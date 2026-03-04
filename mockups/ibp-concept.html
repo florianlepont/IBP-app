@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IBP iPhone Concept</title>
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+  <style>
+    :root {
+      --bg-top: #dce9df;
+      --bg-bottom: #c6d8cb;
+      --glass: rgba(255, 255, 255, 0.42);
+      --glass-strong: rgba(255, 255, 255, 0.58);
+      --line: rgba(255, 255, 255, 0.45);
+      --ink: #182515;
+      --muted: #47624b;
+      --forest: #1f6a3a;
+      --forest-2: #3c8e57;
+      --amber: #d39a45;
+      --radius: 24px;
+      --blur: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "SF Pro Display", "SF Pro Text", "Avenir Next", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(60vw 60vw at 10% 8%, rgba(255,255,255,0.58), transparent 60%),
+        radial-gradient(42vw 42vw at 90% 24%, rgba(104,164,122,0.38), transparent 60%),
+        linear-gradient(160deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 1620px;
+      margin: 0 auto;
+      padding: 44px 24px 72px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 40px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      max-width: 980px;
+      margin: 12px 0 30px;
+      color: #35503b;
+      font-size: 17px;
+      line-height: 1.45;
+    }
+
+    .phones {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(275px, 1fr));
+    }
+
+    .iphone {
+      background: linear-gradient(170deg, #121617 0%, #0a0d0f 100%);
+      border-radius: 46px;
+      padding: 10px;
+      box-shadow:
+        0 30px 44px rgba(8, 20, 12, 0.32),
+        inset 0 0 0 1px rgba(255,255,255,0.12),
+        inset 0 0 24px rgba(255,255,255,0.08);
+      position: relative;
+    }
+
+    .screen {
+      border-radius: 36px;
+      overflow: hidden;
+      height: 622px;
+      position: relative;
+      background:
+        radial-gradient(90% 70% at 10% 8%, rgba(255,255,255,0.54), transparent 70%),
+        linear-gradient(145deg, #eaf4eb 0%, #d6e8d7 45%, #c4ddcb 100%);
+      border: 1px solid rgba(255,255,255,0.2);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .island {
+      width: 118px;
+      height: 30px;
+      border-radius: 0 0 16px 16px;
+      background: #080b0a;
+      margin: 0 auto;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,0.1);
+    }
+
+    .status {
+      padding: 7px 20px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      color: #f3f8f0;
+      background: linear-gradient(180deg, rgba(12,16,14,0.85), rgba(12,16,14,0.2));
+      letter-spacing: 0.01em;
+    }
+
+    .content {
+      padding: 14px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+    }
+
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(var(--blur)) saturate(1.2);
+      -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 10px 20px rgba(30, 67, 39, 0.12);
+    }
+
+    .hero {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .badge {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      width: fit-content;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.6);
+      background: rgba(255,255,255,0.42);
+      padding: 5px 10px;
+      font-size: 11px;
+      color: #1e502f;
+      font-weight: 700;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+
+    .muted {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .row { display: flex; gap: 8px; }
+
+    .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      cursor: default;
+    }
+
+    .btn.main {
+      color: #f2fff7;
+      background: linear-gradient(160deg, var(--forest-2), var(--forest));
+      box-shadow: 0 8px 18px rgba(23, 97, 54, 0.28);
+    }
+
+    .btn.alt {
+      color: #244d2f;
+      border: 1px solid rgba(255,255,255,0.55);
+      background: rgba(255,255,255,0.43);
+      backdrop-filter: blur(10px);
+    }
+
+    .tile {
+      flex: 1;
+      padding: 10px;
+    }
+
+    .metric {
+      margin: 2px 0 0;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .progress {
+      height: 7px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.52);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #e4b16c 0%, var(--amber) 100%);
+    }
+
+    .card {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .field {
+      padding: 9px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.58);
+      background: rgba(255,255,255,0.49);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #294733;
+      font-weight: 600;
+    }
+
+    .step {
+      width: 21px;
+      height: 21px;
+      border-radius: 999px;
+      background: rgba(31,106,58,0.16);
+      border: 1px solid rgba(31,106,58,0.3);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #1f6a3a;
+    }
+
+    .error {
+      margin: 0;
+      color: #8c3d31;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .map {
+      height: 146px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.55);
+      background:
+        radial-gradient(circle at 35% 30%, rgba(63, 130, 84, 0.46) 0 19%, transparent 20%),
+        radial-gradient(circle at 52% 48%, rgba(63, 130, 84, 0.52) 0 28%, transparent 29%),
+        radial-gradient(circle at 65% 63%, rgba(63, 130, 84, 0.56) 0 13%, transparent 14%),
+        linear-gradient(160deg, rgba(255,255,255,0.64) 0%, rgba(220,236,220,0.65) 100%);
+      backdrop-filter: blur(8px);
+    }
+
+    .legend {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: #33543e;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 4px;
+      background: var(--amber);
+    }
+
+    .item {
+      padding: 9px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .item img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.5);
+      border: 1px solid rgba(255,255,255,0.54);
+    }
+
+    .tabbar {
+      margin-top: auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 12px;
+      border-radius: 16px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #35563f;
+    }
+
+    .home-indicator {
+      width: 110px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(3,8,6,0.78);
+      margin: 7px auto 8px;
+    }
+
+    .logo {
+      height: 64px;
+      object-fit: contain;
+      background: rgba(255,255,255,0.45);
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.58);
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1 class="title">IBP iPhone Concept - Apple Glass UI</h1>
+    <p class="subtitle">Version iPhone avec esthétique glassmorphism: surfaces translucides, flou de profondeur, boutons en verre, et hiérarchie centrée sur les parcours terrain (saisie 10 facteurs, offline/sync, carte publique et gamification).</p>
+
+    <section class="phones">
+      <article class="iphone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>5G 86%</span></div>
+          <div class="content">
+            <img class="logo" src="../media/LOGO_ETATS_SAUVAGES.png" alt="Logo Etats-Sauvages" />
+            <div class="glass hero">
+              <span class="badge">Contributeur IBP</span>
+              <h2>Démarrer un relevé en forêt</h2>
+              <p class="muted">Brouillon valide pendant 7 jours. Ensuite statut caduc.</p>
+              <div class="row">
+                <button class="btn main">Nouveau relevé</button>
+                <button class="btn alt">Mes brouillons</button>
+              </div>
+            </div>
+            <div class="row">
+              <div class="glass tile">
+                <p class="muted">Points</p>
+                <p class="metric">1 240</p>
+              </div>
+              <div class="glass tile">
+                <p class="muted">Classement</p>
+                <p class="metric">#18</p>
+              </div>
+            </div>
+            <div class="glass card">
+              <p class="muted">Mission actuelle</p>
+              <strong>3 relevés géolocalisés avec photo</strong>
+              <div class="progress"><span style="width:68%"></span></div>
+            </div>
+            <div class="glass tabbar"><span>Accueil</span><span>Relevés</span><span>Carte</span><span>Profil</span></div>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </article>
+
+      <article class="iphone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>Sync OK</span></div>
+          <div class="content">
+            <div class="glass hero">
+              <h2>Relevé #2026-031</h2>
+              <p class="muted">ACA / collinéen - Étape 3/10 (Facteur B)</p>
+              <div class="progress"><span style="width:30%"></span></div>
+            </div>
+            <div class="field"><span>Strate très basse &lt;1.5m</span><span class="step">1</span></div>
+            <div class="field"><span>Strate basse 1.5-7m</span><span class="step">1</span></div>
+            <div class="field"><span>Strate intermédiaire 7-20m</span><span class="step">1</span></div>
+            <div class="field"><span>Strate haute &gt;20m</span><span class="step">0</span></div>
+            <div class="field"><span>Couvert autochtone</span><strong>40%</strong></div>
+            <p class="error">Score B plafonné à 2 (couvert autochtone &lt; 50%).</p>
+            <div class="row">
+              <button class="btn alt" style="flex:1">Retour</button>
+              <button class="btn main" style="flex:1">Valider B</button>
+            </div>
+            <div class="glass tabbar"><span>Facteurs</span><span>Photos</span><span>Carte</span><span>Résumé</span></div>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </article>
+
+      <article class="iphone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>Offline</span></div>
+          <div class="content">
+            <div class="glass hero">
+              <h2>Mes relevés</h2>
+              <p class="muted">Statuts: brouillon, soumis, synchronisé, caduc</p>
+            </div>
+            <div class="glass card">
+              <strong>Forêt de Rambouillet</strong>
+              <p class="muted">Créé le 02/03/2026 - expire le 09/03</p>
+              <span class="badge">Brouillon</span>
+            </div>
+            <div class="glass card">
+              <strong>Massif de Tronçais</strong>
+              <p class="muted">Soumis le 01/03/2026</p>
+              <span class="badge">Synchronisé</span>
+            </div>
+            <div class="glass card">
+              <strong>Bois communal Nord</strong>
+              <p class="muted">Brouillon ancien &gt; 7 jours</p>
+              <span class="badge" style="color:#8f4131">Caduc</span>
+            </div>
+            <div class="glass card">
+              <div class="row" style="justify-content:space-between"><strong>Sync local</strong><strong>3 en attente</strong></div>
+              <button class="btn main">Synchroniser maintenant</button>
+            </div>
+            <div class="glass tabbar"><span>Accueil</span><span>Relevés</span><span>Carte</span><span>Profil</span></div>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </article>
+
+      <article class="iphone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>Carte France</span></div>
+          <div class="content">
+            <div class="glass hero">
+              <h2>Carte publique IBP</h2>
+              <p class="muted">Points anonymisés issus de relevés validés.</p>
+            </div>
+            <div class="map"></div>
+            <div class="legend">
+              <span><span class="dot"></span>Relevé validé</span>
+              <span><span class="dot" style="background:#2d7d49"></span>Zone active</span>
+            </div>
+            <div class="glass item">
+              <img src="../media/animaux/PIC NOIR.png" alt="Pic noir" />
+              <div>
+                <strong>Badge: Observateur du vivant</strong>
+                <p class="muted">10 relevés synchronisés ce mois</p>
+              </div>
+            </div>
+            <div class="glass item">
+              <img src="../media/herbier/ES-herbier-simple-chene-caduc.png" alt="Chêne caduc" />
+              <div>
+                <strong>Essence dominante</strong>
+                <p class="muted">Chêne caduc sur 31% des relevés</p>
+              </div>
+            </div>
+            <button class="btn alt">Voir le classement national</button>
+            <div class="glass tabbar"><span>Accueil</span><span>Relevés</span><span>Carte</span><span>Profil</span></div>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
