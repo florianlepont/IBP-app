@@ -6,12 +6,15 @@ Build a participatory experience where contributors can follow IBP activity acro
 The app is a public-interest project led by the association Etats-Sauvages and its members.
 
 ## 2) Goals
+- Make IBP assessments easier to perform for non-expert contributors, despite methodological complexity.
 - Reduce the average time needed to complete a full survey.
 - Decrease data entry errors and missing fields.
 - Ensure traceability (who, when, where, what).
 - Synchronize surveys to a shared community database.
 - Enable nationwide visibility of completed IBP surveys (France).
 - Increase long-term contributor engagement through points and progression.
+- Increase visibility and awareness for the association Etats-Sauvages.
+- Drive users toward donation flows that support the association mission.
 
 ## 3) Personas
 - Contributor: voluntarily submits IBP surveys and follows personal/community impact.
@@ -21,21 +24,38 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - User authentication.
 - List of personal surveys (draft, submitted, synced).
 - Guided IBP survey entry (required/optional fields).
+- On-demand pedagogical help during survey entry for complex IBP fields.
 - Photo attachments and geolocation.
 - Offline mode + synchronization.
 - Survey statuses (draft, expired, submitted, synced, error).
 - Personal point counter based on completed IBP surveys.
 - Basic public map of completed IBP surveys in France (with privacy constraints).
+- Association visibility surfaces in-app (mission, impact, actions).
+- Donation call-to-action in key user journey moments.
+
+## 8) V2 Backlog (Out of MVP Scope)
+- Community moderation workflow with approval/rejection for flagged surveys.
+- Push notifications (new badges, ranking updates, moderation feedback).
+- PDF/Excel export.
+- KPI dashboards (average time, error rate, sync success rate).
+- Multi-language support.
+- In-app documentation section (learning hub) to explore IBP methodology outside survey flow.
+- Advanced donation features (recurring donation, campaign-specific donation, donation impact dashboard).
+- Team challenges (city/association/organization competitions).
+- Seasonal events and limited-time missions.
+- Social sharing of milestones (optional).
 
 ## 5) Cross-Epic Business Rules
 - A survey is linked to a single site (or checkpoint).
 - Some fields are mandatory depending on survey type.
 - A photo may be required to validate certain anomalies.
 - A survey can only be submitted when all required fields are completed.
+- Pedagogical content must be accessible on demand during survey entry without interrupting form completion.
 - A draft survey expires 7 days after creation; after that, it becomes expired ("caduc") and cannot be submitted.
 - Public map data is anonymized (no personal data exposed).
 - Points are awarded only for valid submitted surveys (not drafts).
 - Anti-cheat rules are needed (duplicate locations, spam submissions, fake entries).
+- Donation prompts must stay transparent and non-blocking for core app usage.
 
 ## 6) Epic Documents
 - Epic A - Access and Security: `specifications/epics/epic-a-access-security.md`
@@ -50,22 +70,14 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 2. Epic C - IBP Survey Data Entry
 3. Epic D - Offline and Synchronization
 4. Epic B - Survey Preparation
-5. Epic F - Participatory Experience and Gamification
-6. Epic E - Data Quality and Trust
-
-## 8) V2 Backlog (Out of MVP Scope)
-- Electronic signature.
-- Community moderation workflow with approval/rejection for flagged surveys.
-- Push notifications (new badges, ranking updates, moderation feedback).
-- PDF/Excel export.
-- KPI dashboards (average time, error rate, sync success rate).
-- Multi-language support.
-- Team challenges (city/association/organization competitions).
-- Seasonal events and limited-time missions.
-- Social sharing of milestones (optional).
+5. Epic E - Data Quality and Trust
+6. Epic F - Participatory Experience and Gamification
 
 ## 9) Non-Functional Requirements
-- Platforms: iOS (version to define) and Android (version to define).
+- Platforms:
+  - iOS minimum supported version: iOS 17.
+  - Android minimum supported version: Android 12 (API 31).
+  - App Store / Play publishing targets must follow current store requirements (latest supported SDK/target API).
 - Performance: app launch time < 3 seconds on target devices.
 - Offline reliability: no draft data loss in case of forced app closure.
 - Security: encrypted local storage for sensitive data, API communication over TLS.

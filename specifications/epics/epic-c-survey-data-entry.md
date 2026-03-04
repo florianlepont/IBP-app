@@ -2,6 +2,7 @@
 
 ## Scope
 Create, edit, and submit IBP surveys with validation and expiration rules.
+Provide on-demand pedagogical guidance during survey completion.
 
 ## User Stories
 
@@ -45,3 +46,12 @@ Acceptance criteria:
 - Submission is blocked if the survey is older than 7 days, and status changes to "expired".
 - After submission, status changes to "submitted".
 - A local confirmation message is displayed.
+
+### US-C6 - On-Demand Pedagogical Help During Entry
+As a contributor, I want contextual educational help while filling specific fields so I can complete IBP correctly even as a non-expert.
+
+Acceptance criteria:
+- During survey entry, each complex field can expose a help entry point (for example: "Help" or "How to assess this factor?").
+- Help content is displayed on demand without losing current form progress.
+- Help content includes at least: plain-language explanation, what to observe in the field, and scoring guidance for the field.
+- Closing help returns the user to the same field/state in the form.
