@@ -22,6 +22,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 
 ## 4) Scope (V1)
 - User authentication.
+- Basic user profile management (first name, last name, display name, profile picture).
 - List of personal surveys (draft, submitted, synced).
 - Guided IBP survey entry (required/optional fields).
 - On-demand pedagogical help during survey entry for complex IBP fields.
@@ -30,6 +31,8 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Survey statuses (draft, expired, submitted, synced, error).
 - Personal point counter based on completed IBP surveys.
 - Basic public map of completed IBP surveys in France (with privacy constraints).
+- User-controlled survey visibility: private (default) or public (shared with community).
+- Post-publication survey management (delete survey, switch private/public).
 - Association visibility surfaces in-app (mission, impact, actions).
 - Donation call-to-action in key user journey moments.
 
@@ -50,6 +53,10 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Some fields are mandatory depending on survey type.
 - A photo may be required to validate certain anomalies.
 - A survey can only be submitted when all required fields are completed.
+- Each submitted survey has a visibility setting: `private` or `public`.
+- Only `public` surveys are eligible for community surfaces (public map, community feeds, public stats).
+- Changing a survey from `public` to `private` must remove it from community surfaces.
+- Deleting a survey must remove it from community surfaces.
 - Pedagogical content must be accessible on demand during survey entry without interrupting form completion.
 - A draft survey expires 7 days after creation; after that, it becomes expired ("caduc") and cannot be submitted.
 - Public map data is anonymized (no personal data exposed).

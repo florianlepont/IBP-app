@@ -36,7 +36,8 @@ As a contributor, I want to record the survey GPS location to ensure traceabilit
 
 Acceptance criteria:
 - During creation/submission, location is captured if permission is granted.
-- If geolocation is unavailable, the app shows a message without blocking submission (rule to confirm).
+- If geolocation is unavailable, the app asks the user to enter the address manually.
+- Manual address entry is required before submission when GPS coordinates are missing.
 
 ### US-C5 - Submit Survey
 As a contributor, I want to submit a completed survey to share my observation.
@@ -55,3 +56,12 @@ Acceptance criteria:
 - Help content is displayed on demand without losing current form progress.
 - Help content includes at least: plain-language explanation, what to observe in the field, and scoring guidance for the field.
 - Closing help returns the user to the same field/state in the form.
+
+### US-C7 - Survey Privacy Choice (Private/Public)
+As a contributor, I want to choose whether my survey is private or public so I control what is shared with the community.
+
+Acceptance criteria:
+- Before submission, I can set survey visibility to `private` or `public`.
+- Default visibility is `private`.
+- I can change visibility later from survey detail.
+- `Public` surveys are shareable to community surfaces; `private` surveys remain visible only to the contributor and authorized moderators/admins.

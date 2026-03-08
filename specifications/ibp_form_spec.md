@@ -1,375 +1,400 @@
-# Specification fonctionnelle - Formulaire IBP (France)
+# Functional Specification - IBP Form (France)
 
-## 1) Objet
-Ce document definit la structure complete du formulaire IBP de l'application mobile grand public Etats-Sauvages.
-Il constitue la source de verite pour:
-- la saisie des 10 facteurs IBP,
-- la determination des classes et des scores,
-- les validations UI (bloquantes/non bloquantes),
-- le calcul des sous-scores et du score total,
-- le contrat de donnees de soumission.
+## 1) Purpose
+This document defines the complete structure of the IBP form used in the Etats-Sauvages public mobile app.
+It is the source of truth for:
+- entering the 10 IBP factors,
+- determining classes and scores,
+- UI validations (blocking/non-blocking),
+- calculating subscores and total score,
+- submission data contract.
 
-## 2) Perimetre
-Inclus:
-- Releves IBP sur peuplements forestiers metropolitains.
-- Versions biogeographiques IBP Fr v3.0:
-  - ACA: Atlantique / Continentale / Alpine.
-  - M: Mediterraneenne (thermo, meso, supra-mediterraneen).
-- Cas standard par parcours en plein/partiel.
-- Regles de saisie mobile et regles de validation.
+## 2) Scope
+Included:
+- IBP surveys on metropolitan French forest stands.
+- IBP Fr v3.0 biogeographic versions:
+  - ACA: Atlantic / Continental / Alpine.
+  - M: Mediterranean (thermo, meso, supra-mediterranean).
+- Standard full/partial transect workflows.
+- Mobile entry and validation rules.
 
-Exclu:
-- Interpretation ecologique avancee des scores.
-- Workflows de moderation communautaire (documentes dans les epics).
+Excluded:
+- Advanced ecological interpretation of scores.
+- Community moderation workflows (covered in epics).
 
-## 3) Metadonnees
-- Version spec: v1.0
-- Langue: Francais
-- Proprietaire: Etats-Sauvages
-- Derniere mise a jour: 2026-03-04
-- Version IBP cible (champ obligatoire): `ibp_method_version`
-  - Valeur recommandee par defaut: `cnpf_ibp_fr_v3_0_2023-03-23`
+## 3) Metadata
+- Spec version: v1.0
+- Language: English
+- Owner: Etats-Sauvages
+- Last update: 2026-03-04
+- Target IBP version (required field): `ibp_method_version`
+  - Recommended default value: `cnpf_ibp_fr_v3_0_2023-03-23`
 
-## 4) Regles globales de formulaire
-- Un releve est rattache a un seul site/peuplement.
-- Le brouillon expire 7 jours apres creation.
-- Passe 7 jours, le statut devient `expired` et la soumission est refusee.
-- La soumission exige que tous les facteurs obligatoires soient renseignes et scorables.
-- Les scores autorises par facteur sont en general `{0,1,2,5}`.
-- Exception: facteurs `I` et `J` utilisent `{0,2,5}`.
-- Sous-scores:
+## 4) Global Form Rules
+- A survey is linked to one site/stand.
+- A draft expires 7 days after creation.
+- After 7 days, status becomes `expired` and submission is rejected.
+- Submission requires all mandatory factors to be filled and scorable.
+- Allowed factor scores are generally `{0,1,2,5}`.
+- Exception: factors `I` and `J` use `{0,2,5}`.
+- Subscores:
   - `ibp_peuplement_gestion = A + B + C + D + E + F + G` (max 35)
   - `ibp_contexte = H + I + J` (max 15)
-- Score total:
+- Total score:
   - `ibp_total = ibp_peuplement_gestion + ibp_contexte` (max 50)
+- Privacy:
+  - each survey has a visibility status: `private` or `public`.
+  - default value: `private`.
+  - only `public` surveys can be displayed in community surfaces.
+- Post-publication management:
+  - users can switch visibility (`public` <-> `private`) after submission.
+  - users can delete a submitted survey (with confirmation).
+  - switching to `private` or deleting removes survey from community surfaces.
 
-## 5) Typologie de version et region
-Champ requis avant notation des facteurs:
+## 5) Version and Region Typology
+Required before scoring factors:
 - `region_version` (enum): `ACA` | `M`
-- `etage_vegetation` (enum minimal):
-  - pour `ACA`: `planitiaire`, `collineen`, `montagnard`, `subalpin`, `montagnard_mediterraneen`
-  - pour `M`: `thermo_mediterraneen`, `meso_mediterraneen`, `supra_mediterraneen`
+- `vegetation_stage` (minimal enum):
+  - for `ACA`: `planitiaire`, `collineen`, `montagnard`, `subalpin`, `montagnard_mediterraneen`
+  - for `M`: `thermo_mediterraneen`, `meso_mediterraneen`, `supra_mediterraneen`
 
-Regle de compatibilite:
-- Si `region_version = ACA`, utiliser les seuils ACA.
-- Si `region_version = M`, utiliser les seuils M.
-- Cas particulier: `montagnard_mediterraneen` -> utiliser ACA (consigne CNPF).
+Compatibility rule:
+- If `region_version = ACA`, use ACA thresholds.
+- If `region_version = M`, use M thresholds.
+- Special case: `montagnard_mediterraneen` -> use ACA (CNPF rule).
 
-## 6) Facteurs IBP (modele detaille)
+## 6) IBP Factors (Detailed Model)
 
-### Facteur A - Essences autochtones
-- Objectif ecologique: qualifier la diversite d'essences autochtones arborescentes.
+### Factor A - Native Tree Taxa
+- Ecological objective: characterize diversity of native tree taxa.
 - Field ID: `factor_a`
-- Type saisie: liste multi-choix de genres autochtones observes + compteur derive.
-- Unite/perimetre: nombre de genres autochtones dans le peuplement decrit.
+- Input type: multi-select list of observed native genera + derived counter.
+- Unit/scope: number of native genera in described stand.
 - Determination:
-  - compter les genres autochtones (selon liste CNPF de la version regionale).
-  - prendre en compte arbres vivants (h > 50 cm) et arbres morts.
+  - count native genera (from CNPF list for regional version).
+  - include living trees (h > 50 cm) and dead trees.
 - Classes/scores:
   - ACA (planitiaire/collineen/montagnard):
-    - `0`: 0-1 genre
-    - `1`: 2 genres
-    - `2`: 3-4 genres
-    - `5`: >= 5 genres
+    - `0`: 0-1 genera
+    - `1`: 2 genera
+    - `2`: 3-4 genera
+    - `5`: >= 5 genera
   - ACA (subalpin):
-    - `0`: 0 genre
-    - `1`: 1 genre
-    - `2`: 2 genres
-    - `5`: >= 3 genres
+    - `0`: 0 genera
+    - `1`: 1 genus
+    - `2`: 2 genera
+    - `5`: >= 3 genera
   - M:
-    - `0`: 0-1 genre
-    - `1`: 2 genres
-    - `2`: 3-4 genres
-    - `5`: >= 5 genres
-- Validation UI:
-  - bloquant: au moins une valeur de comptage ou une liste d'essences doit etre fournie.
-  - non bloquant: essence hors liste CNPF -> avertissement.
-- Exemple:
-  - ACA collineen, 4 genres autochtones -> score `2`.
+    - `0`: 0-1 genera
+    - `1`: 2 genera
+    - `2`: 3-4 genera
+    - `5`: >= 5 genera
+- UI validation:
+  - blocking: at least one count value or species list entry must be provided.
+  - non-blocking: species outside CNPF list -> warning.
+- Example:
+  - ACA collineen, 4 native genera -> score `2`.
 
-### Facteur B - Structure verticale de la vegetation
-- Objectif ecologique: decrire la complexite verticale.
+### Factor B - Vertical Vegetation Structure
+- Ecological objective: describe vertical complexity.
 - Field ID: `factor_b`
-- Type saisie: cases a cocher par strate + couvert autochtone global.
-- Unite/perimetre: nombre de strates couvrant >= 20% de la surface decrite.
+- Input type: checkbox per stratum + global native canopy cover.
+- Unit/scope: number of strata covering >= 20% of described area.
 - Determination:
-  - compter parmi 5 strates.
-  - un meme ligneux peut contribuer a plusieurs strates.
-- Definition des strates:
-  - ACA: tres bas <1.5 m, bas 1.5-7 m, intermediaire 7-20 m, haut >20 m (+ strate herbacee/semi-ligneuse).
-  - M: tres bas <1.5 m, bas 1.5-5 m, intermediaire 5-15 m, haut >15 m (+ strate herbacee/semi-ligneuse).
+  - count among 5 strata.
+  - one woody plant can contribute to multiple strata.
+- Strata definition:
+  - ACA: very low <1.5 m, low 1.5-7 m, intermediate 7-20 m, high >20 m (+ herbaceous/semi-woody).
+  - M: very low <1.5 m, low 1.5-5 m, intermediate 5-15 m, high >15 m (+ herbaceous/semi-woody).
 - Classes/scores:
-  - `0`: 1 strate
-  - `1`: 2 strates
-  - `2`: 3-4 strates
-  - `5`: 5 strates
-- Regle speciale:
-  - score plafonne a `2` si le couvert des essences autochtones est < 50% du peuplement decrit.
-- Validation UI:
-  - bloquant: au moins 1 strate cochee.
-  - bloquant: `covered_autochthonous_percent` requis pour appliquer le plafonnement.
-- Exemple:
-  - 5 strates observees mais couvert autochtone 40% -> score final `2` (plafonne).
+  - `0`: 1 stratum
+  - `1`: 2 strata
+  - `2`: 3-4 strata
+  - `5`: 5 strata
+- Special rule:
+  - score capped at `2` if native species cover is < 50% of described stand.
+- UI validation:
+  - blocking: at least 1 stratum selected.
+  - blocking: `covered_autochthonous_percent` required to apply capping.
+- Example:
+  - 5 observed strata but native cover 40% -> final score `2` (capped).
 
-### Facteur C - Bois morts sur pied de grosse dimension
-- Objectif ecologique: estimer la ressource en bois mort vertical.
+### Factor C - Standing Deadwood of Large Size
+- Ecological objective: estimate vertical deadwood resource.
 - Field ID: `factor_c`
-- Type saisie: compteurs `bmg_count`, `bmm_count`, `surface_ha`.
-- Unite/perimetre: densite par hectare.
+- Input type: counters `bmg_count`, `bmm_count`, `surface_ha`.
+- Unit/scope: density per hectare.
 - Determination:
-  - compter les bois morts sur pied (h >= 1 m): arbres morts, chandelles, souches hautes.
+  - count standing deadwood (h >= 1 m): dead trees, snags, high stumps.
   - derive `BMg/ha`, `BMm/ha`.
-- Seuils de diametre:
+- Diameter thresholds:
   - ACA:
-    - BMg: D > 37.5 cm (cas particuliers: D > 17.5 cm)
+    - BMg: D > 37.5 cm (special cases: D > 17.5 cm)
     - BMm: 17.5 < D < 37.5 cm
   - M:
-    - BMg: D > 27.5 cm (cas particuliers: D > 17.5 cm)
+    - BMg: D > 27.5 cm (special cases: D > 17.5 cm)
     - BMm: 17.5 < D < 27.5 cm
 - Classes/scores:
-  - `0`: BMg/ha < 1 et BMm/ha < 1
-  - `1`: BMg/ha < 1 et BMm/ha >= 1
+  - `0`: BMg/ha < 1 and BMm/ha < 1
+  - `1`: BMg/ha < 1 and BMm/ha >= 1
   - `2`: 1 <= BMg/ha < 3
   - `5`: BMg/ha >= 3
-- Validation UI:
-  - bloquant: `surface_ha > 0`.
-  - bloquant: compteurs >= 0.
-- Exemple:
+- UI validation:
+  - blocking: `surface_ha > 0`.
+  - blocking: counters >= 0.
+- Example:
   - BMg/ha = 2.2 -> score `2`.
 
-### Facteur D - Bois morts au sol de grosse dimension
-- Objectif ecologique: estimer la ressource en bois mort horizontal.
+### Factor D - Downed Deadwood of Large Size
+- Ecological objective: estimate horizontal deadwood resource.
 - Field ID: `factor_d`
-- Type saisie: compteurs `bmg_count`, `bmm_count`, `surface_ha`.
-- Unite/perimetre: densite par hectare.
+- Input type: counters `bmg_count`, `bmm_count`, `surface_ha`.
+- Unit/scope: density per hectare.
 - Determination:
-  - compter bois morts au sol de longueur >= 1 m.
-- Seuils de diametre:
+  - count downed deadwood with length >= 1 m.
+- Diameter thresholds:
   - ACA:
-    - BMg: D > 37.5 cm (a 1 m du gros bout; cas particuliers: >17.5)
+    - BMg: D > 37.5 cm (at 1 m from large end; special cases: >17.5)
     - BMm: 17.5 < D < 37.5 cm
   - M:
-    - BMg: D > 27.5 cm (cas particuliers: >17.5)
+    - BMg: D > 27.5 cm (special cases: >17.5)
     - BMm: 17.5 < D < 27.5 cm
-- Classes/scores (identiques a C):
-  - `0`: BMg/ha < 1 et BMm/ha < 1
-  - `1`: BMg/ha < 1 et BMm/ha >= 1
+- Classes/scores (same as C):
+  - `0`: BMg/ha < 1 and BMm/ha < 1
+  - `1`: BMg/ha < 1 and BMm/ha >= 1
   - `2`: 1 <= BMg/ha < 3
   - `5`: BMg/ha >= 3
-- Validation UI:
-  - bloquant: `surface_ha > 0`.
-- Exemple:
+- UI validation:
+  - blocking: `surface_ha > 0`.
+- Example:
   - BMg/ha = 0.6, BMm/ha = 1.3 -> score `1`.
 
-### Facteur E - Tres gros bois vivants
-- Objectif ecologique: quantifier la presence d'arbres de grande dimension.
+### Factor E - Very Large Living Trees
+- Ecological objective: quantify very large living trees.
 - Field ID: `factor_e`
-- Type saisie: compteurs `tgb_count`, `gb_count`, `surface_ha`.
-- Unite/perimetre: densite par hectare.
+- Input type: counters `tgb_count`, `gb_count`, `surface_ha`.
+- Unit/scope: density per hectare.
 - Determination:
-  - compter TGB et GB (GB utile si TGB < 1/ha).
-- Seuils de diametre:
+  - count TGB and GB (GB used if TGB < 1/ha).
+- Diameter thresholds:
   - ACA:
-    - TGB: D > 67.5 cm (cas particuliers: >47.5)
+    - TGB: D > 67.5 cm (special cases: >47.5)
     - GB: 47.5 < D < 67.5 cm
   - M:
-    - TGB: D > 57.5 cm (cas particuliers: >37.5)
+    - TGB: D > 57.5 cm (special cases: >37.5)
     - GB: 37.5 < D < 57.5 cm
 - Classes/scores:
-  - `0`: TGB/ha < 1 et GB/ha < 1
-  - `1`: TGB/ha < 1 et GB/ha >= 1
+  - `0`: TGB/ha < 1 and GB/ha < 1
+  - `1`: TGB/ha < 1 and GB/ha >= 1
   - `2`: 1 <= TGB/ha < 5
   - `5`: TGB/ha >= 5
-- Validation UI:
-  - bloquant: `surface_ha > 0`.
-- Exemple:
-  - TGB/ha = 0.4 et GB/ha = 1.1 -> score `1`.
+- UI validation:
+  - blocking: `surface_ha > 0`.
+- Example:
+  - TGB/ha = 0.4 and GB/ha = 1.1 -> score `1`.
 
-### Facteur F - Arbres vivants porteurs de dendromicrohabitats
-- Objectif ecologique: capter la diversite de micro-habitats arboricoles.
+### Factor F - Living Trees with Dendromicrohabitats
+- Ecological objective: capture arboreal microhabitat diversity.
 - Field ID: `factor_f`
-- Type saisie: tableau par groupe de dmh (15 groupes) + compteur total derive.
-- Unite/perimetre: arbres/ha (plafonnes par groupe).
+- Input type: table per dmh group (15 groups) + derived total counter.
+- Unit/scope: trees/ha (capped per group).
 - Determination:
-  - compter les arbres porteurs de dmh selon typologie IBP.
-  - un arbre peut etre compte dans plusieurs groupes.
-  - au sein d'un meme groupe, un arbre ne compte qu'une fois.
-  - plafonnement: max 2 arbres/ha par groupe.
+  - count trees carrying dmh according to IBP typology.
+  - one tree can be counted in multiple groups.
+  - within one group, one tree counts once.
+  - capping: max 2 trees/ha per group.
 - Classes/scores:
-  - `0`: arbres/ha < 2
-  - `1`: 2 <= arbres/ha < 3
-  - `2`: 3 <= arbres/ha < 8
-  - `5`: arbres/ha >= 8
-- Validation UI:
-  - bloquant: au moins 1 groupe dmh evalue (0 autorise).
-  - non bloquant: valeur depassant le plafond par groupe -> auto-cap + avertissement.
-- Exemple:
-  - total calcule apres plafonnement = 8.4 arbres/ha -> score `5`.
+  - `0`: trees/ha < 2
+  - `1`: 2 <= trees/ha < 3
+  - `2`: 3 <= trees/ha < 8
+  - `5`: trees/ha >= 8
+- UI validation:
+  - blocking: at least 1 dmh group evaluated (0 allowed).
+  - non-blocking: value above group cap -> auto-cap + warning.
+- Example:
+  - total after capping = 8.4 trees/ha -> score `5`.
 
-### Facteur G - Milieux ouverts floriferes
-- Objectif ecologique: qualifier la proportion d'habitats ouverts floriferes associes au peuplement.
+### Factor G - Flowering Open Habitats
+- Ecological objective: qualify proportion of flowering open habitats linked to stand.
 - Field ID: `factor_g`
-- Type saisie: surface ouverte florifere (m2) + surface decrite (m2/ha).
-- Unite/perimetre: pourcentage de surface ouverte florifere.
+- Input type: flowering open area (m2) + described area (m2/ha).
+- Unit/scope: percentage of flowering open area.
 - Determination:
-  - inclure trouees/clairieres, lisiere (largeur standard 2 m), peuplements clairs.
-  - ne compter que la fraction nettement occupee par vegetation florifere.
+  - include gaps/clearings, edges (standard width 2 m), open canopy stands.
+  - count only fraction clearly occupied by flowering vegetation.
 - Classes/scores:
-  - ACA (collineen et montagnard):
+  - ACA (collineen and montagnard):
     - `0`: 0%
-    - `2`: <1% ou >5%
-    - `5`: 1 a 5%
+    - `2`: <1% or >5%
+    - `5`: 1 to 5%
   - ACA (subalpin):
     - `0`: 0%
     - `2`: <1%
     - `5`: >=1%
   - M:
     - `0`: 0%
-    - `2`: <1% ou >5%
-    - `5`: 1 a 5%
-- Validation UI:
-  - bloquant: surface decrite > 0.
-- Exemple:
-  - 3.2% de milieux ouverts floriferes (M) -> score `5`.
+    - `2`: <1% or >5%
+    - `5`: 1 to 5%
+- UI validation:
+  - blocking: described area > 0.
+- Example:
+  - 3.2% flowering open habitats (M) -> score `5`.
 
-### Facteur H - Continuite temporelle de l'etat boise
-- Objectif ecologique: estimer l'anciennete/continuite forestiere.
+### Factor H - Temporal Continuity of Forest Cover
+- Ecological objective: estimate forest continuity/antiquity.
 - Field ID: `factor_h`
-- Type saisie: classe expert guidee + justifications (sources bureau + indices terrain).
-- Unite/perimetre: classe ordinale.
+- Input type: guided expert class + justifications (desk sources + field evidence).
+- Unit/scope: ordinal class.
 - Determination:
-  - reference minimum forestier XIXe (carte d'etat-major) + docs ulterieurs + indices terrain.
+  - reference 19th-century forest minimum (Etat-major map) + later documents + field evidence.
 - Classes/scores:
-  - `0`: foret recente (defrichee sur toute la surface)
-  - `2`: continuite partielle OU continuite avec reboisement et travail du sol en plein
-  - `5`: foret ancienne continue (pas de defrichement, pas de reboisement avec travail du sol en plein)
-- Validation UI:
-  - bloquant: une classe obligatoire.
-  - bloquant: `evidence_source` obligatoire (carte, photo aerienne, observation terrain).
-- Exemple:
-  - parcelle presente sur carte d'etat-major sans signe de rupture -> score `5`.
+  - `0`: recent forest (cleared over whole area)
+  - `2`: partial continuity OR continuity with full-soil-disturbance reforestation
+  - `5`: ancient continuous forest (no clearing, no full-soil-disturbance reforestation)
+- UI validation:
+  - blocking: one class required.
+  - blocking: `evidence_source` required (map, aerial photo, field observation).
+- Example:
+  - stand present on Etat-major map with no discontinuity signs -> score `5`.
 
-### Facteur I - Milieux aquatiques
-- Objectif ecologique: prendre en compte la diversite des milieux aquatiques proches.
+### Factor I - Aquatic Habitats
+- Ecological objective: account for nearby aquatic habitat diversity.
 - Field ID: `factor_i`
-- Type saisie: multi-choix de types aquatiques observes.
-- Unite/perimetre: nombre de types distincts (interieur ou bordure du peuplement).
-- Regles:
-  - types naturels ou artificiels.
-  - permanents ou temporaires (hors episodes de crue).
+- Input type: multi-select of observed aquatic habitat types.
+- Unit/scope: number of distinct habitat types (inside or bordering stand).
+- Rules:
+  - natural or artificial types.
+  - permanent or temporary (excluding flood events).
 - Classes/scores:
-  - `0`: aucun type
+  - `0`: no type
   - `2`: 1 type
   - `5`: >=2 types
-- Validation UI:
-  - bloquant: nombre de types determine (0 possible).
-- Exemple:
-  - source + petit cours d'eau -> score `5`.
+- UI validation:
+  - blocking: number of types determined (0 allowed).
+- Example:
+  - spring + small stream -> score `5`.
 
-### Facteur J - Milieux rocheux
-- Objectif ecologique: prendre en compte la diversite des milieux rocheux/mineraux.
+### Factor J - Rocky Habitats
+- Ecological objective: account for rocky/mineral habitat diversity.
 - Field ID: `factor_j`
-- Type saisie: multi-choix de types rocheux observes.
-- Unite/perimetre: nombre de types distincts.
-- Regles:
-  - situer a l'interieur ou en bordure du peuplement.
-  - ne compter un type que si surface cumulee > 20 m2.
+- Input type: multi-select of observed rocky habitat types.
+- Unit/scope: number of distinct habitat types.
+- Rules:
+  - located inside or bordering stand.
+  - a type counts only if cumulative area > 20 m2.
 - Classes/scores:
-  - `0`: aucun type
+  - `0`: no type
   - `2`: 1 type
   - `5`: >=2 types
-- Validation UI:
-  - bloquant: nombre de types determine (0 possible).
-- Exemple:
-  - dalle + affleurements (surface >20 m2 chacun) -> score `5`.
+- UI validation:
+  - blocking: number of types determined (0 allowed).
+- Example:
+  - slab + outcrops (each >20 m2 cumulative area) -> score `5`.
 
-## 7) Cas limites et regles transverses
-- Cas particuliers de fertilite/essences a faible croissance:
-  - appliquer les seuils de diametre reduits prevus dans C, D, E.
-- Releve plafonne (mode mobile par defaut):
-  - arret possible d'un facteur des que le score final est acquis.
-- Releve deplafonne (mode etude):
-  - autorise, mais le score est calcule avec les memes classes IBP.
-- Forets lineaires (<15 m de large):
-  - adaptation densite/km (table CNPF):
-    - C et D: BMg/km <9; 9-<15; >=15
+## 7) Edge Cases and Cross-Cutting Rules
+- Special low-fertility/low-growth taxa cases:
+  - apply reduced diameter thresholds for C, D, E.
+- Capped survey mode (default mobile mode):
+  - a factor can stop being observed as soon as final score is secured.
+- Uncapped survey mode (study mode):
+  - allowed, but score still computed with same IBP classes.
+- Linear forests (<15 m width):
+  - density/km adaptation (CNPF table):
+    - C and D: BMg/km <9; 9-<15; >=15
     - E: TGB/km <9; 9-<20; >=20
-    - F: arbres/km <12; 12-<15; 15-<25; >=25
-    - plafonnement F: max 9 arbres/km par groupe dmh.
+    - F: trees/km <12; 12-<15; 15-<25; >=25
+    - F cap: max 9 trees/km per dmh group.
 
-## 8) Matrice de validation (UI + soumission)
+## 8) Validation Matrix (UI + Submission)
 
-### 8.1 Validations bloquantes par facteur
-- A: region_version + etage + comptage genres autochtones disponibles.
-- B: au moins 1 strate renseignee; `covered_autochthonous_percent` renseigne.
-- C/D/E: `surface_ha > 0`; compteurs non negatifs.
-- F: donnees par groupe dmh coherentes; total calculable.
-- G: surfaces calculees et `open_flowering_percent` calculable.
-- H: classe choisie + source de justification.
-- I/J: nombre de types determine (0 accepte).
+### 8.1 Blocking Validations by Factor
+- A: region_version + stage + native genera count available.
+- B: at least 1 stratum entered; `covered_autochthonous_percent` entered.
+- C/D/E: `surface_ha > 0`; non-negative counters.
+- F: coherent dmh-group data; computable total.
+- G: computable surfaces and `open_flowering_percent`.
+- H: class selected + evidence source.
+- I/J: number of types determined (0 accepted).
 
-### 8.2 Validations temporelles/statut
-- Si `now > created_at + 7 jours` ET statut `draft`:
-  - forcer statut `expired`.
-  - interdire soumission.
-  - message: `Ce releve est caduc (plus de 7 jours). Creez un nouveau releve.`
+### 8.2 Time/Status Validations
+- If `now > created_at + 7 days` and status is `draft`:
+  - force status `expired`.
+  - block submission.
+  - message: `This survey has expired (more than 7 days). Please create a new survey.`
 
-### 8.3 Coherences inter-facteurs (non bloquantes)
-- `factor_b >= 3 strates` avec `factor_a = 0` -> avertissement de coherence.
-- `factor_f >= 5` avec `factor_e = 0` -> avertissement (possible mais a verifier).
-- `factor_g = 5` et `factor_i = 0`/`factor_j = 0` -> pas d'erreur (pas de contrainte stricte).
+### 8.3 Visibility Validations
+- `visibility` is required at submission (`private` or `public`).
+- Default value at draft creation: `private`.
+- If `visibility = public`, verify exposed data complies with anonymization/pseudonymization rules.
 
-### 8.4 Messages d'erreur FR (canon)
-- `Champ obligatoire manquant: {field_id}`
-- `Valeur invalide pour {field_id}`
-- `Surface decrite invalide (doit etre > 0)`
-- `Version IBP non supportee: {ibp_method_version}`
-- `Incoherence de region/version IBP`
-- `Ce releve est caduc (plus de 7 jours).`
+### 8.4 Post-Publication Action Validations
+- Visibility change action is allowed only for survey owner (or authorized moderator/admin role).
+- Deletion requires explicit user confirmation.
+- After deletion, payload status becomes `deleted` and survey is excluded from list/map/community feeds.
 
-## 9) Regles de calcul
-- Calcul par facteur:
-  - evaluer la classe selon les seuils regionaux.
-  - appliquer plafonnements/ajustements (B, F, cas particuliers diametre).
-- Calcul final:
+### 8.5 Inter-Factor Consistency (Non-Blocking)
+- `factor_b >= 3 strata` with `factor_a = 0` -> consistency warning.
+- `factor_f >= 5` with `factor_e = 0` -> warning (possible but should be checked).
+- `factor_g = 5` and `factor_i = 0`/`factor_j = 0` -> no error (no strict constraint).
+
+### 8.6 Canonical Error Messages (EN)
+- `Missing required field: {field_id}`
+- `Invalid value for {field_id}`
+- `Invalid described area (must be > 0)`
+- `Unsupported IBP version: {ibp_method_version}`
+- `Inconsistent region/IBP version`
+- `This survey has expired (more than 7 days).`
+- `Invalid visibility (expected values: private, public).`
+- `Deletion cancelled or not confirmed.`
+
+## 9) Calculation Rules
+- Per-factor calculation:
+  - evaluate class based on regional thresholds.
+  - apply caps/adjustments (B, F, special diameter cases).
+- Final calculation:
   - `ibp_peuplement_gestion = A+B+C+D+E+F+G`
   - `ibp_contexte = H+I+J`
   - `ibp_total = ibp_peuplement_gestion + ibp_contexte`
-- Arrondis:
-  - les scores facteurs sont discrets (pas d'arrondi intermediaire de score).
-  - les densites/percentages peuvent etre calcules en flottant puis compares strictement aux seuils.
+- Rounding:
+  - factor scores are discrete (no intermediate score rounding).
+  - densities/percentages may be computed as floating values then compared strictly to thresholds.
 
-## 10) Contrat de donnees (API/stockage)
+## 10) Data Contract (API/Storage)
 
-### 10.1 Types principaux
-- `ibp_method_version: string` (obligatoire)
-- `region_version: "ACA" | "M"` (obligatoire)
-- `status: "draft" | "expired" | "submitted" | "synced" | "error"`
-- `factors: array[10]` (obligatoire)
+### 10.1 Main Types
+- `ibp_method_version: string` (required)
+- `region_version: "ACA" | "M"` (required)
+- `status: "draft" | "expired" | "submitted" | "synced" | "error" | "deleted"`
+- `visibility: "private" | "public"` (required, default `private`)
+- `published_at?: datetime`
+- `deleted_at?: datetime`
+- `factors: array[10]` (required)
 
-### 10.2 Structure d'un facteur
+### 10.2 Factor Structure
 - `factor_id: "factor_a" | ... | "factor_j"`
-- `observed_value_raw: object` (donnees brutes de saisie)
+- `observed_value_raw: object` (raw input data)
 - `selected_class: "S0" | "S1" | "S2" | "S5"` (I/J: `S0|S2|S5`)
-- `score_points: number` (0|1|2|5 ou 0|2|5)
+- `score_points: number` (0|1|2|5 or 0|2|5)
 - `evidence: { notes?: string, photos?: string[], gps?: {lat:number,lng:number,accuracy_m?:number} }`
 
-### 10.3 Payload logique de soumission
+### 10.3 Logical Submission Payload
 ```json
 {
   "survey_id": "uuid",
   "ibp_method_version": "cnpf_ibp_fr_v3_0_2023-03-23",
   "region_version": "ACA",
-  "etage_vegetation": "collineen",
+  "vegetation_stage": "collineen",
   "created_at": "2026-03-04T10:00:00Z",
   "status": "submitted",
+  "visibility": "public",
+  "published_at": "2026-03-04T10:35:00Z",
   "factors": [
     {
       "factor_id": "factor_a",
       "observed_value_raw": { "autochthonous_genus_count": 4 },
       "selected_class": "S2",
       "score_points": 2,
-      "evidence": { "notes": "Genre verifie sur terrain" }
+      "evidence": { "notes": "Taxon validated in field" }
     }
   ],
   "ibp_peuplement_gestion": 23,
@@ -379,37 +404,44 @@ Regle de compatibilite:
 }
 ```
 
-### 10.4 Regles de versionning
-- `ibp_method_version` obligatoire a la creation du brouillon.
-- Si version non supportee:
-  - blocage de soumission,
-  - erreur `Version IBP non supportee`.
-- Les enums de classes et seuils sont figes par version.
+### 10.4 Versioning Rules
+- `ibp_method_version` is required at draft creation.
+- If version is unsupported:
+  - block submission,
+  - return `Unsupported IBP version` error.
+- Class enums and thresholds are fixed per version.
 
-## 11) Scenarios de test d'acceptation
-1. Classement correct d'un facteur:
-- entree brute -> classe attendue -> score attendu.
+## 11) Acceptance Test Scenarios
+1. Correct factor classification:
+- raw input -> expected class -> expected score.
 
-2. Cas limite de seuil:
-- valeur exactement au seuil -> classe correcte selon borne incluse/exclue.
+2. Threshold edge case:
+- value exactly on threshold -> correct class based on inclusive/exclusive bounds.
 
-3. Incoherence inter-facteurs:
-- warning leve sans bloquer la soumission (si regle non bloquante).
+3. Inter-factor inconsistency:
+- warning raised without blocking submission (for non-blocking rule).
 
-4. Soumission valide:
-- 10 facteurs scorables + champs obligatoires -> score calcule + statut `submitted`.
+4. Valid submission:
+- 10 scorable factors + required fields -> score computed + status `submitted`.
 
-5. Brouillon expire:
-- draft > 7 jours -> statut `expired`, soumission refusee.
+5. Expired draft:
+- draft > 7 days -> status `expired`, submission denied.
 
-6. Versionning:
-- meme releve avec version differente -> verifier seuils/version supportee.
+6. Visibility:
+- `private` not published in map/community surfaces, `public` eligible for publication.
 
-## 12) References officielles (source primaire)
-- CNPF - page IBP (documents officiels): https://www.cnpf.fr/n/ibp/n:2006
-- Definition IBP Fr v3.0 (maj 23/03/2023): https://www.cnpf.fr/sites/socle/files/cnpf-old/medias/documents/9a66d6016d0a99f576f35f53df4e73f3/ibp_def_fr_v3_0_230323_0.pdf
-- Fiches de releve IBP Fr v3.0 (maj 23/03/2023): https://www.cnpf.fr/sites/socle/files/cnpf-old/medias/documents/5cf710f876f8e4ddfd4007df318f71f5/ibp_rel_fr_v3_0_230323_0.pdf
-- Methodes de releve IBP (maj 10/10/2022): https://www.cnpf.fr/sites/socle/files/cnpf-old/medias/documents/e5f7f1ea0f6f4f63a2ef41a58ecab8e0/ibp_methodes_de_releve_v221010_0.pdf
+7. Post-publication management:
+- switching `public` -> `private` removes survey from map/community surfaces.
+- deletion marks survey as `deleted` and removes it from user/community lists.
 
-## 13) Change log
-- 2026-03-04: passage d'un template a une specification operationnelle complete (facteurs, seuils, score, validations, contrat de donnees, references CNPF).
+8. Versioning:
+- same survey with different version -> verify version-specific thresholds / support.
+
+## 12) Official References (Primary Source)
+- CNPF - IBP page (official documents): https://www.cnpf.fr/n/ibp/n:2006
+- IBP Fr v3.0 definition (updated 2023-03-23): https://www.cnpf.fr/sites/socle/files/cnpf-old/medias/documents/9a66d6016d0a99f576f35f53df4e73f3/ibp_def_fr_v3_0_230323_0.pdf
+- IBP Fr v3.0 survey sheets (updated 2023-03-23): https://www.cnpf.fr/sites/socle/files/cnpf-old/medias/documents/5cf710f876f8e4ddfd4007df318f71f5/ibp_rel_fr_v3_0_230323_0.pdf
+- IBP survey methods (updated 2022-10-10): https://www.cnpf.fr/sites/socle/files/cnpf-old/medias/documents/e5f7f1ea0f6f4f63a2ef41a58ecab8e0/ibp_methodes_de_releve_v221010_0.pdf
+
+## 13) Change Log
+- 2026-03-04: moved from template to full operational specification (factors, thresholds, scoring, validations, data contract, CNPF references).

@@ -1,7 +1,7 @@
 # Epic A - Access and Security
 
 ## Scope
-Authentication and session management for contributors.
+Authentication, session management, and basic profile management for contributors.
 
 ## User Stories
 
@@ -19,3 +19,12 @@ As a user, I want to log out so my account is secure on shared devices.
 Acceptance criteria:
 - I can log out from the profile menu.
 - After logout, I am redirected to the login screen.
+
+### US-A3 - Manage Profile
+As a contributor, I want to manage my profile information so my account is personalized and up to date.
+
+Acceptance criteria:
+- I can view and edit at least: first name, last name, display name, and profile picture.
+- Changes are saved and visible after app restart.
+- Profile picture upload supports camera and gallery selection.
+- Display name is used in community surfaces (for example leaderboard) while keeping personal identity controls.
