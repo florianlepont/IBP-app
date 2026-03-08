@@ -23,7 +23,7 @@ export type DraftInput = {
   site_name: string;
   region_version: 'ACA' | 'M';
   vegetation_stage: string;
-  factors: Record<string, number>;
+  factors: Record<string, unknown>;
 };
 
 const dbPromise = SQLite.openDatabaseAsync('ibp-local.db');
