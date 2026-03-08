@@ -80,3 +80,10 @@ Implemented:
   - `ibp_total = ibp_peuplement_gestion + ibp_contexte`
 - Submit is blocked with `422` if required IBP fields are missing/invalid
 - Mobile form now captures `region_version`, `vegetation_stage`, and A..J factor scores
+
+## Step 6.2 Observation Inputs + Contextual Help (Current)
+Implemented:
+- Mobile now captures observation-oriented inputs for all factors A..J (instead of score-only fields)
+- Contextual help toggles are available for each factor section in the mobile form
+- Backend IBP rule engine supports raw observation objects per factor and computes scores server-side
+- Backward compatibility kept for direct numeric factor scores during transition

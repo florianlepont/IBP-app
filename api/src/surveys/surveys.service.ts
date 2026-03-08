@@ -51,7 +51,7 @@ export class SurveysService {
       throw new BadRequestException('site_name is required');
     }
 
-    const draftValidation = this.ibpRules.validateDraft(body.factors);
+    const draftValidation = this.ibpRules.validateDraft(body.factors, body.region_version, body.vegetation_stage);
     if (!draftValidation.ok) {
       throw new UnprocessableEntityException({
         message: 'IBP factor validation failed',
@@ -171,7 +171,11 @@ export class SurveysService {
     const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
 
     if (body.factors) {
-      const check = this.ibpRules.validateDraft(body.factors);
+      const check = this.ibpRules.validateDraft(
+        body.factors,
+        body.region_version ?? existing.region_version,
+        body.vegetation_stage ?? existing.vegetation_stage
+      );
       if (!check.ok) {
         throw new UnprocessableEntityException({ message: 'IBP factor validation failed', errors: check.errors });
       }
