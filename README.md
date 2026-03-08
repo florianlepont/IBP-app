@@ -67,3 +67,16 @@ Implemented:
   - retry backoff for transient failures
   - terminal handling for `409`/`422`
   - local `last_sync_error` persisted for diagnostics
+
+## Step 5 IBP Business Rules (Current)
+Implemented:
+- Server-side IBP factor validation for A..J
+- Allowed score sets enforced:
+  - A..H: `0|1|2|5`
+  - I,J: `0|2|5`
+- Server-side score computation:
+  - `ibp_peuplement_gestion = A+B+C+D+E+F+G`
+  - `ibp_contexte = H+I+J`
+  - `ibp_total = ibp_peuplement_gestion + ibp_contexte`
+- Submit is blocked with `422` if required IBP fields are missing/invalid
+- Mobile form now captures `region_version`, `vegetation_stage`, and A..J factor scores

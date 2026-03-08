@@ -1,12 +1,22 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
+import { IbpRulesService } from './ibp-rules.service';
 import { SurveyEventRow, SurveyPatchBody, SurveyRow, SurveyUpsertBody } from './surveys.types';
 
 @Injectable()
 export class SurveysService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly ibpRules: IbpRulesService
+  ) {}
 
   async listForUser(user: AuthenticatedUser, status?: string): Promise<Array<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>> {
     const filters: string[] = ['user_id = $1', 'deleted_at IS NULL'];
@@ -41,8 +51,21 @@ export class SurveysService {
       throw new BadRequestException('site_name is required');
     }
 
+    const draftValidation = this.ibpRules.validateDraft(body.factors);
+    if (!draftValidation.ok) {
+      throw new UnprocessableEntityException({
+        message: 'IBP factor validation failed',
+        errors: draftValidation.errors
+      });
+    }
+
     const now = new Date();
     const expiresAt = body.expires_at ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const computedScores = draftValidation.scores ?? {
+      ibp_peuplement_gestion: 0,
+      ibp_contexte: 0,
+      ibp_total: 0
+    };
 
     const existing = await this.getSurveyForUser(body.id, user.id, false);
 
@@ -66,11 +89,11 @@ export class SurveysService {
           body.region_version ?? null,
           body.vegetation_stage ?? null,
           JSON.stringify(body.factors ?? {}),
-          JSON.stringify(body.scores ?? {}),
+          JSON.stringify(computedScores),
           JSON.stringify(body.location ?? {}),
           createdAt,
           createdAt,
-          body.status === 'submitted' ? now.toISOString() : null,
+          null,
           expiresAt,
           body.sync_version
         ]
@@ -110,10 +133,9 @@ export class SurveysService {
            factors = $8::jsonb,
            scores = $9::jsonb,
            location = $10::jsonb,
-           submitted_at = $11,
-           expires_at = $12,
-           sync_version = $13,
-           updated_at = $14
+           expires_at = $11,
+           sync_version = $12,
+           updated_at = $13
        WHERE id = $1 AND user_id = $2
        RETURNING id, updated_at::text`,
       [
@@ -125,9 +147,8 @@ export class SurveysService {
         body.region_version ?? existing.region_version,
         body.vegetation_stage ?? existing.vegetation_stage,
         JSON.stringify(body.factors ?? existing.factors ?? {}),
-        JSON.stringify(body.scores ?? existing.scores ?? {}),
+        JSON.stringify(computedScores),
         JSON.stringify(body.location ?? existing.location ?? {}),
-        body.status === 'submitted' ? now.toISOString() : existing.submitted_at,
         expiresAt,
         body.sync_version,
         now.toISOString()
@@ -148,6 +169,16 @@ export class SurveysService {
 
   async patchSurvey(user: AuthenticatedUser, surveyId: string, body: SurveyPatchBody): Promise<{ id: string; updated_at: string }> {
     const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    if (body.factors) {
+      const check = this.ibpRules.validateDraft(body.factors);
+      if (!check.ok) {
+        throw new UnprocessableEntityException({ message: 'IBP factor validation failed', errors: check.errors });
+      }
+      if (check.scores) {
+        body.scores = check.scores;
+      }
+    }
 
     const result = await this.db.query<{ id: string; updated_at: string }>(
       `UPDATE surveys
@@ -192,37 +223,46 @@ export class SurveysService {
     return result.rows[0];
   }
 
-  async submitSurvey(user: AuthenticatedUser, surveyId: string): Promise<{ id: string; status: 'submitted'; submitted_at: string }> {
+  async submitSurvey(user: AuthenticatedUser, surveyId: string): Promise<{ id: string; status: 'submitted'; submitted_at: string; scores: Record<string, number> }> {
     const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
 
-    if (existing.status === 'submitted' || existing.status === 'synced') {
-      return {
-        id: existing.id,
-        status: 'submitted',
-        submitted_at: existing.submitted_at ?? existing.updated_at
-      };
-    }
+    const validation = this.ibpRules.validateSubmit({
+      region_version: existing.region_version,
+      vegetation_stage: existing.vegetation_stage,
+      expires_at: existing.expires_at,
+      factors: existing.factors
+    });
 
-    const now = new Date();
-    if (now > new Date(existing.expires_at)) {
-      throw new ConflictException('Survey is expired and cannot be submitted');
+    if (!validation.ok || !validation.scores) {
+      throw new UnprocessableEntityException({
+        message: 'Survey cannot be submitted',
+        errors: validation.errors
+      });
     }
 
     const result = await this.db.query<{ id: string; status: 'submitted'; submitted_at: string }>(
       `UPDATE surveys
-       SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+       SET status = 'submitted',
+           submitted_at = NOW(),
+           scores = $3::jsonb,
+           updated_at = NOW()
        WHERE id = $1 AND user_id = $2
        RETURNING id, status, submitted_at::text`,
-      [surveyId, user.id]
+      [surveyId, user.id, JSON.stringify(validation.scores)]
     );
 
     if (!result.rows[0]) {
       throw new NotFoundException('Survey not found');
     }
 
-    await this.insertEvent(surveyId, user.id, 'submitted', {});
+    await this.insertEvent(surveyId, user.id, 'submitted', {
+      scores: validation.scores
+    });
 
-    return result.rows[0];
+    return {
+      ...result.rows[0],
+      scores: validation.scores
+    };
   }
 
   async getEvents(user: AuthenticatedUser, surveyId: string): Promise<{ items: SurveyEventRow[] }> {
