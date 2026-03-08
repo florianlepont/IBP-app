@@ -19,6 +19,13 @@ type QueueRow = {
   next_retry_at: string | null;
 };
 
+export type DraftInput = {
+  site_name: string;
+  region_version: 'ACA' | 'M';
+  vegetation_stage: string;
+  factors: Record<string, number>;
+};
+
 const dbPromise = SQLite.openDatabaseAsync('ibp-local.db');
 
 export async function initLocalDb(): Promise<void> {
@@ -45,15 +52,17 @@ export async function initLocalDb(): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+  `);
 
+  await db.execAsync(`
     ALTER TABLE local_surveys ADD COLUMN last_sync_error TEXT;
     ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT;
   `).catch(() => {
-    // SQLite throws if ALTER COLUMN already applied; safe to ignore for idempotent init.
+    // Safe for already-migrated local DBs.
   });
 }
 
-export async function createLocalDraft(siteName: string): Promise<LocalSurvey> {
+export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> {
   const db = await dbPromise;
 
   const id = `survey-${Date.now()}`;
@@ -61,18 +70,19 @@ export async function createLocalDraft(siteName: string): Promise<LocalSurvey> {
   const payload = {
     id,
     sync_version: 1,
-    site_name: siteName,
+    site_name: input.site_name,
     status: 'draft',
     visibility: 'private',
-    factors: {},
-    scores: {},
+    region_version: input.region_version,
+    vegetation_stage: input.vegetation_stage,
+    factors: input.factors,
     location: {}
   };
 
   await db.runAsync(
     `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, siteName, 'draft', 1, 'pending', null, now]
+    [id, input.site_name, 'draft', 1, 'pending', null, now]
   );
 
   await db.runAsync(
@@ -83,7 +93,7 @@ export async function createLocalDraft(siteName: string): Promise<LocalSurvey> {
 
   return {
     id,
-    site_name: siteName,
+    site_name: input.site_name,
     status: 'draft',
     sync_version: 1,
     sync_state: 'pending',
@@ -148,7 +158,6 @@ export async function syncPending(apiUrl: string, accessToken: string): Promise<
       const isConflictOrValidation = message.includes('HTTP 409') || message.includes('HTTP 422');
 
       if (isConflictOrValidation) {
-        // Terminal failure: keep record for user visibility, remove from queue.
         await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
         await db.runAsync(
           `UPDATE local_surveys
@@ -179,7 +188,50 @@ export async function syncPending(apiUrl: string, accessToken: string): Promise<
   return { synced, failed };
 }
 
+export async function submitSurvey(apiUrl: string, accessToken: string, surveyId: string): Promise<{ ok: boolean; message: string }> {
+  const db = await dbPromise;
+
+  const response = await fetch(`${apiUrl}/surveys/${surveyId}/submit`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const payload = (await safeJson(response)) as { errors?: string[]; message?: string };
+    const message = payload.errors?.join(' | ') ?? payload.message ?? `HTTP ${response.status}`;
+
+    await db.runAsync(
+      `UPDATE local_surveys
+       SET sync_state = 'failed', last_sync_error = ?, updated_at = ?
+       WHERE id = ?`,
+      [message, new Date().toISOString(), surveyId]
+    );
+
+    return { ok: false, message };
+  }
+
+  await db.runAsync(
+    `UPDATE local_surveys
+     SET status = 'submitted', sync_state = 'synced', last_sync_error = NULL, updated_at = ?
+     WHERE id = ?`,
+    [new Date().toISOString(), surveyId]
+  );
+
+  return { ok: true, message: 'Survey submitted' };
+}
+
 function computeNextRetryAt(now: Date, retryCount: number): string {
   const seconds = Math.min(300, Math.pow(2, Math.min(retryCount, 8)) * 5);
   return new Date(now.getTime() + seconds * 1000).toISOString();
+}
+
+async function safeJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
 }

@@ -67,4 +67,80 @@ describe('Surveys idempotency (e2e)', () => {
       .send({ ...payload, sync_version: 0 })
       .expect(409);
   });
+
+  it('rejects submit when IBP factors are incomplete', async () => {
+    const email = `e2e-submit-invalid-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-submit-invalid-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Incomplete Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: { A: 1, I: 2 },
+        location: {}
+      })
+      .expect(201);
+
+    const submit = await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(422);
+
+    expect(Array.isArray(submit.body.errors)).toBe(true);
+    expect(submit.body.errors.join(' ')).toContain('factor B is required');
+  });
+
+  it('submits valid IBP survey and returns computed scores', async () => {
+    const email = `e2e-submit-valid-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-submit-valid-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Valid Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+        },
+        location: {}
+      })
+      .expect(201);
+
+    const submit = await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    expect(submit.body.status).toBe('submitted');
+    expect(submit.body.scores).toEqual({
+      ibp_peuplement_gestion: 7,
+      ibp_contexte: 5,
+      ibp_total: 12
+    });
+  });
 });
