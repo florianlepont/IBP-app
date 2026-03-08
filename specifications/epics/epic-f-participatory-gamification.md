@@ -9,7 +9,7 @@ Drive engagement through visibility, points, rankings, progression, and support 
 As a contributor, I want to view completed IBP surveys on a map of France so I can track collective progress.
 
 Acceptance criteria:
-- I can open a map showing completed IBP surveys in French forests.
+- I can open a map showing completed `public` IBP surveys in French forests.
 - I can filter by date range and region/department.
 - Sensitive data is not exposed (no exact private personal information).
 
