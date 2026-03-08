@@ -1,8 +1,8 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
-import { SurveyRow, SurveyUpsertBody } from './surveys.types';
+import { SurveyEventRow, SurveyPatchBody, SurveyRow, SurveyUpsertBody } from './surveys.types';
 
 @Injectable()
 export class SurveysService {
@@ -42,17 +42,9 @@ export class SurveysService {
     }
 
     const now = new Date();
-    const submittedAt = body.status === 'submitted' ? now.toISOString() : null;
     const expiresAt = body.expires_at ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const existingResult = await this.db.query<SurveyRow>(
-      `SELECT *
-       FROM surveys
-       WHERE id = $1 AND user_id = $2`,
-      [body.id, user.id]
-    );
-
-    const existing = existingResult.rows[0];
+    const existing = await this.getSurveyForUser(body.id, user.id, false);
 
     if (!existing) {
       const createdAt = now.toISOString();
@@ -78,7 +70,7 @@ export class SurveysService {
           JSON.stringify(body.location ?? {}),
           createdAt,
           createdAt,
-          submittedAt,
+          body.status === 'submitted' ? now.toISOString() : null,
           expiresAt,
           body.sync_version
         ]
@@ -135,7 +127,7 @@ export class SurveysService {
         JSON.stringify(body.factors ?? existing.factors ?? {}),
         JSON.stringify(body.scores ?? existing.scores ?? {}),
         JSON.stringify(body.location ?? existing.location ?? {}),
-        submittedAt,
+        body.status === 'submitted' ? now.toISOString() : existing.submitted_at,
         expiresAt,
         body.sync_version,
         now.toISOString()
@@ -152,6 +144,118 @@ export class SurveysService {
       server_status: 'synced',
       updated_at: updateResult.rows[0].updated_at
     };
+  }
+
+  async patchSurvey(user: AuthenticatedUser, surveyId: string, body: SurveyPatchBody): Promise<{ id: string; updated_at: string }> {
+    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    const result = await this.db.query<{ id: string; updated_at: string }>(
+      `UPDATE surveys
+       SET site_name = COALESCE($3, site_name),
+           visibility = COALESCE($4, visibility),
+           region_version = COALESCE($5, region_version),
+           vegetation_stage = COALESCE($6, vegetation_stage),
+           factors = COALESCE($7::jsonb, factors),
+           scores = COALESCE($8::jsonb, scores),
+           location = COALESCE($9::jsonb, location),
+           updated_at = NOW()
+       WHERE id = $1 AND user_id = $2
+       RETURNING id, updated_at::text`,
+      [
+        surveyId,
+        user.id,
+        body.site_name ?? null,
+        body.visibility ?? null,
+        body.region_version ?? null,
+        body.vegetation_stage ?? null,
+        body.factors ? JSON.stringify(body.factors) : null,
+        body.scores ? JSON.stringify(body.scores) : null,
+        body.location ? JSON.stringify(body.location) : null
+      ]
+    );
+
+    if (!result.rows[0]) {
+      throw new NotFoundException('Survey not found');
+    }
+
+    await this.insertEvent(surveyId, user.id, 'updated', {
+      changed_fields: Object.keys(body)
+    });
+
+    if (body.visibility && body.visibility !== existing.visibility) {
+      await this.insertEvent(surveyId, user.id, 'visibility_changed', {
+        from: existing.visibility,
+        to: body.visibility
+      });
+    }
+
+    return result.rows[0];
+  }
+
+  async submitSurvey(user: AuthenticatedUser, surveyId: string): Promise<{ id: string; status: 'submitted'; submitted_at: string }> {
+    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    if (existing.status === 'submitted' || existing.status === 'synced') {
+      return {
+        id: existing.id,
+        status: 'submitted',
+        submitted_at: existing.submitted_at ?? existing.updated_at
+      };
+    }
+
+    const now = new Date();
+    if (now > new Date(existing.expires_at)) {
+      throw new ConflictException('Survey is expired and cannot be submitted');
+    }
+
+    const result = await this.db.query<{ id: string; status: 'submitted'; submitted_at: string }>(
+      `UPDATE surveys
+       SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND user_id = $2
+       RETURNING id, status, submitted_at::text`,
+      [surveyId, user.id]
+    );
+
+    if (!result.rows[0]) {
+      throw new NotFoundException('Survey not found');
+    }
+
+    await this.insertEvent(surveyId, user.id, 'submitted', {});
+
+    return result.rows[0];
+  }
+
+  async getEvents(user: AuthenticatedUser, surveyId: string): Promise<{ items: SurveyEventRow[] }> {
+    await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    const events = await this.db.query<SurveyEventRow>(
+      `SELECT id, survey_id, actor_id, event_type, payload, created_at::text
+       FROM survey_events
+       WHERE survey_id = $1
+       ORDER BY created_at DESC`,
+      [surveyId]
+    );
+
+    return { items: events.rows };
+  }
+
+  private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {
+    const survey = await this.getSurveyForUser(surveyId, userId, true);
+    if (!survey) {
+      throw new NotFoundException('Survey not found');
+    }
+    return survey;
+  }
+
+  private async getSurveyForUser(surveyId: string, userId: string, activeOnly: boolean): Promise<SurveyRow | null> {
+    const where = activeOnly ? 'AND deleted_at IS NULL' : '';
+    const result = await this.db.query<SurveyRow>(
+      `SELECT *
+       FROM surveys
+       WHERE id = $1 AND user_id = $2 ${where}`,
+      [surveyId, userId]
+    );
+    return result.rows[0] ?? null;
   }
 
   private async insertEvent(surveyId: string, actorId: string, eventType: string, payload: Record<string, unknown>): Promise<void> {

@@ -153,6 +153,9 @@ export default function App() {
               <Text style={styles.rowMeta}>
                 status: {survey.status} | sync: {survey.sync_state} | v{survey.sync_version}
               </Text>
+              {survey.last_sync_error ? (
+                <Text style={styles.rowMeta}>last error: {survey.last_sync_error}</Text>
+              ) : null}
             </View>
           ))}
           {surveys.length === 0 ? <Text style={styles.meta}>No local survey yet.</Text> : null}

@@ -22,7 +22,7 @@ docker compose -f infra/docker-compose.yml up -d
 ## Run
 Terminal 1:
 ```bash
-npm run dev:api
+npm run dev:api:migrated
 ```
 
 Terminal 2:
@@ -53,3 +53,17 @@ Manual test flow:
    - Create offline draft
    - Sync pending drafts
 5. Confirm survey persisted in API DB (`surveys` table) and local item becomes `synced`.
+
+## Step 4 Hardening (Current)
+Implemented:
+- API auth hardened with JWT (`access` + `refresh`) and password hashing (`bcrypt`)
+- SQL migrations system (`api/migrations`, `api/scripts/migrate.js`)
+- User profile partial update endpoint: `PATCH /v1/me`
+- Survey workflow endpoints:
+  - `PATCH /v1/surveys/:id`
+  - `POST /v1/surveys/:id/submit`
+  - `GET /v1/surveys/:id/events`
+- Mobile sync improvements:
+  - retry backoff for transient failures
+  - terminal handling for `409`/`422`
+  - local `last_sync_error` persisted for diagnostics
