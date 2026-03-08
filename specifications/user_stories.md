@@ -103,4 +103,4 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - What moderation policy should Etats-Sauvages apply for disputed surveys?
 
 ## 11) Detailed Functional Specification Reference
-- IBP factor-level form definition: [ibp_form_spec.md](/Users/florianlepont/Documents/Projets/IBP%20app/specifications/ibp_form_spec.md)
+- IBP factor-level form definition: [ibp_form_spec.md](/Users/florianlepont/Documents/Projets/IBP%20app/specifications/epics/ibp_form_spec.md)
