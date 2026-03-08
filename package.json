@@ -7,8 +7,10 @@
     "api"
   ],
   "scripts": {
+    "migrate:api": "npm --workspace api run migrate",
     "dev:mobile": "npm --workspace mobile run start",
     "dev:api": "npm --workspace api run start:dev",
+    "dev:api:migrated": "npm run migrate:api && npm run dev:api",
     "dev": "echo \"Run dev:api and dev:mobile in separate terminals\"",
     "lint": "echo \"Lint not configured yet\"",
     "test": "echo \"Tests not configured yet\""
