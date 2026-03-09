@@ -24,6 +24,14 @@ export type SurveyPatchBody = {
 
 type JsonObject = Record<string, unknown>;
 
+export type FactorCanonical = {
+  factor_id: string;
+  observed_value_raw: unknown;
+  selected_class: 'S0' | 'S1' | 'S2' | 'S5';
+  score_points: number;
+  warnings: string[];
+};
+
 export type SurveyRow = {
   id: string;
   user_id: string;
@@ -33,6 +41,7 @@ export type SurveyRow = {
   region_version: string | null;
   vegetation_stage: string | null;
   factors: JsonObject;
+  factor_results: Record<string, FactorCanonical>;
   scores: JsonObject;
   location: JsonObject;
   created_at: string;

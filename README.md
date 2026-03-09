@@ -97,3 +97,14 @@ Implemented:
 - Added non-blocking consistency warnings (cross-factor checks) and F-group capping warning
 - Added region compatibility special case: `montagnard_mediterraneen` uses ACA thresholds
 - Added e2e test for full raw A..J payload with exact expected score computation
+
+## Step 8 Canonical Factor Model + Detail Endpoint (Current)
+Implemented:
+- Survey persistence now stores canonical IBP factor outputs in `surveys.factor_results` (JSONB)
+- New migration: `002_factor_results.sql`
+- `POST /v1/surveys` and `POST /v1/surveys/:id/submit` now persist canonical factor results
+- New endpoint: `GET /v1/surveys/:id` returns full survey payload including:
+  - `factors` (raw observation payload)
+  - `factor_results` (canonical normalized model)
+  - `scores` (computed IBP aggregates)
+- Added e2e coverage to assert canonical factor results are returned by detail endpoint

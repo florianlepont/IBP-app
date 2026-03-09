@@ -41,7 +41,7 @@ export class SurveysService {
   async upsertForUser(
     user: AuthenticatedUser,
     body: SurveyUpsertBody
-  ): Promise<{ id: string; server_status: 'synced'; updated_at: string; warnings?: string[] }> {
+  ): Promise<{ id: string; server_status: 'synced'; updated_at: string; warnings?: string[]; factor_results?: SurveyRow['factor_results'] }> {
     if (!body.id) {
       throw new BadRequestException('id is required');
     }
@@ -78,10 +78,10 @@ export class SurveysService {
       const insertResult = await this.db.query<{ id: string; updated_at: string }>(
         `INSERT INTO surveys (
           id, user_id, site_name, status, visibility, region_version, vegetation_stage,
-          factors, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
+          factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
-          $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15
+          $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16
         )
         RETURNING id, updated_at::text`,
         [
@@ -93,6 +93,7 @@ export class SurveysService {
           body.region_version ?? null,
           body.vegetation_stage ?? null,
           JSON.stringify(body.factors ?? {}),
+          JSON.stringify(draftValidation.factor_results ?? {}),
           JSON.stringify(computedScores),
           JSON.stringify(body.location ?? {}),
           createdAt,
@@ -113,7 +114,8 @@ export class SurveysService {
         id: insertResult.rows[0].id,
         server_status: 'synced',
         updated_at: insertResult.rows[0].updated_at,
-        warnings: draftValidation.warnings
+        warnings: draftValidation.warnings,
+        factor_results: draftValidation.factor_results ?? undefined
       };
     }
 
@@ -126,7 +128,8 @@ export class SurveysService {
         id: existing.id,
         server_status: 'synced',
         updated_at: existing.updated_at,
-        warnings: draftValidation.warnings
+        warnings: draftValidation.warnings,
+        factor_results: draftValidation.factor_results ?? undefined
       };
     }
 
@@ -138,11 +141,12 @@ export class SurveysService {
            region_version = $6,
            vegetation_stage = $7,
            factors = $8::jsonb,
-           scores = $9::jsonb,
-           location = $10::jsonb,
-           expires_at = $11,
-           sync_version = $12,
-           updated_at = $13
+           factor_results = $9::jsonb,
+           scores = $10::jsonb,
+           location = $11::jsonb,
+           expires_at = $12,
+           sync_version = $13,
+           updated_at = $14
        WHERE id = $1 AND user_id = $2
        RETURNING id, updated_at::text`,
       [
@@ -154,6 +158,7 @@ export class SurveysService {
         body.region_version ?? existing.region_version,
         body.vegetation_stage ?? existing.vegetation_stage,
         JSON.stringify(body.factors ?? existing.factors ?? {}),
+        JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
         JSON.stringify(computedScores),
         JSON.stringify(body.location ?? existing.location ?? {}),
         expiresAt,
@@ -172,7 +177,8 @@ export class SurveysService {
       id: updateResult.rows[0].id,
       server_status: 'synced',
       updated_at: updateResult.rows[0].updated_at,
-      warnings: draftValidation.warnings
+      warnings: draftValidation.warnings,
+      factor_results: draftValidation.factor_results ?? undefined
     };
   }
 
@@ -195,6 +201,10 @@ export class SurveysService {
       if (check.scores) {
         body.scores = check.scores;
       }
+      if (check.factor_results) {
+        const mutableBody = body as SurveyPatchBody & { factor_results?: SurveyRow['factor_results'] };
+        mutableBody.factor_results = check.factor_results;
+      }
     }
 
     const result = await this.db.query<{ id: string; updated_at: string }>(
@@ -204,8 +214,9 @@ export class SurveysService {
            region_version = COALESCE($5, region_version),
            vegetation_stage = COALESCE($6, vegetation_stage),
            factors = COALESCE($7::jsonb, factors),
-           scores = COALESCE($8::jsonb, scores),
-           location = COALESCE($9::jsonb, location),
+           factor_results = COALESCE($8::jsonb, factor_results),
+           scores = COALESCE($9::jsonb, scores),
+           location = COALESCE($10::jsonb, location),
            updated_at = NOW()
        WHERE id = $1 AND user_id = $2
        RETURNING id, updated_at::text`,
@@ -217,6 +228,9 @@ export class SurveysService {
         body.region_version ?? null,
         body.vegetation_stage ?? null,
         body.factors ? JSON.stringify(body.factors) : null,
+        (body as SurveyPatchBody & { factor_results?: SurveyRow['factor_results'] }).factor_results
+          ? JSON.stringify((body as SurveyPatchBody & { factor_results?: SurveyRow['factor_results'] }).factor_results)
+          : null,
         body.scores ? JSON.stringify(body.scores) : null,
         body.location ? JSON.stringify(body.location) : null
       ]
@@ -238,6 +252,50 @@ export class SurveysService {
     }
 
     return result.rows[0];
+  }
+
+  async getSurveyById(
+    user: AuthenticatedUser,
+    surveyId: string
+  ): Promise<
+    Pick<
+      SurveyRow,
+      | 'id'
+      | 'site_name'
+      | 'status'
+      | 'visibility'
+      | 'region_version'
+      | 'vegetation_stage'
+      | 'factors'
+      | 'factor_results'
+      | 'scores'
+      | 'location'
+      | 'created_at'
+      | 'updated_at'
+      | 'submitted_at'
+      | 'expires_at'
+      | 'sync_version'
+    >
+  > {
+    const survey = await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    return {
+      id: survey.id,
+      site_name: survey.site_name,
+      status: survey.status,
+      visibility: survey.visibility,
+      region_version: survey.region_version,
+      vegetation_stage: survey.vegetation_stage,
+      factors: survey.factors,
+      factor_results: survey.factor_results,
+      scores: survey.scores,
+      location: survey.location,
+      created_at: survey.created_at,
+      updated_at: survey.updated_at,
+      submitted_at: survey.submitted_at,
+      expires_at: survey.expires_at,
+      sync_version: survey.sync_version
+    };
   }
 
   async submitSurvey(
@@ -265,11 +323,12 @@ export class SurveysService {
       `UPDATE surveys
        SET status = 'submitted',
            submitted_at = NOW(),
-           scores = $3::jsonb,
+           factor_results = $3::jsonb,
+           scores = $4::jsonb,
            updated_at = NOW()
        WHERE id = $1 AND user_id = $2
        RETURNING id, status, submitted_at::text`,
-      [surveyId, user.id, JSON.stringify(validation.scores)]
+      [surveyId, user.id, JSON.stringify(validation.factor_results ?? {}), JSON.stringify(validation.scores)]
     );
 
     if (!result.rows[0]) {

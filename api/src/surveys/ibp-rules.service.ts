@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { FactorCanonical } from './surveys.types';
 
 export type IbpValidationIssue = {
   factor?: string;
@@ -13,6 +14,7 @@ export type IbpValidationResult = {
   warnings: string[];
   issues: IbpValidationIssue[];
   factor_scores: Record<string, number> | null;
+  factor_results: Record<string, FactorCanonical> | null;
   scores: {
     ibp_peuplement_gestion: number;
     ibp_contexte: number;
@@ -23,6 +25,11 @@ export type IbpValidationResult = {
 type Factors = Record<string, unknown>;
 type RegionVersion = 'ACA' | 'M';
 
+type NormalizeContext = {
+  issues: IbpValidationIssue[];
+  factorResults: Record<string, FactorCanonical>;
+};
+
 const FACTOR_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as const;
 const STANDARD_ALLOWED = new Set([0, 1, 2, 5]);
 const IJ_ALLOWED = new Set([0, 2, 5]);
@@ -31,17 +38,29 @@ const IJ_ALLOWED = new Set([0, 2, 5]);
 export class IbpRulesService {
   validateDraft(factors: Factors | null | undefined, regionVersion?: string | null, vegetationStage?: string | null): IbpValidationResult {
     const issues: IbpValidationIssue[] = [];
+    const factorResults: Record<string, FactorCanonical> = {};
 
     const thresholdRegion = this.resolveThresholdRegion(this.normalizeRegion(regionVersion), vegetationStage ?? undefined);
-    const normalized = this.normalizeFactors(factors, issues, false, thresholdRegion, vegetationStage ?? undefined);
+    const normalized = this.normalizeFactors(
+      factors,
+      {
+        issues,
+        factorResults
+      },
+      false,
+      thresholdRegion,
+      vegetationStage ?? undefined
+    );
 
     if (!normalized) {
-      return this.formatResult(issues, null);
+      return this.formatResult(issues, null, null, factorResults);
     }
 
     this.addNonBlockingConsistencyWarnings(normalized, issues);
+    this.applyWarningsToCanonicalFactors(issues, factorResults);
+
     const scores = this.computeScores(normalized);
-    return this.formatResult(issues, scores, normalized);
+    return this.formatResult(issues, scores, normalized, factorResults);
   }
 
   validateSubmit(input: {
@@ -51,6 +70,7 @@ export class IbpRulesService {
     factors?: Factors | null;
   }): IbpValidationResult {
     const issues: IbpValidationIssue[] = [];
+    const factorResults: Record<string, FactorCanonical> = {};
 
     const region = this.normalizeRegion(input.region_version);
     if (!region) {
@@ -68,19 +88,31 @@ export class IbpRulesService {
     }
 
     const thresholdRegion = this.resolveThresholdRegion(region, input.vegetation_stage ?? undefined);
-    const normalized = this.normalizeFactors(input.factors, issues, true, thresholdRegion, input.vegetation_stage ?? undefined);
+    const normalized = this.normalizeFactors(
+      input.factors,
+      {
+        issues,
+        factorResults
+      },
+      true,
+      thresholdRegion,
+      input.vegetation_stage ?? undefined
+    );
+
     if (!normalized) {
-      return this.formatResult(issues, null);
+      return this.formatResult(issues, null, null, factorResults);
     }
 
     this.addNonBlockingConsistencyWarnings(normalized, issues);
+    this.applyWarningsToCanonicalFactors(issues, factorResults);
+
     const scores = this.computeScores(normalized);
-    return this.formatResult(issues, scores, normalized);
+    return this.formatResult(issues, scores, normalized, factorResults);
   }
 
   private normalizeFactors(
     factors: Factors | null | undefined,
-    issues: IbpValidationIssue[],
+    context: NormalizeContext,
     requireAll: boolean,
     regionVersion?: RegionVersion,
     vegetationStage?: string
@@ -93,24 +125,31 @@ export class IbpRulesService {
 
       if (value === undefined || value === null || value === '') {
         if (requireAll) {
-          issues.push(this.issue('factor_required', `factor ${key} is required`, true, key));
+          context.issues.push(this.issue('factor_required', `factor ${key} is required`, true, key));
         }
         continue;
       }
 
-      const score = this.resolveFactorScore(key, value, regionVersion, vegetationStage, issues);
+      const score = this.resolveFactorScore(key, value, regionVersion, vegetationStage, context);
       if (score === null) {
-        issues.push(this.issue('factor_invalid_raw', `factor ${key} has invalid raw input`, true, key));
+        context.issues.push(this.issue('factor_invalid_raw', `factor ${key} has invalid raw input`, true, key));
         continue;
       }
 
       if (!this.isAllowedScore(key, score)) {
         const allowedValues = key === 'I' || key === 'J' ? '0,2,5' : '0,1,2,5';
-        issues.push(this.issue('factor_invalid_score', `factor ${key} must resolve to one of [${allowedValues}]`, true, key));
+        context.issues.push(this.issue('factor_invalid_score', `factor ${key} must resolve to one of [${allowedValues}]`, true, key));
         continue;
       }
 
       normalized[key] = score;
+      context.factorResults[key] = {
+        factor_id: `factor_${key.toLowerCase()}`,
+        observed_value_raw: value,
+        selected_class: this.toClass(score),
+        score_points: score,
+        warnings: []
+      };
     }
 
     return normalized;
@@ -121,7 +160,7 @@ export class IbpRulesService {
     rawValue: unknown,
     regionVersion: RegionVersion | undefined,
     vegetationStage: string | undefined,
-    issues: IbpValidationIssue[]
+    context: NormalizeContext
   ): number | null {
     const direct = this.asNumber(rawValue);
     if (direct !== null) {
@@ -143,7 +182,7 @@ export class IbpRulesService {
       case 'E':
         return this.scoreFactorE(rawValue);
       case 'F':
-        return this.scoreFactorF(rawValue, issues);
+        return this.scoreFactorF(rawValue, context);
       case 'G':
         return this.scoreFactorG(rawValue, regionVersion, vegetationStage);
       case 'H':
@@ -158,9 +197,7 @@ export class IbpRulesService {
 
   private scoreFactorA(raw: Record<string, unknown>, region?: RegionVersion, stage?: string): number | null {
     const count = this.pickNumber(raw, ['native_genus_count', 'autochthonous_genus_count', 'count']);
-    if (count === null) {
-      return null;
-    }
+    if (count === null) return null;
 
     const isSubalpin = region === 'ACA' && stage === 'subalpin';
     if (isSubalpin) {
@@ -180,9 +217,7 @@ export class IbpRulesService {
     const strataCount = this.pickNumber(raw, ['strata_count', 'count']);
     const coverPercent = this.pickNumber(raw, ['covered_autochthonous_percent', 'native_cover_percent']);
 
-    if (strataCount === null || coverPercent === null) {
-      return null;
-    }
+    if (strataCount === null || coverPercent === null) return null;
 
     let score = 0;
     if (strataCount <= 1) score = 0;
@@ -202,9 +237,7 @@ export class IbpRulesService {
     const bmmCount = this.pickNumber(raw, ['bmm_count']);
     const surfaceHa = this.pickNumber(raw, ['surface_ha']);
 
-    if (bmgCount === null || bmmCount === null || surfaceHa === null || surfaceHa <= 0) {
-      return null;
-    }
+    if (bmgCount === null || bmmCount === null || surfaceHa === null || surfaceHa <= 0) return null;
 
     const bmgPerHa = bmgCount / surfaceHa;
     const bmmPerHa = bmmCount / surfaceHa;
@@ -220,9 +253,7 @@ export class IbpRulesService {
     const gbCount = this.pickNumber(raw, ['gb_count']);
     const surfaceHa = this.pickNumber(raw, ['surface_ha']);
 
-    if (tgbCount === null || gbCount === null || surfaceHa === null || surfaceHa <= 0) {
-      return null;
-    }
+    if (tgbCount === null || gbCount === null || surfaceHa === null || surfaceHa <= 0) return null;
 
     const tgbPerHa = tgbCount / surfaceHa;
     const gbPerHa = gbCount / surfaceHa;
@@ -233,7 +264,7 @@ export class IbpRulesService {
     return 5;
   }
 
-  private scoreFactorF(raw: Record<string, unknown>, issues: IbpValidationIssue[]): number | null {
+  private scoreFactorF(raw: Record<string, unknown>, context: NormalizeContext): number | null {
     const treesPerHa = this.pickNumber(raw, ['trees_per_ha']);
     if (treesPerHa !== null) {
       if (treesPerHa < 2) return 0;
@@ -243,16 +274,14 @@ export class IbpRulesService {
     }
 
     const groups = raw.dmh_group_counts;
-    if (!Array.isArray(groups)) {
-      return null;
-    }
+    if (!Array.isArray(groups)) return null;
 
     let cappedTotal = 0;
     for (const g of groups) {
       const n = this.asNumber(g);
       if (n === null) return null;
       if (n > 2) {
-        issues.push(this.issue('factor_f_group_capped', 'factor F group count capped to 2 trees/ha', false, 'F'));
+        context.issues.push(this.issue('factor_f_group_capped', 'factor F group count capped to 2 trees/ha', false, 'F'));
       }
       cappedTotal += Math.min(2, Math.max(0, n));
     }
@@ -275,9 +304,7 @@ export class IbpRulesService {
       }
     }
 
-    if (percent === null) {
-      return null;
-    }
+    if (percent === null) return null;
 
     const isSubalpin = region === 'ACA' && stage === 'subalpin';
     if (percent <= 0) return 0;
@@ -291,9 +318,7 @@ export class IbpRulesService {
 
   private scoreFactorH(raw: Record<string, unknown>): number | null {
     const n = this.pickNumber(raw, ['class_score', 'score']);
-    if (n !== null) {
-      return n;
-    }
+    if (n !== null) return n;
 
     const cls = typeof raw.class === 'string' ? raw.class.trim().toLowerCase() : '';
     if (!cls) return null;
@@ -319,6 +344,15 @@ export class IbpRulesService {
 
     if ((factors.F ?? 0) >= 5 && (factors.E ?? 0) === 0) {
       issues.push(this.issue('consistency_e_f', 'factor_f is high while factor_e is 0; possible but should be checked', false, 'F'));
+    }
+  }
+
+  private applyWarningsToCanonicalFactors(issues: IbpValidationIssue[], factorResults: Record<string, FactorCanonical>): void {
+    for (const issue of issues) {
+      if (issue.blocking || !issue.factor) continue;
+      const canonical = factorResults[issue.factor];
+      if (!canonical) continue;
+      canonical.warnings.push(issue.message);
     }
   }
 
@@ -356,22 +390,16 @@ export class IbpRulesService {
   private pickNumber(obj: Record<string, unknown>, keys: string[]): number | null {
     for (const k of keys) {
       const n = this.asNumber(obj[k]);
-      if (n !== null) {
-        return n;
-      }
+      if (n !== null) return n;
     }
     return null;
   }
 
   private asNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string' && value.trim() !== '') {
       const n = Number(value);
-      if (Number.isFinite(n)) {
-        return n;
-      }
+      if (Number.isFinite(n)) return n;
     }
     return null;
   }
@@ -384,10 +412,18 @@ export class IbpRulesService {
     return { code, message, blocking, factor };
   }
 
+  private toClass(score: number): 'S0' | 'S1' | 'S2' | 'S5' {
+    if (score === 0) return 'S0';
+    if (score === 1) return 'S1';
+    if (score === 2) return 'S2';
+    return 'S5';
+  }
+
   private formatResult(
     issues: IbpValidationIssue[],
     scores: IbpValidationResult['scores'],
-    factorScores: Record<string, number> | null = null
+    factorScores: Record<string, number> | null,
+    factorResults: Record<string, FactorCanonical>
   ): IbpValidationResult {
     const errors = issues.filter((i) => i.blocking).map((i) => i.message);
     const warnings = issues.filter((i) => !i.blocking).map((i) => i.message);
@@ -398,6 +434,7 @@ export class IbpRulesService {
       warnings,
       issues,
       factor_scores: factorScores,
+      factor_results: Object.keys(factorResults).length > 0 ? factorResults : null,
       scores
     };
   }

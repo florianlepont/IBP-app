@@ -21,6 +21,11 @@ export class SurveysController {
     return this.surveysService.upsertForUser(user, body);
   }
 
+  @Get(':id')
+  async getById(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.surveysService.getSurveyById(user, id);
+  }
+
   @Patch(':id')
   async patch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() body: SurveyPatchBody) {
     return this.surveysService.patchSurvey(user, id, body);
