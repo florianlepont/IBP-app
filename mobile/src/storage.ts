@@ -107,6 +107,13 @@ type RemoteSurvey = {
   id: string;
   site_name: string;
   status: string;
+  visibility?: string;
+  region_version?: string | null;
+  vegetation_stage?: string | null;
+  factors?: Record<string, unknown>;
+  scores?: Record<string, unknown>;
+  location?: Record<string, unknown>;
+  expires_at?: string | null;
   sync_version: number;
   deleted_at?: string | null;
 };
@@ -136,6 +143,16 @@ export type DraftInput = {
   factors: Record<string, unknown>;
 };
 
+export type UpdateDraftInput = {
+  survey_id: string;
+  site_name: string;
+  region_version: 'ACA' | 'M';
+  vegetation_stage: string;
+  factors: Record<string, unknown>;
+  visibility?: 'private' | 'public';
+  location?: Record<string, unknown>;
+};
+
 export type LocalAttachmentInput = {
   survey_id: string;
   local_uri: string;
@@ -162,6 +179,7 @@ export async function initLocalDb(): Promise<void> {
       last_sync_error_code TEXT,
       last_sync_error_at TEXT,
       sync_blocked INTEGER NOT NULL DEFAULT 0,
+      payload_json TEXT,
       updated_at TEXT NOT NULL
     );
 
@@ -210,6 +228,7 @@ export async function initLocalDb(): Promise<void> {
   await addColumnIfMissing(db, 'local_surveys', 'last_sync_error_code TEXT');
   await addColumnIfMissing(db, 'local_surveys', 'last_sync_error_at TEXT');
   await addColumnIfMissing(db, 'local_surveys', 'sync_blocked INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'local_surveys', 'payload_json TEXT');
   await addColumnIfMissing(db, 'sync_queue', 'next_retry_at TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'remote_attachment_id TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'storage_key TEXT');
@@ -238,9 +257,9 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
   };
 
   await db.runAsync(
-    `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, input.site_name, 'draft', 1, 'pending', null, null, null, 0, now]
+    `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, input.site_name, 'draft', 1, 'pending', null, null, null, 0, JSON.stringify(payload), now]
   );
 
   await db.runAsync(
@@ -352,6 +371,126 @@ export async function queueDeleteSurvey(surveyId: string): Promise<{ queued_dele
   await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [surveyId]);
 
   return { queued_delete: true };
+}
+
+export async function getLocalSurveyDraft(surveyId: string): Promise<SurveyQueuePayload | null> {
+  const db = await dbPromise;
+  const row = await db.getFirstAsync<{
+    id: string;
+    site_name: string;
+    sync_version: number;
+    payload_json: string | null;
+  }>(
+    `SELECT id, site_name, sync_version, payload_json
+     FROM local_surveys
+     WHERE id = ?`,
+    [surveyId]
+  );
+
+  if (!row?.id) {
+    return null;
+  }
+
+  const parsedPayload = row.payload_json ? safeParseJson(row.payload_json) : null;
+  if (isSurveyQueuePayload(parsedPayload)) {
+    return parsedPayload;
+  }
+
+  return {
+    id: row.id,
+    sync_version: row.sync_version,
+    site_name: row.site_name,
+    status: 'draft',
+    visibility: 'private',
+    factors: {},
+    location: {}
+  };
+}
+
+export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSurvey> {
+  const db = await dbPromise;
+  const now = new Date().toISOString();
+
+  const existing = await db.getFirstAsync<{
+    id: string;
+    site_name: string;
+    status: string;
+    sync_version: number;
+    payload_json: string | null;
+  }>(
+    `SELECT id, site_name, status, sync_version, payload_json
+     FROM local_surveys
+     WHERE id = ?`,
+    [input.survey_id]
+  );
+
+  if (!existing?.id) {
+    throw new Error(`Unknown local survey: ${input.survey_id}`);
+  }
+
+  const parsedPayload = existing.payload_json ? safeParseJson(existing.payload_json) : null;
+  const basePayload = isSurveyQueuePayload(parsedPayload)
+    ? parsedPayload
+    : {
+        id: existing.id,
+        sync_version: existing.sync_version,
+        site_name: existing.site_name,
+        status: existing.status || 'draft',
+        visibility: 'private',
+        factors: {},
+        location: {}
+      };
+
+  const nextSyncVersion = Math.max(1, Number(basePayload.sync_version ?? existing.sync_version ?? 0) + 1);
+  const nextPayload: SurveyQueuePayload = {
+    ...basePayload,
+    id: input.survey_id,
+    sync_version: nextSyncVersion,
+    site_name: input.site_name,
+    status: 'draft',
+    visibility: input.visibility ?? (basePayload.visibility as 'private' | 'public' | undefined) ?? 'private',
+    region_version: input.region_version,
+    vegetation_stage: input.vegetation_stage,
+    factors: input.factors,
+    location: input.location ?? (basePayload.location as Record<string, unknown> | undefined) ?? {}
+  };
+
+  await deleteQueuedSurveyUpserts(db, input.survey_id);
+
+  await db.runAsync(
+    `INSERT INTO sync_queue (survey_id, payload, status, retry_count, next_retry_at, created_at, updated_at)
+     VALUES (?, ?, 'pending', 0, NULL, ?, ?)`,
+    [input.survey_id, JSON.stringify(nextPayload), now, now]
+  );
+
+  await db.runAsync(
+    `UPDATE local_surveys
+     SET site_name = ?,
+         status = 'draft',
+         sync_version = ?,
+         sync_state = 'pending',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
+         payload_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [input.site_name, nextSyncVersion, JSON.stringify(nextPayload), now, input.survey_id]
+  );
+
+  return {
+    id: input.survey_id,
+    site_name: input.site_name,
+    status: 'draft',
+    sync_version: nextSyncVersion,
+    sync_state: 'pending',
+    last_sync_error: null,
+    last_sync_error_code: null,
+    last_sync_error_at: null,
+    sync_blocked: 0,
+    updated_at: now
+  };
 }
 
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
@@ -939,16 +1078,18 @@ async function applyRemoteChanges(
     );
 
     if (!existing) {
+      const payload = buildSurveyPayloadFromRemote(survey);
       await db.runAsync(
-        `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, updated_at)
-         VALUES (?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?)`,
-        [survey.id, survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, now]
+        `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, updated_at)
+         VALUES (?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?, ?)`,
+        [survey.id, survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, JSON.stringify(payload), now]
       );
       appliedSurveys += 1;
       continue;
     }
 
     if (!pendingQueue) {
+      const payload = buildSurveyPayloadFromRemote(survey);
       await db.runAsync(
         `UPDATE local_surveys
          SET site_name = ?,
@@ -959,9 +1100,10 @@ async function applyRemoteChanges(
              last_sync_error_code = NULL,
              last_sync_error_at = NULL,
              sync_blocked = 0,
+             payload_json = ?,
              updated_at = ?
          WHERE id = ?`,
-        [survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, now, survey.id]
+        [survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, JSON.stringify(payload), now, survey.id]
       );
       appliedSurveys += 1;
     }
@@ -1039,6 +1181,22 @@ async function applyRemoteChanges(
   return { surveys: appliedSurveys, attachments: appliedAttachments };
 }
 
+function buildSurveyPayloadFromRemote(survey: RemoteSurvey): SurveyQueuePayload {
+  return {
+    id: survey.id,
+    sync_version: survey.sync_version ?? 1,
+    site_name: survey.site_name ?? 'Remote survey',
+    status: survey.status ?? 'draft',
+    visibility: (survey.visibility as 'private' | 'public' | undefined) ?? 'private',
+    region_version: survey.region_version ?? undefined,
+    vegetation_stage: survey.vegetation_stage ?? undefined,
+    factors: survey.factors ?? {},
+    scores: survey.scores ?? {},
+    location: survey.location ?? {},
+    expires_at: survey.expires_at ?? undefined
+  };
+}
+
 async function hasPendingQueueForSurvey(db: SQLite.SQLiteDatabase, surveyId: string): Promise<boolean> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count
@@ -1048,6 +1206,22 @@ async function hasPendingQueueForSurvey(db: SQLite.SQLiteDatabase, surveyId: str
     [surveyId]
   );
   return Number(row?.count ?? 0) > 0;
+}
+
+async function deleteQueuedSurveyUpserts(db: SQLite.SQLiteDatabase, surveyId: string): Promise<void> {
+  const rows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
+    `SELECT id, payload
+     FROM sync_queue
+     WHERE survey_id = ?`,
+    [surveyId]
+  );
+
+  for (const row of rows) {
+    const payload = safeParseJson(row.payload);
+    if (isSurveyQueuePayload(payload)) {
+      await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
+    }
+  }
 }
 
 function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit: number): string {

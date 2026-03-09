@@ -247,3 +247,45 @@ Implemented:
 - e2e coverage:
   - direct delete endpoint behavior
   - survey delete operation via `/v1/sync`
+
+## Step 17 Edit Existing Surveys Locally (Current)
+Implemented:
+- Mobile local survey snapshots now persist full draft payload (`payload_json`) for resume/edit.
+- New mobile draft-edit flow:
+  - `Edit survey` action from local survey list
+  - form prefill from local draft payload
+  - `Save survey edits` action updates local survey and re-queues one clean survey upsert
+  - `Cancel edit mode` returns to create mode
+- Queue behavior for edits:
+  - previous queued survey upserts for the same survey are removed
+  - latest edited version is enqueued with incremented `sync_version`
+- Downsync merge now also refreshes local `payload_json` snapshots for synced surveys.
+
+## Step 18 Targeted Survey Submit + Read-Only Submitted State (Current)
+Implemented:
+- Mobile submit flow is now per-survey (from list row), replacing "submit first synced survey" behavior.
+- Submit eligibility in UI:
+  - only surveys with `sync_state=synced`
+  - `status != submitted`
+  - `sync_blocked != 1`
+- Submitted surveys are now read-only in mobile UI:
+  - hide `Edit survey`
+  - hide `Attach photo (queue)`
+  - hide `Delete survey`
+- Added runtime guards to block edit/delete/attach actions if a submitted survey is targeted.
+
+## Step 19 Rich Survey List (Current)
+Implemented:
+- Mobile survey list now includes:
+  - text search (`site_name`, `id`, and last sync error content)
+  - filter chips for status, sync state, blocked state, and attachment presence
+  - sort chips (`updated desc`, `updated asc`, `site name A-Z`)
+- Added list-level operational summary counters:
+  - draft, submitted, pending, synced, failed, blocked
+- Added per-survey visual badges:
+  - survey status
+  - sync state
+  - sync version
+  - attachment count
+  - blocked marker
+- Added `Reset filters` quick action.
