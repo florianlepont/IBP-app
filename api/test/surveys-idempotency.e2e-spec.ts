@@ -363,4 +363,140 @@ describe('Surveys idempotency (e2e)', () => {
     expect(eventTypes).toContain('attachment_uploaded');
     expect(eventTypes).toContain('attachment_deleted');
   });
+
+  it('processes mixed operations via POST /v1/sync', async () => {
+    const email = `e2e-sync-batch-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const validSurveyId = `e2e-sync-batch-valid-${Date.now()}`;
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        operations: [
+          {
+            client_ref: 'op-valid-survey',
+            entity: 'survey',
+            action: 'upsert',
+            payload: {
+              id: validSurveyId,
+              sync_version: 1,
+              site_name: 'Batch Forest',
+              status: 'draft',
+              visibility: 'private',
+              factors: {},
+              scores: {},
+              location: {}
+            }
+          },
+          {
+            client_ref: 'op-invalid-survey',
+            entity: 'survey',
+            action: 'upsert',
+            payload: {
+              id: `e2e-sync-batch-invalid-${Date.now()}`,
+              sync_version: 1,
+              status: 'draft',
+              visibility: 'private',
+              factors: {},
+              scores: {},
+              location: {}
+            }
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(Array.isArray(response.body.results)).toBe(true);
+    expect(response.body.results).toHaveLength(2);
+    expect(response.body.results[0]).toMatchObject({
+      client_ref: 'op-valid-survey',
+      entity: 'survey',
+      action: 'upsert',
+      status: 'synced'
+    });
+    expect(response.body.results[0].data.id).toBe(validSurveyId);
+
+    expect(response.body.results[1]).toMatchObject({
+      client_ref: 'op-invalid-survey',
+      entity: 'survey',
+      action: 'upsert',
+      status: 'fatal_error'
+    });
+    expect(response.body.results[1].error.http_status).toBe(400);
+  });
+
+  it('returns incremental changes via GET /v1/sync/changes with cursor', async () => {
+    const email = `e2e-sync-changes-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-sync-changes-survey-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Changes Forest',
+        status: 'draft',
+        visibility: 'private',
+        factors: {},
+        scores: {},
+        location: {}
+      })
+      .expect(201);
+
+    const firstChanges = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .query({ limit: 20 })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(Array.isArray(firstChanges.body.events)).toBe(true);
+    expect(firstChanges.body.events.length).toBeGreaterThan(0);
+    expect(Array.isArray(firstChanges.body.surveys)).toBe(true);
+    expect(firstChanges.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true);
+    expect(typeof firstChanges.body.cursor_out).toBe('string');
+
+    const cursorOut = firstChanges.body.cursor_out as string;
+
+    await request(app.getHttpServer())
+      .patch(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ site_name: 'Changes Forest Updated' })
+      .expect(200);
+
+    const createdAttachment = await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/attachments`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        mime_type: 'image/jpeg',
+        size_bytes: 1024
+      })
+      .expect(201);
+
+    const deltaChanges = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .query({ cursor: cursorOut, limit: 20 })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    const eventTypes = (deltaChanges.body.events as Array<{ event_type: string }>).map((event) => event.event_type);
+    expect(eventTypes).toContain('updated');
+    expect(eventTypes).toContain('attachment_created');
+    expect(deltaChanges.body.surveys.some((survey: { id: string; site_name: string }) => survey.id === surveyId && survey.site_name === 'Changes Forest Updated')).toBe(true);
+    expect(deltaChanges.body.attachments.some((attachment: { id: string }) => attachment.id === createdAttachment.body.attachment_id)).toBe(true);
+    expect(typeof deltaChanges.body.cursor_out).toBe('string');
+    expect(deltaChanges.body.cursor_out).not.toBe(cursorOut);
+  });
 });

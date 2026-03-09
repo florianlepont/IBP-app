@@ -19,6 +19,7 @@ import {
   listLocalSurveys,
   LocalAttachment,
   LocalSurvey,
+  pullRemoteChanges,
   queueLocalAttachment,
   submitSurvey,
   syncPending
@@ -205,9 +206,28 @@ export default function App() {
       const result = await syncPending(apiUrl, accessToken);
       await refreshLocalSurveys();
       await refreshLocalAttachments();
-      setStatus(`Sync complete: ${result.synced} synced, ${result.failed} failed`);
+      setStatus(
+        `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`
+      );
     } catch (error) {
       setStatus(`Sync error: ${(error as Error).message}`);
+    }
+  };
+
+  const handlePullChanges = async (): Promise<void> => {
+    if (!accessToken) {
+      setStatus('Login required before pulling server changes');
+      return;
+    }
+
+    try {
+      setStatus('Pulling server changes...');
+      const result = await pullRemoteChanges(apiUrl, accessToken);
+      await refreshLocalSurveys();
+      await refreshLocalAttachments();
+      setStatus(`Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`);
+    } catch (error) {
+      setStatus(`Pull error: ${(error as Error).message}`);
     }
   };
 
@@ -356,7 +376,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.title}>IBP Step 11 - Raw Observations + Attachment Queue</Text>
+          <Text style={styles.title}>IBP Step 14 - Batch Sync + Incremental Pull</Text>
           <Text style={styles.subtitle}>API URL (editable)</Text>
           <TextInput
             style={styles.input}
@@ -424,9 +444,11 @@ export default function App() {
 
           <Button title="Create offline draft" onPress={handleCreateDraft} />
           <View style={styles.spacer} />
-          <Button title="Sync pending drafts" onPress={handleSync} />
+          <Button title="Sync pending queue (batch + pull)" onPress={handleSync} />
           <View style={styles.spacer} />
           <Button title="Submit first synced survey" onPress={handleSubmit} />
+          <View style={styles.spacer} />
+          <Button title="Pull server changes" onPress={handlePullChanges} />
           <View style={styles.spacer} />
           <Button title="Refresh local list" onPress={refreshLocalSurveys} />
           <View style={styles.spacer} />
@@ -459,7 +481,7 @@ export default function App() {
                   <Text style={styles.attachmentHeader}>Local Attachments</Text>
                   {surveyAttachments.map((attachment) => (
                     <View key={attachment.id} style={styles.attachmentRow}>
-                      <Image source={{ uri: attachment.local_uri }} style={styles.attachmentPreview} />
+                      {attachment.local_uri ? <Image source={{ uri: attachment.local_uri }} style={styles.attachmentPreview} /> : null}
                       <Text style={styles.attachmentText}>
                         {attachment.id} | {attachment.mime_type} | {Math.round(attachment.size_bytes / 1024)} KB
                       </Text>

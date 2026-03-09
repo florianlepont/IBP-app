@@ -176,3 +176,33 @@ Implemented:
   - binary upload call
   - list attachments
   - delete + post-delete list check
+
+## Step 13 Batch Sync Endpoint (Current)
+Implemented:
+- New endpoint: `POST /v1/sync`
+- Supports mixed operations in one request (V1):
+  - `survey.upsert`
+  - `attachment.create`
+- Returns per-operation results with stable `client_ref`:
+  - `synced`
+  - `retryable_error`
+  - `fatal_error`
+- Keeps operation order deterministic in the response
+- Mobile sync now sends due queue rows as a single batch request
+
+## Step 14 Incremental Downsync (Current)
+Implemented:
+- New endpoint: `GET /v1/sync/changes?cursor=&limit=`
+- Cursor-based incremental feed of user-scoped changes:
+  - `events`
+  - changed `surveys`
+  - changed `attachments`
+- Cursor format includes event timestamp + event id for deterministic pagination
+- Mobile:
+  - added `local_meta` table to persist `downsync_cursor`
+  - added pull function that applies server deltas in pages
+  - integrated pull after push sync
+  - added manual UI action: **Pull server changes**
+- e2e coverage added for:
+  - mixed batch sync success/failure
+  - incremental changes with cursor progression

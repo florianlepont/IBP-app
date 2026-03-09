@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException
@@ -13,7 +14,19 @@ import { dirname, join } from 'path';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
 import { IbpRulesService } from './ibp-rules.service';
-import { AttachmentRow, CreateAttachmentBody, SurveyEventRow, SurveyPatchBody, SurveyRow, SurveyUpsertBody } from './surveys.types';
+import {
+  AttachmentRow,
+  CreateAttachmentBody,
+  SurveyEventRow,
+  SurveyPatchBody,
+  SurveyRow,
+  SurveyUpsertBody,
+  SyncBatchBody,
+  SyncChangeAttachment,
+  SyncChangeEvent,
+  SyncChangeSurvey,
+  SyncOperationResult
+} from './surveys.types';
 
 @Injectable()
 export class SurveysService {
@@ -596,6 +609,190 @@ export class SurveysService {
     return { items: events.rows };
   }
 
+  async syncBatch(user: AuthenticatedUser, body: SyncBatchBody): Promise<{ results: SyncOperationResult[] }> {
+    const operations = body.operations;
+    if (!Array.isArray(operations) || operations.length === 0) {
+      throw new BadRequestException('operations must be a non-empty array');
+    }
+    if (operations.length > 100) {
+      throw new BadRequestException('operations exceeds V1 batch limit (100)');
+    }
+
+    const results: SyncOperationResult[] = [];
+
+    for (const operation of operations) {
+      const clientRef = typeof operation.client_ref === 'string' && operation.client_ref.trim() ? operation.client_ref : null;
+      const entity = typeof operation.entity === 'string' ? operation.entity : 'unknown';
+      const action = typeof operation.action === 'string' ? operation.action : 'unknown';
+
+      try {
+        if (operation.entity === 'survey' && operation.action === 'upsert') {
+          if (!operation.payload || typeof operation.payload !== 'object') {
+            throw new BadRequestException('survey upsert payload is required');
+          }
+          const data = await this.upsertForUser(user, operation.payload as SurveyUpsertBody);
+          results.push({
+            client_ref: clientRef,
+            entity: operation.entity,
+            action: operation.action,
+            status: 'synced',
+            data: data as Record<string, unknown>
+          });
+          continue;
+        }
+
+        if (operation.entity === 'attachment' && operation.action === 'create') {
+          if (!operation.survey_id) {
+            throw new BadRequestException('survey_id is required for attachment create');
+          }
+          if (!operation.payload || typeof operation.payload !== 'object') {
+            throw new BadRequestException('attachment create payload is required');
+          }
+          const data = await this.createAttachment(user, operation.survey_id, operation.payload as CreateAttachmentBody);
+          results.push({
+            client_ref: clientRef,
+            entity: operation.entity,
+            action: operation.action,
+            status: 'synced',
+            data: data as Record<string, unknown>
+          });
+          continue;
+        }
+
+        throw new BadRequestException(`Unsupported sync operation: ${entity}.${action}`);
+      } catch (error) {
+        const mapped = this.mapSyncError(error);
+        results.push({
+          client_ref: clientRef,
+          entity,
+          action,
+          status: mapped.status,
+          error: mapped.error
+        });
+      }
+    }
+
+    return { results };
+  }
+
+  async getSyncChanges(
+    user: AuthenticatedUser,
+    cursor?: string,
+    limitRaw?: number
+  ): Promise<{
+    cursor_in: string | null;
+    cursor_out: string | null;
+    has_more: boolean;
+    events: SyncChangeEvent[];
+    surveys: SyncChangeSurvey[];
+    attachments: SyncChangeAttachment[];
+  }> {
+    const limit = this.normalizeChangesLimit(limitRaw);
+    const parsedCursor = this.parseChangesCursor(cursor);
+
+    const rawEvents = await this.db.query<SyncChangeEvent>(
+      `SELECT e.id, e.survey_id, e.actor_id, e.event_type, e.payload, e.created_at::text
+       FROM survey_events e
+       JOIN surveys s ON s.id = e.survey_id
+       WHERE s.user_id = $1
+         AND (
+           e.created_at > $2::timestamptz
+           OR (e.created_at = $2::timestamptz AND e.id > $3)
+         )
+       ORDER BY e.created_at ASC, e.id ASC
+       LIMIT $4`,
+      [user.id, parsedCursor.timestamp, parsedCursor.eventId, limit + 1]
+    );
+
+    const hasMore = rawEvents.rows.length > limit;
+    const events = hasMore ? rawEvents.rows.slice(0, limit) : rawEvents.rows;
+
+    if (events.length === 0) {
+      return {
+        cursor_in: parsedCursor.original,
+        cursor_out: parsedCursor.original,
+        has_more: false,
+        events: [],
+        surveys: [],
+        attachments: []
+      };
+    }
+
+    const surveyIds = Array.from(new Set(events.map((event) => event.survey_id)));
+    const attachmentIds = Array.from(
+      new Set(
+        events
+          .map((event) => this.extractAttachmentId(event.payload))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    const surveys = surveyIds.length
+      ? (
+          await this.db.query<SyncChangeSurvey>(
+            `SELECT
+               id,
+               site_name,
+               status,
+               visibility,
+               region_version,
+               vegetation_stage,
+               factors,
+               factor_results,
+               scores,
+               location,
+               created_at::text,
+               updated_at::text,
+               submitted_at::text,
+               expires_at::text,
+               sync_version,
+               deleted_at::text
+             FROM surveys
+             WHERE user_id = $1
+               AND id = ANY($2::text[])
+             ORDER BY updated_at ASC, id ASC`,
+            [user.id, surveyIds]
+          )
+        ).rows
+      : [];
+
+    const attachments = attachmentIds.length
+      ? (
+          await this.db.query<SyncChangeAttachment>(
+            `SELECT
+               a.id,
+               a.survey_id,
+               a.storage_key,
+               a.mime_type,
+               a.size_bytes,
+               a.captured_at::text,
+               a.metadata,
+               a.created_at::text,
+               a.uploaded_at::text,
+               a.deleted_at::text
+             FROM attachments a
+             JOIN surveys s ON s.id = a.survey_id
+             WHERE s.user_id = $1
+               AND a.id = ANY($2::text[])
+             ORDER BY a.created_at ASC, a.id ASC`,
+            [user.id, attachmentIds]
+          )
+        ).rows
+      : [];
+
+    const lastEvent = events[events.length - 1];
+    const cursorOut = this.buildChangesCursor(lastEvent.created_at, lastEvent.id);
+
+    return {
+      cursor_in: parsedCursor.original,
+      cursor_out: cursorOut,
+      has_more: hasMore,
+      events,
+      surveys,
+      attachments
+    };
+  }
+
   private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {
     const survey = await this.getSurveyForUser(surveyId, userId, true);
     if (!survey) {
@@ -672,5 +869,94 @@ export class SurveysService {
       await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
       this.s3BucketReady = true;
     }
+  }
+
+  private mapSyncError(error: unknown): {
+    status: 'retryable_error' | 'fatal_error';
+    error: { code: string; message: string; http_status?: number };
+  } {
+    let httpStatus: number | undefined;
+    if (error instanceof HttpException) {
+      httpStatus = error.getStatus();
+    }
+
+    const message = this.extractSyncErrorMessage(error);
+    const retryable = typeof httpStatus === 'number' ? httpStatus >= 500 || httpStatus === 429 : true;
+
+    return {
+      status: retryable ? 'retryable_error' : 'fatal_error',
+      error: {
+        code: typeof httpStatus === 'number' ? `http_${httpStatus}` : 'internal_error',
+        message,
+        http_status: httpStatus
+      }
+    };
+  }
+
+  private extractSyncErrorMessage(error: unknown): string {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (typeof response === 'string' && response.trim().length > 0) {
+        return response;
+      }
+      if (response && typeof response === 'object') {
+        const message = (response as { message?: unknown }).message;
+        if (Array.isArray(message)) {
+          return message.map((value) => String(value)).join(' | ');
+        }
+        if (typeof message === 'string' && message.trim().length > 0) {
+          return message;
+        }
+      }
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Unexpected sync failure';
+  }
+
+  private normalizeChangesLimit(limitRaw?: number): number {
+    if (!Number.isFinite(limitRaw)) return 50;
+    const integer = Math.trunc(limitRaw ?? 0);
+    if (integer <= 0) return 50;
+    return Math.min(200, integer);
+  }
+
+  private parseChangesCursor(cursor?: string): { timestamp: string; eventId: string; original: string | null } {
+    if (!cursor || cursor.trim().length === 0) {
+      return {
+        timestamp: '1970-01-01T00:00:00.000Z',
+        eventId: '',
+        original: null
+      };
+    }
+
+    const [timestampRaw, eventIdRaw] = cursor.split('|');
+    if (!timestampRaw || Number.isNaN(Date.parse(timestampRaw))) {
+      throw new BadRequestException('Invalid sync cursor');
+    }
+
+    return {
+      timestamp: timestampRaw,
+      eventId: eventIdRaw ?? '',
+      original: cursor
+    };
+  }
+
+  private buildChangesCursor(timestamp: string, eventId: string): string {
+    return `${timestamp}|${eventId}`;
+  }
+
+  private extractAttachmentId(payload: Record<string, unknown> | null): string | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    const value = (payload as { attachment_id?: unknown }).attachment_id;
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return null;
+    }
+    return value;
   }
 }

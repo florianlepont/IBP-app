@@ -78,6 +78,7 @@ Optional fields:
 - `captured_at` (timestamp, nullable)
 - `metadata` (jsonb, nullable) // EXIF or device metadata
 - `uploaded_at` (timestamp, nullable) // set once upload target is consumed
+- `deleted_at` (timestamp, nullable) // soft delete
 
 ### 5) Survey Event (Audit Trail)
 Minimal audit history for reliability and moderation.
@@ -97,7 +98,7 @@ Required fields:
 - `id` (uuid)
 - `entity_type` (enum: `survey` | `attachment` | `report`)
 - `entity_id` (uuid)
-- `operation` (enum: `upsert` | `delete`)
+- `operation` (enum: `upsert` | `delete` | `create`) // `create` used for attachment records
 - `payload` (jsonb)
 - `status` (enum: `pending` | `processing` | `failed`)
 - `retry_count` (integer)

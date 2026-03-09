@@ -337,11 +337,23 @@ Request:
 {
   "operations": [
     {
+      "client_ref": "queue-101",
       "entity": "survey",
       "action": "upsert",
       "payload": {
         "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
-        "sync_version": 3
+        "sync_version": 3,
+        "site_name": "Forest Plot 12"
+      }
+    },
+    {
+      "client_ref": "queue-102",
+      "entity": "attachment",
+      "action": "create",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "payload": {
+        "mime_type": "image/jpeg",
+        "size_bytes": 2450000
       }
     }
   ]
@@ -353,9 +365,96 @@ Response `200`:
 {
   "results": [
     {
+      "client_ref": "queue-101",
       "entity": "survey",
+      "action": "upsert",
+      "status": "synced",
+      "data": {
+        "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+        "server_status": "synced",
+        "updated_at": "2026-03-09T10:20:00Z"
+      }
+    },
+    {
+      "client_ref": "queue-102",
+      "entity": "attachment",
+      "action": "create",
+      "status": "synced",
+      "data": {
+        "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
+        "storage_key": "surveys/2f3d8a59/photo-1.jpg",
+        "upload_url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+        "confirm_url": "/surveys/2f3d8a59-7c53-4fdf-8df4-8e2325b6172c/attachments/6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0/upload?token=generated-token"
+      }
+    },
+    {
+      "client_ref": "queue-103",
+      "entity": "survey",
+      "action": "upsert",
+      "status": "fatal_error",
+      "error": {
+        "code": "http_400",
+        "message": "site_name is required",
+        "http_status": 400
+      }
+    }
+  ]
+}
+```
+
+Rules:
+- Batch size max in V1: `100` operations.
+- Each operation is processed independently.
+- `status` can be:
+  - `synced`
+  - `retryable_error` (typically `429` or `5xx`)
+  - `fatal_error` (typically `4xx` validation/business errors)
+- `client_ref` is echoed back for local queue reconciliation.
+
+### GET /sync/changes?cursor=&limit=
+Fetch user-scoped incremental changes for downsync (server -> mobile).
+
+Query params:
+- `cursor` (optional): opaque cursor from previous response (`{timestamp}|{event_id}`)
+- `limit` (optional): default `50`, max `200`
+
+Response `200`:
+```json
+{
+  "cursor_in": "2026-03-09T10:12:00.123+00|d4f...",
+  "cursor_out": "2026-03-09T10:20:31.991+00|8ac...",
+  "has_more": false,
+  "events": [
+    {
+      "id": "8ac4ff29-5f7d-4f3b-9f4f-040f5df516a6",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "actor_id": "0b3127b6-021a-4805-a9de-b3e9f3eb2f6b",
+      "event_type": "attachment_created",
+      "payload": { "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0" },
+      "created_at": "2026-03-09T10:20:31.991+00"
+    }
+  ],
+  "surveys": [
+    {
       "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
-      "status": "synced"
+      "site_name": "Forest Plot 12",
+      "status": "draft",
+      "visibility": "private",
+      "sync_version": 3,
+      "updated_at": "2026-03-09T10:20:00.002+00",
+      "deleted_at": null
+    }
+  ],
+  "attachments": [
+    {
+      "id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "storage_key": "surveys/2f3d8a59/photo-1.jpg",
+      "mime_type": "image/jpeg",
+      "size_bytes": 2450000,
+      "created_at": "2026-03-09T10:20:31.991+00",
+      "uploaded_at": null,
+      "deleted_at": null
     }
   ]
 }
@@ -429,6 +528,7 @@ Response `200`:
 - `401` unauthorized
 - `403` forbidden
 - `404` not found
+- `429` rate limited
 - `409` conflict/version mismatch
 - `422` business rule violation
 - `500` internal server error
