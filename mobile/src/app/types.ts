@@ -3,6 +3,12 @@ export type AuthUser = {
   email: string;
   display_name: string;
   role: string;
+  first_name: string;
+  last_name: string;
+  profile_picture_url: string | null;
+  email_change_required?: boolean;
+  email_change_pending_to?: string | null;
+  email_change_token_dev?: string;
 };
 
 export type LoginResponse = {
@@ -77,7 +83,7 @@ export type SurveySyncFilter = 'all' | 'pending' | 'synced' | 'failed';
 export type SurveyBlockedFilter = 'all' | 'blocked' | 'unblocked';
 export type SurveyAttachmentFilter = 'all' | 'with' | 'without';
 export type SurveySort = 'updated_desc' | 'updated_asc' | 'site_asc';
-export type AppScreen = 'list' | 'create' | 'edit' | 'public_map';
+export type AppScreen = 'list' | 'create' | 'edit' | 'public_map' | 'profile';
 export type RegionVersion = 'ACA' | 'M';
 export type VegetationStage =
   | 'planitiaire'

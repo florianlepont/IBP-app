@@ -84,7 +84,9 @@ Response `200`:
   "first_name": "Florian",
   "last_name": "Lepont",
   "display_name": "Florian",
-  "profile_picture_url": null
+  "profile_picture_url": "/me/profile-picture?v=1741525200",
+  "email_change_required": false,
+  "email_change_pending_to": null
 }
 ```
 
@@ -113,11 +115,72 @@ Response `200`:
   "first_name": "Florian",
   "last_name": "Lepont",
   "display_name": "Florian L.",
-  "email": "florian@example.com",
+  "email": "user@example.com",
   "profile_picture_url": "https://storage.example/profiles/0f5f57bb/avatar.jpg",
-  "updated_at": "2026-03-08T12:10:00Z"
+  "updated_at": "2026-03-08T12:10:00Z",
+  "email_change_required": true,
+  "email_change_pending_to": "florian@example.com",
+  "email_change_token_dev": "e8fe84f5-6f88-413d-b6ad-31fa7ad13e03"
 }
 ```
+
+### POST /me/email/confirm
+Confirm a pending email change with token received via verification channel.
+
+Request:
+```json
+{
+  "token": "e8fe84f5-6f88-413d-b6ad-31fa7ad13e03"
+}
+```
+
+Response `200`:
+```json
+{
+  "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
+  "email": "florian@example.com",
+  "role": "contributor",
+  "first_name": "Florian",
+  "last_name": "Lepont",
+  "display_name": "Florian L.",
+  "profile_picture_url": "https://storage.example/profiles/0f5f57bb/avatar.jpg",
+  "email_change_required": false,
+  "email_change_pending_to": null,
+  "updated_at": "2026-03-08T12:30:00Z"
+}
+```
+
+### PUT /me/profile-picture
+Upload user profile picture (`multipart/form-data`, field name: `file`).
+
+Response `200`:
+```json
+{
+  "profile_picture_url": "/me/profile-picture?v=1741525200",
+  "user": {
+    "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
+    "email": "user@example.com",
+    "role": "contributor",
+    "first_name": "Florian",
+    "last_name": "Lepont",
+    "display_name": "Florian",
+    "profile_picture_url": "/me/profile-picture?v=1741525200",
+    "email_change_required": false,
+    "email_change_pending_to": null,
+    "updated_at": "2026-03-08T12:40:00Z"
+  }
+}
+```
+
+### GET /me/profile-picture
+Download current authenticated user profile picture.
+
+Response `200`: binary image stream.
+
+### DELETE /me/profile-picture
+Remove current authenticated user profile picture.
+
+Response `204`.
 
 ## 2) Surveys
 
