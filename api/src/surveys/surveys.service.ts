@@ -716,6 +716,76 @@ export class SurveysService {
     return { items: events.rows };
   }
 
+  async getPublicMapItems(input?: {
+    from?: string;
+    to?: string;
+    region?: string;
+  }): Promise<{
+    items: Array<{
+      survey_id: string;
+      display_location: { lat: number; lng: number };
+      survey_date: string;
+      region_code: string;
+      ibp_total: number;
+    }>;
+  }> {
+    const filters: string[] = [
+      `deleted_at IS NULL`,
+      `visibility = 'public'`,
+      `status = 'submitted'`,
+      `submitted_at IS NOT NULL`
+    ];
+    const values: unknown[] = [];
+
+    const fromDate = this.normalizeDateInput(input?.from);
+    if (fromDate) {
+      values.push(fromDate);
+      filters.push(`submitted_at::date >= $${values.length}::date`);
+    }
+
+    const toDate = this.normalizeDateInput(input?.to);
+    if (toDate) {
+      values.push(toDate);
+      filters.push(`submitted_at::date <= $${values.length}::date`);
+    }
+
+    if (input?.region && input.region.trim().length > 0) {
+      values.push(input.region.trim());
+      filters.push(`region_version = $${values.length}`);
+    }
+
+    const result = await this.db.query<{
+      id: string;
+      region_version: string | null;
+      location: Record<string, unknown>;
+      scores: Record<string, unknown>;
+      submitted_at: string | null;
+    }>(
+      `SELECT id, region_version, location, scores, submitted_at::text
+       FROM surveys
+       WHERE ${filters.join(' AND ')}
+       ORDER BY submitted_at DESC
+       LIMIT 500`,
+      values
+    );
+
+    const items = result.rows
+      .map((row) => this.toPublicMapItem(row))
+      .filter(
+        (
+          item
+        ): item is {
+          survey_id: string;
+          display_location: { lat: number; lng: number };
+          survey_date: string;
+          region_code: string;
+          ibp_total: number;
+        } => Boolean(item)
+      );
+
+    return { items };
+  }
+
   async syncBatch(user: AuthenticatedUser, body: SyncBatchBody): Promise<{ results: SyncOperationResult[] }> {
     const operations = body.operations;
     if (!Array.isArray(operations) || operations.length === 0) {
@@ -759,6 +829,32 @@ export class SurveysService {
           }
 
           const data = await this.deleteSurvey(user, surveyId, { allowMissing: true });
+          results.push({
+            client_ref: clientRef,
+            entity: operation.entity,
+            action: operation.action,
+            status: 'synced',
+            data: data as Record<string, unknown>
+          });
+          continue;
+        }
+
+        if (operation.entity === 'survey' && operation.action === 'visibility_update') {
+          const payloadVisibility =
+            operation.payload && typeof operation.payload === 'object'
+              ? (operation.payload as { visibility?: unknown }).visibility
+              : undefined;
+
+          if (!operation.survey_id || typeof operation.survey_id !== 'string') {
+            throw new BadRequestException('survey_id is required for survey visibility_update');
+          }
+          if (payloadVisibility !== 'private' && payloadVisibility !== 'public') {
+            throw new BadRequestException('visibility must be private or public for survey visibility_update');
+          }
+
+          const data = await this.patchSurveyVisibility(user, operation.survey_id, {
+            visibility: payloadVisibility
+          });
           results.push({
             client_ref: clientRef,
             entity: operation.entity,
@@ -1152,5 +1248,68 @@ export class SurveysService {
       return null;
     }
     return value;
+  }
+
+  private normalizeDateInput(value: string | undefined): string | null {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  private toPublicMapItem(row: {
+    id: string;
+    region_version: string | null;
+    location: Record<string, unknown>;
+    scores: Record<string, unknown>;
+    submitted_at: string | null;
+  }):
+    | {
+        survey_id: string;
+        display_location: { lat: number; lng: number };
+        survey_date: string;
+        region_code: string;
+        ibp_total: number;
+      }
+    | null {
+    const lat = this.asFiniteNumber(row.location?.lat);
+    const lng = this.asFiniteNumber(row.location?.lng);
+    if (lat === null || lng === null) {
+      return null;
+    }
+
+    const ibpTotal = this.asFiniteNumber(row.scores?.ibp_total) ?? 0;
+    const surveyDate =
+      typeof row.submitted_at === 'string' && row.submitted_at.length >= 10
+        ? row.submitted_at.slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+    return {
+      survey_id: row.id,
+      display_location: {
+        lat: Number(lat.toFixed(2)),
+        lng: Number(lng.toFixed(2))
+      },
+      survey_date: surveyDate,
+      region_code: row.region_version ?? 'unknown',
+      ibp_total: ibpTotal
+    };
+  }
+
+  private asFiniteNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
   }
 }

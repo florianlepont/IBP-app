@@ -7,6 +7,7 @@ import {
   SurveySort,
   SurveyStats,
   SurveyStatusFilter,
+  SurveyVisibilityFilter,
   SurveySyncFilter
 } from '../app/types';
 import { FilterChip } from '../components/FilterChip';
@@ -23,6 +24,8 @@ type SurveyListScreenProps = {
   setSurveyQuery: (value: string) => void;
   statusFilter: SurveyStatusFilter;
   setStatusFilter: (value: SurveyStatusFilter) => void;
+  visibilityFilter: SurveyVisibilityFilter;
+  setVisibilityFilter: (value: SurveyVisibilityFilter) => void;
   syncFilter: SurveySyncFilter;
   setSyncFilter: (value: SurveySyncFilter) => void;
   blockedFilter: SurveyBlockedFilter;
@@ -46,6 +49,8 @@ export function SurveyListScreen({
   setSurveyQuery,
   statusFilter,
   setStatusFilter,
+  visibilityFilter,
+  setVisibilityFilter,
   syncFilter,
   setSyncFilter,
   blockedFilter,
@@ -89,6 +94,15 @@ export function SurveyListScreen({
           <FilterChip label="All" active={statusFilter === 'all'} onPress={() => setStatusFilter('all')} />
           <FilterChip label="Draft" active={statusFilter === 'draft'} onPress={() => setStatusFilter('draft')} />
           <FilterChip label="Submitted" active={statusFilter === 'submitted'} onPress={() => setStatusFilter('submitted')} />
+        </View>
+      </View>
+
+      <View style={styles.filterGroup}>
+        <Text style={styles.filterLabel}>Visibility</Text>
+        <View style={styles.filterChipsRow}>
+          <FilterChip label="All" active={visibilityFilter === 'all'} onPress={() => setVisibilityFilter('all')} />
+          <FilterChip label="Private" active={visibilityFilter === 'private'} onPress={() => setVisibilityFilter('private')} />
+          <FilterChip label="Public" active={visibilityFilter === 'public'} onPress={() => setVisibilityFilter('public')} />
         </View>
       </View>
 

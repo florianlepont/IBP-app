@@ -39,6 +39,42 @@ const renderCanonicalFactor = (factorCode: string, factor: FactorCanonical) => (
   </View>
 );
 
+const asFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const formatLocationSummary = (location?: Record<string, unknown>): string => {
+  if (!location || typeof location !== 'object') return 'not available';
+  const source = typeof location.source === 'string' ? location.source : '';
+
+  if (source === 'gps') {
+    const lat = asFiniteNumber(location.lat);
+    const lng = asFiniteNumber(location.lng);
+    if (lat === null || lng === null) return 'GPS selected (coordinates missing)';
+    return `GPS ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+
+  if (source === 'manual') {
+    const parts = [
+      typeof location.address_line === 'string' ? location.address_line : '',
+      typeof location.postal_code === 'string' ? location.postal_code : '',
+      typeof location.city === 'string' ? location.city : '',
+      typeof location.country === 'string' ? location.country : ''
+    ]
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    if (parts.length === 0) return 'manual address selected (details missing)';
+    return parts.join(', ');
+  }
+
+  return 'not available';
+};
+
 export function SurveyDetailScreen({
   selectedSurvey,
   selectedSurveyAttachments,
@@ -61,6 +97,14 @@ export function SurveyDetailScreen({
   onDiscardSurvey,
   onToggleVisibility
 }: SurveyDetailScreenProps) {
+  const detail = surveyDetails[selectedSurvey.id];
+  // Local survey state is the live source after user actions (submit / visibility toggle).
+  const detailStatus = selectedSurvey.status;
+  const detailVisibility = selectedSurvey.visibility;
+  const detailSubmittedAt = detail?.submitted_at ?? null;
+  const detailSyncVersion = detail?.sync_version ?? selectedSurvey.sync_version;
+  const publishableOnPublicMap = detailStatus === 'submitted' && detailVisibility === 'public';
+
   return (
     <View style={styles.detailCard}>
       <View style={styles.detailHeader}>
@@ -84,6 +128,11 @@ export function SurveyDetailScreen({
         <View style={styles.detailSection}>
           {editingSurveyId === selectedSurvey.id ? <Text style={styles.editingTag}>currently edited in form above</Text> : null}
           {selectedSurvey.status === 'submitted' ? <Text style={styles.rowMeta}>submitted survey: read-only</Text> : null}
+          <Text style={styles.rowMeta}>visibility: {detailVisibility}</Text>
+          <Text style={styles.rowMeta}>publishable on public map: {publishableOnPublicMap ? 'yes' : 'no'}</Text>
+          <Text style={styles.rowMeta}>submitted at: {detailSubmittedAt ?? 'not submitted yet'}</Text>
+          <Text style={styles.rowMeta}>sync version: v{detailSyncVersion}</Text>
+          <Text style={styles.rowMeta}>location: {formatLocationSummary(detail?.location)}</Text>
           {selectedSurvey.last_sync_error ? (
             <Text style={styles.rowMeta}>last error: {selectedSurvey.last_sync_error}</Text>
           ) : (
@@ -96,7 +145,7 @@ export function SurveyDetailScreen({
 
       {surveyDetailTab === 'factors' ? (
         <View style={styles.detailSection}>
-          <Button title="Refresh canonical details" onPress={() => void onLoadCanonicalDetails(selectedSurvey.id)} />
+          <Button title="Reload canonical details" onPress={() => void onLoadCanonicalDetails(selectedSurvey.id)} />
           {detailsLoadingSurveyId === selectedSurvey.id ? <Text style={styles.rowMeta}>Loading canonical details...</Text> : null}
           {surveyDetails[selectedSurvey.id] ? (
             <View style={styles.canonicalCard}>
@@ -146,7 +195,7 @@ export function SurveyDetailScreen({
 
       {surveyDetailTab === 'events' ? (
         <View style={styles.detailSection}>
-          <Button title="Refresh events" onPress={() => void onLoadSurveyEvents(selectedSurvey.id)} />
+          <Button title="Reload events" onPress={() => void onLoadSurveyEvents(selectedSurvey.id)} />
           {eventsLoadingSurveyId === selectedSurvey.id ? <Text style={styles.rowMeta}>Loading events...</Text> : null}
           {(surveyEvents[selectedSurvey.id] ?? []).length === 0 && eventsLoadingSurveyId !== selectedSurvey.id ? (
             <Text style={styles.rowMeta}>No events loaded yet.</Text>

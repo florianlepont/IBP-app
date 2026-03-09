@@ -183,6 +183,9 @@ export function useSurveySync({
     const result = await submitSurvey(apiUrl, accessToken, surveyId);
     await refreshLocalSurveys();
     await refreshLocalAttachments();
+    if (result.ok && accessToken) {
+      void handleLoadCanonicalDetails(surveyId, { silent: true });
+    }
     if (result.ok && editingSurveyId === surveyId) {
       onStopEditing();
     }
@@ -212,19 +215,14 @@ export function useSurveySync({
   };
 
   const handleToggleVisibility = async (surveyId: string, visibility: 'private' | 'public'): Promise<void> => {
-    if (!accessToken) {
-      setStatus('Login required before changing visibility');
-      return;
-    }
-
     try {
       const result = await updateSurveyVisibility(apiUrl, accessToken, surveyId, visibility);
       await refreshLocalSurveys();
-      if (!result.ok) {
-        setStatus(`Visibility update failed for ${surveyId}: ${result.message}`);
-        return;
+      await refreshLocalAttachments();
+      if (accessToken) {
+        void handleLoadCanonicalDetails(surveyId, { silent: true });
       }
-      setStatus(`Visibility set to ${result.visibility ?? visibility} for ${surveyId}`);
+      setStatus(result.ok ? result.message : `Visibility update warning for ${surveyId}: ${result.message}`);
     } catch (error) {
       setStatus(`Visibility update error: ${(error as Error).message}`);
     }

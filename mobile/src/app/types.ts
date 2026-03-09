@@ -22,6 +22,17 @@ export type FactorCanonical = {
 
 export type SurveyDetailResponse = {
   id: string;
+  site_name?: string;
+  status?: string;
+  visibility?: 'private' | 'public';
+  region_version?: string | null;
+  vegetation_stage?: string | null;
+  location?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  submitted_at?: string | null;
+  expires_at?: string | null;
+  sync_version?: number;
   factor_results: Record<string, FactorCanonical>;
   scores: {
     ibp_peuplement_gestion: number;
@@ -45,12 +56,21 @@ export type SurveyEventsResponse = {
   items?: SurveyEventItem[];
 };
 
+export type PublicMapItem = {
+  survey_id: string;
+  display_location: { lat: number; lng: number };
+  survey_date: string;
+  region_code: string;
+  ibp_total: number;
+};
+
 export type SurveyStatusFilter = 'all' | 'draft' | 'submitted';
+export type SurveyVisibilityFilter = 'all' | 'private' | 'public';
 export type SurveySyncFilter = 'all' | 'pending' | 'synced' | 'failed';
 export type SurveyBlockedFilter = 'all' | 'blocked' | 'unblocked';
 export type SurveyAttachmentFilter = 'all' | 'with' | 'without';
 export type SurveySort = 'updated_desc' | 'updated_asc' | 'site_asc';
-export type AppScreen = 'list' | 'create' | 'edit';
+export type AppScreen = 'list' | 'create' | 'edit' | 'public_map';
 export type RegionVersion = 'ACA' | 'M';
 export type VegetationStage =
   | 'planitiaire'
@@ -90,6 +110,7 @@ export type FactorField = {
 export type SurveyListFilters = {
   surveyQuery: string;
   statusFilter: SurveyStatusFilter;
+  visibilityFilter: SurveyVisibilityFilter;
   syncFilter: SurveySyncFilter;
   blockedFilter: SurveyBlockedFilter;
   attachmentFilter: SurveyAttachmentFilter;

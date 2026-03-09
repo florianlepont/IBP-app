@@ -103,7 +103,7 @@ Required fields:
 - `id` (uuid)
 - `entity_type` (enum: `survey` | `attachment` | `report`)
 - `entity_id` (uuid)
-- `operation` (enum: `upsert` | `delete` | `create`) // `create` used for attachment records
+- `operation` (enum: `upsert` | `delete` | `create` | `visibility_update`) // `create` for attachments, `visibility_update` for offline publication toggle
 - `payload` (jsonb)
 - `status` (enum: `pending` | `processing` | `failed`)
 - `retry_count` (integer)

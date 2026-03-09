@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { DEFAULT_API_URL } from './src/app/constants';
 import { styles } from './src/app/styles';
-import { AppScreen, SurveyDetailTab } from './src/app/types';
+import { AppScreen, PublicMapItem, SurveyDetailTab } from './src/app/types';
 import { SurveyFormScreen } from './src/screens/SurveyFormScreen';
 import { SurveyListScreen } from './src/screens/SurveyListScreen';
 import { initLocalDb, createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from './src/storage';
@@ -10,6 +10,7 @@ import { useSurveyForm } from './src/hooks/useSurveyForm';
 import { useSurveyList } from './src/hooks/useSurveyList';
 import { useSurveySync } from './src/hooks/useSurveySync';
 import { SurveyDetailScreen } from './src/screens/SurveyDetailScreen';
+import { PublicMapScreen } from './src/screens/PublicMapScreen';
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL);
@@ -19,6 +20,11 @@ export default function App() {
   const [screen, setScreen] = useState<AppScreen>('list');
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null);
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>('summary');
+  const [publicMapItems, setPublicMapItems] = useState<PublicMapItem[]>([]);
+  const [publicMapLoading, setPublicMapLoading] = useState(false);
+  const [publicMapFromDate, setPublicMapFromDate] = useState('');
+  const [publicMapToDate, setPublicMapToDate] = useState('');
+  const [publicMapRegion, setPublicMapRegion] = useState('');
 
   const surveyForm = useSurveyForm();
   const surveyList = useSurveyList();
@@ -104,10 +110,11 @@ export default function App() {
     }
 
     try {
+      const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId);
       await updateLocalDraft({
         survey_id: editingSurveyId,
         ...surveyForm.buildDraftInput(),
-        visibility: 'private'
+        visibility: current?.visibility ?? 'private'
       });
 
       await surveyList.refreshLocalSurveys();
@@ -173,6 +180,56 @@ export default function App() {
     surveySync.setStatus('Survey detail closed');
   };
 
+  const handleLoadPublicMap = async (): Promise<void> => {
+    try {
+      setPublicMapLoading(true);
+      const baseUrl = apiUrl.replace(/\/+$/, '');
+      const queryParts: string[] = [];
+      if (publicMapFromDate.trim()) {
+        queryParts.push(`from=${encodeURIComponent(publicMapFromDate.trim())}`);
+      }
+      if (publicMapToDate.trim()) {
+        queryParts.push(`to=${encodeURIComponent(publicMapToDate.trim())}`);
+      }
+      if (publicMapRegion.trim()) {
+        queryParts.push(`region=${encodeURIComponent(publicMapRegion.trim().toUpperCase())}`);
+      }
+
+      const suffix = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+      const response = await fetch(`${baseUrl}/public/map-items${suffix}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        surveySync.setStatus(`Public map load failed: HTTP ${response.status}`);
+        return;
+      }
+
+      const payload = (await response.json()) as { items?: PublicMapItem[] };
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      setPublicMapItems(items);
+      surveySync.setStatus(`Public map loaded: ${items.length} item(s)`);
+    } catch (error) {
+      surveySync.setStatus(`Public map load error: ${(error as Error).message}`);
+    } finally {
+      setPublicMapLoading(false);
+    }
+  };
+
+  const handleOpenPublicMap = (): void => {
+    closeSurveyDetailSelection();
+    setScreen('public_map');
+    void handleLoadPublicMap();
+  };
+
+  const handleBackToListFromPublicMap = (): void => {
+    setScreen('list');
+    surveySync.setStatus('Back to local surveys');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -218,6 +275,8 @@ export default function App() {
           <Button title="Create new survey" onPress={handleOpenCreateSurvey} />
           <View style={styles.spacer} />
           <Button title="Sync now (push + pull)" onPress={() => void surveySync.handleSync()} />
+          <View style={styles.spacer} />
+          <Button title="Open public map" onPress={handleOpenPublicMap} />
 
           <Text style={styles.status}>{surveySync.status}</Text>
         </View>
@@ -233,6 +292,8 @@ export default function App() {
             setSurveyQuery={surveyList.setSurveyQuery}
             statusFilter={surveyList.statusFilter}
             setStatusFilter={surveyList.setStatusFilter}
+            visibilityFilter={surveyList.visibilityFilter}
+            setVisibilityFilter={surveyList.setVisibilityFilter}
             syncFilter={surveyList.syncFilter}
             setSyncFilter={surveyList.setSyncFilter}
             blockedFilter={surveyList.blockedFilter}
@@ -270,7 +331,24 @@ export default function App() {
               ) : null
             }
           />
-        ) : (
+        ) : null}
+
+        {screen === 'public_map' ? (
+          <PublicMapScreen
+            items={publicMapItems}
+            loading={publicMapLoading}
+            fromDate={publicMapFromDate}
+            toDate={publicMapToDate}
+            region={publicMapRegion}
+            onChangeFromDate={setPublicMapFromDate}
+            onChangeToDate={setPublicMapToDate}
+            onChangeRegion={setPublicMapRegion}
+            onLoad={handleLoadPublicMap}
+            onBack={handleBackToListFromPublicMap}
+          />
+        ) : null}
+
+        {screen === 'create' || screen === 'edit' ? (
           <SurveyFormScreen
             screen={screen}
             editingSurveyId={editingSurveyId}
@@ -293,7 +371,7 @@ export default function App() {
             onBackToSurveyList={handleCancelSurveyForm}
             status={surveySync.status}
           />
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

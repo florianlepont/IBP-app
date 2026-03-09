@@ -10,6 +10,7 @@ import {
   SurveyBlockedFilter,
   SurveySort,
   SurveyStatusFilter,
+  SurveyVisibilityFilter,
   SurveySyncFilter
 } from '../app/types';
 import { listLocalAttachments, listLocalSurveys, LocalAttachment, LocalSurvey } from '../storage';
@@ -20,6 +21,7 @@ export function useSurveyList() {
   const [selectedSurveyId, setSelectedSurveyId] = useState<string | null>(null);
   const [surveyQuery, setSurveyQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<SurveyStatusFilter>('all');
+  const [visibilityFilter, setVisibilityFilter] = useState<SurveyVisibilityFilter>('all');
   const [syncFilter, setSyncFilter] = useState<SurveySyncFilter>('all');
   const [blockedFilter, setBlockedFilter] = useState<SurveyBlockedFilter>('all');
   const [attachmentFilter, setAttachmentFilter] = useState<SurveyAttachmentFilter>('all');
@@ -44,10 +46,10 @@ export function useSurveyList() {
     () =>
       filterAndSortSurveys(
         surveys,
-        { surveyQuery, statusFilter, syncFilter, blockedFilter, attachmentFilter, sortMode },
+        { surveyQuery, statusFilter, visibilityFilter, syncFilter, blockedFilter, attachmentFilter, sortMode },
         attachmentCountBySurvey
       ),
-    [surveys, surveyQuery, statusFilter, syncFilter, blockedFilter, attachmentFilter, sortMode, attachmentCountBySurvey]
+    [surveys, surveyQuery, statusFilter, visibilityFilter, syncFilter, blockedFilter, attachmentFilter, sortMode, attachmentCountBySurvey]
   );
 
   const selectedSurvey = useMemo(
@@ -63,6 +65,7 @@ export function useSurveyList() {
   const resetFilters = (): void => {
     setSurveyQuery('');
     setStatusFilter('all');
+    setVisibilityFilter('all');
     setSyncFilter('all');
     setBlockedFilter('all');
     setAttachmentFilter('all');
@@ -91,6 +94,8 @@ export function useSurveyList() {
     setSurveyQuery,
     statusFilter,
     setStatusFilter,
+    visibilityFilter,
+    setVisibilityFilter,
     syncFilter,
     setSyncFilter,
     blockedFilter,
