@@ -143,4 +143,55 @@ describe('Surveys idempotency (e2e)', () => {
       ibp_total: 12
     });
   });
+
+  it('submits a full raw-observation payload A..J and computes exact scores', async () => {
+    const email = `e2e-raw-full-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-raw-full-${Date.now()}`;
+
+    const upsert = await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Raw Full Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: { native_genus_count: 2 },
+          B: { strata_count: 3, covered_autochthonous_percent: 40 },
+          C: { bmg_count: 0, bmm_count: 2, surface_ha: 1 },
+          D: { bmg_count: 4, bmm_count: 0, surface_ha: 1 },
+          E: { tgb_count: 0, gb_count: 2, surface_ha: 1 },
+          F: { trees_per_ha: 8 },
+          G: { open_flowering_percent: 2 },
+          H: { class_score: 5 },
+          I: { type_count: 2 },
+          J: { type_count: 1 }
+        },
+        location: {}
+      })
+      .expect(201);
+
+    expect(Array.isArray(upsert.body.warnings)).toBe(true);
+
+    const submit = await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    expect(submit.body.scores).toEqual({
+      ibp_peuplement_gestion: 20,
+      ibp_contexte: 12,
+      ibp_total: 32
+    });
+  });
 });

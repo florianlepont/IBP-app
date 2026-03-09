@@ -87,3 +87,13 @@ Implemented:
 - Contextual help toggles are available for each factor section in the mobile form
 - Backend IBP rule engine supports raw observation objects per factor and computes scores server-side
 - Backward compatibility kept for direct numeric factor scores during transition
+
+## Step 7 Validation Matrix + Non-Blocking Warnings (Current)
+Implemented:
+- Validation result now distinguishes:
+  - blocking errors (`errors`)
+  - non-blocking warnings (`warnings`)
+  - structured issue entries (`issues`)
+- Added non-blocking consistency warnings (cross-factor checks) and F-group capping warning
+- Added region compatibility special case: `montagnard_mediterraneen` uses ACA thresholds
+- Added e2e test for full raw A..J payload with exact expected score computation
