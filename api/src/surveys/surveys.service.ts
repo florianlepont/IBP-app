@@ -38,7 +38,10 @@ export class SurveysService {
     return result.rows;
   }
 
-  async upsertForUser(user: AuthenticatedUser, body: SurveyUpsertBody): Promise<{ id: string; server_status: 'synced'; updated_at: string }> {
+  async upsertForUser(
+    user: AuthenticatedUser,
+    body: SurveyUpsertBody
+  ): Promise<{ id: string; server_status: 'synced'; updated_at: string; warnings?: string[] }> {
     if (!body.id) {
       throw new BadRequestException('id is required');
     }
@@ -55,7 +58,8 @@ export class SurveysService {
     if (!draftValidation.ok) {
       throw new UnprocessableEntityException({
         message: 'IBP factor validation failed',
-        errors: draftValidation.errors
+        errors: draftValidation.errors,
+        warnings: draftValidation.warnings
       });
     }
 
@@ -101,13 +105,15 @@ export class SurveysService {
 
       await this.insertEvent(body.id, user.id, 'created', {
         sync_version: body.sync_version,
-        site_name: body.site_name
+        site_name: body.site_name,
+        warnings: draftValidation.warnings
       });
 
       return {
         id: insertResult.rows[0].id,
         server_status: 'synced',
-        updated_at: insertResult.rows[0].updated_at
+        updated_at: insertResult.rows[0].updated_at,
+        warnings: draftValidation.warnings
       };
     }
 
@@ -119,7 +125,8 @@ export class SurveysService {
       return {
         id: existing.id,
         server_status: 'synced',
-        updated_at: existing.updated_at
+        updated_at: existing.updated_at,
+        warnings: draftValidation.warnings
       };
     }
 
@@ -157,13 +164,15 @@ export class SurveysService {
 
     await this.insertEvent(body.id, user.id, 'updated', {
       sync_version: body.sync_version,
-      site_name: body.site_name
+      site_name: body.site_name,
+      warnings: draftValidation.warnings
     });
 
     return {
       id: updateResult.rows[0].id,
       server_status: 'synced',
-      updated_at: updateResult.rows[0].updated_at
+      updated_at: updateResult.rows[0].updated_at,
+      warnings: draftValidation.warnings
     };
   }
 
@@ -177,7 +186,11 @@ export class SurveysService {
         body.vegetation_stage ?? existing.vegetation_stage
       );
       if (!check.ok) {
-        throw new UnprocessableEntityException({ message: 'IBP factor validation failed', errors: check.errors });
+        throw new UnprocessableEntityException({
+          message: 'IBP factor validation failed',
+          errors: check.errors,
+          warnings: check.warnings
+        });
       }
       if (check.scores) {
         body.scores = check.scores;
@@ -227,7 +240,10 @@ export class SurveysService {
     return result.rows[0];
   }
 
-  async submitSurvey(user: AuthenticatedUser, surveyId: string): Promise<{ id: string; status: 'submitted'; submitted_at: string; scores: Record<string, number> }> {
+  async submitSurvey(
+    user: AuthenticatedUser,
+    surveyId: string
+  ): Promise<{ id: string; status: 'submitted'; submitted_at: string; scores: Record<string, number>; warnings?: string[] }> {
     const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
 
     const validation = this.ibpRules.validateSubmit({
@@ -240,7 +256,8 @@ export class SurveysService {
     if (!validation.ok || !validation.scores) {
       throw new UnprocessableEntityException({
         message: 'Survey cannot be submitted',
-        errors: validation.errors
+        errors: validation.errors,
+        warnings: validation.warnings
       });
     }
 
@@ -260,12 +277,14 @@ export class SurveysService {
     }
 
     await this.insertEvent(surveyId, user.id, 'submitted', {
-      scores: validation.scores
+      scores: validation.scores,
+      warnings: validation.warnings
     });
 
     return {
       ...result.rows[0],
-      scores: validation.scores
+      scores: validation.scores,
+      warnings: validation.warnings
     };
   }
 

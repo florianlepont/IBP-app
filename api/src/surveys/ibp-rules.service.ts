@@ -1,8 +1,18 @@
 import { Injectable } from '@nestjs/common';
 
+export type IbpValidationIssue = {
+  factor?: string;
+  code: string;
+  message: string;
+  blocking: boolean;
+};
+
 export type IbpValidationResult = {
   ok: boolean;
   errors: string[];
+  warnings: string[];
+  issues: IbpValidationIssue[];
+  factor_scores: Record<string, number> | null;
   scores: {
     ibp_peuplement_gestion: number;
     ibp_contexte: number;
@@ -20,15 +30,18 @@ const IJ_ALLOWED = new Set([0, 2, 5]);
 @Injectable()
 export class IbpRulesService {
   validateDraft(factors: Factors | null | undefined, regionVersion?: string | null, vegetationStage?: string | null): IbpValidationResult {
-    const errors: string[] = [];
-    const normalized = this.normalizeFactors(factors, errors, false, this.normalizeRegion(regionVersion), vegetationStage ?? undefined);
+    const issues: IbpValidationIssue[] = [];
+
+    const thresholdRegion = this.resolveThresholdRegion(this.normalizeRegion(regionVersion), vegetationStage ?? undefined);
+    const normalized = this.normalizeFactors(factors, issues, false, thresholdRegion, vegetationStage ?? undefined);
 
     if (!normalized) {
-      return { ok: false, errors, scores: null };
+      return this.formatResult(issues, null);
     }
 
+    this.addNonBlockingConsistencyWarnings(normalized, issues);
     const scores = this.computeScores(normalized);
-    return { ok: errors.length === 0, errors, scores };
+    return this.formatResult(issues, scores, normalized);
   }
 
   validateSubmit(input: {
@@ -37,35 +50,37 @@ export class IbpRulesService {
     expires_at?: string | null;
     factors?: Factors | null;
   }): IbpValidationResult {
-    const errors: string[] = [];
+    const issues: IbpValidationIssue[] = [];
 
     const region = this.normalizeRegion(input.region_version);
     if (!region) {
-      errors.push('region_version is required and must be ACA or M');
+      issues.push(this.issue('region_version_required', 'region_version is required and must be ACA or M', true));
     }
 
     if (!input.vegetation_stage || !input.vegetation_stage.trim()) {
-      errors.push('vegetation_stage is required');
+      issues.push(this.issue('vegetation_stage_required', 'vegetation_stage is required', true));
     }
 
     if (!input.expires_at) {
-      errors.push('expires_at is required');
+      issues.push(this.issue('expires_at_required', 'expires_at is required', true));
     } else if (new Date() > new Date(input.expires_at)) {
-      errors.push('survey is expired and cannot be submitted');
+      issues.push(this.issue('survey_expired', 'survey is expired and cannot be submitted', true));
     }
 
-    const normalized = this.normalizeFactors(input.factors, errors, true, region, input.vegetation_stage ?? undefined);
+    const thresholdRegion = this.resolveThresholdRegion(region, input.vegetation_stage ?? undefined);
+    const normalized = this.normalizeFactors(input.factors, issues, true, thresholdRegion, input.vegetation_stage ?? undefined);
     if (!normalized) {
-      return { ok: false, errors, scores: null };
+      return this.formatResult(issues, null);
     }
 
+    this.addNonBlockingConsistencyWarnings(normalized, issues);
     const scores = this.computeScores(normalized);
-    return { ok: errors.length === 0, errors, scores };
+    return this.formatResult(issues, scores, normalized);
   }
 
   private normalizeFactors(
     factors: Factors | null | undefined,
-    errors: string[],
+    issues: IbpValidationIssue[],
     requireAll: boolean,
     regionVersion?: RegionVersion,
     vegetationStage?: string
@@ -78,20 +93,20 @@ export class IbpRulesService {
 
       if (value === undefined || value === null || value === '') {
         if (requireAll) {
-          errors.push(`factor ${key} is required`);
+          issues.push(this.issue('factor_required', `factor ${key} is required`, true, key));
         }
         continue;
       }
 
-      const score = this.resolveFactorScore(key, value, regionVersion, vegetationStage);
+      const score = this.resolveFactorScore(key, value, regionVersion, vegetationStage, issues);
       if (score === null) {
-        errors.push(`factor ${key} has invalid raw input`);
+        issues.push(this.issue('factor_invalid_raw', `factor ${key} has invalid raw input`, true, key));
         continue;
       }
 
       if (!this.isAllowedScore(key, score)) {
         const allowedValues = key === 'I' || key === 'J' ? '0,2,5' : '0,1,2,5';
-        errors.push(`factor ${key} must resolve to one of [${allowedValues}]`);
+        issues.push(this.issue('factor_invalid_score', `factor ${key} must resolve to one of [${allowedValues}]`, true, key));
         continue;
       }
 
@@ -104,8 +119,9 @@ export class IbpRulesService {
   private resolveFactorScore(
     key: string,
     rawValue: unknown,
-    regionVersion?: RegionVersion,
-    vegetationStage?: string
+    regionVersion: RegionVersion | undefined,
+    vegetationStage: string | undefined,
+    issues: IbpValidationIssue[]
   ): number | null {
     const direct = this.asNumber(rawValue);
     if (direct !== null) {
@@ -127,7 +143,7 @@ export class IbpRulesService {
       case 'E':
         return this.scoreFactorE(rawValue);
       case 'F':
-        return this.scoreFactorF(rawValue);
+        return this.scoreFactorF(rawValue, issues);
       case 'G':
         return this.scoreFactorG(rawValue, regionVersion, vegetationStage);
       case 'H':
@@ -217,7 +233,7 @@ export class IbpRulesService {
     return 5;
   }
 
-  private scoreFactorF(raw: Record<string, unknown>): number | null {
+  private scoreFactorF(raw: Record<string, unknown>, issues: IbpValidationIssue[]): number | null {
     const treesPerHa = this.pickNumber(raw, ['trees_per_ha']);
     if (treesPerHa !== null) {
       if (treesPerHa < 2) return 0;
@@ -235,6 +251,9 @@ export class IbpRulesService {
     for (const g of groups) {
       const n = this.asNumber(g);
       if (n === null) return null;
+      if (n > 2) {
+        issues.push(this.issue('factor_f_group_capped', 'factor F group count capped to 2 trees/ha', false, 'F'));
+      }
       cappedTotal += Math.min(2, Math.max(0, n));
     }
 
@@ -293,6 +312,16 @@ export class IbpRulesService {
     return 5;
   }
 
+  private addNonBlockingConsistencyWarnings(factors: Record<string, number>, issues: IbpValidationIssue[]): void {
+    if ((factors.B ?? 0) >= 2 && (factors.A ?? 0) === 0) {
+      issues.push(this.issue('consistency_a_b', 'factor_b indicates complex strata while factor_a is very low; please double-check', false, 'A'));
+    }
+
+    if ((factors.F ?? 0) >= 5 && (factors.E ?? 0) === 0) {
+      issues.push(this.issue('consistency_e_f', 'factor_f is high while factor_e is 0; possible but should be checked', false, 'F'));
+    }
+  }
+
   private computeScores(factors: Record<string, number>) {
     const value = (k: string) => factors[k] ?? 0;
 
@@ -304,6 +333,13 @@ export class IbpRulesService {
       ibp_contexte,
       ibp_total: ibp_peuplement_gestion + ibp_contexte
     };
+  }
+
+  private resolveThresholdRegion(region: RegionVersion | undefined, stage: string | undefined): RegionVersion | undefined {
+    if (stage === 'montagnard_mediterraneen') {
+      return 'ACA';
+    }
+    return region;
   }
 
   private normalizeRegion(region?: string | null): RegionVersion | undefined {
@@ -342,5 +378,27 @@ export class IbpRulesService {
 
   private isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private issue(code: string, message: string, blocking: boolean, factor?: string): IbpValidationIssue {
+    return { code, message, blocking, factor };
+  }
+
+  private formatResult(
+    issues: IbpValidationIssue[],
+    scores: IbpValidationResult['scores'],
+    factorScores: Record<string, number> | null = null
+  ): IbpValidationResult {
+    const errors = issues.filter((i) => i.blocking).map((i) => i.message);
+    const warnings = issues.filter((i) => !i.blocking).map((i) => i.message);
+
+    return {
+      ok: errors.length === 0,
+      errors,
+      warnings,
+      issues,
+      factor_scores: factorScores,
+      scores
+    };
   }
 }
