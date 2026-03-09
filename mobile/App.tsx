@@ -69,11 +69,36 @@ type SurveyDetailResponse = {
   };
 };
 
+type SurveyDetailTab = 'summary' | 'factors' | 'photos' | 'events';
+
+type SurveyEventItem = {
+  id: string;
+  survey_id?: string;
+  actor_id?: string | null;
+  event_type: string;
+  payload?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type SurveyEventsResponse = {
+  items?: SurveyEventItem[];
+};
+
 type SurveyStatusFilter = 'all' | 'draft' | 'submitted';
 type SurveySyncFilter = 'all' | 'pending' | 'synced' | 'failed';
 type SurveyBlockedFilter = 'all' | 'blocked' | 'unblocked';
 type SurveyAttachmentFilter = 'all' | 'with' | 'without';
 type SurveySort = 'updated_desc' | 'updated_asc' | 'site_asc';
+type AppScreen = 'list' | 'create' | 'edit';
+type RegionVersion = 'ACA' | 'M';
+type VegetationStage =
+  | 'planitiaire'
+  | 'collineen'
+  | 'montagnard'
+  | 'subalpin'
+  | 'thermo_mediterraneen'
+  | 'meso_mediterraneen'
+  | 'supra_mediterraneen';
 
 const HELP_BY_FACTOR: Record<FactorKey, string> = {
   A: 'Native tree taxa. Enter the observed count of native genera in the stand.',
@@ -88,15 +113,47 @@ const HELP_BY_FACTOR: Record<FactorKey, string> = {
   J: 'Rocky habitats. Enter distinct habitat type_count: 0, 1, or 2+.'
 };
 
+const REGION_OPTIONS: Array<{ value: RegionVersion; label: string }> = [
+  { value: 'ACA', label: 'Régions atlantique, continentale et alpine' },
+  { value: 'M', label: 'Méditerranéenne' }
+];
+
+const VEGETATION_STAGE_OPTIONS_BY_REGION: Record<RegionVersion, Array<{ value: VegetationStage; label: string }>> = {
+  ACA: [
+    { value: 'planitiaire', label: 'Planitiaire' },
+    { value: 'collineen', label: 'Collinéen' },
+    { value: 'montagnard', label: 'Montagnard' },
+    { value: 'subalpin', label: 'Subalpin' }
+  ],
+  M: [
+    { value: 'thermo_mediterraneen', label: 'Thermo-méditerranéen' },
+    { value: 'meso_mediterraneen', label: 'Méso-méditerranéen' },
+    { value: 'supra_mediterraneen', label: 'Supra-méditerranéen' }
+  ]
+};
+
+const defaultVegetationStageForRegion = (region: RegionVersion): VegetationStage =>
+  VEGETATION_STAGE_OPTIONS_BY_REGION[region][0].value;
+
+const normalizeVegetationStageForRegion = (region: RegionVersion, stage: unknown): VegetationStage => {
+  if (typeof stage !== 'string') {
+    return defaultVegetationStageForRegion(region);
+  }
+  if (region === 'ACA' && stage === 'montagnard_mediterraneen') {
+    return 'montagnard';
+  }
+  const match = VEGETATION_STAGE_OPTIONS_BY_REGION[region].find((option) => option.value === stage);
+  return match ? match.value : defaultVegetationStageForRegion(region);
+};
+
 export default function App() {
   const initialApiUrl = useMemo(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL, []);
   const [apiUrl, setApiUrl] = useState(initialApiUrl);
   const [email, setEmail] = useState('demo@ibp.local');
   const [password, setPassword] = useState('demo123');
   const [siteName, setSiteName] = useState('Foret de Rambouillet');
-  const [regionVersion, setRegionVersion] = useState<'ACA' | 'M'>('ACA');
-  const [vegetationStage, setVegetationStage] = useState('collineen');
-  const [helpFactor, setHelpFactor] = useState<FactorKey | null>(null);
+  const [regionVersion, setRegionVersion] = useState<RegionVersion>('ACA');
+  const [vegetationStage, setVegetationStage] = useState<VegetationStage>('collineen');
 
   const [factorA, setFactorA] = useState({ native_genus_count: '2' });
   const [factorB, setFactorB] = useState({ strata_count: '2', covered_autochthonous_percent: '70' });
@@ -115,6 +172,13 @@ export default function App() {
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null);
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
+  const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null);
+  const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({});
+  const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null);
+  const [selectedSurveyId, setSelectedSurveyId] = useState<string | null>(null);
+  const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>('summary');
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [screen, setScreen] = useState<AppScreen>('list');
   const [status, setStatus] = useState<string>('Ready');
   const [surveyQuery, setSurveyQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<SurveyStatusFilter>('all');
@@ -222,6 +286,16 @@ export default function App() {
     return sorted;
   }, [surveys, surveyQuery, statusFilter, syncFilter, blockedFilter, attachmentFilter, sortMode, attachmentCountBySurvey]);
 
+  const selectedSurvey = useMemo(
+    () => (selectedSurveyId ? surveys.find((survey) => survey.id === selectedSurveyId) ?? null : null),
+    [surveys, selectedSurveyId]
+  );
+
+  const selectedSurveyAttachments = useMemo(
+    () => (selectedSurvey ? attachmentsBySurvey[selectedSurvey.id] ?? [] : []),
+    [selectedSurvey, attachmentsBySurvey]
+  );
+
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
       await initLocalDb();
@@ -265,6 +339,11 @@ export default function App() {
   const asObject = (value: unknown): Record<string, unknown> =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
+  const handleRegionChange = (nextRegion: RegionVersion): void => {
+    setRegionVersion(nextRegion);
+    setVegetationStage((current) => normalizeVegetationStageForRegion(nextRegion, current));
+  };
+
   const buildFactorsPayload = (): Record<string, unknown> => ({
     A: { native_genus_count: toNum(factorA.native_genus_count) },
     B: {
@@ -296,8 +375,9 @@ export default function App() {
   const applyDraftToForm = (draftValue: unknown): void => {
     const draft = asObject(draftValue);
     setSiteName(typeof draft.site_name === 'string' ? draft.site_name : siteName);
-    setRegionVersion(draft.region_version === 'M' ? 'M' : 'ACA');
-    setVegetationStage(typeof draft.vegetation_stage === 'string' ? draft.vegetation_stage : vegetationStage);
+    const nextRegion: RegionVersion = draft.region_version === 'M' ? 'M' : 'ACA';
+    setRegionVersion(nextRegion);
+    setVegetationStage(normalizeVegetationStageForRegion(nextRegion, draft.vegetation_stage));
 
     const factors = asObject(draft.factors);
     const factorAObj = asObject(factors.A);
@@ -338,18 +418,44 @@ export default function App() {
     setFactorJ({ type_count: toTextNum(factorJObj.type_count, '1') });
   };
 
+  const resetSurveyForm = (): void => {
+    setSiteName('Foret de Rambouillet');
+    setRegionVersion('ACA');
+    setVegetationStage(defaultVegetationStageForRegion('ACA'));
+    setFactorA({ native_genus_count: '2' });
+    setFactorB({ strata_count: '2', covered_autochthonous_percent: '70' });
+    setFactorC({ bmg_count: '0', bmm_count: '0', surface_ha: '1' });
+    setFactorD({ bmg_count: '0', bmm_count: '0', surface_ha: '1' });
+    setFactorE({ tgb_count: '0', gb_count: '0', surface_ha: '1' });
+    setFactorF({ trees_per_ha: '2' });
+    setFactorG({ open_flowering_percent: '2' });
+    setFactorH({ class_score: '2' });
+    setFactorI({ type_count: '1' });
+    setFactorJ({ type_count: '1' });
+  };
+
+  const handleOpenCreateSurvey = (): void => {
+    setEditingSurveyId(null);
+    setSelectedSurveyId(null);
+    resetSurveyForm();
+    setScreen('create');
+    setStatus('Create survey view opened');
+  };
+
   const handleCreateDraft = async (): Promise<void> => {
     try {
-      await createLocalDraft({
+      const created = await createLocalDraft({
         site_name: siteName.trim() || 'Unnamed site',
         region_version: regionVersion,
-        vegetation_stage: vegetationStage.trim(),
+        vegetation_stage: vegetationStage,
         factors: buildFactorsPayload()
       });
 
       await refreshLocalSurveys();
       await refreshLocalAttachments();
       setEditingSurveyId(null);
+      setSelectedSurveyId(created.id);
+      setScreen('list');
       setStatus('Local IBP draft created with raw observations');
     } catch (error) {
       setStatus(`Draft error: ${(error as Error).message}`);
@@ -371,6 +477,8 @@ export default function App() {
       }
       applyDraftToForm(draft);
       setEditingSurveyId(surveyId);
+      setSelectedSurveyId(surveyId);
+      setScreen('edit');
       setStatus(`Editing survey ${surveyId}`);
     } catch (error) {
       setStatus(`Edit load error: ${(error as Error).message}`);
@@ -388,7 +496,7 @@ export default function App() {
         survey_id: editingSurveyId,
         site_name: siteName.trim() || 'Unnamed site',
         region_version: regionVersion,
-        vegetation_stage: vegetationStage.trim(),
+        vegetation_stage: vegetationStage,
         factors: buildFactorsPayload(),
         visibility: 'private',
         location: {}
@@ -396,6 +504,7 @@ export default function App() {
 
       await refreshLocalSurveys();
       await refreshLocalAttachments();
+      setScreen('list');
       setStatus(`Local survey ${editingSurveyId} updated and queued for sync`);
     } catch (error) {
       setStatus(`Edit save error: ${(error as Error).message}`);
@@ -404,7 +513,17 @@ export default function App() {
 
   const handleCancelSurveyEdit = (): void => {
     setEditingSurveyId(null);
+    setScreen('list');
     setStatus('Edit mode cancelled');
+  };
+
+  const handleCancelSurveyForm = (): void => {
+    if (screen === 'edit') {
+      handleCancelSurveyEdit();
+      return;
+    }
+    setScreen('list');
+    setStatus('Create mode cancelled');
   };
 
   const handleSync = async (): Promise<void> => {
@@ -527,6 +646,10 @@ export default function App() {
               .then(async (result) => {
                 await refreshLocalSurveys();
                 await refreshLocalAttachments();
+                if (result.queued_delete && selectedSurveyId === surveyId) {
+                  setSelectedSurveyId(null);
+                  setSurveyDetailTab('summary');
+                }
                 setStatus(result.queued_delete ? `Deletion queued for ${surveyId}` : `Survey not found: ${surveyId}`);
               })
               .catch((error) => setStatus(`Delete error: ${(error as Error).message}`));
@@ -594,14 +717,20 @@ export default function App() {
     }
   };
 
-  const handleLoadCanonicalDetails = async (surveyId: string): Promise<void> => {
+  const handleLoadCanonicalDetails = async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
+    const silent = options?.silent ?? false;
     if (!accessToken) {
-      setStatus('Login required before loading canonical details');
+      if (!silent) {
+        setStatus('Login required before loading canonical details');
+      }
       return;
     }
 
     try {
-      setStatus(`Loading canonical details for ${surveyId}...`);
+      setDetailsLoadingSurveyId(surveyId);
+      if (!silent) {
+        setStatus(`Loading canonical details for ${surveyId}...`);
+      }
       const response = await fetch(`${apiUrl}/surveys/${surveyId}`, {
         method: 'GET',
         headers: {
@@ -611,17 +740,109 @@ export default function App() {
       });
 
       if (!response.ok) {
-        setStatus(`Load detail failed: HTTP ${response.status}`);
+        if (!silent) {
+          setStatus(`Load detail failed: HTTP ${response.status}`);
+        }
         return;
       }
 
       const payload = (await response.json()) as SurveyDetailResponse;
       setSurveyDetails((prev) => ({ ...prev, [surveyId]: payload }));
-      setStatus(`Canonical details loaded for ${surveyId}`);
+      if (!silent) {
+        setStatus(`Canonical details loaded for ${surveyId}`);
+      }
     } catch (error) {
-      setStatus(`Load detail error: ${(error as Error).message}`);
+      if (!silent) {
+        setStatus(`Load detail error: ${(error as Error).message}`);
+      }
+    } finally {
+      setDetailsLoadingSurveyId((current) => (current === surveyId ? null : current));
     }
   };
+
+  const handleOpenSurvey = (surveyId: string): void => {
+    setSelectedSurveyId(surveyId);
+    setSurveyDetailTab('summary');
+    setStatus(`Survey ${surveyId} opened`);
+  };
+
+  const handleCloseSurveyDetail = (): void => {
+    setSelectedSurveyId(null);
+    setSurveyDetailTab('summary');
+    setStatus('Survey detail closed');
+  };
+
+  const handleLoadSurveyEvents = async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
+    const silent = options?.silent ?? false;
+    if (!accessToken) {
+      if (!silent) {
+        setStatus('Login required before loading survey events');
+      }
+      return;
+    }
+
+    try {
+      setEventsLoadingSurveyId(surveyId);
+      if (!silent) {
+        setStatus(`Loading events for ${surveyId}...`);
+      }
+      const response = await fetch(`${apiUrl}/surveys/${surveyId}/events`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        if (!silent) {
+          setStatus(`Load events failed: HTTP ${response.status}`);
+        }
+        return;
+      }
+
+      const payload = (await response.json()) as SurveyEventsResponse;
+      setSurveyEvents((prev) => ({ ...prev, [surveyId]: payload.items ?? [] }));
+      if (!silent) {
+        setStatus(`Events loaded for ${surveyId}`);
+      }
+    } catch (error) {
+      if (!silent) {
+        setStatus(`Load events error: ${(error as Error).message}`);
+      }
+    } finally {
+      setEventsLoadingSurveyId((current) => (current === surveyId ? null : current));
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedSurveyId || !accessToken) {
+      return;
+    }
+    if (surveyDetails[selectedSurveyId]) {
+      return;
+    }
+    if (detailsLoadingSurveyId === selectedSurveyId) {
+      return;
+    }
+    void handleLoadCanonicalDetails(selectedSurveyId, { silent: true });
+  }, [selectedSurveyId, accessToken, surveyDetails, detailsLoadingSurveyId]);
+
+  useEffect(() => {
+    if (!selectedSurveyId || !accessToken) {
+      return;
+    }
+    if (surveyDetailTab !== 'events') {
+      return;
+    }
+    if (surveyEvents[selectedSurveyId]) {
+      return;
+    }
+    if (eventsLoadingSurveyId === selectedSurveyId) {
+      return;
+    }
+    void handleLoadSurveyEvents(selectedSurveyId, { silent: true });
+  }, [selectedSurveyId, accessToken, surveyDetailTab, surveyEvents, eventsLoadingSurveyId]);
 
   const formatPoints = (value: number): string => `${value} point${value > 1 ? 's' : ''}`;
 
@@ -644,11 +865,8 @@ export default function App() {
     <View style={styles.helpCard} key={key}>
       <View style={styles.helpHeader}>
         <Text style={styles.label}>Factor {key}</Text>
-        <Pressable onPress={() => setHelpFactor((v) => (v === key ? null : key))}>
-          <Text style={styles.helpToggle}>{helpFactor === key ? 'Hide help' : 'Show help'}</Text>
-        </Pressable>
       </View>
-      {helpFactor === key ? <Text style={styles.helpText}>{HELP_BY_FACTOR[key]}</Text> : null}
+      <Text style={styles.helpText}>{HELP_BY_FACTOR[key]}</Text>
       <View style={styles.factorGrid}>
         {fields.map((field) => (
           <View key={`${key}-${field.label}`} style={styles.factorItemWide}>
@@ -671,96 +889,96 @@ export default function App() {
     </Pressable>
   );
 
+  const renderSurveyBadges = (survey: LocalSurvey, attachmentCount: number) => {
+    const isSubmitted = survey.status === 'submitted';
+    return (
+      <View style={styles.badgeRow}>
+        <View style={[styles.badge, isSubmitted ? styles.badgeStatusSubmitted : styles.badgeStatusDraft]}>
+          <Text style={styles.badgeText}>status: {survey.status}</Text>
+        </View>
+        <View
+          style={[
+            styles.badge,
+            survey.sync_state === 'synced'
+              ? styles.badgeSyncSynced
+              : survey.sync_state === 'pending'
+                ? styles.badgeSyncPending
+                : styles.badgeSyncFailed
+          ]}
+        >
+          <Text style={styles.badgeText}>sync: {survey.sync_state}</Text>
+        </View>
+        <View style={[styles.badge, styles.badgeNeutral]}>
+          <Text style={styles.badgeText}>v{survey.sync_version}</Text>
+        </View>
+        <View style={[styles.badge, styles.badgeNeutral]}>
+          <Text style={styles.badgeText}>photos: {attachmentCount}</Text>
+        </View>
+        {survey.sync_blocked === 1 ? (
+          <View style={[styles.badge, styles.badgeBlocked]}>
+            <Text style={styles.badgeText}>blocked</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const formatEventPayload = (payload?: Record<string, unknown> | null): string => {
+    if (!payload) return '';
+    const json = JSON.stringify(payload);
+    if (!json) return '';
+    return json.length > 120 ? `${json.slice(0, 117)}...` : json;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.title}>IBP Step 19 - Rich Survey List (Search, Filters, Badges)</Text>
-          <Text style={styles.subtitle}>API URL (editable)</Text>
-          <TextInput
-            style={styles.input}
-            value={apiUrl}
-            onChangeText={setApiUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <Text style={styles.title}>IBP Step 20 - Local Survey Hub + Dedicated Forms</Text>
+          <View style={styles.authCompact}>
+            <View style={styles.authCompactHeader}>
+              <Text style={styles.label}>Settings</Text>
+              <Pressable onPress={() => setShowSettingsPanel((open) => !open)}>
+                <Text style={styles.helpToggle}>{showSettingsPanel ? 'Hide settings' : 'Show settings'}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.meta}>User: {profile}</Text>
+          </View>
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" />
+          {showSettingsPanel ? (
+            <View style={styles.authPanel}>
+              <Text style={styles.subtitle}>API URL (editable)</Text>
+              <TextInput
+                style={styles.input}
+                value={apiUrl}
+                onChangeText={setApiUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+              <Text style={styles.label}>Email</Text>
+              <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" />
 
-          <Button title="Login" onPress={handleLogin} />
-          <Text style={styles.meta}>User: {profile}</Text>
+              <Text style={styles.label}>Password</Text>
+              <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
 
-          <Text style={styles.label}>Site name</Text>
-          <TextInput style={styles.input} value={siteName} onChangeText={setSiteName} />
-
-          <Text style={styles.label}>Region version (ACA or M)</Text>
-          <TextInput style={styles.input} value={regionVersion} onChangeText={(v) => setRegionVersion(v === 'M' ? 'M' : 'ACA')} />
-
-          <Text style={styles.label}>Vegetation stage</Text>
-          <TextInput style={styles.input} value={vegetationStage} onChangeText={setVegetationStage} />
-
-          {renderFactorSection('A', [
-            { label: 'native_genus_count', value: factorA.native_genus_count, onChange: (v) => setFactorA({ native_genus_count: v }) }
-          ])}
-          {renderFactorSection('B', [
-            { label: 'strata_count', value: factorB.strata_count, onChange: (v) => setFactorB((p) => ({ ...p, strata_count: v })) },
-            { label: 'covered_autochthonous_percent', value: factorB.covered_autochthonous_percent, onChange: (v) => setFactorB((p) => ({ ...p, covered_autochthonous_percent: v })) }
-          ])}
-          {renderFactorSection('C', [
-            { label: 'bmg_count', value: factorC.bmg_count, onChange: (v) => setFactorC((p) => ({ ...p, bmg_count: v })) },
-            { label: 'bmm_count', value: factorC.bmm_count, onChange: (v) => setFactorC((p) => ({ ...p, bmm_count: v })) },
-            { label: 'surface_ha', value: factorC.surface_ha, onChange: (v) => setFactorC((p) => ({ ...p, surface_ha: v })) }
-          ])}
-          {renderFactorSection('D', [
-            { label: 'bmg_count', value: factorD.bmg_count, onChange: (v) => setFactorD((p) => ({ ...p, bmg_count: v })) },
-            { label: 'bmm_count', value: factorD.bmm_count, onChange: (v) => setFactorD((p) => ({ ...p, bmm_count: v })) },
-            { label: 'surface_ha', value: factorD.surface_ha, onChange: (v) => setFactorD((p) => ({ ...p, surface_ha: v })) }
-          ])}
-          {renderFactorSection('E', [
-            { label: 'tgb_count', value: factorE.tgb_count, onChange: (v) => setFactorE((p) => ({ ...p, tgb_count: v })) },
-            { label: 'gb_count', value: factorE.gb_count, onChange: (v) => setFactorE((p) => ({ ...p, gb_count: v })) },
-            { label: 'surface_ha', value: factorE.surface_ha, onChange: (v) => setFactorE((p) => ({ ...p, surface_ha: v })) }
-          ])}
-          {renderFactorSection('F', [
-            { label: 'trees_per_ha', value: factorF.trees_per_ha, onChange: (v) => setFactorF({ trees_per_ha: v }) }
-          ])}
-          {renderFactorSection('G', [
-            { label: 'open_flowering_percent', value: factorG.open_flowering_percent, onChange: (v) => setFactorG({ open_flowering_percent: v }) }
-          ])}
-          {renderFactorSection('H', [
-            { label: 'class_score (0|2|5)', value: factorH.class_score, onChange: (v) => setFactorH({ class_score: v }) }
-          ])}
-          {renderFactorSection('I', [
-            { label: 'type_count', value: factorI.type_count, onChange: (v) => setFactorI({ type_count: v }) }
-          ])}
-          {renderFactorSection('J', [
-            { label: 'type_count', value: factorJ.type_count, onChange: (v) => setFactorJ({ type_count: v }) }
-          ])}
-
-          {editingSurveyId ? <Text style={styles.meta}>Editing survey: {editingSurveyId}</Text> : null}
-          {editingSurveyId ? (
-            <Button title="Save survey edits" onPress={handleSaveSurveyEdits} />
-          ) : (
-            <Button title="Create offline draft" onPress={handleCreateDraft} />
-          )}
-          {editingSurveyId ? <View style={styles.spacer} /> : null}
-          {editingSurveyId ? <Button title="Cancel edit mode" onPress={handleCancelSurveyEdit} /> : null}
+              <Button title="Login" onPress={handleLogin} />
+              <View style={styles.spacer} />
+              <Button title="Pull server changes (advanced)" onPress={handlePullChanges} />
+              <View style={styles.spacer} />
+              <Button title="Refresh local list" onPress={refreshLocalSurveys} />
+              <View style={styles.spacer} />
+              <Button title="Refresh local attachments" onPress={refreshLocalAttachments} />
+            </View>
+          ) : null}
+          <Button title="Create new survey" onPress={handleOpenCreateSurvey} />
           <View style={styles.spacer} />
-          <Button title="Sync pending queue (batch + pull)" onPress={handleSync} />
-          <View style={styles.spacer} />
-          <Button title="Pull server changes" onPress={handlePullChanges} />
-          <View style={styles.spacer} />
-          <Button title="Refresh local list" onPress={refreshLocalSurveys} />
-          <View style={styles.spacer} />
-          <Button title="Refresh local attachments" onPress={refreshLocalAttachments} />
+          <Button title="Sync now (push + pull)" onPress={handleSync} />
 
           <Text style={styles.status}>{status}</Text>
         </View>
 
+        {screen === 'list' ? (
         <View style={styles.card}>
           <Text style={styles.title}>Local Surveys ({visibleSurveys.length}/{surveys.length})</Text>
 
@@ -843,113 +1061,158 @@ export default function App() {
             <Text style={styles.filterResetText}>Reset filters</Text>
           </Pressable>
 
+          {selectedSurvey ? (
+            <View style={styles.detailCard}>
+              <View style={styles.detailHeader}>
+                <Text style={styles.detailTitle}>Survey detail: {selectedSurvey.site_name}</Text>
+                <Pressable onPress={handleCloseSurveyDetail}>
+                  <Text style={styles.helpToggle}>Close</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.rowMeta}>id: {selectedSurvey.id}</Text>
+              <Text style={styles.rowMeta}>updated: {selectedSurvey.updated_at}</Text>
+              {renderSurveyBadges(selectedSurvey, selectedSurveyAttachments.length)}
+
+              <View style={styles.filterChipsRow}>
+                {renderFilterChip('Summary', surveyDetailTab === 'summary', () => setSurveyDetailTab('summary'))}
+                {renderFilterChip('Factors', surveyDetailTab === 'factors', () => setSurveyDetailTab('factors'))}
+                {renderFilterChip('Photos', surveyDetailTab === 'photos', () => setSurveyDetailTab('photos'))}
+                {renderFilterChip('Events', surveyDetailTab === 'events', () => setSurveyDetailTab('events'))}
+              </View>
+
+              {surveyDetailTab === 'summary' ? (
+                <View style={styles.detailSection}>
+                  {editingSurveyId === selectedSurvey.id ? <Text style={styles.editingTag}>currently edited in form above</Text> : null}
+                  {selectedSurvey.status === 'submitted' ? <Text style={styles.rowMeta}>submitted survey: read-only</Text> : null}
+                  {selectedSurvey.last_sync_error ? (
+                    <Text style={styles.rowMeta}>last error: {selectedSurvey.last_sync_error}</Text>
+                  ) : (
+                    <Text style={styles.rowMeta}>No sync error reported.</Text>
+                  )}
+                  {selectedSurvey.last_sync_error_code ? (
+                    <Text style={styles.rowMeta}>error code: {selectedSurvey.last_sync_error_code}</Text>
+                  ) : null}
+                  {selectedSurvey.last_sync_error_at ? (
+                    <Text style={styles.rowMeta}>error at: {selectedSurvey.last_sync_error_at}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {surveyDetailTab === 'factors' ? (
+                <View style={styles.detailSection}>
+                  <Button title="Refresh canonical details" onPress={() => void handleLoadCanonicalDetails(selectedSurvey.id)} />
+                  {detailsLoadingSurveyId === selectedSurvey.id ? <Text style={styles.rowMeta}>Loading canonical details...</Text> : null}
+                  {surveyDetails[selectedSurvey.id] ? (
+                    <View style={styles.canonicalCard}>
+                      <Text style={styles.canonicalHeader}>Scores globaux</Text>
+                      <Text style={styles.canonicalHeaderLine}>
+                        Peuplement/Gestion: {formatPoints(surveyDetails[selectedSurvey.id].scores.ibp_peuplement_gestion)}
+                      </Text>
+                      <Text style={styles.canonicalHeaderLine}>
+                        Contexte: {formatPoints(surveyDetails[selectedSurvey.id].scores.ibp_contexte)}
+                      </Text>
+                      <Text style={styles.canonicalHeaderLine}>
+                        Total IBP: {formatPoints(surveyDetails[selectedSurvey.id].scores.ibp_total)}
+                      </Text>
+                      {Object.entries(surveyDetails[selectedSurvey.id].factor_results)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([factorCode, factor]) => renderCanonicalFactor(factorCode, factor))}
+                    </View>
+                  ) : (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.rowMeta}>Canonical factors not loaded yet.</Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+
+              {surveyDetailTab === 'photos' ? (
+                <View style={styles.detailSection}>
+                  {selectedSurveyAttachments.length > 0 ? (
+                    <View style={styles.attachmentCard}>
+                      <Text style={styles.attachmentHeader}>Local Attachments</Text>
+                      {selectedSurveyAttachments.map((attachment) => (
+                        <View key={attachment.id} style={styles.attachmentRow}>
+                          {attachment.local_uri ? <Image source={{ uri: attachment.local_uri }} style={styles.attachmentPreview} /> : null}
+                          <Text style={styles.attachmentText}>
+                            {attachment.id} | {attachment.mime_type} | {Math.round(attachment.size_bytes / 1024)} KB
+                          </Text>
+                          <Text style={styles.attachmentText}>
+                            state: {attachment.sync_state}
+                            {attachment.remote_attachment_id ? ` | remote: ${attachment.remote_attachment_id}` : ''}
+                          </Text>
+                          {attachment.last_sync_error_code ? (
+                            <Text style={styles.attachmentError}>code: {attachment.last_sync_error_code}</Text>
+                          ) : null}
+                          {attachment.last_sync_error ? <Text style={styles.attachmentError}>error: {attachment.last_sync_error}</Text> : null}
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.rowMeta}>No photo queued for this survey.</Text>
+                  )}
+                </View>
+              ) : null}
+
+              {surveyDetailTab === 'events' ? (
+                <View style={styles.detailSection}>
+                  <Button title="Refresh events" onPress={() => void handleLoadSurveyEvents(selectedSurvey.id)} />
+                  {eventsLoadingSurveyId === selectedSurvey.id ? <Text style={styles.rowMeta}>Loading events...</Text> : null}
+                  {(surveyEvents[selectedSurvey.id] ?? []).length === 0 && eventsLoadingSurveyId !== selectedSurvey.id ? (
+                    <Text style={styles.rowMeta}>No events loaded yet.</Text>
+                  ) : null}
+                  {(surveyEvents[selectedSurvey.id] ?? []).map((event) => (
+                    <View key={event.id} style={styles.eventRow}>
+                      <Text style={styles.eventTitle}>{event.event_type}</Text>
+                      <Text style={styles.rowMeta}>{event.created_at}</Text>
+                      {formatEventPayload(event.payload) ? (
+                        <Text style={styles.eventPayload}>{formatEventPayload(event.payload)}</Text>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              <View style={styles.detailSection}>
+                {selectedSurvey.status !== 'submitted' ? (
+                  <>
+                    <Button title="Edit survey" onPress={() => handleStartEditSurvey(selectedSurvey.id)} />
+                    <View style={styles.miniSpacer} />
+                    <Button title="Attach photo (queue)" onPress={() => handleQueueAttachment(selectedSurvey.id)} />
+                    <View style={styles.miniSpacer} />
+                    <Button title="Delete survey" onPress={() => confirmDeleteSurvey(selectedSurvey.id)} />
+                    <View style={styles.miniSpacer} />
+                  </>
+                ) : null}
+                {selectedSurvey.sync_state === 'synced' && selectedSurvey.status !== 'submitted' && selectedSurvey.sync_blocked !== 1 ? (
+                  <>
+                    <Button title="Submit survey" onPress={() => handleSubmitSurvey(selectedSurvey.id)} />
+                    <View style={styles.miniSpacer} />
+                  </>
+                ) : null}
+                {selectedSurvey.sync_state === 'failed' ? (
+                  <>
+                    <Button title="Retry now" onPress={() => handleRetrySurvey(selectedSurvey.id)} />
+                    <View style={styles.miniSpacer} />
+                    <Button title="Discard local change" onPress={() => handleDiscardSurvey(selectedSurvey.id)} />
+                    <View style={styles.miniSpacer} />
+                  </>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
           {visibleSurveys.map((survey) => {
-            const surveyAttachments = attachmentsBySurvey[survey.id] ?? [];
-            const attachmentCount = surveyAttachments.length;
-            const isSubmitted = survey.status === 'submitted';
-            const canSubmit = survey.sync_state === 'synced' && !isSubmitted && survey.sync_blocked !== 1;
+            const attachmentCount = attachmentCountBySurvey[survey.id] ?? 0;
             return (
               <View key={survey.id} style={styles.row}>
               <Text style={styles.rowTitle}>{survey.site_name}</Text>
               <Text style={styles.rowMeta}>id: {survey.id}</Text>
               <Text style={styles.rowMeta}>updated: {survey.updated_at}</Text>
-
-              <View style={styles.badgeRow}>
-                <View style={[styles.badge, isSubmitted ? styles.badgeStatusSubmitted : styles.badgeStatusDraft]}>
-                  <Text style={styles.badgeText}>status: {survey.status}</Text>
-                </View>
-                <View
-                  style={[
-                    styles.badge,
-                    survey.sync_state === 'synced'
-                      ? styles.badgeSyncSynced
-                      : survey.sync_state === 'pending'
-                        ? styles.badgeSyncPending
-                        : styles.badgeSyncFailed
-                  ]}
-                >
-                  <Text style={styles.badgeText}>sync: {survey.sync_state}</Text>
-                </View>
-                <View style={[styles.badge, styles.badgeNeutral]}>
-                  <Text style={styles.badgeText}>v{survey.sync_version}</Text>
-                </View>
-                <View style={[styles.badge, styles.badgeNeutral]}>
-                  <Text style={styles.badgeText}>photos: {attachmentCount}</Text>
-                </View>
-                {survey.sync_blocked === 1 ? (
-                  <View style={[styles.badge, styles.badgeBlocked]}>
-                    <Text style={styles.badgeText}>blocked</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              {editingSurveyId === survey.id ? <Text style={styles.editingTag}>currently edited in form above</Text> : null}
-              {isSubmitted ? <Text style={styles.rowMeta}>submitted survey: read-only</Text> : null}
-              {survey.last_sync_error ? (
-                <Text style={styles.rowMeta}>last error: {survey.last_sync_error}</Text>
-              ) : null}
-              {survey.last_sync_error_code ? (
-                <Text style={styles.rowMeta}>error code: {survey.last_sync_error_code}</Text>
-              ) : null}
-              {survey.last_sync_error_at ? (
-                <Text style={styles.rowMeta}>error at: {survey.last_sync_error_at}</Text>
-              ) : null}
+              {renderSurveyBadges(survey, attachmentCount)}
+              {selectedSurveyId === survey.id ? <Text style={styles.editingTag}>selected in detail panel</Text> : null}
               <View style={styles.miniSpacer} />
-              {!isSubmitted ? <Button title="Edit survey" onPress={() => handleStartEditSurvey(survey.id)} /> : null}
-              {!isSubmitted ? <View style={styles.miniSpacer} /> : null}
-              {!isSubmitted ? <Button title="Attach photo (queue)" onPress={() => handleQueueAttachment(survey.id)} /> : null}
-              {!isSubmitted ? <View style={styles.miniSpacer} /> : null}
-              {!isSubmitted ? <Button title="Delete survey" onPress={() => confirmDeleteSurvey(survey.id)} /> : null}
-              {!isSubmitted ? <View style={styles.miniSpacer} /> : null}
-              {canSubmit ? <Button title="Submit survey" onPress={() => handleSubmitSurvey(survey.id)} /> : null}
-              {canSubmit ? <View style={styles.miniSpacer} /> : null}
-              {survey.sync_state === 'failed' ? (
-                <Button title="Retry now" onPress={() => handleRetrySurvey(survey.id)} />
-              ) : null}
-              {survey.sync_state === 'failed' ? <View style={styles.miniSpacer} /> : null}
-              {survey.sync_state === 'failed' ? (
-                <Button title="Discard local change" onPress={() => handleDiscardSurvey(survey.id)} />
-              ) : null}
-              {survey.sync_state === 'failed' ? <View style={styles.miniSpacer} /> : null}
-              <Button title="Load canonical details" onPress={() => handleLoadCanonicalDetails(survey.id)} />
-              {surveyAttachments.length > 0 ? (
-                <View style={styles.attachmentCard}>
-                  <Text style={styles.attachmentHeader}>Local Attachments</Text>
-                  {surveyAttachments.map((attachment) => (
-                    <View key={attachment.id} style={styles.attachmentRow}>
-                      {attachment.local_uri ? <Image source={{ uri: attachment.local_uri }} style={styles.attachmentPreview} /> : null}
-                      <Text style={styles.attachmentText}>
-                        {attachment.id} | {attachment.mime_type} | {Math.round(attachment.size_bytes / 1024)} KB
-                      </Text>
-                      <Text style={styles.attachmentText}>
-                        state: {attachment.sync_state}
-                        {attachment.remote_attachment_id ? ` | remote: ${attachment.remote_attachment_id}` : ''}
-                      </Text>
-                      {attachment.last_sync_error_code ? (
-                        <Text style={styles.attachmentError}>code: {attachment.last_sync_error_code}</Text>
-                      ) : null}
-                      {attachment.last_sync_error ? <Text style={styles.attachmentError}>error: {attachment.last_sync_error}</Text> : null}
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              {surveyDetails[survey.id] ? (
-                <View style={styles.canonicalCard}>
-                  <Text style={styles.canonicalHeader}>Scores globaux</Text>
-                  <Text style={styles.canonicalHeaderLine}>
-                    Peuplement/Gestion: {formatPoints(surveyDetails[survey.id].scores.ibp_peuplement_gestion)}
-                  </Text>
-                  <Text style={styles.canonicalHeaderLine}>
-                    Contexte: {formatPoints(surveyDetails[survey.id].scores.ibp_contexte)}
-                  </Text>
-                  <Text style={styles.canonicalHeaderLine}>
-                    Total IBP: {formatPoints(surveyDetails[survey.id].scores.ibp_total)}
-                  </Text>
-                  {Object.entries(surveyDetails[survey.id].factor_results)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([factorCode, factor]) => renderCanonicalFactor(factorCode, factor))}
-                </View>
-              ) : null}
+              <Button title="Open survey" onPress={() => handleOpenSurvey(survey.id)} />
               </View>
             );
           })}
@@ -958,6 +1221,76 @@ export default function App() {
             <Text style={styles.meta}>No survey matches current filters.</Text>
           ) : null}
         </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.title}>{screen === 'edit' ? 'Edit survey (dedicated view)' : 'Create survey (dedicated view)'}</Text>
+            {screen === 'edit' && editingSurveyId ? <Text style={styles.meta}>Survey id: {editingSurveyId}</Text> : null}
+
+            <Text style={styles.label}>Site name</Text>
+            <TextInput style={styles.input} value={siteName} onChangeText={setSiteName} />
+
+            <Text style={styles.label}>Region version</Text>
+            <View style={styles.filterChipsRow}>
+              {REGION_OPTIONS.map((option) =>
+                renderFilterChip(option.label, regionVersion === option.value, () => handleRegionChange(option.value))
+              )}
+            </View>
+
+            <Text style={styles.label}>Vegetation stage</Text>
+            <View style={styles.filterChipsRow}>
+              {VEGETATION_STAGE_OPTIONS_BY_REGION[regionVersion].map((option) =>
+                renderFilterChip(option.label, vegetationStage === option.value, () => setVegetationStage(option.value))
+              )}
+            </View>
+
+            {renderFactorSection('A', [
+              { label: 'native_genus_count', value: factorA.native_genus_count, onChange: (v) => setFactorA({ native_genus_count: v }) }
+            ])}
+            {renderFactorSection('B', [
+              { label: 'strata_count', value: factorB.strata_count, onChange: (v) => setFactorB((p) => ({ ...p, strata_count: v })) },
+              { label: 'covered_autochthonous_percent', value: factorB.covered_autochthonous_percent, onChange: (v) => setFactorB((p) => ({ ...p, covered_autochthonous_percent: v })) }
+            ])}
+            {renderFactorSection('C', [
+              { label: 'bmg_count', value: factorC.bmg_count, onChange: (v) => setFactorC((p) => ({ ...p, bmg_count: v })) },
+              { label: 'bmm_count', value: factorC.bmm_count, onChange: (v) => setFactorC((p) => ({ ...p, bmm_count: v })) },
+              { label: 'surface_ha', value: factorC.surface_ha, onChange: (v) => setFactorC((p) => ({ ...p, surface_ha: v })) }
+            ])}
+            {renderFactorSection('D', [
+              { label: 'bmg_count', value: factorD.bmg_count, onChange: (v) => setFactorD((p) => ({ ...p, bmg_count: v })) },
+              { label: 'bmm_count', value: factorD.bmm_count, onChange: (v) => setFactorD((p) => ({ ...p, bmm_count: v })) },
+              { label: 'surface_ha', value: factorD.surface_ha, onChange: (v) => setFactorD((p) => ({ ...p, surface_ha: v })) }
+            ])}
+            {renderFactorSection('E', [
+              { label: 'tgb_count', value: factorE.tgb_count, onChange: (v) => setFactorE((p) => ({ ...p, tgb_count: v })) },
+              { label: 'gb_count', value: factorE.gb_count, onChange: (v) => setFactorE((p) => ({ ...p, gb_count: v })) },
+              { label: 'surface_ha', value: factorE.surface_ha, onChange: (v) => setFactorE((p) => ({ ...p, surface_ha: v })) }
+            ])}
+            {renderFactorSection('F', [
+              { label: 'trees_per_ha', value: factorF.trees_per_ha, onChange: (v) => setFactorF({ trees_per_ha: v }) }
+            ])}
+            {renderFactorSection('G', [
+              { label: 'open_flowering_percent', value: factorG.open_flowering_percent, onChange: (v) => setFactorG({ open_flowering_percent: v }) }
+            ])}
+            {renderFactorSection('H', [
+              { label: 'class_score (0|2|5)', value: factorH.class_score, onChange: (v) => setFactorH({ class_score: v }) }
+            ])}
+            {renderFactorSection('I', [
+              { label: 'type_count', value: factorI.type_count, onChange: (v) => setFactorI({ type_count: v }) }
+            ])}
+            {renderFactorSection('J', [
+              { label: 'type_count', value: factorJ.type_count, onChange: (v) => setFactorJ({ type_count: v }) }
+            ])}
+
+            {screen === 'edit' ? (
+              <Button title="Save survey edits" onPress={handleSaveSurveyEdits} />
+            ) : (
+              <Button title="Create offline draft" onPress={handleCreateDraft} />
+            )}
+            <View style={styles.spacer} />
+            <Button title="Back to survey list" onPress={handleCancelSurveyForm} />
+            <Text style={styles.status}>{status}</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1053,6 +1386,63 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: 12,
     color: '#4b6480'
+  },
+  authCompact: {
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
+    backgroundColor: '#f8fbff'
+  },
+  authCompactHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  authPanel: {
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#fbfdff'
+  },
+  detailCard: {
+    borderWidth: 1,
+    borderColor: '#d6e5f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#f7fbff'
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  detailTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#184369'
+  },
+  detailSection: {
+    gap: 6
+  },
+  eventRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#e4edf7',
+    paddingTop: 6,
+    gap: 2
+  },
+  eventTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2a5378'
+  },
+  eventPayload: {
+    fontSize: 11,
+    color: '#4f6882'
   },
   summaryRow: {
     flexDirection: 'row',

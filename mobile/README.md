@@ -12,8 +12,10 @@ Create `mobile/.env` from `.env.example`:
 cp mobile/.env.example mobile/.env
 ```
 
-Default value:
-- `EXPO_PUBLIC_API_URL=http://localhost:3000/v1`
+Recommended values:
+- iOS Simulator: `EXPO_PUBLIC_API_URL=http://localhost:3000/v1`
+- Android Emulator: `EXPO_PUBLIC_API_URL=http://10.0.2.2:3000/v1`
+- Physical phone (same Wi-Fi as Mac): `EXPO_PUBLIC_API_URL=http://<YOUR_MAC_LAN_IP>:3000/v1`
 
 ## Run
 ```bash
