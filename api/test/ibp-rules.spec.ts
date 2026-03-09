@@ -164,7 +164,8 @@ describe('IbpRulesService (unit)', () => {
       region_version: 'ACA',
       vegetation_stage: 'collineen',
       expires_at: new Date(Date.now() - 60_000).toISOString(),
-      factors: { A: 1 }
+      factors: { A: 1 },
+      location: { source: 'gps', lat: 48.643, lng: 1.829 }
     });
 
     expect(result.ok).toBe(false);
@@ -188,7 +189,8 @@ describe('IbpRulesService (unit)', () => {
         H: 2,
         I: 2,
         J: 5
-      }
+      },
+      location: { source: 'gps', lat: 48.643, lng: 1.829 }
     });
 
     expect(result.ok).toBe(true);
@@ -198,5 +200,58 @@ describe('IbpRulesService (unit)', () => {
       ibp_contexte: 9,
       ibp_total: 16
     });
+  });
+
+  it('validateSubmit rejects missing location', () => {
+    const result = service.validateSubmit({
+      region_version: 'ACA',
+      vegetation_stage: 'collineen',
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      factors: {
+        A: 1,
+        B: 1,
+        C: 1,
+        D: 1,
+        E: 1,
+        F: 1,
+        G: 1,
+        H: 2,
+        I: 2,
+        J: 5
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(' | ')).toContain('location is required for submit');
+  });
+
+  it('validateSubmit accepts full manual address location', () => {
+    const result = service.validateSubmit({
+      region_version: 'ACA',
+      vegetation_stage: 'collineen',
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      factors: {
+        A: 1,
+        B: 1,
+        C: 1,
+        D: 1,
+        E: 1,
+        F: 1,
+        G: 1,
+        H: 2,
+        I: 2,
+        J: 5
+      },
+      location: {
+        source: 'manual',
+        address_line: '12 rue des Chenes',
+        postal_code: '75001',
+        city: 'Paris',
+        country: 'FR'
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toHaveLength(0);
   });
 });

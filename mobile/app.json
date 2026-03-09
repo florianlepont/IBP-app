@@ -12,7 +12,20 @@
       "**/*"
     ],
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow IBP App to access your photos for survey attachments.",
+          "cameraPermission": "Allow IBP App to use your camera to capture survey photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow IBP App to access your location for survey georeferencing."
+        }
+      ]
     ]
   }
 }

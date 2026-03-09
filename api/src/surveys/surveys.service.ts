@@ -360,7 +360,8 @@ export class SurveysService {
       region_version: existing.region_version,
       vegetation_stage: existing.vegetation_stage,
       expires_at: existing.expires_at,
-      factors: existing.factors
+      factors: existing.factors,
+      location: existing.location
     });
 
     if (!validation.ok || !validation.scores) {

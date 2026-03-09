@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_SURVEY_FORM, defaultVegetationStageForRegion, normalizeVegetationStageForRegion } from '../app/constants';
-import { FactorField, FactorKey, RegionVersion, VegetationStage } from '../app/types';
+import {
+  FactorField,
+  FactorKey,
+  RegionVersion,
+  SurveyLocationPayload,
+  SurveyLocationSource,
+  VegetationStage
+} from '../app/types';
 
 const toNum = (value: string): number => Number(value || '0');
 
@@ -10,13 +17,46 @@ const toTextNum = (value: unknown, fallback = '0'): string => {
   return fallback;
 };
 
+const toTextMaybe = (value: unknown): string => {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string') return value;
+  return '';
+};
+
 const asObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+const toFiniteNumber = (value: string): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const hasText = (value: string): boolean => value.trim().length > 0;
+
+type GpsFormValue = typeof DEFAULT_SURVEY_FORM.gpsLocation;
+type ManualFormValue = typeof DEFAULT_SURVEY_FORM.manualLocation;
+
+const inferLocationSource = (location: Record<string, unknown>): SurveyLocationSource => {
+  if (location.source === 'manual') return 'manual';
+  if (location.source === 'gps') return 'gps';
+  if (
+    hasText(toTextMaybe(location.address_line)) ||
+    hasText(toTextMaybe(location.postal_code)) ||
+    hasText(toTextMaybe(location.city)) ||
+    hasText(toTextMaybe(location.country))
+  ) {
+    return 'manual';
+  }
+  return 'gps';
+};
 
 export function useSurveyForm() {
   const [siteName, setSiteName] = useState(DEFAULT_SURVEY_FORM.siteName);
   const [regionVersion, setRegionVersion] = useState<RegionVersion>(DEFAULT_SURVEY_FORM.regionVersion);
   const [vegetationStage, setVegetationStage] = useState<VegetationStage>(DEFAULT_SURVEY_FORM.vegetationStage);
+  const [locationSource, setLocationSource] = useState<SurveyLocationSource>(DEFAULT_SURVEY_FORM.locationSource);
+  const [gpsLocation, setGpsLocation] = useState<GpsFormValue>(DEFAULT_SURVEY_FORM.gpsLocation);
+  const [manualLocation, setManualLocation] = useState<ManualFormValue>(DEFAULT_SURVEY_FORM.manualLocation);
 
   const [factorA, setFactorA] = useState(DEFAULT_SURVEY_FORM.factorA);
   const [factorB, setFactorB] = useState(DEFAULT_SURVEY_FORM.factorB);
@@ -32,6 +72,24 @@ export function useSurveyForm() {
   const handleRegionChange = (nextRegion: RegionVersion): void => {
     setRegionVersion(nextRegion);
     setVegetationStage((current) => normalizeVegetationStageForRegion(nextRegion, current));
+  };
+
+  const setManualLocationField = (field: keyof ManualFormValue, value: string): void => {
+    setManualLocation((current) => ({ ...current, [field]: value }));
+  };
+
+  const setGpsLocationField = (field: keyof GpsFormValue, value: string): void => {
+    setGpsLocation((current) => ({ ...current, [field]: value }));
+  };
+
+  const applyGpsLocation = (location: { lat: number; lng: number; accuracy_m?: number | null; collected_at?: string }): void => {
+    setLocationSource('gps');
+    setGpsLocation({
+      lat: String(location.lat),
+      lng: String(location.lng),
+      accuracy_m: typeof location.accuracy_m === 'number' && Number.isFinite(location.accuracy_m) ? String(location.accuracy_m) : '',
+      collected_at: location.collected_at ?? new Date().toISOString()
+    });
   };
 
   const buildFactorsPayload = (): Record<string, unknown> => ({
@@ -62,6 +120,34 @@ export function useSurveyForm() {
     J: { type_count: toNum(factorJ.type_count) }
   });
 
+  const buildLocationPayload = (): SurveyLocationPayload => {
+    if (locationSource === 'manual') {
+      return {
+        source: 'manual',
+        address_line: manualLocation.address_line.trim(),
+        postal_code: manualLocation.postal_code.trim(),
+        city: manualLocation.city.trim(),
+        country: manualLocation.country.trim()
+      };
+    }
+
+    const lat = toFiniteNumber(gpsLocation.lat);
+    const lng = toFiniteNumber(gpsLocation.lng);
+    const accuracy = toFiniteNumber(gpsLocation.accuracy_m);
+
+    if (lat !== null && lng !== null) {
+      return {
+        source: 'gps',
+        lat,
+        lng,
+        accuracy_m: accuracy ?? undefined,
+        collected_at: gpsLocation.collected_at || new Date().toISOString()
+      };
+    }
+
+    return {};
+  };
+
   const applyDraftToForm = (draftValue: unknown): void => {
     const draft = asObject(draftValue);
     setSiteName(typeof draft.site_name === 'string' ? draft.site_name : DEFAULT_SURVEY_FORM.siteName);
@@ -80,6 +166,7 @@ export function useSurveyForm() {
     const factorHObj = asObject(factors.H);
     const factorIObj = asObject(factors.I);
     const factorJObj = asObject(factors.J);
+    const location = asObject(draft.location);
 
     setFactorA({ native_genus_count: toTextNum(factorAObj.native_genus_count) });
     setFactorB({
@@ -106,12 +193,29 @@ export function useSurveyForm() {
     setFactorH({ class_score: toTextNum(factorHObj.class_score, '2') });
     setFactorI({ type_count: toTextNum(factorIObj.type_count, '1') });
     setFactorJ({ type_count: toTextNum(factorJObj.type_count, '1') });
+
+    setLocationSource(inferLocationSource(location));
+    setGpsLocation({
+      lat: toTextMaybe(location.lat),
+      lng: toTextMaybe(location.lng),
+      accuracy_m: toTextMaybe(location.accuracy_m),
+      collected_at: typeof location.collected_at === 'string' ? location.collected_at : ''
+    });
+    setManualLocation({
+      address_line: typeof location.address_line === 'string' ? location.address_line : '',
+      postal_code: typeof location.postal_code === 'string' ? location.postal_code : '',
+      city: typeof location.city === 'string' ? location.city : '',
+      country: typeof location.country === 'string' ? location.country : ''
+    });
   };
 
   const resetSurveyForm = (): void => {
     setSiteName(DEFAULT_SURVEY_FORM.siteName);
     setRegionVersion(DEFAULT_SURVEY_FORM.regionVersion);
     setVegetationStage(defaultVegetationStageForRegion(DEFAULT_SURVEY_FORM.regionVersion));
+    setLocationSource(DEFAULT_SURVEY_FORM.locationSource);
+    setGpsLocation(DEFAULT_SURVEY_FORM.gpsLocation);
+    setManualLocation(DEFAULT_SURVEY_FORM.manualLocation);
     setFactorA(DEFAULT_SURVEY_FORM.factorA);
     setFactorB(DEFAULT_SURVEY_FORM.factorB);
     setFactorC(DEFAULT_SURVEY_FORM.factorC);
@@ -163,7 +267,8 @@ export function useSurveyForm() {
     site_name: siteName.trim() || 'Unnamed site',
     region_version: regionVersion,
     vegetation_stage: vegetationStage,
-    factors: buildFactorsPayload()
+    factors: buildFactorsPayload(),
+    location: buildLocationPayload()
   });
 
   return {
@@ -172,6 +277,13 @@ export function useSurveyForm() {
     regionVersion,
     vegetationStage,
     setVegetationStage,
+    locationSource,
+    setLocationSource,
+    gpsLocation,
+    manualLocation,
+    setManualLocationField,
+    setGpsLocationField,
+    applyGpsLocation,
     handleRegionChange,
     factorSections,
     applyDraftToForm,
