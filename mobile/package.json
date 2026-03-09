@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:unit": "jest --runInBand --config jest.unit.config.js"
+    "test:unit": "jest --runInBand --config jest.unit.config.js",
+    "test:unit:coverage": "jest --runInBand --config jest.unit.config.js --coverage"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.15.5",

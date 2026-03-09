@@ -30,6 +30,27 @@ Terminal 2:
 npm run dev:mobile
 ```
 
+## Quality checks
+```bash
+# API
+npm --workspace api run build
+npm --workspace api run test:unit
+npm --workspace api run test:e2e
+
+# Mobile
+npm --workspace mobile run typecheck
+npm --workspace mobile run test:unit
+```
+
+Coverage commands:
+```bash
+# API coverage (unit + e2e)
+npm run test:coverage:api
+
+# Mobile unit coverage
+npm run test:coverage:mobile
+```
+
 ## First end-to-end check
 - API: open `http://localhost:3000/v1/health`
 - Mobile: tap **Check API /health** in the app

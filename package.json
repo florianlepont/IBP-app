@@ -13,6 +13,8 @@
     "dev:api:migrated": "npm run migrate:api && npm run dev:api",
     "dev": "echo \"Run dev:api and dev:mobile in separate terminals\"",
     "lint": "echo \"Lint not configured yet\"",
-    "test": "echo \"Tests not configured yet\""
+    "test": "echo \"Tests not configured yet\"",
+    "test:coverage:api": "npm --workspace api run test:unit:coverage && npm --workspace api run test:e2e:coverage",
+    "test:coverage:mobile": "npm --workspace mobile run test:unit:coverage"
   }
 }

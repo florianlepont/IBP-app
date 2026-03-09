@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { DEFAULT_API_URL } from './src/app/constants';
 import { styles } from './src/app/styles';
 import { FactorKey, PublicMapItem, SurveyDetailTab } from './src/app/types';
+import { verifyManualLocation } from './src/app/verify-manual-location';
 import { SurveyFormScreen } from './src/screens/SurveyFormScreen';
 import { SurveyListScreen } from './src/screens/SurveyListScreen';
 import { initLocalDb, createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from './src/storage';
@@ -44,7 +45,6 @@ const AccountStack = createNativeStackNavigator<AccountStackParamList>();
 const SurveysStack = createNativeStackNavigator<SurveysStackParamList>();
 
 type FormMode = 'create' | 'edit';
-type DraftInput = ReturnType<ReturnType<typeof useSurveyForm>['buildDraftInput']>;
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL);
@@ -86,53 +86,6 @@ export default function App() {
     }
   });
 
-  const withVerifiedManualAddress = async (draftInput: DraftInput): Promise<DraftInput | null> => {
-    const location = draftInput.location;
-    if (!location || typeof location !== 'object' || Array.isArray(location) || location.source !== 'manual') {
-      return draftInput;
-    }
-
-    const addressLine = typeof location.address_line === 'string' ? location.address_line.trim() : '';
-    const postalCode = typeof location.postal_code === 'string' ? location.postal_code.trim() : '';
-    const city = typeof location.city === 'string' ? location.city.trim() : '';
-    const country = typeof location.country === 'string' ? location.country.trim() : '';
-    const addressQuery = [addressLine, postalCode, city, country].filter((value) => value.length > 0).join(', ');
-
-    if (!addressQuery) {
-      surveySync.setStatus('Address verification failed: incomplete manual address');
-      return null;
-    }
-
-    try {
-      surveySync.setStatus('Verifying manual address...');
-      const Location = await import('expo-location');
-      const matches = await Location.geocodeAsync(addressQuery);
-      const firstMatch = matches.find((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
-
-      if (!firstMatch) {
-        surveySync.setStatus('Address verification failed: no match found');
-        return null;
-      }
-
-      surveySync.setStatus('Manual address verified');
-      return {
-        ...draftInput,
-        location: {
-          ...location,
-          source: 'manual',
-          lat: firstMatch.latitude,
-          lng: firstMatch.longitude,
-          geocoded_at: new Date().toISOString(),
-          geocode_query: addressQuery,
-          geocode_provider: 'expo-location'
-        }
-      };
-    } catch (error) {
-      surveySync.setStatus(`Address verification error: ${(error as Error).message}`);
-      return null;
-    }
-  };
-
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
       await initLocalDb();
@@ -157,7 +110,7 @@ export default function App() {
 
   const handleCreateDraft = async (): Promise<boolean> => {
     try {
-      const draftInput = await withVerifiedManualAddress(surveyForm.buildDraftInput());
+      const draftInput = await verifyManualLocation(surveyForm.buildDraftInput(), { setStatus: surveySync.setStatus });
       if (!draftInput) return false;
       const created = await createLocalDraft(draftInput);
       await surveyList.refreshLocalSurveys();
@@ -206,7 +159,7 @@ export default function App() {
 
     try {
       const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId);
-      const draftInput = await withVerifiedManualAddress(surveyForm.buildDraftInput());
+      const draftInput = await verifyManualLocation(surveyForm.buildDraftInput(), { setStatus: surveySync.setStatus });
       if (!draftInput) return false;
       await updateLocalDraft({
         survey_id: editingSurveyId,
