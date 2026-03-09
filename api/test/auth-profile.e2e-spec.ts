@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request = require('supertest');
 import { AppModule } from '../src/app.module';
+import { DatabaseService } from '../src/database/database.service';
 
 describe('Auth + profile (e2e)', () => {
   let app: INestApplication;
@@ -60,7 +61,17 @@ describe('Auth + profile (e2e)', () => {
     expect(patch.body.email).toBe(email);
     expect(patch.body.email_change_required).toBe(true);
     expect(patch.body.email_change_pending_to).toBe(requestedEmail);
-    expect(typeof patch.body.email_change_token_dev).toBe('string');
+
+    let confirmationToken = patch.body.email_change_token_dev as string | undefined;
+    if (!confirmationToken) {
+      const db = app.get(DatabaseService);
+      const tokenResult = await db.query<{ email_change_token: string | null }>(
+        'SELECT email_change_token FROM users WHERE id = $1',
+        [login.body.user.id]
+      );
+      confirmationToken = tokenResult.rows[0]?.email_change_token ?? undefined;
+    }
+    expect(typeof confirmationToken).toBe('string');
 
     await request(app.getHttpServer())
       .post('/v1/me/email/confirm')
@@ -71,7 +82,7 @@ describe('Auth + profile (e2e)', () => {
     const confirm = await request(app.getHttpServer())
       .post('/v1/me/email/confirm')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ token: patch.body.email_change_token_dev })
+      .send({ token: confirmationToken })
       .expect(200);
 
     expect(confirm.body.email).toBe(requestedEmail);

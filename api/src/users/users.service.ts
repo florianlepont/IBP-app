@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
+import { EmailService } from './email.service';
 
 const EMAIL_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
 const PROFILE_PICTURE_MAX_BYTES = 10 * 1024 * 1024;
@@ -41,7 +42,10 @@ export type PatchMeBody = {
 export class UsersService {
   private readonly uploadsRootDir: string;
 
-  constructor(private readonly db: DatabaseService) {
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly emailService: EmailService
+  ) {
     this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? '/tmp/ibp-uploads';
   }
 
@@ -104,6 +108,20 @@ export class UsersService {
     const updated = result.rows[0];
     if (!updated) {
       throw new NotFoundException('User not found');
+    }
+
+    if (emailChangeRequested && updated.pending_email && updated.email_change_token && updated.email_change_expires_at) {
+      try {
+        await this.emailService.sendEmailChangeConfirmation({
+          toEmail: updated.pending_email,
+          displayName: updated.display_name,
+          token: updated.email_change_token,
+          expiresAtIso: updated.email_change_expires_at
+        });
+      } catch (_error) {
+        await this.clearPendingEmailChange(updated.id);
+        throw new InternalServerErrorException('Unable to send confirmation email. Please retry later.');
+      }
     }
 
     return this.toMeResponse(updated);
@@ -359,6 +377,26 @@ export class UsersService {
     return join(this.uploadsRootDir, storageKey);
   }
 
+  private async clearPendingEmailChange(userId: string): Promise<void> {
+    await this.db.query(
+      `UPDATE users
+       SET pending_email = NULL,
+           email_change_token = NULL,
+           email_change_expires_at = NULL,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [userId]
+    );
+  }
+
+  private shouldExposeDevToken(): boolean {
+    const nodeEnv = (process.env.NODE_ENV ?? '').toLowerCase();
+    if (nodeEnv !== 'development') {
+      return false;
+    }
+    return (process.env.AUTH_DEV_EXPOSE_EMAIL_TOKEN ?? 'true').toLowerCase() !== 'false';
+  }
+
   private toMeResponse(row: UserMeRow): MeResponse {
     const response: MeResponse = {
       id: row.id,
@@ -373,7 +411,7 @@ export class UsersService {
       email_change_pending_to: row.pending_email ?? null
     };
 
-    if (process.env.NODE_ENV !== 'production' && row.email_change_token) {
+    if (this.shouldExposeDevToken() && row.email_change_token) {
       response.email_change_token_dev = row.email_change_token;
     }
 

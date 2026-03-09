@@ -67,12 +67,14 @@ export function ProfileScreen({
   const [lastName, setLastName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
+  const [emailConfirmToken, setEmailConfirmToken] = useState('');
 
   useEffect(() => {
     setFirstName(currentUser?.first_name ?? '');
     setLastName(currentUser?.last_name ?? '');
     setDisplayName(currentUser?.display_name ?? '');
     setProfileEmail(currentUser?.email ?? '');
+    setEmailConfirmToken(currentUser?.email_change_token_dev ?? '');
   }, [currentUser]);
 
   const profilePictureUri = useMemo(() => {
@@ -135,13 +137,17 @@ export function ProfileScreen({
           {currentUser?.email_change_required ? (
             <View style={styles.infoCard}>
               <Text style={styles.meta}>Pending email: {currentUser.email_change_pending_to ?? 'unknown'}</Text>
-              {currentUser.email_change_token_dev ? (
-                <>
-                  <Text style={styles.meta}>Dev token available for confirmation.</Text>
-                  <View style={styles.spacer} />
-                  <Button title="Confirm pending email (dev)" onPress={() => void onConfirmEmailChange(currentUser.email_change_token_dev ?? '')} />
-                </>
-              ) : null}
+              <Text style={styles.meta}>Enter the token received by email to confirm the change.</Text>
+              <Text style={styles.label}>Confirmation token</Text>
+              <TextInput
+                style={styles.input}
+                value={emailConfirmToken}
+                onChangeText={setEmailConfirmToken}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Paste confirmation token"
+              />
+              <Button title="Confirm pending email" onPress={() => void onConfirmEmailChange(emailConfirmToken)} disabled={profileUpdating} />
             </View>
           ) : null}
 
