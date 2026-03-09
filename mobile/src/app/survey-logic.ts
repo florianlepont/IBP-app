@@ -61,7 +61,15 @@ export const filterAndSortSurveys = (
   const query = filters.surveyQuery.trim().toLowerCase();
 
   const filtered = surveys.filter((survey) => {
-    if (filters.statusFilter !== 'all' && survey.status !== filters.statusFilter) return false;
+    if (filters.statusFilter !== 'all') {
+      if (filters.statusFilter === 'synced') {
+        if (!(survey.status === 'synced' || survey.sync_state === 'synced')) return false;
+      } else if (filters.statusFilter === 'error') {
+        if (!(survey.status === 'error' || survey.sync_state === 'failed')) return false;
+      } else if (survey.status !== filters.statusFilter) {
+        return false;
+      }
+    }
     if (filters.visibilityFilter !== 'all' && survey.visibility !== filters.visibilityFilter) return false;
     if (filters.syncFilter !== 'all' && survey.sync_state !== filters.syncFilter) return false;
 

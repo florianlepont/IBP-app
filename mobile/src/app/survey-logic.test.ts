@@ -14,7 +14,9 @@ const makeSurvey = (overrides: Partial<LocalSurvey>): LocalSurvey => ({
   last_sync_error_code: null,
   last_sync_error_at: null,
   sync_blocked: 0,
+  created_at: '2026-03-01T09:00:00.000Z',
   updated_at: '2026-03-01T10:00:00.000Z',
+  completion_rate: 0,
   ...overrides
 });
 
@@ -125,6 +127,28 @@ describe('filterAndSortSurveys', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
     const result = filterAndSortSurveys(surveys, { ...baseFilters, sortMode: 'site_asc' }, attachmentCounts);
     expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-b', 's-c']);
+  });
+
+  test('filters by status synced using sync_state', () => {
+    const attachmentCounts = buildAttachmentCountBySurvey(attachments);
+    const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'synced' }, attachmentCounts);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('s-b');
+  });
+
+  test('filters by status error using failed sync_state', () => {
+    const attachmentCounts = buildAttachmentCountBySurvey(attachments);
+    const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'error' }, attachmentCounts);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('s-c');
+  });
+
+  test('filters by status expired from survey status', () => {
+    const attachmentCounts = buildAttachmentCountBySurvey(attachments);
+    const withExpired = surveys.map((survey) => (survey.id === 's-a' ? { ...survey, status: 'expired' } : survey));
+    const result = filterAndSortSurveys(withExpired, { ...baseFilters, statusFilter: 'expired' }, attachmentCounts);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('s-a');
   });
 });
 

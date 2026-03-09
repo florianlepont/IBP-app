@@ -378,6 +378,8 @@ export default function App() {
                   onLogout={surveySync.handleLogout}
                   onSync={surveySync.handleSync}
                   onPullChanges={surveySync.handlePullChanges}
+                  onDebugResetIbpData={surveySync.handleDebugResetIbpData}
+                  onDebugResetUserData={surveySync.handleDebugResetUserData}
                   onRefreshLocalList={surveyList.refreshLocalSurveys}
                   onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
                   onReloadProfile={() => surveySync.handleLoadMyProfile()}

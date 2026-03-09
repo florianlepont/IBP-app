@@ -48,6 +48,39 @@ const asFiniteNumber = (value: unknown): number | null => {
   return null;
 };
 
+const formatDateTime = (value?: string | null): string => {
+  if (!value) return 'n/a';
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return value;
+  return new Date(parsed).toLocaleString();
+};
+
+const resolveSubmissionDeadline = (createdAt?: string | null, expiresAt?: string | null): string | null => {
+  if (expiresAt) return expiresAt;
+  if (!createdAt) return null;
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) return null;
+  return new Date(createdAtMs + 7 * 24 * 60 * 60 * 1000).toISOString();
+};
+
+const formatRemainingTime = (deadlineIso?: string | null): string => {
+  if (!deadlineIso) return 'n/a';
+  const deadlineMs = Date.parse(deadlineIso);
+  if (!Number.isFinite(deadlineMs)) return 'n/a';
+
+  const deltaMs = deadlineMs - Date.now();
+  if (deltaMs <= 0) return 'expired';
+
+  const totalMinutes = Math.floor(deltaMs / (60 * 1000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h remaining`;
+  if (hours > 0) return `${hours}h ${minutes}m remaining`;
+  return `${minutes}m remaining`;
+};
+
 const formatLocationSummary = (location?: Record<string, unknown>): string => {
   if (!location || typeof location !== 'object') return 'not available';
   const source = typeof location.source === 'string' ? location.source : '';
@@ -103,6 +136,11 @@ export function SurveyDetailScreen({
   const detailVisibility = selectedSurvey.visibility;
   const detailSubmittedAt = detail?.submitted_at ?? null;
   const detailSyncVersion = detail?.sync_version ?? selectedSurvey.sync_version;
+  const detailCreatedAt = detail?.created_at ?? selectedSurvey.created_at;
+  const detailExpiresAt = detail?.expires_at ?? null;
+  const submissionDeadline = resolveSubmissionDeadline(detailCreatedAt, detailExpiresAt);
+  const remainingTime = formatRemainingTime(submissionDeadline);
+  const loadedEventCount = surveyEvents[selectedSurvey.id]?.length ?? 0;
   const publishableOnPublicMap = detailStatus === 'submitted' && detailVisibility === 'public';
 
   return (
@@ -126,13 +164,23 @@ export function SurveyDetailScreen({
 
       {surveyDetailTab === 'summary' ? (
         <View style={styles.detailSection}>
+          <View style={styles.infoCard}>
+            <Text style={styles.detailTitle}>Instructions</Text>
+            <Text style={styles.rowMeta}>Review survey context, then start or continue data entry from this screen.</Text>
+            <Text style={styles.rowMeta}>A survey is expected to be submitted within 7 days after creation.</Text>
+          </View>
           {editingSurveyId === selectedSurvey.id ? <Text style={styles.editingTag}>currently edited in form above</Text> : null}
           {selectedSurvey.status === 'submitted' ? <Text style={styles.rowMeta}>submitted survey: read-only</Text> : null}
           <Text style={styles.rowMeta}>visibility: {detailVisibility}</Text>
           <Text style={styles.rowMeta}>publishable on public map: {publishableOnPublicMap ? 'yes' : 'no'}</Text>
-          <Text style={styles.rowMeta}>submitted at: {detailSubmittedAt ?? 'not submitted yet'}</Text>
+          <Text style={styles.rowMeta}>completion: {selectedSurvey.completion_rate}%</Text>
+          <Text style={styles.rowMeta}>created: {formatDateTime(detailCreatedAt)}</Text>
+          <Text style={styles.rowMeta}>submission deadline: {formatDateTime(submissionDeadline)}</Text>
+          <Text style={styles.rowMeta}>time remaining: {detailStatus === 'submitted' ? 'submitted' : remainingTime}</Text>
+          <Text style={styles.rowMeta}>submitted at: {formatDateTime(detailSubmittedAt)}</Text>
           <Text style={styles.rowMeta}>sync version: v{detailSyncVersion}</Text>
           <Text style={styles.rowMeta}>location: {formatLocationSummary(detail?.location)}</Text>
+          <Text style={styles.rowMeta}>history entries loaded: {loadedEventCount}</Text>
           {selectedSurvey.last_sync_error ? (
             <Text style={styles.rowMeta}>last error: {selectedSurvey.last_sync_error}</Text>
           ) : (
@@ -219,16 +267,16 @@ export function SurveyDetailScreen({
         <View style={styles.miniSpacer} />
         {selectedSurvey.status !== 'submitted' ? (
           <>
-            <Button title="Edit survey" onPress={() => void onEditSurvey(selectedSurvey.id)} />
+            <Button title="Start / Continue survey" onPress={() => void onEditSurvey(selectedSurvey.id)} />
             <View style={styles.miniSpacer} />
             <Button title="Take photo (camera)" onPress={() => void onTakePhoto(selectedSurvey.id)} />
             <View style={styles.miniSpacer} />
             <Button title="Add photo from library" onPress={() => void onPickPhoto(selectedSurvey.id)} />
             <View style={styles.miniSpacer} />
-            <Button title="Delete survey" onPress={() => onDeleteSurvey(selectedSurvey.id)} />
-            <View style={styles.miniSpacer} />
           </>
         ) : null}
+        <Button title="Delete survey" onPress={() => onDeleteSurvey(selectedSurvey.id)} />
+        <View style={styles.miniSpacer} />
         {selectedSurvey.sync_state === 'synced' && selectedSurvey.status !== 'submitted' && selectedSurvey.sync_blocked !== 1 ? (
           <>
             <Button title="Submit survey" onPress={() => void onSubmitSurvey(selectedSurvey.id)} />
