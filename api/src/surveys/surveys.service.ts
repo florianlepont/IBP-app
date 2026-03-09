@@ -399,6 +399,68 @@ export class SurveysService {
     };
   }
 
+  async deleteSurvey(
+    user: AuthenticatedUser,
+    surveyId: string,
+    options?: { allowMissing?: boolean }
+  ): Promise<{ id: string; deleted_at: string | null; already_deleted: boolean; missing: boolean }> {
+    const existing = await this.getSurveyForUser(surveyId, user.id, false);
+    if (!existing) {
+      if (options?.allowMissing) {
+        return { id: surveyId, deleted_at: null, already_deleted: false, missing: true };
+      }
+      throw new NotFoundException('Survey not found');
+    }
+
+    if (existing.deleted_at) {
+      return { id: existing.id, deleted_at: existing.deleted_at, already_deleted: true, missing: false };
+    }
+
+    const attachmentsResult = await this.db.query<Pick<AttachmentRow, 'id' | 'storage_key'>>(
+      `SELECT id, storage_key
+       FROM attachments
+       WHERE survey_id = $1
+         AND deleted_at IS NULL`,
+      [surveyId]
+    );
+
+    await this.db.query(
+      `UPDATE attachments
+       SET deleted_at = NOW()
+       WHERE survey_id = $1
+         AND deleted_at IS NULL`,
+      [surveyId]
+    );
+
+    for (const attachment of attachmentsResult.rows) {
+      await this.cleanupAttachmentStorage(attachment.storage_key);
+    }
+
+    const deletedSurvey = await this.db.query<{ id: string; deleted_at: string }>(
+      `UPDATE surveys
+       SET deleted_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1
+         AND user_id = $2
+         AND deleted_at IS NULL
+       RETURNING id, deleted_at::text`,
+      [surveyId, user.id]
+    );
+
+    const deletedAt = deletedSurvey.rows[0]?.deleted_at ?? existing.deleted_at ?? null;
+
+    await this.insertEvent(surveyId, user.id, 'deleted', {
+      attachment_count_deleted: attachmentsResult.rows.length
+    });
+
+    return {
+      id: surveyId,
+      deleted_at: deletedAt,
+      already_deleted: false,
+      missing: false
+    };
+  }
+
   async createAttachment(
     user: AuthenticatedUser,
     surveyId: string,
@@ -562,21 +624,7 @@ export class SurveysService {
       [attachmentId, surveyId]
     );
 
-    if (this.objectStorageMode === 'minio') {
-      if (this.s3Client) {
-        await this.s3Client
-          .send(
-            new DeleteObjectCommand({
-              Bucket: this.s3Bucket,
-              Key: existing.rows[0].storage_key
-            })
-          )
-          .catch(() => undefined);
-      }
-    } else {
-      const storagePath = join(this.uploadsRootDir, existing.rows[0].storage_key);
-      await rm(storagePath, { force: true }).catch(() => undefined);
-    }
+    await this.cleanupAttachmentStorage(existing.rows[0].storage_key);
 
     await this.insertEvent(surveyId, user.id, 'attachment_deleted', {
       attachment_id: attachmentId,
@@ -639,6 +687,27 @@ export class SurveysService {
             throw new BadRequestException('survey upsert payload is required');
           }
           const data = await this.upsertForUser(user, operation.payload as SurveyUpsertBody);
+          results.push({
+            client_ref: clientRef,
+            entity: operation.entity,
+            action: operation.action,
+            status: 'synced',
+            data: data as Record<string, unknown>
+          });
+          continue;
+        }
+
+        if (operation.entity === 'survey' && operation.action === 'delete') {
+          const payloadSurveyId =
+            operation.payload && typeof operation.payload === 'object'
+              ? (operation.payload as { id?: unknown }).id
+              : undefined;
+          const surveyId = operation.survey_id ?? (typeof payloadSurveyId === 'string' ? payloadSurveyId : undefined);
+          if (!surveyId || typeof surveyId !== 'string') {
+            throw new BadRequestException('survey_id is required for survey delete');
+          }
+
+          const data = await this.deleteSurvey(user, surveyId, { allowMissing: true });
           results.push({
             client_ref: clientRef,
             entity: operation.entity,
@@ -856,6 +925,25 @@ export class SurveysService {
     });
 
     return getSignedUrl(this.s3Client, command, { expiresIn: 15 * 60 });
+  }
+
+  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
+    if (this.objectStorageMode === 'minio') {
+      if (this.s3Client) {
+        await this.s3Client
+          .send(
+            new DeleteObjectCommand({
+              Bucket: this.s3Bucket,
+              Key: storageKey
+            })
+          )
+          .catch(() => undefined);
+      }
+      return;
+    }
+
+    const storagePath = join(this.uploadsRootDir, storageKey);
+    await rm(storagePath, { force: true }).catch(() => undefined);
   }
 
   private async ensureS3Bucket(): Promise<void> {
