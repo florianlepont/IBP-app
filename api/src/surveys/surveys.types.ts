@@ -35,6 +35,10 @@ export type SurveyPatchBody = {
   location?: SurveyLocationPayload;
 };
 
+export type SurveyVisibilityPatchBody = {
+  visibility?: 'private' | 'public';
+};
+
 export type CreateAttachmentBody = {
   mime_type?: string;
   size_bytes?: number;

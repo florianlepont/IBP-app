@@ -7,6 +7,7 @@ const makeSurvey = (overrides: Partial<LocalSurvey>): LocalSurvey => ({
   id: 'survey-default',
   site_name: 'Default site',
   status: 'draft',
+  visibility: 'private',
   sync_version: 1,
   sync_state: 'pending',
   last_sync_error: null,

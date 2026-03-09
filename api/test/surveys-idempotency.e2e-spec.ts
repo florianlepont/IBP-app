@@ -181,6 +181,111 @@ describe('Surveys idempotency (e2e)', () => {
     });
   });
 
+  it('rejects non-visibility PATCH fields after submit', async () => {
+    const email = `e2e-submit-readonly-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-submit-readonly-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Read-only Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+        },
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    const patch = await request(app.getHttpServer())
+      .patch(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        factors: { A: 5 }
+      })
+      .expect(422);
+
+    expect(patch.body.code).toBe('submitted_read_only_fields');
+    expect(patch.body.forbidden_fields).toContain('factors');
+  });
+
+  it('toggles visibility after submit via PATCH /v1/surveys/:id/visibility and writes visibility_changed event', async () => {
+    const email = `e2e-submit-visibility-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-submit-visibility-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Visibility Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+        },
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    const toggle = await request(app.getHttpServer())
+      .patch(`/v1/surveys/${surveyId}/visibility`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ visibility: 'public' })
+      .expect(200);
+
+    expect(toggle.body.id).toBe(surveyId);
+    expect(toggle.body.visibility).toBe('public');
+    expect(typeof toggle.body.updated_at).toBe('string');
+
+    const detail = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(detail.body.visibility).toBe('public');
+
+    const events = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}/events`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    const visibilityEvent = (events.body.items as Array<{ event_type: string; payload?: { from?: string; to?: string } }>).find(
+      (event) => event.event_type === 'visibility_changed' && event.payload?.from === 'private' && event.payload?.to === 'public'
+    );
+    expect(visibilityEvent).toBeTruthy();
+  });
+
   it('submits a full raw-observation payload A..J and computes exact scores', async () => {
     const email = `e2e-raw-full-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())

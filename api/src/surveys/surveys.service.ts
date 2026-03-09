@@ -19,6 +19,7 @@ import {
   CreateAttachmentBody,
   SurveyEventRow,
   SurveyPatchBody,
+  SurveyVisibilityPatchBody,
   SurveyRow,
   SurveyUpsertBody,
   SyncBatchBody,
@@ -236,6 +237,15 @@ export class SurveysService {
 
   async patchSurvey(user: AuthenticatedUser, surveyId: string, body: SurveyPatchBody): Promise<{ id: string; updated_at: string }> {
     const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
+    const forbiddenPostSubmitFields = this.getSubmittedReadOnlyFields(body);
+
+    if (existing.status === 'submitted' && forbiddenPostSubmitFields.length > 0) {
+      throw new UnprocessableEntityException({
+        code: 'submitted_read_only_fields',
+        message: 'submitted survey is read-only for observation fields',
+        forbidden_fields: forbiddenPostSubmitFields
+      });
+    }
 
     if (body.factors) {
       const check = this.ibpRules.validateDraft(
@@ -302,6 +312,46 @@ export class SurveysService {
         to: body.visibility
       });
     }
+
+    return result.rows[0];
+  }
+
+  async patchSurveyVisibility(
+    user: AuthenticatedUser,
+    surveyId: string,
+    body: SurveyVisibilityPatchBody
+  ): Promise<{ id: string; visibility: 'private' | 'public'; updated_at: string }> {
+    if (body.visibility !== 'private' && body.visibility !== 'public') {
+      throw new BadRequestException('visibility must be private or public');
+    }
+
+    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id);
+    if (existing.visibility === body.visibility) {
+      return {
+        id: existing.id,
+        visibility: existing.visibility,
+        updated_at: existing.updated_at
+      };
+    }
+
+    const result = await this.db.query<{ id: string; visibility: 'private' | 'public'; updated_at: string }>(
+      `UPDATE surveys
+       SET visibility = $3,
+           updated_at = NOW()
+       WHERE id = $1
+         AND user_id = $2
+       RETURNING id, visibility, updated_at::text`,
+      [surveyId, user.id, body.visibility]
+    );
+
+    if (!result.rows[0]) {
+      throw new NotFoundException('Survey not found');
+    }
+
+    await this.insertEvent(surveyId, user.id, 'visibility_changed', {
+      from: existing.visibility,
+      to: result.rows[0].visibility
+    });
 
     return result.rows[0];
   }
@@ -888,6 +938,19 @@ export class SurveysService {
       [surveyId, userId]
     );
     return result.rows[0] ?? null;
+  }
+
+  private getSubmittedReadOnlyFields(body: SurveyPatchBody): string[] {
+    const readonlyFields: Array<keyof SurveyPatchBody> = [
+      'site_name',
+      'region_version',
+      'vegetation_stage',
+      'factors',
+      'scores',
+      'location'
+    ];
+
+    return readonlyFields.filter((field) => Object.prototype.hasOwnProperty.call(body, field));
   }
 
   private async insertEvent(surveyId: string, actorId: string, eventType: string, payload: Record<string, unknown>): Promise<void> {

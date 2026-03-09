@@ -4,7 +4,7 @@ import { memoryStorage } from 'multer';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthenticatedUser } from '../auth/auth.types';
-import { CreateAttachmentBody, SurveyPatchBody, SurveyUpsertBody } from './surveys.types';
+import { CreateAttachmentBody, SurveyPatchBody, SurveyUpsertBody, SurveyVisibilityPatchBody } from './surveys.types';
 import { SurveysService } from './surveys.service';
 
 @Controller('surveys')
@@ -31,6 +31,11 @@ export class SurveysController {
   @Patch(':id')
   async patch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() body: SurveyPatchBody) {
     return this.surveysService.patchSurvey(user, id, body);
+  }
+
+  @Patch(':id/visibility')
+  async patchVisibility(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() body: SurveyVisibilityPatchBody) {
+    return this.surveysService.patchSurveyVisibility(user, id, body);
   }
 
   @Post(':id/submit')

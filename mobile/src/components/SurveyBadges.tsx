@@ -31,6 +31,9 @@ export function SurveyBadges({ survey, attachmentCount }: SurveyBadgesProps) {
         <Text style={styles.badgeText}>v{survey.sync_version}</Text>
       </View>
       <View style={[styles.badge, styles.badgeNeutral]}>
+        <Text style={styles.badgeText}>visibility: {survey.visibility}</Text>
+      </View>
+      <View style={[styles.badge, styles.badgeNeutral]}>
         <Text style={styles.badgeText}>photos: {attachmentCount}</Text>
       </View>
       {survey.sync_blocked === 1 ? (

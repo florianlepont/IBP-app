@@ -223,6 +223,11 @@ Response `200`:
 ### PATCH /surveys/{id}
 Partially update survey fields.
 
+Lifecycle rule in V1:
+- While `status=draft`, business fields are editable (`site_name`, region/stage, factors, location, visibility).
+- While `status=submitted`, observation payload is read-only.
+- For `submitted`, only publication visibility changes are allowed (use dedicated endpoint below).
+
 Request:
 ```json
 {
@@ -253,6 +258,34 @@ Response `200`:
   "updated_at": "2026-03-08T12:15:00Z"
 }
 ```
+
+For submitted surveys, patching non-publication fields must return `422`
+with a business error (example: `submitted_read_only_fields`).
+
+### PATCH /surveys/{id}/visibility
+Toggle publication visibility for a survey (`private` <-> `public`).
+
+Request:
+```json
+{
+  "visibility": "public"
+}
+```
+
+Response `200`:
+```json
+{
+  "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+  "visibility": "public",
+  "updated_at": "2026-03-09T16:20:00Z"
+}
+```
+
+Rules:
+- Allowed for survey owner (and moderators/admins where applicable by auth policy).
+- Allowed in both `draft` and `submitted` states.
+- Must write an audit event: `visibility_changed` with `{ from, to }`.
+- No-op requests (same visibility) return `200` unchanged.
 
 ### POST /surveys/{id}/submit
 Attempt submission transition (`draft` -> `submitted`) with server-side checks.
@@ -567,6 +600,11 @@ Response `200`:
 
 ### GET /public/map-items?from=&to=&region=
 Return anonymized public survey map items.
+
+Inclusion rules in V1:
+- `visibility = public`
+- survey is not deleted
+- survey is considered publishable (recommended policy: `status=submitted`)
 
 Response `200`:
 ```json

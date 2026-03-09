@@ -265,6 +265,7 @@ export default function App() {
                   onSubmitSurvey={surveySync.handleSubmitSurvey}
                   onRetrySurvey={surveySync.handleRetrySurvey}
                   onDiscardSurvey={surveySync.handleDiscardSurvey}
+                  onToggleVisibility={surveySync.handleToggleVisibility}
                 />
               ) : null
             }

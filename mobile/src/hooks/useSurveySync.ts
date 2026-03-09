@@ -17,7 +17,8 @@ import {
   queueLocalAttachment,
   retrySurveyNow,
   submitSurvey,
-  syncPending
+  syncPending,
+  updateSurveyVisibility
 } from '../storage';
 
 type UseSurveySyncParams = {
@@ -207,6 +208,25 @@ export function useSurveySync({
       setStatus(`Local changes discarded for ${surveyId} (${result.removed_queue} queue item(s) removed)`);
     } catch (error) {
       setStatus(`Discard error: ${(error as Error).message}`);
+    }
+  };
+
+  const handleToggleVisibility = async (surveyId: string, visibility: 'private' | 'public'): Promise<void> => {
+    if (!accessToken) {
+      setStatus('Login required before changing visibility');
+      return;
+    }
+
+    try {
+      const result = await updateSurveyVisibility(apiUrl, accessToken, surveyId, visibility);
+      await refreshLocalSurveys();
+      if (!result.ok) {
+        setStatus(`Visibility update failed for ${surveyId}: ${result.message}`);
+        return;
+      }
+      setStatus(`Visibility set to ${result.visibility ?? visibility} for ${surveyId}`);
+    } catch (error) {
+      setStatus(`Visibility update error: ${(error as Error).message}`);
     }
   };
 
@@ -430,6 +450,7 @@ export function useSurveySync({
     handleSubmitSurvey,
     handleRetrySurvey,
     handleDiscardSurvey,
+    handleToggleVisibility,
     confirmDeleteSurvey,
     handleQueueAttachmentFromLibrary,
     handleQueueAttachmentFromCamera,
