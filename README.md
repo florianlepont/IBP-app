@@ -289,3 +289,26 @@ Implemented:
   - attachment count
   - blocked marker
 - Added `Reset filters` quick action.
+
+## Step 20 Survey Detail Views + Compact Authentication (Current)
+Implemented:
+- Login/API settings are now hidden in a dedicated `Settings` panel:
+  - collapsed by default (`Show settings` / `Hide settings`)
+  - no full login block at the top of the main screen
+- Main screen now focuses primarily on local survey list operations:
+  - create, sync, pull, refresh
+  - rich list + filters + detail panel
+- Survey form flows are split into dedicated views:
+  - `Create survey (dedicated view)`
+  - `Edit survey (dedicated view)`
+  - both separated from main list screen
+- Region selection in form now uses explicit options (`ACA` / `M`) instead of free text input.
+- Survey list now supports a dedicated selected-survey detail panel:
+  - tabs: `Summary`, `Factors`, `Photos`, `Events`
+  - contextual actions moved into detail panel (`Edit`, `Attach`, `Delete`, `Submit`, conflict actions)
+- Factors tab:
+  - auto-loads canonical IBP breakdown when a survey is opened (if user is logged in)
+  - includes `Refresh canonical details` action
+- Events tab:
+  - auto-loads via `GET /v1/surveys/:id/events` when Events tab is opened (if user is logged in)
+  - supports manual refresh and event payload preview
