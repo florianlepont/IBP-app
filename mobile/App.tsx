@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Alert, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { DEFAULT_API_URL } from './src/app/constants';
 import { styles } from './src/app/styles';
-import { AppScreen, PublicMapItem, SurveyDetailTab } from './src/app/types';
+import { PublicMapItem, SurveyDetailTab } from './src/app/types';
 import { SurveyFormScreen } from './src/screens/SurveyFormScreen';
 import { SurveyListScreen } from './src/screens/SurveyListScreen';
 import { initLocalDb, createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from './src/storage';
@@ -11,17 +16,38 @@ import { useSurveyList } from './src/hooks/useSurveyList';
 import { useSurveySync } from './src/hooks/useSurveySync';
 import { SurveyDetailScreen } from './src/screens/SurveyDetailScreen';
 import { PublicMapScreen } from './src/screens/PublicMapScreen';
-import { ProfileScreen } from './src/screens/ProfileScreen';
-import { BottomTabBar } from './src/components/BottomTabBar';
 import { AuthGateScreen } from './src/screens/AuthGateScreen';
+import { AccountScreen } from './src/screens/AccountScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 
-type MainTab = Exclude<AppScreen, 'edit'>;
+type RootTabParamList = {
+  surveys: undefined;
+  publicMap: undefined;
+  account: undefined;
+};
+
+type AccountStackParamList = {
+  accountHome: undefined;
+  settings: undefined;
+};
+
+type SurveysStackParamList = {
+  surveysHome: undefined;
+  surveyDetail: undefined;
+  surveyForm: undefined;
+};
+
+const Tab = createBottomTabNavigator<RootTabParamList>();
+const AccountStack = createNativeStackNavigator<AccountStackParamList>();
+const SurveysStack = createNativeStackNavigator<SurveysStackParamList>();
+
+type FormMode = 'create' | 'edit';
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL);
   const [email, setEmail] = useState('demo@ibp.local');
   const [password, setPassword] = useState('demo123');
-  const [screen, setScreen] = useState<AppScreen>('list');
+  const [formMode, setFormMode] = useState<FormMode>('create');
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null);
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>('summary');
   const [publicMapItems, setPublicMapItems] = useState<PublicMapItem[]>([]);
@@ -29,6 +55,8 @@ export default function App() {
   const [publicMapFromDate, setPublicMapFromDate] = useState('');
   const [publicMapToDate, setPublicMapToDate] = useState('');
   const [publicMapRegion, setPublicMapRegion] = useState('');
+
+  const navigationRef = useRef<NavigationContainerRef<RootTabParamList> | null>(null);
 
   const surveyForm = useSurveyForm();
   const surveyList = useSurveyList();
@@ -49,7 +77,10 @@ export default function App() {
     refreshLocalSurveys: surveyList.refreshLocalSurveys,
     refreshLocalAttachments: surveyList.refreshLocalAttachments,
     onCloseSurveyDetail: closeSurveyDetailSelection,
-    onStopEditing: () => setEditingSurveyId(null)
+    onStopEditing: () => {
+      setEditingSurveyId(null);
+      setFormMode('create');
+    }
   });
 
   useEffect(() => {
@@ -62,55 +93,63 @@ export default function App() {
     bootstrap().catch((error) => surveySync.setStatus(`Init error: ${(error as Error).message}`));
   }, []);
 
+  const navigateToTab = (tab: keyof RootTabParamList): void => {
+    navigationRef.current?.navigate(tab as never);
+  };
+
   const handleOpenCreateSurvey = (): void => {
     setEditingSurveyId(null);
+    setFormMode('create');
     closeSurveyDetailSelection();
     surveyForm.resetSurveyForm();
-    setScreen('create');
     surveySync.setStatus('Create survey view opened');
   };
 
-  const handleCreateDraft = async (): Promise<void> => {
+  const handleCreateDraft = async (): Promise<boolean> => {
     try {
       const created = await createLocalDraft(surveyForm.buildDraftInput());
       await surveyList.refreshLocalSurveys();
       await surveyList.refreshLocalAttachments();
       setEditingSurveyId(null);
+      setFormMode('create');
       surveyList.setSelectedSurveyId(created.id);
-      setScreen('list');
       surveySync.setStatus('Local IBP draft created with raw observations');
+      return true;
     } catch (error) {
       surveySync.setStatus(`Draft error: ${(error as Error).message}`);
+      return false;
     }
   };
 
-  const handleStartEditSurvey = async (surveyId: string): Promise<void> => {
+  const handleStartEditSurvey = async (surveyId: string): Promise<boolean> => {
     const current = surveyList.surveys.find((survey) => survey.id === surveyId);
     if (current?.status === 'submitted') {
       surveySync.setStatus(`Survey ${surveyId} is submitted and read-only`);
-      return;
+      return false;
     }
 
     try {
       const draft = await getLocalSurveyDraft(surveyId);
       if (!draft) {
         surveySync.setStatus(`Survey not found locally: ${surveyId}`);
-        return;
+        return false;
       }
       surveyForm.applyDraftToForm(draft);
       setEditingSurveyId(surveyId);
+      setFormMode('edit');
       surveyList.setSelectedSurveyId(surveyId);
-      setScreen('edit');
       surveySync.setStatus(`Editing survey ${surveyId}`);
+      return true;
     } catch (error) {
       surveySync.setStatus(`Edit load error: ${(error as Error).message}`);
+      return false;
     }
   };
 
-  const handleSaveSurveyEdits = async (): Promise<void> => {
+  const handleSaveSurveyEdits = async (): Promise<boolean> => {
     if (!editingSurveyId) {
       surveySync.setStatus('No survey selected for editing');
-      return;
+      return false;
     }
 
     try {
@@ -123,26 +162,20 @@ export default function App() {
 
       await surveyList.refreshLocalSurveys();
       await surveyList.refreshLocalAttachments();
-      setScreen('list');
+      setEditingSurveyId(null);
+      setFormMode('create');
       surveySync.setStatus(`Local survey ${editingSurveyId} updated and queued for sync`);
+      return true;
     } catch (error) {
       surveySync.setStatus(`Edit save error: ${(error as Error).message}`);
+      return false;
     }
-  };
-
-  const handleCancelSurveyEdit = (): void => {
-    setEditingSurveyId(null);
-    setScreen('list');
-    surveySync.setStatus('Edit mode cancelled');
   };
 
   const handleCancelSurveyForm = (): void => {
-    if (screen === 'edit') {
-      handleCancelSurveyEdit();
-      return;
-    }
-    setScreen('list');
-    surveySync.setStatus('Create mode cancelled');
+    setEditingSurveyId(null);
+    setFormMode('create');
+    surveySync.setStatus('Form cancelled');
   };
 
   const handleOpenSurvey = (surveyId: string): void => {
@@ -197,11 +230,6 @@ export default function App() {
     }
   };
 
-  const handleCloseSurveyDetail = (): void => {
-    closeSurveyDetailSelection();
-    surveySync.setStatus('Survey detail closed');
-  };
-
   const handleLoadPublicMap = async (): Promise<void> => {
     try {
       setPublicMapLoading(true);
@@ -241,46 +269,226 @@ export default function App() {
     }
   };
 
-  const handleOpenPublicMap = (): void => {
-    closeSurveyDetailSelection();
-    setScreen('public_map');
-    void handleLoadPublicMap();
-  };
+  const SurveysTab = () => (
+    <SurveysStack.Navigator
+      screenOptions={{
+        headerShown: true,
+        headerLargeTitle: false,
+        headerTitleAlign: 'left',
+        headerTitleStyle: {
+          fontSize: 30,
+          fontWeight: '800',
+          color: '#12304f'
+        },
+        headerStyle: {
+          backgroundColor: '#f2f5fa'
+        },
+        headerShadowVisible: false,
+        headerTintColor: '#12304f'
+      }}
+    >
+      <SurveysStack.Screen
+        name="surveysHome"
+        options={{
+          title: 'Surveys'
+        }}
+      >
+        {({ navigation }) => (
+          <View style={styles.tabScreenContainer}>
+            <SurveyListScreen
+              surveys={surveyList.surveys}
+              visibleSurveys={surveyList.visibleSurveys}
+              selectedSurveyId={surveyList.selectedSurveyId}
+              attachmentsBySurvey={surveyList.attachmentsBySurvey}
+              surveyQuery={surveyList.surveyQuery}
+              setSurveyQuery={surveyList.setSurveyQuery}
+              statusFilter={surveyList.statusFilter}
+              setStatusFilter={surveyList.setStatusFilter}
+              visibilityFilter={surveyList.visibilityFilter}
+              setVisibilityFilter={surveyList.setVisibilityFilter}
+              syncFilter={surveyList.syncFilter}
+              setSyncFilter={surveyList.setSyncFilter}
+              blockedFilter={surveyList.blockedFilter}
+              setBlockedFilter={surveyList.setBlockedFilter}
+              attachmentFilter={surveyList.attachmentFilter}
+              setAttachmentFilter={surveyList.setAttachmentFilter}
+              sortMode={surveyList.sortMode}
+              setSortMode={surveyList.setSortMode}
+              resetFilters={surveyList.resetFilters}
+              onOpenSurvey={(surveyId) => {
+                handleOpenSurvey(surveyId);
+                navigation.navigate('surveyDetail');
+              }}
+            />
+            <Pressable
+              style={styles.fabButton}
+              onPress={() => {
+                handleOpenCreateSurvey();
+                navigation.navigate('surveyForm');
+              }}
+            >
+              <Ionicons name="add" size={30} color="#ffffff" />
+            </Pressable>
+          </View>
+        )}
+      </SurveysStack.Screen>
+      <SurveysStack.Screen
+        name="surveyDetail"
+        options={{
+          title: 'Detail',
+          headerLargeTitle: false
+        }}
+        listeners={{
+          beforeRemove: () => {
+            closeSurveyDetailSelection();
+          }
+        }}
+      >
+        {({ navigation }) => (
+          <>
+            {surveyList.selectedSurvey ? (
+              <SurveyDetailScreen
+                selectedSurvey={surveyList.selectedSurvey}
+                selectedSurveyAttachments={surveyList.selectedSurveyAttachments}
+                surveyDetailTab={surveyDetailTab}
+                setSurveyDetailTab={setSurveyDetailTab}
+                editingSurveyId={editingSurveyId}
+                surveyDetails={surveySync.surveyDetails}
+                detailsLoadingSurveyId={surveySync.detailsLoadingSurveyId}
+                surveyEvents={surveySync.surveyEvents}
+                eventsLoadingSurveyId={surveySync.eventsLoadingSurveyId}
+                onLoadCanonicalDetails={surveySync.handleLoadCanonicalDetails}
+                onLoadSurveyEvents={surveySync.handleLoadSurveyEvents}
+                onEditSurvey={async (surveyId) => {
+                  const loaded = await handleStartEditSurvey(surveyId);
+                  if (loaded) {
+                    navigation.navigate('surveyForm');
+                  }
+                }}
+                onTakePhoto={surveySync.handleQueueAttachmentFromCamera}
+                onPickPhoto={surveySync.handleQueueAttachmentFromLibrary}
+                onDeleteAttachment={surveySync.handleDeleteAttachment}
+                onDeleteSurvey={surveySync.confirmDeleteSurvey}
+                onSubmitSurvey={surveySync.handleSubmitSurvey}
+                onRetrySurvey={surveySync.handleRetrySurvey}
+                onDiscardSurvey={surveySync.handleDiscardSurvey}
+                onToggleVisibility={surveySync.handleToggleVisibility}
+              />
+            ) : null}
+          </>
+        )}
+      </SurveysStack.Screen>
+      <SurveysStack.Screen
+        name="surveyForm"
+        options={{
+          title: formMode === 'edit' ? 'Edit survey' : 'Create a new survey',
+          headerLargeTitle: false
+        }}
+      >
+        {({ navigation }) => (
+          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+            <SurveyFormScreen
+              screen={formMode === 'edit' ? 'edit' : 'create'}
+              editingSurveyId={editingSurveyId}
+              siteName={surveyForm.siteName}
+              setSiteName={surveyForm.setSiteName}
+              regionVersion={surveyForm.regionVersion}
+              vegetationStage={surveyForm.vegetationStage}
+              setVegetationStage={surveyForm.setVegetationStage}
+              onRegionChange={surveyForm.handleRegionChange}
+              locationSource={surveyForm.locationSource}
+              setLocationSource={surveyForm.setLocationSource}
+              gpsLocation={surveyForm.gpsLocation}
+              manualLocation={surveyForm.manualLocation}
+              setGpsLocationField={surveyForm.setGpsLocationField}
+              setManualLocationField={surveyForm.setManualLocationField}
+              onCaptureGpsLocation={handleCaptureGpsLocation}
+              factorSections={surveyForm.factorSections}
+              formErrors={surveyForm.formErrors}
+              onSaveSurveyEdits={async () => {
+                const saved = await handleSaveSurveyEdits();
+                if (saved) {
+                  navigation.goBack();
+                }
+              }}
+              onCreateDraft={async () => {
+                const created = await handleCreateDraft();
+                if (created) {
+                  navigation.goBack();
+                }
+              }}
+              onBackToSurveyList={() => {
+                handleCancelSurveyForm();
+                navigation.goBack();
+              }}
+              status={surveySync.status}
+            />
+          </ScrollView>
+        )}
+      </SurveysStack.Screen>
+    </SurveysStack.Navigator>
+  );
 
-  const handleBackToListFromPublicMap = (): void => {
-    setScreen('list');
-    surveySync.setStatus('Back to local surveys');
-  };
+  const PublicMapTab = () => (
+    <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+      <PublicMapScreen
+        items={publicMapItems}
+        loading={publicMapLoading}
+        fromDate={publicMapFromDate}
+        toDate={publicMapToDate}
+        region={publicMapRegion}
+        onChangeFromDate={setPublicMapFromDate}
+        onChangeToDate={setPublicMapToDate}
+        onChangeRegion={setPublicMapRegion}
+        onLoad={handleLoadPublicMap}
+        onBack={() => navigateToTab('surveys')}
+      />
+    </ScrollView>
+  );
 
-  const handleOpenProfile = (): void => {
-    closeSurveyDetailSelection();
-    setScreen('profile');
-    surveySync.setStatus('Profile view opened');
-    if (surveySync.isAuthenticated) {
-      void surveySync.handleLoadMyProfile({ silent: true });
-    }
-  };
-
-  const activeTab: MainTab = screen === 'edit' ? 'create' : screen;
-
-  const handleSelectTab = (tab: MainTab): void => {
-    if (tab === 'list') {
-      setScreen('list');
-      return;
-    }
-    if (tab === 'create') {
-      handleOpenCreateSurvey();
-      return;
-    }
-    if (tab === 'public_map') {
-      handleOpenPublicMap();
-      return;
-    }
-    if (tab === 'profile') {
-      handleOpenProfile();
-      return;
-    }
-  };
+  const AccountTab = () => (
+    <AccountStack.Navigator screenOptions={{ headerShown: false }}>
+      <AccountStack.Screen name="accountHome">
+        {({ navigation }) => (
+          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+            <AccountScreen
+              accessToken={surveySync.accessToken}
+              currentUser={surveySync.currentUser}
+              profile={surveySync.profile}
+              profileUpdating={surveySync.profileUpdating}
+              status={surveySync.status}
+              apiUrl={apiUrl}
+              onOpenSettings={() => navigation.navigate('settings')}
+              onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
+              onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
+              onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
+              onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
+              onConfirmEmailChange={surveySync.handleConfirmEmailChange}
+              onLogout={surveySync.handleLogout}
+            />
+          </ScrollView>
+        )}
+      </AccountStack.Screen>
+      <AccountStack.Screen name="settings">
+        {({ navigation }) => (
+          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+            <SettingsScreen
+              apiUrl={apiUrl}
+              onApiUrlChange={setApiUrl}
+              onSync={surveySync.handleSync}
+              onPullChanges={surveySync.handlePullChanges}
+              onRefreshLocalList={surveyList.refreshLocalSurveys}
+              onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
+              onDebugResetIbpData={surveySync.handleDebugResetIbpData}
+              onDebugResetUserData={surveySync.handleDebugResetUserData}
+              onBack={() => navigation.goBack()}
+              status={surveySync.status}
+            />
+          </ScrollView>
+        )}
+      </AccountStack.Screen>
+    </AccountStack.Navigator>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -299,146 +507,78 @@ export default function App() {
             />
           </ScrollView>
         ) : (
-          <>
-            <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-              <View style={styles.card}>
-                <Text style={styles.title}>IBP Step 20 - Local Survey Hub + Dedicated Forms</Text>
-                <View style={styles.authCompact}>
-                  <Text style={styles.label}>Session</Text>
-                  <Text style={styles.meta}>User: {surveySync.profile}</Text>
-                </View>
-
-                <Text style={styles.status}>{surveySync.status}</Text>
-              </View>
-
-              {screen === 'list' ? (
-                <SurveyListScreen
-                  surveys={surveyList.surveys}
-                  visibleSurveys={surveyList.visibleSurveys}
-                  selectedSurveyId={surveyList.selectedSurveyId}
-                  surveyStats={surveyList.surveyStats}
-                  attachmentCountBySurvey={surveyList.attachmentCountBySurvey}
-                  surveyQuery={surveyList.surveyQuery}
-                  setSurveyQuery={surveyList.setSurveyQuery}
-                  statusFilter={surveyList.statusFilter}
-                  setStatusFilter={surveyList.setStatusFilter}
-                  visibilityFilter={surveyList.visibilityFilter}
-                  setVisibilityFilter={surveyList.setVisibilityFilter}
-                  syncFilter={surveyList.syncFilter}
-                  setSyncFilter={surveyList.setSyncFilter}
-                  blockedFilter={surveyList.blockedFilter}
-                  setBlockedFilter={surveyList.setBlockedFilter}
-                  attachmentFilter={surveyList.attachmentFilter}
-                  setAttachmentFilter={surveyList.setAttachmentFilter}
-                  sortMode={surveyList.sortMode}
-                  setSortMode={surveyList.setSortMode}
-                  resetFilters={surveyList.resetFilters}
-                  onOpenSurvey={handleOpenSurvey}
-                  detailContent={
-                    surveyList.selectedSurvey ? (
-                      <SurveyDetailScreen
-                        selectedSurvey={surveyList.selectedSurvey}
-                        selectedSurveyAttachments={surveyList.selectedSurveyAttachments}
-                        surveyDetailTab={surveyDetailTab}
-                        setSurveyDetailTab={setSurveyDetailTab}
-                        editingSurveyId={editingSurveyId}
-                        surveyDetails={surveySync.surveyDetails}
-                        detailsLoadingSurveyId={surveySync.detailsLoadingSurveyId}
-                        surveyEvents={surveySync.surveyEvents}
-                        eventsLoadingSurveyId={surveySync.eventsLoadingSurveyId}
-                        onClose={handleCloseSurveyDetail}
-                        onLoadCanonicalDetails={surveySync.handleLoadCanonicalDetails}
-                        onLoadSurveyEvents={surveySync.handleLoadSurveyEvents}
-                        onEditSurvey={handleStartEditSurvey}
-                        onTakePhoto={surveySync.handleQueueAttachmentFromCamera}
-                        onPickPhoto={surveySync.handleQueueAttachmentFromLibrary}
-                        onDeleteAttachment={surveySync.handleDeleteAttachment}
-                        onDeleteSurvey={surveySync.confirmDeleteSurvey}
-                        onSubmitSurvey={surveySync.handleSubmitSurvey}
-                        onRetrySurvey={surveySync.handleRetrySurvey}
-                        onDiscardSurvey={surveySync.handleDiscardSurvey}
-                        onToggleVisibility={surveySync.handleToggleVisibility}
-                      />
-                    ) : null
+          <NavigationContainer ref={navigationRef}>
+            <Tab.Navigator
+              screenOptions={({ route }) => ({
+                headerShown: true,
+                headerTitleAlign: 'left',
+                headerTitleStyle: {
+                  fontSize: 30,
+                  fontWeight: '800',
+                  color: '#12304f'
+                },
+                headerStyle: {
+                  backgroundColor: '#f2f5fa'
+                },
+                headerShadowVisible: false,
+                tabBarActiveTintColor: '#1d4f84',
+                tabBarInactiveTintColor: '#6b859f',
+                tabBarStyle: {
+                  backgroundColor: '#ffffff'
+                },
+                tabBarLabel: route.name === 'publicMap' ? 'Map' : route.name === 'surveys' ? 'Surveys' : 'Account',
+                tabBarIcon: ({ color, size }) => {
+                  const iconName =
+                    route.name === 'surveys'
+                      ? 'list-outline'
+                      : route.name === 'publicMap'
+                        ? 'map-outline'
+                        : 'person-outline';
+                  return <Ionicons name={iconName as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
+                }
+              })}
+            >
+              <Tab.Screen
+                name="surveys"
+                options={{
+                  tabBarLabel: 'Surveys',
+                  headerShown: false
+                }}
+              >
+                {() => <SurveysTab />}
+              </Tab.Screen>
+              <Tab.Screen
+                name="publicMap"
+                options={{
+                  title: 'Map'
+                }}
+                listeners={{
+                  tabPress: () => {
+                    closeSurveyDetailSelection();
+                    void handleLoadPublicMap();
                   }
-                />
-              ) : null}
-
-              {screen === 'public_map' ? (
-                <PublicMapScreen
-                  items={publicMapItems}
-                  loading={publicMapLoading}
-                  fromDate={publicMapFromDate}
-                  toDate={publicMapToDate}
-                  region={publicMapRegion}
-                  onChangeFromDate={setPublicMapFromDate}
-                  onChangeToDate={setPublicMapToDate}
-                  onChangeRegion={setPublicMapRegion}
-                  onLoad={handleLoadPublicMap}
-                  onBack={handleBackToListFromPublicMap}
-                />
-              ) : null}
-
-              {screen === 'profile' ? (
-                <ProfileScreen
-                  accessToken={surveySync.accessToken}
-                  isAuthenticated={surveySync.isAuthenticated}
-                  currentUser={surveySync.currentUser}
-                  profile={surveySync.profile}
-                  profileUpdating={surveySync.profileUpdating}
-                  status={surveySync.status}
-                  apiUrl={apiUrl}
-                  onApiUrlChange={setApiUrl}
-                  email={email}
-                  onEmailChange={setEmail}
-                  password={password}
-                  onPasswordChange={setPassword}
-                  onLogin={surveySync.handleLogin}
-                  onLogout={surveySync.handleLogout}
-                  onSync={surveySync.handleSync}
-                  onPullChanges={surveySync.handlePullChanges}
-                  onDebugResetIbpData={surveySync.handleDebugResetIbpData}
-                  onDebugResetUserData={surveySync.handleDebugResetUserData}
-                  onRefreshLocalList={surveyList.refreshLocalSurveys}
-                  onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
-                  onReloadProfile={() => surveySync.handleLoadMyProfile()}
-                  onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
-                  onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
-                  onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
-                  onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
-                  onConfirmEmailChange={surveySync.handleConfirmEmailChange}
-                />
-              ) : null}
-
-              {screen === 'create' || screen === 'edit' ? (
-                <SurveyFormScreen
-                  screen={screen}
-                  editingSurveyId={editingSurveyId}
-                  siteName={surveyForm.siteName}
-                  setSiteName={surveyForm.setSiteName}
-                  regionVersion={surveyForm.regionVersion}
-                  vegetationStage={surveyForm.vegetationStage}
-                  setVegetationStage={surveyForm.setVegetationStage}
-                  onRegionChange={surveyForm.handleRegionChange}
-                  locationSource={surveyForm.locationSource}
-                  setLocationSource={surveyForm.setLocationSource}
-                  gpsLocation={surveyForm.gpsLocation}
-                  manualLocation={surveyForm.manualLocation}
-                  setGpsLocationField={surveyForm.setGpsLocationField}
-                  setManualLocationField={surveyForm.setManualLocationField}
-                  onCaptureGpsLocation={handleCaptureGpsLocation}
-                  factorSections={surveyForm.factorSections}
-                  formErrors={surveyForm.formErrors}
-                  onSaveSurveyEdits={handleSaveSurveyEdits}
-                  onCreateDraft={handleCreateDraft}
-                  onBackToSurveyList={handleCancelSurveyForm}
-                  status={surveySync.status}
-                />
-              ) : null}
-            </ScrollView>
-
-            <BottomTabBar activeTab={activeTab} onSelectTab={handleSelectTab} />
-          </>
+                }}
+              >
+                {() => <PublicMapTab />}
+              </Tab.Screen>
+              <Tab.Screen
+                name="account"
+                options={{
+                  title: 'Account'
+                }}
+                listeners={{
+                  tabPress: () => {
+                    closeSurveyDetailSelection();
+                    if (surveySync.isAuthenticated) {
+                      void surveySync.handleLoadMyProfile({ silent: true });
+                    }
+                  }
+                }}
+              >
+                {() => <AccountTab />}
+              </Tab.Screen>
+            </Tab.Navigator>
+          </NavigationContainer>
         )}
       </View>
     </SafeAreaView>

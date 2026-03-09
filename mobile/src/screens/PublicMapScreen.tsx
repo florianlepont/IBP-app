@@ -29,7 +29,6 @@ export function PublicMapScreen({
 }: PublicMapScreenProps) {
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Public Map Items (Server)</Text>
       <Text style={styles.meta}>Only `submitted + public` surveys are exposed here.</Text>
 
       <Text style={styles.label}>From (YYYY-MM-DD)</Text>
@@ -83,4 +82,3 @@ export function PublicMapScreen({
     </View>
   );
 }
-
