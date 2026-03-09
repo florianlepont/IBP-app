@@ -451,22 +451,6 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-  factorDetailBackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#c8d9eb',
-    backgroundColor: '#eef5ff',
-    paddingHorizontal: 10,
-    paddingVertical: 6
-  },
-  factorDetailBackText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1e4f79'
-  },
   factorDetailProgressText: {
     fontSize: 12,
     fontWeight: '700',
