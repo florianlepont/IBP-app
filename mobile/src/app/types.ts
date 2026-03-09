@@ -118,6 +118,8 @@ export type FactorField = {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  required?: boolean;
+  error?: string | null;
 };
 
 export type SurveyListFilters = {

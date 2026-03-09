@@ -1,5 +1,5 @@
 import { Button, Image, Pressable, Text, View } from 'react-native';
-import { formatEventPayload, formatPoints } from '../app/formatters';
+import { formatDateTime, formatEventPayload, formatPoints, formatRemainingTime, isLessThan24HoursRemaining, resolveSubmissionDeadline } from '../app/formatters';
 import { styles } from '../app/styles';
 import { FactorCanonical, SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from '../app/types';
 import { FilterChip } from '../components/FilterChip';
@@ -22,6 +22,7 @@ type SurveyDetailScreenProps = {
   onEditSurvey: (surveyId: string) => Promise<void> | void;
   onTakePhoto: (surveyId: string) => Promise<void> | void;
   onPickPhoto: (surveyId: string) => Promise<void> | void;
+  onDeleteAttachment: (surveyId: string, localAttachmentId: string) => Promise<void> | void;
   onDeleteSurvey: (surveyId: string) => void;
   onSubmitSurvey: (surveyId: string) => Promise<void>;
   onRetrySurvey: (surveyId: string) => Promise<void>;
@@ -46,39 +47,6 @@ const asFiniteNumber = (value: unknown): number | null => {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
-};
-
-const formatDateTime = (value?: string | null): string => {
-  if (!value) return 'n/a';
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return value;
-  return new Date(parsed).toLocaleString();
-};
-
-const resolveSubmissionDeadline = (createdAt?: string | null, expiresAt?: string | null): string | null => {
-  if (expiresAt) return expiresAt;
-  if (!createdAt) return null;
-  const createdAtMs = Date.parse(createdAt);
-  if (!Number.isFinite(createdAtMs)) return null;
-  return new Date(createdAtMs + 7 * 24 * 60 * 60 * 1000).toISOString();
-};
-
-const formatRemainingTime = (deadlineIso?: string | null): string => {
-  if (!deadlineIso) return 'n/a';
-  const deadlineMs = Date.parse(deadlineIso);
-  if (!Number.isFinite(deadlineMs)) return 'n/a';
-
-  const deltaMs = deadlineMs - Date.now();
-  if (deltaMs <= 0) return 'expired';
-
-  const totalMinutes = Math.floor(deltaMs / (60 * 1000));
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-
-  if (days > 0) return `${days}d ${hours}h remaining`;
-  if (hours > 0) return `${hours}h ${minutes}m remaining`;
-  return `${minutes}m remaining`;
 };
 
 const formatLocationSummary = (location?: Record<string, unknown>): string => {
@@ -124,6 +92,7 @@ export function SurveyDetailScreen({
   onEditSurvey,
   onTakePhoto,
   onPickPhoto,
+  onDeleteAttachment,
   onDeleteSurvey,
   onSubmitSurvey,
   onRetrySurvey,
@@ -140,6 +109,7 @@ export function SurveyDetailScreen({
   const detailExpiresAt = detail?.expires_at ?? null;
   const submissionDeadline = resolveSubmissionDeadline(detailCreatedAt, detailExpiresAt);
   const remainingTime = formatRemainingTime(submissionDeadline);
+  const isDraftNearDeadline = detailStatus === 'draft' && isLessThan24HoursRemaining(submissionDeadline);
   const loadedEventCount = surveyEvents[selectedSurvey.id]?.length ?? 0;
   const publishableOnPublicMap = detailStatus === 'submitted' && detailVisibility === 'public';
 
@@ -177,6 +147,7 @@ export function SurveyDetailScreen({
           <Text style={styles.rowMeta}>created: {formatDateTime(detailCreatedAt)}</Text>
           <Text style={styles.rowMeta}>submission deadline: {formatDateTime(submissionDeadline)}</Text>
           <Text style={styles.rowMeta}>time remaining: {detailStatus === 'submitted' ? 'submitted' : remainingTime}</Text>
+          {isDraftNearDeadline ? <Text style={styles.warningText}>Warning: less than 24h left before survey expiration.</Text> : null}
           <Text style={styles.rowMeta}>submitted at: {formatDateTime(detailSubmittedAt)}</Text>
           <Text style={styles.rowMeta}>sync version: v{detailSyncVersion}</Text>
           <Text style={styles.rowMeta}>location: {formatLocationSummary(detail?.location)}</Text>
@@ -232,6 +203,12 @@ export function SurveyDetailScreen({
                   </Text>
                   {attachment.last_sync_error_code ? <Text style={styles.attachmentError}>code: {attachment.last_sync_error_code}</Text> : null}
                   {attachment.last_sync_error ? <Text style={styles.attachmentError}>error: {attachment.last_sync_error}</Text> : null}
+                  {selectedSurvey.status !== 'submitted' ? (
+                    <>
+                      <View style={styles.miniSpacer} />
+                      <Button title="Remove photo" onPress={() => void onDeleteAttachment(selectedSurvey.id, attachment.id)} />
+                    </>
+                  ) : null}
                 </View>
               ))}
             </View>

@@ -18,8 +18,12 @@ export function FactorSection({ factorKey, helpText, fields }: FactorSectionProp
       <View style={styles.factorGrid}>
         {fields.map((field) => (
           <View key={`${factorKey}-${field.label}`} style={styles.factorItemWide}>
-            <Text style={styles.factorKey}>{field.label}</Text>
+            <Text style={styles.factorKey}>
+              {field.label}
+              {field.required ? ' *' : ''}
+            </Text>
             <TextInput style={styles.factorInput} value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            {field.error ? <Text style={styles.fieldError}>{field.error}</Text> : null}
           </View>
         ))}
       </View>

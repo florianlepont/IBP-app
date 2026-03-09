@@ -53,6 +53,12 @@ type AttachmentQueuePayload = {
   metadata?: Record<string, unknown>;
 };
 
+type AttachmentDeleteQueuePayload = {
+  kind: 'attachment_delete';
+  survey_id: string;
+  attachment_id: string;
+};
+
 type SurveyQueuePayload = {
   id?: string;
   sync_version?: number;
@@ -454,6 +460,69 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
   };
 }
 
+export async function queueDeleteAttachment(
+  surveyId: string,
+  localAttachmentId: string
+): Promise<{ queued_delete: boolean; removed_local: boolean; remote_attachment_id: string | null }> {
+  const db = await dbPromise;
+  const now = new Date().toISOString();
+
+  const attachment = await db.getFirstAsync<{
+    id: string;
+    survey_id: string;
+    remote_attachment_id: string | null;
+  }>(
+    `SELECT id, survey_id, remote_attachment_id
+     FROM local_attachments
+     WHERE id = ? AND survey_id = ?`,
+    [localAttachmentId, surveyId]
+  );
+
+  if (!attachment?.id) {
+    return { queued_delete: false, removed_local: false, remote_attachment_id: null };
+  }
+
+  const queueRows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
+    `SELECT id, payload
+     FROM sync_queue
+     WHERE survey_id = ?`,
+    [surveyId]
+  );
+
+  for (const row of queueRows) {
+    const payload = safeParseJson(row.payload);
+    if (isAttachmentQueuePayload(payload) && payload.local_attachment_id === localAttachmentId) {
+      await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
+      continue;
+    }
+    if (isAttachmentDeleteQueuePayload(payload) && payload.attachment_id === attachment.remote_attachment_id) {
+      await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
+    }
+  }
+
+  if (attachment.remote_attachment_id) {
+    const deletePayload: AttachmentDeleteQueuePayload = {
+      kind: 'attachment_delete',
+      survey_id: surveyId,
+      attachment_id: attachment.remote_attachment_id
+    };
+
+    await db.runAsync(
+      `INSERT INTO sync_queue (survey_id, payload, status, retry_count, next_retry_at, created_at, updated_at)
+       VALUES (?, ?, 'pending', 0, NULL, ?, ?)`,
+      [surveyId, JSON.stringify(deletePayload), now, now]
+    );
+  }
+
+  await db.runAsync(`DELETE FROM local_attachments WHERE id = ?`, [localAttachmentId]);
+
+  return {
+    queued_delete: Boolean(attachment.remote_attachment_id),
+    removed_local: true,
+    remote_attachment_id: attachment.remote_attachment_id
+  };
+}
+
 export async function queueDeleteSurvey(surveyId: string): Promise<{ queued_delete: boolean }> {
   const db = await dbPromise;
   const now = new Date().toISOString();
@@ -692,7 +761,15 @@ export async function syncPending(
   let failed = 0;
   const operationRows = new Map<
     string,
-    { row: QueueRow; payload: SurveyQueuePayload | AttachmentQueuePayload | SurveyDeleteQueuePayload | SurveyVisibilityQueuePayload }
+    {
+      row: QueueRow;
+      payload:
+        | SurveyQueuePayload
+        | AttachmentQueuePayload
+        | AttachmentDeleteQueuePayload
+        | SurveyDeleteQueuePayload
+        | SurveyVisibilityQueuePayload;
+    }
   >();
   const operations: SyncBatchOperation[] = [];
   const uploadOnlyRows: Array<{ row: QueueRow; payload: AttachmentQueuePayload; target: UploadTargetResponse }> = [];
@@ -728,6 +805,21 @@ export async function syncPending(
           size_bytes: parsedPayload.size_bytes,
           captured_at: parsedPayload.captured_at ?? null,
           metadata: parsedPayload.metadata ?? {}
+        }
+      });
+      continue;
+    }
+
+    if (isAttachmentDeleteQueuePayload(parsedPayload)) {
+      const clientRef = String(row.id);
+      operationRows.set(clientRef, { row, payload: parsedPayload });
+      operations.push({
+        client_ref: clientRef,
+        entity: 'attachment',
+        action: 'delete',
+        survey_id: parsedPayload.survey_id,
+        payload: {
+          attachment_id: parsedPayload.attachment_id
         }
       });
       continue;
@@ -812,6 +904,10 @@ export async function syncPending(
           await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
             terminalOverride: false
           });
+        } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
+          await handleAttachmentDeleteSyncFailure(db, linked.row, message, {
+            terminalOverride: false
+          });
         } else {
           await handleSurveySyncFailure(db, linked.row, message, {
             terminalOverride: false
@@ -851,6 +947,9 @@ export async function syncPending(
             failed += 1;
             await handleAttachmentSyncFailure(db, linked.row, linked.payload, (error as Error).message);
           }
+        } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
+          await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [linked.row.id]);
+          synced += 1;
         } else {
           if (isSurveyDeleteQueuePayload(linked.payload)) {
             await markSurveyDeleteRowSynced(db, linked.row);
@@ -865,6 +964,12 @@ export async function syncPending(
       if (isAttachmentQueuePayload(linked.payload)) {
         failed += 1;
         await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
+          terminalOverride: result.status === 'fatal_error',
+          errorCode: result.error?.code
+        });
+      } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
+        failed += 1;
+        await handleAttachmentDeleteSyncFailure(db, linked.row, message, {
           terminalOverride: result.status === 'fatal_error',
           errorCode: result.error?.code
         });
@@ -1170,6 +1275,15 @@ function isSurveyVisibilityQueuePayload(payload: unknown): payload is SurveyVisi
     kind === 'survey_visibility_update' &&
     typeof surveyId === 'string' &&
     (visibility === 'private' || visibility === 'public')
+  );
+}
+
+function isAttachmentDeleteQueuePayload(payload: unknown): payload is AttachmentDeleteQueuePayload {
+  if (!payload || typeof payload !== 'object') return false;
+  return (
+    (payload as { kind?: string }).kind === 'attachment_delete' &&
+    typeof (payload as { survey_id?: string }).survey_id === 'string' &&
+    typeof (payload as { attachment_id?: string }).attachment_id === 'string'
   );
 }
 
@@ -1540,6 +1654,33 @@ async function handleAttachmentSyncFailure(
          updated_at = ?
      WHERE id = ?`,
     [finalMessage, errorCode, nowIso, nowIso, payload.local_attachment_id]
+  );
+}
+
+async function handleAttachmentDeleteSyncFailure(
+  db: SQLite.SQLiteDatabase,
+  row: QueueRow,
+  message: string,
+  options?: FailureOptions
+): Promise<void> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const nextRetryCount = row.retry_count + 1;
+  const reachedRetryCap = nextRetryCount >= MAX_RETRY_COUNT;
+  const terminalByMessage = isTerminalAttachmentError(message);
+  const terminal = options?.terminalOverride ?? (terminalByMessage || reachedRetryCap);
+
+  if (terminal) {
+    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
+    return;
+  }
+
+  const nextRetryAt = computeNextRetryAt(now, nextRetryCount);
+  await db.runAsync(
+    `UPDATE sync_queue
+     SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+     WHERE id = ?`,
+    [nextRetryCount, nextRetryAt, nowIso, row.id]
   );
 }
 

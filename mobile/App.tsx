@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Alert, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { DEFAULT_API_URL } from './src/app/constants';
 import { styles } from './src/app/styles';
 import { AppScreen, PublicMapItem, SurveyDetailTab } from './src/app/types';
@@ -152,13 +152,30 @@ export default function App() {
   };
 
   const handleCaptureGpsLocation = async (): Promise<void> => {
+    const promptManualLocationFallback = (reason: string): void => {
+      Alert.alert('GPS unavailable', `${reason}\n\nSwitch to manual address entry?`, [
+        {
+          text: 'Keep GPS',
+          style: 'cancel'
+        },
+        {
+          text: 'Use manual address',
+          onPress: () => {
+            surveyForm.setLocationSource('manual');
+            surveySync.setStatus('GPS unavailable. Enter a manual address before submit.');
+          }
+        }
+      ]);
+    };
+
     try {
       const Location = await import('expo-location');
 
       surveySync.setStatus('Requesting GPS permission...');
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
-        surveySync.setStatus('Location permission is required');
+        surveySync.setStatus('Location permission denied');
+        promptManualLocationFallback('Location permission was denied.');
         return;
       }
 
@@ -176,6 +193,7 @@ export default function App() {
       surveySync.setStatus('GPS location captured');
     } catch (error) {
       surveySync.setStatus(`GPS error: ${(error as Error).message}`);
+      promptManualLocationFallback('The device could not provide a GPS position.');
     }
   };
 
@@ -334,6 +352,7 @@ export default function App() {
                         onEditSurvey={handleStartEditSurvey}
                         onTakePhoto={surveySync.handleQueueAttachmentFromCamera}
                         onPickPhoto={surveySync.handleQueueAttachmentFromLibrary}
+                        onDeleteAttachment={surveySync.handleDeleteAttachment}
                         onDeleteSurvey={surveySync.confirmDeleteSurvey}
                         onSubmitSurvey={surveySync.handleSubmitSurvey}
                         onRetrySurvey={surveySync.handleRetrySurvey}
@@ -409,6 +428,7 @@ export default function App() {
                   setManualLocationField={surveyForm.setManualLocationField}
                   onCaptureGpsLocation={handleCaptureGpsLocation}
                   factorSections={surveyForm.factorSections}
+                  formErrors={surveyForm.formErrors}
                   onSaveSurveyEdits={handleSaveSurveyEdits}
                   onCreateDraft={handleCreateDraft}
                   onBackToSurveyList={handleCancelSurveyForm}

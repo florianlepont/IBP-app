@@ -859,6 +859,116 @@ describe('Surveys idempotency (e2e)', () => {
       .expect(404);
   });
 
+  it('processes attachment delete operation via POST /v1/sync', async () => {
+    const email = `e2e-sync-attachment-delete-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-sync-attachment-delete-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Sync Attachment Delete Forest',
+        status: 'draft',
+        visibility: 'private',
+        factors: {},
+        scores: {},
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    const created = await request(app.getHttpServer())
+      .post('/v1/sync')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        operations: [
+          {
+            client_ref: 'op-create-attachment',
+            entity: 'attachment',
+            action: 'create',
+            survey_id: surveyId,
+            payload: {
+              mime_type: 'image/jpeg',
+              size_bytes: 1024
+            }
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(created.body.results).toHaveLength(1);
+    expect(created.body.results[0].status).toBe('synced');
+    const attachmentId = created.body.results[0].data.attachment_id as string;
+    const uploadUrl = created.body.results[0].data.upload_url as string;
+    const confirmUrl = created.body.results[0].data.confirm_url as string;
+
+    if (uploadUrl.startsWith('http')) {
+      const presignedUpload = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/jpeg'
+        },
+        body: Buffer.from('fake-jpeg-binary')
+      });
+      expect(presignedUpload.ok).toBe(true);
+
+      await request(app.getHttpServer())
+        .put(`/v1${confirmUrl}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+    } else {
+      await request(app.getHttpServer())
+        .put(`/v1${uploadUrl}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .attach('file', Buffer.from('fake-jpeg-binary'), {
+          filename: 'sample.jpg',
+          contentType: 'image/jpeg'
+        })
+        .expect(200);
+    }
+
+    const deleted = await request(app.getHttpServer())
+      .post('/v1/sync')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        operations: [
+          {
+            client_ref: 'op-delete-attachment',
+            entity: 'attachment',
+            action: 'delete',
+            survey_id: surveyId,
+            payload: {
+              attachment_id: attachmentId
+            }
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(deleted.body.results).toHaveLength(1);
+    expect(deleted.body.results[0]).toMatchObject({
+      client_ref: 'op-delete-attachment',
+      entity: 'attachment',
+      action: 'delete',
+      status: 'synced'
+    });
+    expect(deleted.body.results[0].data.attachment_id).toBe(attachmentId);
+
+    const listedAfterDelete = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}/attachments`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(Array.isArray(listedAfterDelete.body.items)).toBe(true);
+    expect(listedAfterDelete.body.items).toHaveLength(0);
+  });
+
   it('returns sync_version_conflict details in POST /v1/sync result', async () => {
     const email = `e2e-sync-conflict-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())

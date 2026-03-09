@@ -1,7 +1,7 @@
 import { Button, Pressable, Text, TextInput, View } from 'react-native';
 import { ReactNode } from 'react';
 import { styles } from '../app/styles';
-import { formatDateTime } from '../app/formatters';
+import { formatDateTime, isLessThan24HoursRemaining, resolveSubmissionDeadline } from '../app/formatters';
 import {
   SurveyAttachmentFilter,
   SurveyBlockedFilter,
@@ -155,6 +155,8 @@ export function SurveyListScreen({
 
       {visibleSurveys.map((survey) => {
         const attachmentCount = attachmentCountBySurvey[survey.id] ?? 0;
+        const submissionDeadline = resolveSubmissionDeadline(survey.created_at, null);
+        const showExpirationWarning = survey.status === 'draft' && isLessThan24HoursRemaining(submissionDeadline);
         return (
           <View key={survey.id} style={styles.row}>
             <Text style={styles.rowTitle}>{survey.site_name}</Text>
@@ -162,6 +164,7 @@ export function SurveyListScreen({
             <Text style={styles.rowMeta}>created: {formatDateTime(survey.created_at)}</Text>
             <Text style={styles.rowMeta}>updated: {survey.updated_at}</Text>
             <Text style={styles.rowMeta}>completion: {survey.completion_rate}%</Text>
+            {showExpirationWarning ? <Text style={styles.warningText}>Less than 24h before expiration.</Text> : null}
             <SurveyBadges survey={survey} attachmentCount={attachmentCount} />
             {selectedSurveyId === survey.id ? <Text style={styles.editingTag}>selected in detail panel</Text> : null}
             <View style={styles.miniSpacer} />
