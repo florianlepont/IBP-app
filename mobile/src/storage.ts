@@ -45,11 +45,78 @@ type AttachmentQueuePayload = {
   metadata?: Record<string, unknown>;
 };
 
+type SurveyQueuePayload = {
+  id?: string;
+  sync_version?: number;
+  site_name?: string;
+  status?: string;
+  visibility?: string;
+  region_version?: string;
+  vegetation_stage?: string;
+  factors?: Record<string, unknown>;
+  scores?: Record<string, unknown>;
+  location?: Record<string, unknown>;
+  expires_at?: string;
+};
+
 type UploadTargetResponse = {
   attachment_id: string;
   storage_key: string;
   upload_url: string;
   confirm_url?: string;
+};
+
+type SyncBatchOperation = {
+  client_ref: string;
+  entity: 'survey' | 'attachment';
+  action: 'upsert' | 'create';
+  survey_id?: string;
+  payload: Record<string, unknown>;
+};
+
+type SyncBatchError = {
+  code?: string;
+  message?: string;
+  http_status?: number;
+};
+
+type SyncBatchResult = {
+  client_ref: string | null;
+  entity: string;
+  action: string;
+  status: 'synced' | 'retryable_error' | 'fatal_error';
+  data?: Record<string, unknown>;
+  error?: SyncBatchError;
+};
+
+type SyncBatchResponse = {
+  results?: SyncBatchResult[];
+};
+
+type RemoteSurvey = {
+  id: string;
+  site_name: string;
+  status: string;
+  sync_version: number;
+  deleted_at?: string | null;
+};
+
+type RemoteAttachment = {
+  id: string;
+  survey_id: string;
+  storage_key: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_at?: string | null;
+  deleted_at?: string | null;
+};
+
+type SyncChangesResponse = {
+  cursor_in: string | null;
+  cursor_out: string | null;
+  has_more: boolean;
+  surveys?: RemoteSurvey[];
+  attachments?: RemoteAttachment[];
 };
 
 export type DraftInput = {
@@ -113,6 +180,12 @@ export async function initLocalDb(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_local_attachments_survey
       ON local_attachments(survey_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS local_meta (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Run schema upgrades column-by-column so one duplicate-column error
@@ -248,7 +321,10 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
   );
 }
 
-export async function syncPending(apiUrl: string, accessToken: string): Promise<{ synced: number; failed: number }> {
+export async function syncPending(
+  apiUrl: string,
+  accessToken: string
+): Promise<{ synced: number; failed: number; pulled_surveys: number; pulled_attachments: number }> {
   const db = await dbPromise;
   const nowIso = new Date().toISOString();
 
@@ -263,89 +339,247 @@ export async function syncPending(apiUrl: string, accessToken: string): Promise<
 
   let synced = 0;
   let failed = 0;
+  const operationRows = new Map<string, { row: QueueRow; payload: SurveyQueuePayload | AttachmentQueuePayload }>();
+  const operations: SyncBatchOperation[] = [];
+  const uploadOnlyRows: Array<{ row: QueueRow; payload: AttachmentQueuePayload; target: UploadTargetResponse }> = [];
 
   for (const row of queueRows) {
-    const payload = safeParseJson(row.payload);
+    const parsedPayload = safeParseJson(row.payload);
+
+    if (isAttachmentQueuePayload(parsedPayload)) {
+      const existingAttachment = await getLocalAttachmentById(db, parsedPayload.local_attachment_id);
+      if (existingAttachment?.remote_attachment_id && existingAttachment.upload_url) {
+        uploadOnlyRows.push({
+          row,
+          payload: parsedPayload,
+          target: {
+            attachment_id: existingAttachment.remote_attachment_id,
+            storage_key: existingAttachment.storage_key ?? '',
+            upload_url: existingAttachment.upload_url,
+            confirm_url: existingAttachment.confirm_url ?? undefined
+          }
+        });
+        continue;
+      }
+
+      const clientRef = String(row.id);
+      operationRows.set(clientRef, { row, payload: parsedPayload });
+      operations.push({
+        client_ref: clientRef,
+        entity: 'attachment',
+        action: 'create',
+        survey_id: parsedPayload.survey_id,
+        payload: {
+          mime_type: parsedPayload.mime_type,
+          size_bytes: parsedPayload.size_bytes,
+          captured_at: parsedPayload.captured_at ?? null,
+          metadata: parsedPayload.metadata ?? {}
+        }
+      });
+      continue;
+    }
+
+    if (isSurveyQueuePayload(parsedPayload)) {
+      const clientRef = String(row.id);
+      operationRows.set(clientRef, { row, payload: parsedPayload });
+      operations.push({
+        client_ref: clientRef,
+        entity: 'survey',
+        action: 'upsert',
+        payload: parsedPayload
+      });
+      continue;
+    }
+
+    failed += 1;
+    await handleSurveySyncFailure(db, row, 'Invalid sync payload', true);
+  }
+
+  if (operations.length > 0) {
+    let batchResults: SyncBatchResult[] = [];
 
     try {
-      if (isAttachmentQueuePayload(payload)) {
-        await syncAttachmentRow(db, row, payload, apiUrl, accessToken);
-      } else {
-        await syncSurveyRow(db, row, apiUrl, accessToken);
-      }
-      synced += 1;
-    } catch (error) {
-      failed += 1;
-      const message = (error as Error).message;
+      const response = await fetch(`${apiUrl}/sync`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ operations })
+      });
 
-      if (isAttachmentQueuePayload(payload)) {
-        await handleAttachmentSyncFailure(db, row, payload, message);
+      if (!response.ok) {
+        throw new Error(`BATCH_HTTP ${response.status}`);
+      }
+
+      const payload = (await safeJson(response)) as SyncBatchResponse;
+      batchResults = Array.isArray(payload.results) ? payload.results : [];
+    } catch (error) {
+      const message = (error as Error).message;
+      for (const operation of operations) {
+        failed += 1;
+        const linked = operationRows.get(operation.client_ref);
+        if (!linked) continue;
+
+        if (isAttachmentQueuePayload(linked.payload)) {
+          await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, false);
+        } else {
+          await handleSurveySyncFailure(db, linked.row, message, false);
+        }
+      }
+      batchResults = [];
+    }
+
+    for (const result of batchResults) {
+      const clientRef = result.client_ref ?? '';
+      const linked = operationRows.get(clientRef);
+      if (!linked) {
+        continue;
+      }
+
+      const message = buildSyncResultMessage(result);
+
+      if (result.status === 'synced') {
+        if (isAttachmentQueuePayload(linked.payload)) {
+          const target = toUploadTarget(result.data);
+          if (!target) {
+            failed += 1;
+            await handleAttachmentSyncFailure(db, linked.row, linked.payload, 'Invalid attachment sync response', true);
+            continue;
+          }
+
+          await saveAttachmentUploadTarget(db, linked.payload.local_attachment_id, target);
+
+          try {
+            await uploadAttachmentAndMarkSynced(db, linked.row, linked.payload, target, apiUrl, accessToken);
+            synced += 1;
+          } catch (error) {
+            failed += 1;
+            await handleAttachmentSyncFailure(db, linked.row, linked.payload, (error as Error).message, undefined);
+          }
+        } else {
+          await markSurveyQueueRowSynced(db, linked.row);
+          synced += 1;
+        }
+        continue;
+      }
+
+      if (isAttachmentQueuePayload(linked.payload)) {
+        failed += 1;
+        await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, result.status === 'fatal_error');
       } else {
-        await handleSurveySyncFailure(db, row, message);
+        failed += 1;
+        await handleSurveySyncFailure(db, linked.row, message, result.status === 'fatal_error');
       }
     }
   }
 
-  return { synced, failed };
-}
-
-async function syncSurveyRow(db: SQLite.SQLiteDatabase, row: QueueRow, apiUrl: string, accessToken: string): Promise<void> {
-  const response = await fetch(`${apiUrl}/surveys`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: row.payload
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+  for (const item of uploadOnlyRows) {
+    try {
+      await uploadAttachmentAndMarkSynced(db, item.row, item.payload, item.target, apiUrl, accessToken);
+      synced += 1;
+    } catch (error) {
+      failed += 1;
+      await handleAttachmentSyncFailure(db, item.row, item.payload, (error as Error).message, undefined);
+    }
   }
 
+  const pulled = await pullRemoteChanges(apiUrl, accessToken).catch(() => ({
+    surveys: 0,
+    attachments: 0,
+    pages: 0,
+    has_more: false
+  }));
+
+  return {
+    synced,
+    failed,
+    pulled_surveys: pulled.surveys,
+    pulled_attachments: pulled.attachments
+  };
+}
+
+export async function pullRemoteChanges(
+  apiUrl: string,
+  accessToken: string,
+  options?: { maxPages?: number; limit?: number }
+): Promise<{ surveys: number; attachments: number; pages: number; has_more: boolean }> {
+  const db = await dbPromise;
+  const maxPages = Math.max(1, Math.min(10, options?.maxPages ?? 5));
+  const limit = Math.max(1, Math.min(200, options?.limit ?? 50));
+
+  let cursor = await getMetaValue(db, 'downsync_cursor');
+  let pages = 0;
+  let totalSurveys = 0;
+  let totalAttachments = 0;
+  let hasMore = false;
+
+  for (let index = 0; index < maxPages; index += 1) {
+    const response = await fetch(buildSyncChangesUrl(apiUrl, cursor, limit), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`DOWNSYNC_HTTP ${response.status}`);
+    }
+
+    const payload = (await safeJson(response)) as SyncChangesResponse;
+    const surveys = Array.isArray(payload.surveys) ? payload.surveys : [];
+    const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+
+    const applied = await applyRemoteChanges(db, surveys, attachments);
+    totalSurveys += applied.surveys;
+    totalAttachments += applied.attachments;
+    pages += 1;
+
+    if (payload.cursor_out && payload.cursor_out !== cursor) {
+      cursor = payload.cursor_out;
+      await setMetaValue(db, 'downsync_cursor', cursor);
+    }
+
+    hasMore = Boolean(payload.has_more);
+    if (!hasMore) {
+      break;
+    }
+  }
+
+  return {
+    surveys: totalSurveys,
+    attachments: totalAttachments,
+    pages,
+    has_more: hasMore
+  };
+}
+
+async function markSurveyQueueRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow): Promise<void> {
+  const now = new Date().toISOString();
   await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
   await db.runAsync(
     `UPDATE local_surveys
      SET sync_state = 'synced', last_sync_error = NULL, updated_at = ?
      WHERE id = ?`,
-    [new Date().toISOString(), row.survey_id]
+    [now, row.survey_id]
   );
 }
 
-async function syncAttachmentRow(
+async function uploadAttachmentAndMarkSynced(
   db: SQLite.SQLiteDatabase,
   row: QueueRow,
   payload: AttachmentQueuePayload,
+  target: UploadTargetResponse,
   apiUrl: string,
   accessToken: string
 ): Promise<void> {
-  const createResponse = await fetch(`${apiUrl}/surveys/${payload.survey_id}/attachments`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      mime_type: payload.mime_type,
-      size_bytes: payload.size_bytes,
-      captured_at: payload.captured_at ?? null,
-      metadata: payload.metadata ?? {}
-    })
-  });
-
-  if (!createResponse.ok) {
-    throw new Error(`HTTP ${createResponse.status}`);
-  }
-
-  const created = (await safeJson(createResponse)) as UploadTargetResponse;
-  if (!created.attachment_id || !created.upload_url) {
-    throw new Error('Invalid attachment create response');
-  }
-
-  const uploadTarget = resolveUploadTarget(apiUrl, created.upload_url);
-  const confirmUrl = created.confirm_url ?? created.upload_url;
+  const uploadTarget = resolveUploadTarget(apiUrl, target.upload_url);
+  const confirmUrl = target.confirm_url ?? target.upload_url;
   const confirmTarget = resolveUploadTarget(apiUrl, confirmUrl);
-  const isApiUploadTarget = uploadTarget.includes('/surveys/') && uploadTarget.includes('/attachments/') && uploadTarget.includes('/upload?token=');
+  const isApiUploadTarget =
+    uploadTarget.includes('/surveys/') &&
+    uploadTarget.includes('/attachments/') &&
+    uploadTarget.includes('/upload?token=');
 
   const uploadResponse = isApiUploadTarget
     ? await uploadFileViaApi(uploadTarget, payload, accessToken)
@@ -368,6 +602,7 @@ async function syncAttachmentRow(
     }
   }
 
+  const now = new Date().toISOString();
   await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
   await db.runAsync(
     `UPDATE local_attachments
@@ -380,11 +615,11 @@ async function syncAttachmentRow(
          updated_at = ?
      WHERE id = ?`,
     [
-      created.attachment_id,
-      created.storage_key ?? null,
-      created.upload_url,
-      created.confirm_url ?? null,
-      new Date().toISOString(),
+      target.attachment_id,
+      target.storage_key ?? null,
+      target.upload_url,
+      target.confirm_url ?? null,
+      now,
       payload.local_attachment_id
     ]
   );
@@ -423,9 +658,243 @@ async function uploadFileDirect(uploadTarget: string, payload: AttachmentQueuePa
   });
 }
 
-async function handleSurveySyncFailure(db: SQLite.SQLiteDatabase, row: QueueRow, message: string): Promise<void> {
+function isSurveyQueuePayload(payload: unknown): payload is SurveyQueuePayload {
+  if (!payload || typeof payload !== 'object') return false;
+  return (
+    typeof (payload as { id?: string }).id === 'string' &&
+    typeof (payload as { sync_version?: number }).sync_version === 'number' &&
+    typeof (payload as { site_name?: string }).site_name === 'string'
+  );
+}
+
+async function getLocalAttachmentById(
+  db: SQLite.SQLiteDatabase,
+  localAttachmentId: string
+): Promise<Pick<LocalAttachment, 'id' | 'remote_attachment_id' | 'storage_key' | 'upload_url' | 'confirm_url'> | null> {
+  const row = await db.getFirstAsync<Pick<LocalAttachment, 'id' | 'remote_attachment_id' | 'storage_key' | 'upload_url' | 'confirm_url'>>(
+    `SELECT id, remote_attachment_id, storage_key, upload_url, confirm_url
+     FROM local_attachments
+     WHERE id = ?`,
+    [localAttachmentId]
+  );
+  return row ?? null;
+}
+
+async function saveAttachmentUploadTarget(db: SQLite.SQLiteDatabase, localAttachmentId: string, target: UploadTargetResponse): Promise<void> {
+  await db.runAsync(
+    `UPDATE local_attachments
+     SET remote_attachment_id = ?,
+         storage_key = ?,
+         upload_url = ?,
+         confirm_url = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [target.attachment_id, target.storage_key ?? null, target.upload_url, target.confirm_url ?? null, new Date().toISOString(), localAttachmentId]
+  );
+}
+
+function toUploadTarget(data: Record<string, unknown> | undefined): UploadTargetResponse | null {
+  if (!data) return null;
+
+  const attachmentId = data.attachment_id;
+  const storageKey = data.storage_key;
+  const uploadUrl = data.upload_url;
+  const confirmUrl = data.confirm_url;
+
+  if (typeof attachmentId !== 'string' || typeof uploadUrl !== 'string') {
+    return null;
+  }
+
+  return {
+    attachment_id: attachmentId,
+    storage_key: typeof storageKey === 'string' ? storageKey : '',
+    upload_url: uploadUrl,
+    confirm_url: typeof confirmUrl === 'string' ? confirmUrl : undefined
+  };
+}
+
+function buildSyncResultMessage(result: SyncBatchResult): string {
+  const errorMessage = result.error?.message ?? result.status;
+  const http = result.error?.http_status;
+  if (typeof http === 'number') {
+    return `HTTP ${http} ${errorMessage}`.trim();
+  }
+  return errorMessage;
+}
+
+async function applyRemoteChanges(
+  db: SQLite.SQLiteDatabase,
+  surveys: RemoteSurvey[],
+  attachments: RemoteAttachment[]
+): Promise<{ surveys: number; attachments: number }> {
+  const now = new Date().toISOString();
+  let appliedSurveys = 0;
+  let appliedAttachments = 0;
+
+  for (const survey of surveys) {
+    if (!survey?.id) continue;
+
+    const pendingQueue = await hasPendingQueueForSurvey(db, survey.id);
+    if (survey.deleted_at) {
+      if (!pendingQueue) {
+        await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [survey.id]);
+      }
+      await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ? AND sync_state = 'synced'`, [survey.id]);
+      appliedSurveys += 1;
+      continue;
+    }
+
+    const existing = await db.getFirstAsync<{ id: string; sync_state: string }>(
+      `SELECT id, sync_state FROM local_surveys WHERE id = ?`,
+      [survey.id]
+    );
+
+    if (!existing) {
+      await db.runAsync(
+        `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, updated_at)
+         VALUES (?, ?, ?, ?, 'synced', NULL, ?)`,
+        [survey.id, survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, now]
+      );
+      appliedSurveys += 1;
+      continue;
+    }
+
+    if (!pendingQueue) {
+      await db.runAsync(
+        `UPDATE local_surveys
+         SET site_name = ?,
+             status = ?,
+             sync_version = ?,
+             sync_state = 'synced',
+             last_sync_error = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+        [survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, now, survey.id]
+      );
+      appliedSurveys += 1;
+    }
+  }
+
+  for (const attachment of attachments) {
+    if (!attachment?.id || !attachment.survey_id) continue;
+
+    if (attachment.deleted_at) {
+      await db.runAsync(
+        `DELETE FROM local_attachments
+         WHERE remote_attachment_id = ?
+            OR id = ?`,
+        [attachment.id, `remote-${attachment.id}`]
+      );
+      appliedAttachments += 1;
+      continue;
+    }
+
+    const existing = await db.getFirstAsync<{ id: string }>(
+      `SELECT id
+       FROM local_attachments
+       WHERE remote_attachment_id = ?
+          OR id = ?
+       LIMIT 1`,
+      [attachment.id, `remote-${attachment.id}`]
+    );
+
+    if (!existing) {
+      await db.runAsync(
+        `INSERT INTO local_attachments (
+           id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'synced', ?, ?, NULL, NULL, NULL, ?, ?)`,
+        [
+          `remote-${attachment.id}`,
+          attachment.survey_id,
+          '',
+          attachment.mime_type ?? 'application/octet-stream',
+          attachment.size_bytes ?? 0,
+          attachment.id,
+          attachment.storage_key ?? null,
+          now,
+          now
+        ]
+      );
+    } else {
+      await db.runAsync(
+        `UPDATE local_attachments
+         SET survey_id = ?,
+             mime_type = ?,
+             size_bytes = ?,
+             sync_state = 'synced',
+             remote_attachment_id = ?,
+             storage_key = ?,
+             last_sync_error = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+        [
+          attachment.survey_id,
+          attachment.mime_type ?? 'application/octet-stream',
+          attachment.size_bytes ?? 0,
+          attachment.id,
+          attachment.storage_key ?? null,
+          now,
+          existing.id
+        ]
+      );
+    }
+
+    appliedAttachments += 1;
+  }
+
+  return { surveys: appliedSurveys, attachments: appliedAttachments };
+}
+
+async function hasPendingQueueForSurvey(db: SQLite.SQLiteDatabase, surveyId: string): Promise<boolean> {
+  const row = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count
+     FROM sync_queue
+     WHERE survey_id = ?
+       AND status IN ('pending', 'failed')`,
+    [surveyId]
+  );
+  return Number(row?.count ?? 0) > 0;
+}
+
+function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit: number): string {
+  const base = apiUrl.replace(/\/+$/, '');
+  const params = [`limit=${encodeURIComponent(String(limit))}`];
+  if (cursor) {
+    params.push(`cursor=${encodeURIComponent(cursor)}`);
+  }
+  return `${base}/sync/changes?${params.join('&')}`;
+}
+
+async function getMetaValue(db: SQLite.SQLiteDatabase, key: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    `SELECT value
+     FROM local_meta
+     WHERE key = ?`,
+    [key]
+  );
+  return row?.value ?? null;
+}
+
+async function setMetaValue(db: SQLite.SQLiteDatabase, key: string, value: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db.runAsync(
+    `INSERT INTO local_meta (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = excluded.updated_at`,
+    [key, value, now]
+  );
+}
+
+async function handleSurveySyncFailure(
+  db: SQLite.SQLiteDatabase,
+  row: QueueRow,
+  message: string,
+  terminalOverride?: boolean
+): Promise<void> {
   const now = new Date();
-  const terminal = isTerminalSurveyError(message);
+  const terminal = terminalOverride ?? isTerminalSurveyError(message);
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
@@ -451,10 +920,11 @@ async function handleAttachmentSyncFailure(
   db: SQLite.SQLiteDatabase,
   row: QueueRow,
   payload: AttachmentQueuePayload,
-  message: string
+  message: string,
+  terminalOverride?: boolean
 ): Promise<void> {
   const now = new Date();
-  const terminal = isTerminalAttachmentError(message);
+  const terminal = terminalOverride ?? isTerminalAttachmentError(message);
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);

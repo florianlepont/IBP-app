@@ -29,6 +29,18 @@ export type CreateAttachmentBody = {
   metadata?: Record<string, unknown>;
 };
 
+export type SyncOperation = {
+  client_ref?: string;
+  entity?: 'survey' | 'attachment';
+  action?: 'upsert' | 'create';
+  survey_id?: string;
+  payload?: unknown;
+};
+
+export type SyncBatchBody = {
+  operations?: SyncOperation[];
+};
+
 type JsonObject = Record<string, unknown>;
 
 export type FactorCanonical = {
@@ -82,3 +94,54 @@ export type AttachmentRow = {
   uploaded_at: string | null;
   deleted_at: string | null;
 };
+
+export type SyncResultError = {
+  code: string;
+  message: string;
+  http_status?: number;
+};
+
+export type SyncOperationResult = {
+  client_ref: string | null;
+  entity: string;
+  action: string;
+  status: 'synced' | 'retryable_error' | 'fatal_error';
+  data?: Record<string, unknown>;
+  error?: SyncResultError;
+};
+
+export type SyncChangeEvent = SurveyEventRow;
+
+export type SyncChangeSurvey = Pick<
+  SurveyRow,
+  | 'id'
+  | 'site_name'
+  | 'status'
+  | 'visibility'
+  | 'region_version'
+  | 'vegetation_stage'
+  | 'factors'
+  | 'factor_results'
+  | 'scores'
+  | 'location'
+  | 'created_at'
+  | 'updated_at'
+  | 'submitted_at'
+  | 'expires_at'
+  | 'sync_version'
+  | 'deleted_at'
+>;
+
+export type SyncChangeAttachment = Pick<
+  AttachmentRow,
+  | 'id'
+  | 'survey_id'
+  | 'storage_key'
+  | 'mime_type'
+  | 'size_bytes'
+  | 'captured_at'
+  | 'metadata'
+  | 'created_at'
+  | 'uploaded_at'
+  | 'deleted_at'
+>;
