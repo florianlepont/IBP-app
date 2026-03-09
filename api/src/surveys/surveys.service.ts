@@ -164,7 +164,15 @@ export class SurveysService {
     }
 
     if (body.sync_version < existing.sync_version) {
-      throw new ConflictException('Older sync_version received');
+      throw new ConflictException({
+        code: 'sync_version_conflict',
+        message: 'Older sync_version received',
+        details: {
+          survey_id: body.id,
+          server_sync_version: existing.sync_version,
+          client_sync_version: body.sync_version
+        }
+      });
     }
 
     if (body.sync_version === existing.sync_version) {
@@ -873,48 +881,82 @@ export class SurveysService {
 
   private mapSyncError(error: unknown): {
     status: 'retryable_error' | 'fatal_error';
-    error: { code: string; message: string; http_status?: number };
+    error: { code: string; message: string; http_status?: number; details?: Record<string, unknown> };
   } {
     let httpStatus: number | undefined;
     if (error instanceof HttpException) {
       httpStatus = error.getStatus();
     }
 
-    const message = this.extractSyncErrorMessage(error);
+    const extracted = this.extractSyncErrorPayload(error);
     const retryable = typeof httpStatus === 'number' ? httpStatus >= 500 || httpStatus === 429 : true;
+    const code = extracted.code
+      ? extracted.code
+      : retryable
+        ? this.defaultRetryableSyncCode(httpStatus)
+        : typeof httpStatus === 'number'
+          ? `http_${httpStatus}`
+          : 'sync_fatal_error';
 
     return {
       status: retryable ? 'retryable_error' : 'fatal_error',
       error: {
-        code: typeof httpStatus === 'number' ? `http_${httpStatus}` : 'internal_error',
-        message,
-        http_status: httpStatus
+        code,
+        message: extracted.message,
+        http_status: httpStatus,
+        details: extracted.details
       }
     };
   }
 
-  private extractSyncErrorMessage(error: unknown): string {
+  private extractSyncErrorPayload(error: unknown): {
+    code?: string;
+    message: string;
+    details?: Record<string, unknown>;
+  } {
     if (error instanceof HttpException) {
       const response = error.getResponse();
       if (typeof response === 'string' && response.trim().length > 0) {
-        return response;
+        return { message: response };
       }
       if (response && typeof response === 'object') {
-        const message = (response as { message?: unknown }).message;
-        if (Array.isArray(message)) {
-          return message.map((value) => String(value)).join(' | ');
-        }
-        if (typeof message === 'string' && message.trim().length > 0) {
-          return message;
-        }
+        const objectResponse = response as {
+          code?: unknown;
+          message?: unknown;
+          details?: unknown;
+          error?: unknown;
+        };
+        const message = Array.isArray(objectResponse.message)
+          ? objectResponse.message.map((value) => String(value)).join(' | ')
+          : typeof objectResponse.message === 'string'
+            ? objectResponse.message
+            : typeof objectResponse.error === 'string'
+              ? objectResponse.error
+              : 'Sync operation failed';
+        const code = typeof objectResponse.code === 'string' ? objectResponse.code : undefined;
+        const details =
+          objectResponse.details && typeof objectResponse.details === 'object' && !Array.isArray(objectResponse.details)
+            ? (objectResponse.details as Record<string, unknown>)
+            : undefined;
+        return { code, message, details };
       }
     }
 
     if (error instanceof Error && error.message) {
-      return error.message;
+      return { message: error.message };
     }
 
-    return 'Unexpected sync failure';
+    return { message: 'Unexpected sync failure' };
+  }
+
+  private defaultRetryableSyncCode(httpStatus?: number): string {
+    if (httpStatus === 429) {
+      return 'rate_limited';
+    }
+    if (httpStatus === 502 || httpStatus === 503 || httpStatus === 504 || typeof httpStatus !== 'number') {
+      return 'network_gateway_error';
+    }
+    return 'transient_upstream_error';
   }
 
   private normalizeChangesLimit(limitRaw?: number): number {

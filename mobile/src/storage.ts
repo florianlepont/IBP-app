@@ -7,6 +7,9 @@ export type LocalSurvey = {
   sync_version: number;
   sync_state: 'pending' | 'synced' | 'failed';
   last_sync_error: string | null;
+  last_sync_error_code: string | null;
+  last_sync_error_at: string | null;
+  sync_blocked: number;
   updated_at: string;
 };
 
@@ -22,6 +25,8 @@ export type LocalAttachment = {
   upload_url: string | null;
   confirm_url: string | null;
   last_sync_error: string | null;
+  last_sync_error_code: string | null;
+  last_sync_error_at: string | null;
   updated_at: string;
 };
 
@@ -136,6 +141,7 @@ export type LocalAttachmentInput = {
 };
 
 const dbPromise = SQLite.openDatabaseAsync('ibp-local.db');
+const MAX_RETRY_COUNT = 8;
 
 export async function initLocalDb(): Promise<void> {
   const db = await dbPromise;
@@ -148,6 +154,9 @@ export async function initLocalDb(): Promise<void> {
       sync_version INTEGER NOT NULL,
       sync_state TEXT NOT NULL,
       last_sync_error TEXT,
+      last_sync_error_code TEXT,
+      last_sync_error_at TEXT,
+      sync_blocked INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
 
@@ -174,6 +183,8 @@ export async function initLocalDb(): Promise<void> {
       upload_url TEXT,
       confirm_url TEXT,
       last_sync_error TEXT,
+      last_sync_error_code TEXT,
+      last_sync_error_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -191,12 +202,17 @@ export async function initLocalDb(): Promise<void> {
   // Run schema upgrades column-by-column so one duplicate-column error
   // does not prevent later columns from being added.
   await addColumnIfMissing(db, 'local_surveys', 'last_sync_error TEXT');
+  await addColumnIfMissing(db, 'local_surveys', 'last_sync_error_code TEXT');
+  await addColumnIfMissing(db, 'local_surveys', 'last_sync_error_at TEXT');
+  await addColumnIfMissing(db, 'local_surveys', 'sync_blocked INTEGER NOT NULL DEFAULT 0');
   await addColumnIfMissing(db, 'sync_queue', 'next_retry_at TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'remote_attachment_id TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'storage_key TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'upload_url TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'confirm_url TEXT');
   await addColumnIfMissing(db, 'local_attachments', 'last_sync_error TEXT');
+  await addColumnIfMissing(db, 'local_attachments', 'last_sync_error_code TEXT');
+  await addColumnIfMissing(db, 'local_attachments', 'last_sync_error_at TEXT');
 }
 
 export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> {
@@ -217,9 +233,9 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
   };
 
   await db.runAsync(
-    `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, input.site_name, 'draft', 1, 'pending', null, now]
+    `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, input.site_name, 'draft', 1, 'pending', null, null, null, 0, now]
   );
 
   await db.runAsync(
@@ -235,6 +251,9 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     sync_version: 1,
     sync_state: 'pending',
     last_sync_error: null,
+    last_sync_error_code: null,
+    last_sync_error_at: null,
+    sync_blocked: 0,
     updated_at: now
   };
 }
@@ -265,8 +284,8 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
 
   await db.runAsync(
     `INSERT INTO local_attachments (
-      id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 'pending', NULL, NULL, NULL, NULL, NULL, ?, ?)`,
+      id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, 'pending', NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)`,
     [localAttachmentId, input.survey_id, input.local_uri, input.mime_type, input.size_bytes, now, now]
   );
 
@@ -288,6 +307,8 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
     upload_url: null,
     confirm_url: null,
     last_sync_error: null,
+    last_sync_error_code: null,
+    last_sync_error_at: null,
     updated_at: now
   };
 }
@@ -295,7 +316,7 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
   const db = await dbPromise;
   const rows = await db.getAllAsync<LocalSurvey>(
-    `SELECT id, site_name, status, sync_version, sync_state, last_sync_error, updated_at
+    `SELECT id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, updated_at
      FROM local_surveys
      ORDER BY updated_at DESC`
   );
@@ -306,7 +327,7 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
   const db = await dbPromise;
   if (surveyId) {
     return db.getAllAsync<LocalAttachment>(
-      `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, updated_at
+      `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at
        FROM local_attachments
        WHERE survey_id = ?
        ORDER BY updated_at DESC`,
@@ -315,7 +336,7 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
   }
 
   return db.getAllAsync<LocalAttachment>(
-    `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, updated_at
+    `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at
      FROM local_attachments
      ORDER BY updated_at DESC`
   );
@@ -392,7 +413,10 @@ export async function syncPending(
     }
 
     failed += 1;
-    await handleSurveySyncFailure(db, row, 'Invalid sync payload', true);
+    await handleSurveySyncFailure(db, row, 'Invalid sync payload', {
+      terminalOverride: true,
+      errorCode: 'invalid_local_payload'
+    });
   }
 
   if (operations.length > 0) {
@@ -422,9 +446,13 @@ export async function syncPending(
         if (!linked) continue;
 
         if (isAttachmentQueuePayload(linked.payload)) {
-          await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, false);
+          await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
+            terminalOverride: false
+          });
         } else {
-          await handleSurveySyncFailure(db, linked.row, message, false);
+          await handleSurveySyncFailure(db, linked.row, message, {
+            terminalOverride: false
+          });
         }
       }
       batchResults = [];
@@ -444,7 +472,10 @@ export async function syncPending(
           const target = toUploadTarget(result.data);
           if (!target) {
             failed += 1;
-            await handleAttachmentSyncFailure(db, linked.row, linked.payload, 'Invalid attachment sync response', true);
+            await handleAttachmentSyncFailure(db, linked.row, linked.payload, 'Invalid attachment sync response', {
+              terminalOverride: true,
+              errorCode: 'invalid_attachment_response'
+            });
             continue;
           }
 
@@ -455,7 +486,7 @@ export async function syncPending(
             synced += 1;
           } catch (error) {
             failed += 1;
-            await handleAttachmentSyncFailure(db, linked.row, linked.payload, (error as Error).message, undefined);
+            await handleAttachmentSyncFailure(db, linked.row, linked.payload, (error as Error).message);
           }
         } else {
           await markSurveyQueueRowSynced(db, linked.row);
@@ -466,10 +497,16 @@ export async function syncPending(
 
       if (isAttachmentQueuePayload(linked.payload)) {
         failed += 1;
-        await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, result.status === 'fatal_error');
+        await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
+          terminalOverride: result.status === 'fatal_error',
+          errorCode: result.error?.code
+        });
       } else {
         failed += 1;
-        await handleSurveySyncFailure(db, linked.row, message, result.status === 'fatal_error');
+        await handleSurveySyncFailure(db, linked.row, message, {
+          terminalOverride: result.status === 'fatal_error',
+          errorCode: result.error?.code
+        });
       }
     }
   }
@@ -480,7 +517,7 @@ export async function syncPending(
       synced += 1;
     } catch (error) {
       failed += 1;
-      await handleAttachmentSyncFailure(db, item.row, item.payload, (error as Error).message, undefined);
+      await handleAttachmentSyncFailure(db, item.row, item.payload, (error as Error).message);
     }
   }
 
@@ -554,12 +591,86 @@ export async function pullRemoteChanges(
   };
 }
 
+export async function retrySurveyNow(surveyId: string): Promise<{ queued: number }> {
+  const db = await dbPromise;
+  const now = new Date().toISOString();
+
+  const updatedQueue = await db.runAsync(
+    `UPDATE sync_queue
+     SET status = 'pending',
+         next_retry_at = NULL,
+         updated_at = ?
+     WHERE survey_id = ?
+       AND status = 'failed'`,
+    [now, surveyId]
+  );
+
+  await db.runAsync(
+    `UPDATE local_surveys
+     SET sync_state = 'pending',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
+         updated_at = ?
+     WHERE id = ?`,
+    [now, surveyId]
+  );
+
+  await db.runAsync(
+    `UPDATE local_attachments
+     SET sync_state = 'pending',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         updated_at = ?
+     WHERE survey_id = ?
+       AND sync_state = 'failed'`,
+    [now, surveyId]
+  );
+
+  return { queued: Number((updatedQueue as { changes?: number }).changes ?? 0) };
+}
+
+export async function discardSurveyLocalChanges(surveyId: string): Promise<{ removed_queue: number }> {
+  const db = await dbPromise;
+  const now = new Date().toISOString();
+
+  const removedQueue = await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ?`, [surveyId]);
+
+  await db.runAsync(
+    `UPDATE local_surveys
+     SET sync_state = 'synced',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
+         updated_at = ?
+     WHERE id = ?`,
+    [now, surveyId]
+  );
+
+  await db.runAsync(
+    `DELETE FROM local_attachments
+     WHERE survey_id = ?
+       AND sync_state <> 'synced'`,
+    [surveyId]
+  );
+
+  return { removed_queue: Number((removedQueue as { changes?: number }).changes ?? 0) };
+}
+
 async function markSurveyQueueRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow): Promise<void> {
   const now = new Date().toISOString();
   await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
   await db.runAsync(
     `UPDATE local_surveys
-     SET sync_state = 'synced', last_sync_error = NULL, updated_at = ?
+     SET sync_state = 'synced',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
+         updated_at = ?
      WHERE id = ?`,
     [now, row.survey_id]
   );
@@ -612,6 +723,8 @@ async function uploadAttachmentAndMarkSynced(
          upload_url = ?,
          confirm_url = ?,
          last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
          updated_at = ?
      WHERE id = ?`,
     [
@@ -687,6 +800,9 @@ async function saveAttachmentUploadTarget(db: SQLite.SQLiteDatabase, localAttach
          storage_key = ?,
          upload_url = ?,
          confirm_url = ?,
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
          updated_at = ?
      WHERE id = ?`,
     [target.attachment_id, target.storage_key ?? null, target.upload_url, target.confirm_url ?? null, new Date().toISOString(), localAttachmentId]
@@ -751,8 +867,8 @@ async function applyRemoteChanges(
 
     if (!existing) {
       await db.runAsync(
-        `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, updated_at)
-         VALUES (?, ?, ?, ?, 'synced', NULL, ?)`,
+        `INSERT INTO local_surveys (id, site_name, status, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, updated_at)
+         VALUES (?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?)`,
         [survey.id, survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, now]
       );
       appliedSurveys += 1;
@@ -767,6 +883,9 @@ async function applyRemoteChanges(
              sync_version = ?,
              sync_state = 'synced',
              last_sync_error = NULL,
+             last_sync_error_code = NULL,
+             last_sync_error_at = NULL,
+             sync_blocked = 0,
              updated_at = ?
          WHERE id = ?`,
         [survey.site_name ?? 'Remote survey', survey.status ?? 'draft', survey.sync_version ?? 1, now, survey.id]
@@ -801,8 +920,8 @@ async function applyRemoteChanges(
     if (!existing) {
       await db.runAsync(
         `INSERT INTO local_attachments (
-           id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, 'synced', ?, ?, NULL, NULL, NULL, ?, ?)`,
+           id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'synced', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)`,
         [
           `remote-${attachment.id}`,
           attachment.survey_id,
@@ -825,6 +944,8 @@ async function applyRemoteChanges(
              remote_attachment_id = ?,
              storage_key = ?,
              last_sync_error = NULL,
+             last_sync_error_code = NULL,
+             last_sync_error_at = NULL,
              updated_at = ?
          WHERE id = ?`,
         [
@@ -887,32 +1008,50 @@ async function setMetaValue(db: SQLite.SQLiteDatabase, key: string, value: strin
   );
 }
 
+type FailureOptions = {
+  terminalOverride?: boolean;
+  errorCode?: string;
+};
+
 async function handleSurveySyncFailure(
   db: SQLite.SQLiteDatabase,
   row: QueueRow,
   message: string,
-  terminalOverride?: boolean
+  options?: FailureOptions
 ): Promise<void> {
   const now = new Date();
-  const terminal = terminalOverride ?? isTerminalSurveyError(message);
+  const nowIso = now.toISOString();
+  const nextRetryCount = row.retry_count + 1;
+  const reachedRetryCap = nextRetryCount >= MAX_RETRY_COUNT;
+  const terminalByMessage = isTerminalSurveyError(message);
+  const terminal = options?.terminalOverride ?? (terminalByMessage || reachedRetryCap);
+  const finalMessage = reachedRetryCap && !terminalByMessage && !options?.terminalOverride
+    ? `${message} | retry cap reached (${MAX_RETRY_COUNT})`
+    : message;
+  const errorCode = options?.errorCode ?? deriveSurveyErrorCode(finalMessage);
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
   } else {
-    const nextRetry = computeNextRetryAt(now, row.retry_count + 1);
+    const nextRetryAt = computeNextRetryAt(now, nextRetryCount);
     await db.runAsync(
       `UPDATE sync_queue
-       SET status = 'failed', retry_count = retry_count + 1, next_retry_at = ?, updated_at = ?
+       SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
        WHERE id = ?`,
-      [nextRetry, now.toISOString(), row.id]
+      [nextRetryCount, nextRetryAt, nowIso, row.id]
     );
   }
 
   await db.runAsync(
     `UPDATE local_surveys
-     SET sync_state = 'failed', last_sync_error = ?, updated_at = ?
+     SET sync_state = 'failed',
+         last_sync_error = ?,
+         last_sync_error_code = ?,
+         last_sync_error_at = ?,
+         sync_blocked = ?,
+         updated_at = ?
      WHERE id = ?`,
-    [message, now.toISOString(), row.survey_id]
+    [finalMessage, errorCode, nowIso, terminal ? 1 : 0, nowIso, row.survey_id]
   );
 }
 
@@ -921,28 +1060,40 @@ async function handleAttachmentSyncFailure(
   row: QueueRow,
   payload: AttachmentQueuePayload,
   message: string,
-  terminalOverride?: boolean
+  options?: FailureOptions
 ): Promise<void> {
   const now = new Date();
-  const terminal = terminalOverride ?? isTerminalAttachmentError(message);
+  const nowIso = now.toISOString();
+  const nextRetryCount = row.retry_count + 1;
+  const reachedRetryCap = nextRetryCount >= MAX_RETRY_COUNT;
+  const terminalByMessage = isTerminalAttachmentError(message);
+  const terminal = options?.terminalOverride ?? (terminalByMessage || reachedRetryCap);
+  const finalMessage = reachedRetryCap && !terminalByMessage && !options?.terminalOverride
+    ? `${message} | retry cap reached (${MAX_RETRY_COUNT})`
+    : message;
+  const errorCode = options?.errorCode ?? deriveAttachmentErrorCode(finalMessage);
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
   } else {
-    const nextRetry = computeNextRetryAt(now, row.retry_count + 1);
+    const nextRetryAt = computeNextRetryAt(now, nextRetryCount);
     await db.runAsync(
       `UPDATE sync_queue
-       SET status = 'failed', retry_count = retry_count + 1, next_retry_at = ?, updated_at = ?
+       SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
        WHERE id = ?`,
-      [nextRetry, now.toISOString(), row.id]
+      [nextRetryCount, nextRetryAt, nowIso, row.id]
     );
   }
 
   await db.runAsync(
     `UPDATE local_attachments
-     SET sync_state = 'failed', last_sync_error = ?, updated_at = ?
+     SET sync_state = 'failed',
+         last_sync_error = ?,
+         last_sync_error_code = ?,
+         last_sync_error_at = ?,
+         updated_at = ?
      WHERE id = ?`,
-    [message, now.toISOString(), payload.local_attachment_id]
+    [finalMessage, errorCode, nowIso, nowIso, payload.local_attachment_id]
   );
 }
 
@@ -963,9 +1114,14 @@ export async function submitSurvey(apiUrl: string, accessToken: string, surveyId
 
     await db.runAsync(
       `UPDATE local_surveys
-       SET sync_state = 'failed', last_sync_error = ?, updated_at = ?
+       SET sync_state = 'failed',
+           last_sync_error = ?,
+           last_sync_error_code = 'submit_failed',
+           last_sync_error_at = ?,
+           sync_blocked = 1,
+           updated_at = ?
        WHERE id = ?`,
-      [message, new Date().toISOString(), surveyId]
+      [message, new Date().toISOString(), new Date().toISOString(), surveyId]
     );
 
     return { ok: false, message };
@@ -973,7 +1129,13 @@ export async function submitSurvey(apiUrl: string, accessToken: string, surveyId
 
   await db.runAsync(
     `UPDATE local_surveys
-     SET status = 'submitted', sync_state = 'synced', last_sync_error = NULL, updated_at = ?
+     SET status = 'submitted',
+         sync_state = 'synced',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
+         updated_at = ?
      WHERE id = ?`,
     [new Date().toISOString(), surveyId]
   );
@@ -999,6 +1161,33 @@ function resolveUploadTarget(apiUrl: string, uploadUrl: string): string {
     return `${base}${uploadUrl}`;
   }
   return `${base}/${uploadUrl}`;
+}
+
+function deriveSurveyErrorCode(message: string): string {
+  if (message.includes('HTTP 409')) return 'sync_version_conflict';
+  if (message.includes('HTTP 422')) return 'survey_validation_failed';
+  if (message.includes('HTTP 400')) return 'bad_request';
+  if (message.includes('HTTP 401')) return 'unauthorized';
+  if (message.includes('HTTP 403')) return 'forbidden';
+  if (message.includes('HTTP 404')) return 'not_found';
+  if (message.includes('HTTP 429')) return 'rate_limited';
+  if (message.includes('HTTP 5') || message.includes('BATCH_HTTP 5')) return 'transient_upstream_error';
+  if (message.includes('BATCH_HTTP')) return 'network_gateway_error';
+  if (message.includes('retry cap reached')) return 'retry_cap_reached';
+  return 'sync_failed';
+}
+
+function deriveAttachmentErrorCode(message: string): string {
+  if (message.includes('UPLOAD_HTTP 400')) return 'attachment_bad_request';
+  if (message.includes('UPLOAD_HTTP 401') || message.includes('CONFIRM_HTTP 401')) return 'unauthorized';
+  if (message.includes('UPLOAD_HTTP 403') || message.includes('CONFIRM_HTTP 403')) return 'forbidden';
+  if (message.includes('UPLOAD_HTTP 404') || message.includes('CONFIRM_HTTP 404') || message.includes('LOCAL_FILE_HTTP 404')) return 'not_found';
+  if (message.includes('UPLOAD_HTTP 429') || message.includes('CONFIRM_HTTP 429')) return 'rate_limited';
+  if (message.includes('UPLOAD_HTTP 5') || message.includes('CONFIRM_HTTP 5')) return 'transient_upstream_error';
+  if (message.includes('HTTP 409')) return 'sync_version_conflict';
+  if (message.includes('HTTP 422')) return 'attachment_validation_failed';
+  if (message.includes('retry cap reached')) return 'retry_cap_reached';
+  return 'attachment_sync_failed';
 }
 
 function isTerminalSurveyError(message: string): boolean {
