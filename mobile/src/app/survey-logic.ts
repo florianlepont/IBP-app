@@ -62,6 +62,7 @@ export const filterAndSortSurveys = (
 
   const filtered = surveys.filter((survey) => {
     if (filters.statusFilter !== 'all' && survey.status !== filters.statusFilter) return false;
+    if (filters.visibilityFilter !== 'all' && survey.visibility !== filters.visibilityFilter) return false;
     if (filters.syncFilter !== 'all' && survey.sync_state !== filters.syncFilter) return false;
 
     const isBlocked = survey.sync_blocked === 1;

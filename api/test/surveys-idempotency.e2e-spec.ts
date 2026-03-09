@@ -286,6 +286,177 @@ describe('Surveys idempotency (e2e)', () => {
     expect(visibilityEvent).toBeTruthy();
   });
 
+  it('processes survey visibility_update operation via POST /v1/sync', async () => {
+    const email = `e2e-sync-visibility-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-sync-visibility-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Sync Visibility Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+        },
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    const sync = await request(app.getHttpServer())
+      .post('/v1/sync')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        operations: [
+          {
+            client_ref: 'op-visibility',
+            entity: 'survey',
+            action: 'visibility_update',
+            survey_id: surveyId,
+            payload: {
+              visibility: 'public'
+            }
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(sync.body.results).toHaveLength(1);
+    expect(sync.body.results[0]).toMatchObject({
+      client_ref: 'op-visibility',
+      entity: 'survey',
+      action: 'visibility_update',
+      status: 'synced'
+    });
+    expect(sync.body.results[0].data.visibility).toBe('public');
+
+    const detail = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(detail.body.visibility).toBe('public');
+  });
+
+  it('exposes submitted+public surveys on /v1/public/map-items and removes them after public -> private', async () => {
+    const email = `e2e-public-map-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const submittedPublicId = `e2e-public-map-pub-${Date.now()}`;
+    const submittedPrivateId = `e2e-public-map-prv-${Date.now()}`;
+    const draftPublicId = `e2e-public-map-draft-${Date.now()}`;
+
+    const validFactors = {
+      A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+    };
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: submittedPublicId,
+        sync_version: 1,
+        site_name: 'Public Submitted Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: validFactors,
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${submittedPublicId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/v1/surveys/${submittedPublicId}/visibility`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ visibility: 'public' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: submittedPrivateId,
+        sync_version: 1,
+        site_name: 'Private Submitted Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: validFactors,
+        location: { source: 'gps', lat: 48.645, lng: 1.821 }
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${submittedPrivateId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: draftPublicId,
+        sync_version: 1,
+        site_name: 'Public Draft Forest',
+        status: 'draft',
+        visibility: 'public',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: validFactors,
+        location: { source: 'gps', lat: 48.649, lng: 1.827 }
+      })
+      .expect(201);
+
+    const mapBeforeHide = await request(app.getHttpServer())
+      .get('/v1/public/map-items')
+      .query({ region: 'ACA' })
+      .expect(200);
+
+    const beforeItems = mapBeforeHide.body.items as Array<{ survey_id: string; region_code: string; ibp_total: number }>;
+    expect(beforeItems.some((item) => item.survey_id === submittedPublicId)).toBe(true);
+    expect(beforeItems.some((item) => item.survey_id === submittedPrivateId)).toBe(false);
+    expect(beforeItems.some((item) => item.survey_id === draftPublicId)).toBe(false);
+
+    const included = beforeItems.find((item) => item.survey_id === submittedPublicId);
+    expect(included?.region_code).toBe('ACA');
+    expect(typeof included?.ibp_total).toBe('number');
+
+    await request(app.getHttpServer())
+      .patch(`/v1/surveys/${submittedPublicId}/visibility`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ visibility: 'private' })
+      .expect(200);
+
+    const mapAfterHide = await request(app.getHttpServer())
+      .get('/v1/public/map-items')
+      .query({ region: 'ACA' })
+      .expect(200);
+
+    const afterItems = mapAfterHide.body.items as Array<{ survey_id: string }>;
+    expect(afterItems.some((item) => item.survey_id === submittedPublicId)).toBe(false);
+  });
+
   it('submits a full raw-observation payload A..J and computes exact scores', async () => {
     const email = `e2e-raw-full-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())

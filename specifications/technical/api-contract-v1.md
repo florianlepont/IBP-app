@@ -286,6 +286,7 @@ Rules:
 - Allowed in both `draft` and `submitted` states.
 - Must write an audit event: `visibility_changed` with `{ from, to }`.
 - No-op requests (same visibility) return `200` unchanged.
+- Mobile offline mode may queue this as `survey.visibility_update` inside `POST /sync`.
 
 ### POST /surveys/{id}/submit
 Attempt submission transition (`draft` -> `submitted`) with server-side checks.
@@ -492,6 +493,7 @@ Rules:
 - Supported operation set in V1:
   - `survey.upsert`
   - `survey.delete`
+  - `survey.visibility_update`
   - `attachment.create`
 - `status` can be:
   - `synced`
@@ -614,7 +616,7 @@ Response `200`:
       "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
       "display_location": { "lat": 48.64, "lng": 1.83 },
       "survey_date": "2026-03-08",
-      "region_code": "FR-IDF",
+      "region_code": "ACA",
       "ibp_total": 28
     }
   ]

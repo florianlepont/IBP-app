@@ -60,5 +60,5 @@ Make survey publication operational without reopening scientific observations af
 4. Visibility state survives sync round-trip (local -> server -> local pull).
 
 ## Implementation Notes
-- Keep compatibility with current sync model (no new sync operation needed in V1 if mobile calls endpoint directly).
-- If later needed offline-first for visibility toggle, introduce `survey.visibility_update` queued operation.
+- Keep compatibility with the direct endpoint (`PATCH /surveys/{id}/visibility`) for online calls.
+- For offline-first mobile behavior, V1 also supports queued `survey.visibility_update` in `POST /sync`.

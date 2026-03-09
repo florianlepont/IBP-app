@@ -70,6 +70,12 @@ type SurveyDeleteQueuePayload = {
   survey_id: string;
 };
 
+type SurveyVisibilityQueuePayload = {
+  kind: 'survey_visibility_update';
+  survey_id: string;
+  visibility: 'private' | 'public';
+};
+
 type UploadTargetResponse = {
   attachment_id: string;
   storage_key: string;
@@ -80,7 +86,7 @@ type UploadTargetResponse = {
 type SyncBatchOperation = {
   client_ref: string;
   entity: 'survey' | 'attachment';
-  action: 'upsert' | 'create' | 'delete';
+  action: 'upsert' | 'create' | 'delete' | 'visibility_update';
   survey_id?: string;
   payload: Record<string, unknown>;
 };
@@ -557,7 +563,10 @@ export async function syncPending(
 
   let synced = 0;
   let failed = 0;
-  const operationRows = new Map<string, { row: QueueRow; payload: SurveyQueuePayload | AttachmentQueuePayload | SurveyDeleteQueuePayload }>();
+  const operationRows = new Map<
+    string,
+    { row: QueueRow; payload: SurveyQueuePayload | AttachmentQueuePayload | SurveyDeleteQueuePayload | SurveyVisibilityQueuePayload }
+  >();
   const operations: SyncBatchOperation[] = [];
   const uploadOnlyRows: Array<{ row: QueueRow; payload: AttachmentQueuePayload; target: UploadTargetResponse }> = [];
 
@@ -619,6 +628,21 @@ export async function syncPending(
         survey_id: parsedPayload.survey_id,
         payload: {
           id: parsedPayload.survey_id
+        }
+      });
+      continue;
+    }
+
+    if (isSurveyVisibilityQueuePayload(parsedPayload)) {
+      const clientRef = String(row.id);
+      operationRows.set(clientRef, { row, payload: parsedPayload });
+      operations.push({
+        client_ref: clientRef,
+        entity: 'survey',
+        action: 'visibility_update',
+        survey_id: parsedPayload.survey_id,
+        payload: {
+          visibility: parsedPayload.visibility
         }
       });
       continue;
@@ -1007,6 +1031,18 @@ function isSurveyDeleteQueuePayload(payload: unknown): payload is SurveyDeleteQu
   return (
     (payload as { kind?: string }).kind === 'survey_delete' &&
     typeof (payload as { survey_id?: string }).survey_id === 'string'
+  );
+}
+
+function isSurveyVisibilityQueuePayload(payload: unknown): payload is SurveyVisibilityQueuePayload {
+  if (!payload || typeof payload !== 'object') return false;
+  const kind = (payload as { kind?: string }).kind;
+  const surveyId = (payload as { survey_id?: string }).survey_id;
+  const visibility = (payload as { visibility?: string }).visibility;
+  return (
+    kind === 'survey_visibility_update' &&
+    typeof surveyId === 'string' &&
+    (visibility === 'private' || visibility === 'public')
   );
 }
 
@@ -1424,51 +1460,100 @@ export async function submitSurvey(apiUrl: string, accessToken: string, surveyId
   return { ok: true, message: 'Survey submitted' };
 }
 
-export async function updateSurveyVisibility(
-  apiUrl: string,
-  accessToken: string,
+async function queueSurveyVisibilityChange(
+  db: SQLite.SQLiteDatabase,
   surveyId: string,
   visibility: 'private' | 'public'
-): Promise<{ ok: boolean; message: string; visibility?: 'private' | 'public' }> {
-  const db = await dbPromise;
-  const response = await fetch(`${apiUrl}/surveys/${surveyId}/visibility`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ visibility })
-  });
-
-  if (!response.ok) {
-    const payload = (await safeJson(response)) as { message?: string; errors?: string[] };
-    const message = payload.errors?.join(' | ') ?? payload.message ?? `HTTP ${response.status}`;
-    return { ok: false, message };
-  }
-
-  const payload = (await safeJson(response)) as {
-    id?: string;
-    visibility?: 'private' | 'public';
-    updated_at?: string;
-  };
-  const nextVisibility = payload.visibility === 'public' ? 'public' : 'private';
-  const now = new Date().toISOString();
-  const updatedAt = payload.updated_at ?? now;
-
-  const row = await db.getFirstAsync<{ payload_json: string | null }>(
-    `SELECT payload_json
+): Promise<{ changed: boolean }> {
+  const survey = await db.getFirstAsync<{
+    id: string;
+    visibility: string | null;
+    payload_json: string | null;
+  }>(
+    `SELECT id, visibility, payload_json
      FROM local_surveys
      WHERE id = ?`,
     [surveyId]
   );
 
-  let payloadJson: string | null = row?.payload_json ?? null;
+  if (!survey?.id) {
+    throw new Error(`Unknown local survey: ${surveyId}`);
+  }
+
+  const currentVisibility = survey.visibility === 'public' ? 'public' : 'private';
+  if (currentVisibility === visibility) {
+    return { changed: false };
+  }
+
+  const now = new Date().toISOString();
+  const queueRows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
+    `SELECT id, payload
+     FROM sync_queue
+     WHERE survey_id = ?`,
+    [surveyId]
+  );
+
+  let hasDeleteQueued = false;
+  let upsertRowsUpdated = 0;
+  const staleVisibilityRowIds: number[] = [];
+
+  for (const row of queueRows) {
+    const parsed = safeParseJson(row.payload);
+
+    if (isSurveyDeleteQueuePayload(parsed)) {
+      hasDeleteQueued = true;
+      continue;
+    }
+
+    if (isSurveyQueuePayload(parsed)) {
+      const nextPayload: SurveyQueuePayload = {
+        ...parsed,
+        visibility
+      };
+      await db.runAsync(
+        `UPDATE sync_queue
+         SET payload = ?, status = 'pending', retry_count = 0, next_retry_at = NULL, updated_at = ?
+         WHERE id = ?`,
+        [JSON.stringify(nextPayload), now, row.id]
+      );
+      upsertRowsUpdated += 1;
+      continue;
+    }
+
+    if (isSurveyVisibilityQueuePayload(parsed)) {
+      staleVisibilityRowIds.push(row.id);
+    }
+  }
+
+  if (hasDeleteQueued) {
+    throw new Error(`Survey ${surveyId} already has a queued delete operation`);
+  }
+
+  for (const rowId of staleVisibilityRowIds) {
+    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [rowId]);
+  }
+
+  if (upsertRowsUpdated === 0) {
+    const queuePayload: SurveyVisibilityQueuePayload = {
+      kind: 'survey_visibility_update',
+      survey_id: surveyId,
+      visibility
+    };
+
+    await db.runAsync(
+      `INSERT INTO sync_queue (survey_id, payload, status, retry_count, next_retry_at, created_at, updated_at)
+       VALUES (?, ?, 'pending', 0, NULL, ?, ?)`,
+      [surveyId, JSON.stringify(queuePayload), now, now]
+    );
+  }
+
+  let payloadJson: string | null = survey.payload_json ?? null;
   if (payloadJson) {
-    const parsed = safeParseJson(payloadJson);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const parsedPayload = safeParseJson(payloadJson);
+    if (parsedPayload && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload)) {
       payloadJson = JSON.stringify({
-        ...(parsed as Record<string, unknown>),
-        visibility: nextVisibility
+        ...(parsedPayload as Record<string, unknown>),
+        visibility
       });
     }
   }
@@ -1476,17 +1561,76 @@ export async function updateSurveyVisibility(
   await db.runAsync(
     `UPDATE local_surveys
      SET visibility = ?,
+         sync_state = 'pending',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
          payload_json = COALESCE(?, payload_json),
          updated_at = ?
      WHERE id = ?`,
-    [nextVisibility, payloadJson, updatedAt, surveyId]
+    [visibility, payloadJson, now, surveyId]
   );
 
-  return {
-    ok: true,
-    message: `Visibility updated to ${nextVisibility}`,
-    visibility: nextVisibility
-  };
+  return { changed: true };
+}
+
+export async function updateSurveyVisibility(
+  apiUrl: string,
+  accessToken: string,
+  surveyId: string,
+  visibility: 'private' | 'public'
+): Promise<{ ok: boolean; message: string; visibility?: 'private' | 'public'; queued: boolean; synced: boolean }> {
+  const db = await dbPromise;
+  const queued = await queueSurveyVisibilityChange(db, surveyId, visibility);
+  if (!queued.changed) {
+    return {
+      ok: true,
+      message: `Visibility already ${visibility}`,
+      visibility,
+      queued: false,
+      synced: false
+    };
+  }
+
+  if (!accessToken || accessToken.trim().length === 0) {
+    return {
+      ok: true,
+      message: `Visibility queued locally (${visibility}). Login and sync to push changes.`,
+      visibility,
+      queued: true,
+      synced: false
+    };
+  }
+
+  try {
+    const result = await syncPending(apiUrl, accessToken);
+    if (result.failed > 0) {
+      return {
+        ok: false,
+        message: `Visibility queued locally, but sync reported ${result.failed} failed operation(s)`,
+        visibility,
+        queued: true,
+        synced: false
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Visibility set to ${visibility} and synced`,
+      visibility,
+      queued: true,
+      synced: true
+    };
+  } catch (error) {
+    return {
+      ok: true,
+      message: `Visibility queued locally (${visibility}); sync pending (${(error as Error).message})`,
+      visibility,
+      queued: true,
+      synced: false
+    };
+  }
 }
 
 function isAttachmentQueuePayload(payload: unknown): payload is AttachmentQueuePayload {

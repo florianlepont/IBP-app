@@ -86,6 +86,7 @@ describe('filterAndSortSurveys', () => {
   const baseFilters: SurveyListFilters = {
     surveyQuery: '',
     statusFilter: 'all',
+    visibilityFilter: 'all',
     syncFilter: 'all',
     blockedFilter: 'all',
     attachmentFilter: 'all',
@@ -106,6 +107,16 @@ describe('filterAndSortSurveys', () => {
   test('filters by attachment presence', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
     const result = filterAndSortSurveys(surveys, { ...baseFilters, attachmentFilter: 'without' }, attachmentCounts);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('s-b');
+  });
+
+  test('filters by visibility', () => {
+    const attachmentCounts = buildAttachmentCountBySurvey(attachments);
+    const withVisibility = surveys.map((survey) =>
+      survey.id === 's-b' ? { ...survey, visibility: 'public' as const } : survey
+    );
+    const result = filterAndSortSurveys(withVisibility, { ...baseFilters, visibilityFilter: 'public' }, attachmentCounts);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('s-b');
   });
