@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Network from 'expo-network';
 import { getSubmitBlockReason } from '../app/survey-logic';
 import {
   AuthUser,
@@ -19,6 +20,7 @@ import {
 import {
   clearLocalIbpData,
   discardSurveyLocalChanges,
+  hasPendingSyncWork,
   LocalSurvey,
   pullRemoteChanges,
   queueDeleteAttachment,
@@ -66,6 +68,9 @@ const AUTH_REQUIRED_ERROR = 'AUTH_REQUIRED';
 const isUnauthorizedMessage = (message: string): boolean =>
   /(^|[^0-9])401([^0-9]|$)|unauthorized|auth_required/i.test(message);
 
+const isOnlineNetworkState = (state: Network.NetworkState): boolean =>
+  Boolean(state.isConnected) && (state.isInternetReachable ?? true);
+
 export function useSurveySync({
   apiUrl,
   email,
@@ -90,6 +95,9 @@ export function useSurveySync({
   const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null);
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({});
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null);
+  const syncInProgressRef = useRef(false);
+  const lastOnlineStateRef = useRef<boolean | null>(null);
+  const lastAutoSyncAtRef = useRef<number>(0);
 
   const setProfileFromUser = (user: AuthUser): void => {
     setCurrentUser(user);
@@ -503,6 +511,9 @@ export function useSurveySync({
 
     await refreshLocalAttachments();
     setStatus(`${source === 'camera' ? 'Camera photo' : 'Photo'} queued for survey ${surveyId}`);
+    if (lastOnlineStateRef.current === true) {
+      void maybeAutoSync('attachment-queued');
+    }
   };
 
   useEffect(() => {
@@ -607,23 +618,41 @@ export function useSurveySync({
     }
   };
 
-  const handleSync = async (): Promise<void> => {
+  const runSync = useCallback(async (mode: 'manual' | 'auto', trigger?: string): Promise<void> => {
+    if (syncInProgressRef.current) {
+      if (mode === 'manual') {
+        setStatus('Sync already in progress...');
+      }
+      return;
+    }
+
+    syncInProgressRef.current = true;
     try {
-      setStatus('Sync in progress...');
+      if (mode === 'manual') {
+        setStatus('Sync in progress...');
+      } else {
+        setStatus(`Back online. Auto-sync in progress${trigger ? ` (${trigger})` : ''}...`);
+      }
       const result = await withAuthRetry((token) => syncPending(apiUrl, token));
       await refreshLocalSurveys();
       await refreshLocalAttachments();
       setStatus(
-        `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`
+        `${mode === 'manual' ? 'Sync complete' : 'Auto-sync complete'}: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`
       );
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession();
-        setStatus('Login required before sync');
+        setStatus(mode === 'manual' ? 'Login required before sync' : 'Auto-sync paused: login required');
         return;
       }
-      setStatus(`Sync error: ${(error as Error).message}`);
+      setStatus(mode === 'manual' ? `Sync error: ${(error as Error).message}` : `Auto-sync error: ${(error as Error).message}`);
+    } finally {
+      syncInProgressRef.current = false;
     }
+  }, [apiUrl, clearSession, refreshLocalAttachments, refreshLocalSurveys, withAuthRetry]);
+
+  const handleSync = async (): Promise<void> => {
+    await runSync('manual');
   };
 
   const handlePullChanges = async (): Promise<void> => {
@@ -642,6 +671,29 @@ export function useSurveySync({
       setStatus(`Pull error: ${(error as Error).message}`);
     }
   };
+
+  const maybeAutoSync = useCallback(
+    async (trigger: string): Promise<void> => {
+      if (!(accessToken || refreshToken)) {
+        return;
+      }
+
+      const cooldownMs = 15_000;
+      const now = Date.now();
+      if (now - lastAutoSyncAtRef.current < cooldownMs) {
+        return;
+      }
+
+      const hasWork = await hasPendingSyncWork();
+      if (!hasWork) {
+        return;
+      }
+
+      lastAutoSyncAtRef.current = now;
+      await runSync('auto', trigger);
+    },
+    [accessToken, refreshToken, runSync]
+  );
 
   const handleDebugResetIbpData = async (): Promise<void> => {
     Alert.alert('Debug reset IBP data', 'This will delete all IBP surveys/events/attachments on server and clear local IBP data.', [
@@ -877,6 +929,9 @@ export function useSurveySync({
                 onCloseSurveyDetail();
               }
               setStatus(result.queued_delete ? `Deletion queued for ${surveyId}` : `Survey not found: ${surveyId}`);
+              if (result.queued_delete && lastOnlineStateRef.current === true) {
+                void maybeAutoSync('survey-delete-queued');
+              }
             })
             .catch((error) => setStatus(`Delete error: ${(error as Error).message}`));
         }
@@ -1103,6 +1158,59 @@ export function useSurveySync({
       setStatus('Logged out');
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const handleNetworkState = (state: Network.NetworkState): void => {
+      const online = isOnlineNetworkState(state);
+      const wasOnline = lastOnlineStateRef.current;
+      lastOnlineStateRef.current = online;
+
+      if (online && wasOnline === false) {
+        void maybeAutoSync('reconnected');
+      }
+    };
+
+    void Network.getNetworkStateAsync()
+      .then((state) => {
+        if (!mounted) return;
+        handleNetworkState(state);
+        if (isOnlineNetworkState(state)) {
+          void maybeAutoSync('startup');
+        }
+      })
+      .catch(() => undefined);
+
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (!mounted) return;
+      handleNetworkState(state);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [maybeAutoSync]);
+
+  useEffect(() => {
+    if (!(accessToken || refreshToken)) {
+      return;
+    }
+    if (lastOnlineStateRef.current === true) {
+      void maybeAutoSync('auth-ready');
+    }
+  }, [accessToken, refreshToken, maybeAutoSync]);
+
+  useEffect(() => {
+    if (!(accessToken || refreshToken)) {
+      return;
+    }
+    if (lastOnlineStateRef.current !== true) {
+      return;
+    }
+    void maybeAutoSync('local-queue-updated');
+  }, [surveys, accessToken, refreshToken, maybeAutoSync]);
 
   useEffect(() => {
     if (!selectedSurveyId || !accessToken) {
