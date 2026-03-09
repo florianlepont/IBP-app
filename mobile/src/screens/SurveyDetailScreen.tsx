@@ -1,5 +1,7 @@
-import { Alert, Button, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker } from 'react-native-maps';
 import { formatDateTime, formatEventPayload, formatPoints, formatRemainingTime, isLessThan24HoursRemaining, resolveSubmissionDeadline } from '../app/formatters';
 import { styles } from '../app/styles';
 import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from '../app/types';
@@ -87,8 +89,15 @@ const resolveGpsCoordinates = (location?: Record<string, unknown>): { lat: numbe
   return { lat, lng };
 };
 
-const buildMapPreviewUrl = (lat: number, lng: number): string =>
-  `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(`${lat},${lng}`)}&zoom=14&size=900x480&markers=${encodeURIComponent(`${lat},${lng},red-pushpin`)}`;
+const hasLocationContent = (location?: Record<string, unknown>): boolean => {
+  if (!location || typeof location !== 'object') return false;
+  return Object.values(location).some((value) => {
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value === 'boolean') return true;
+    return value !== null && value !== undefined;
+  });
+};
 
 type ActionButtonVariant = 'neutral' | 'primary' | 'danger' | 'success';
 
@@ -170,10 +179,27 @@ export function SurveyDetailScreen({
   const canonicalFactorEntries = detail
     ? Object.entries(detail.factor_results).sort(([left], [right]) => left.localeCompare(right))
     : [];
-  const mediaSlideWidth = Math.max(280, viewportWidth - 52);
-  const gpsCoordinates = resolveGpsCoordinates(detail?.location);
+  const mediaSlideWidth = Math.max(300, viewportWidth - 36);
+  const localLocation = selectedSurvey.location;
+  const effectiveLocation = hasLocationContent(localLocation) ? localLocation : detail?.location;
+  const gpsCoordinates = resolveGpsCoordinates(effectiveLocation);
   const hasMapPreview = gpsCoordinates !== null;
-  const hasMediaSlides = hasMapPreview || photoAttachments.length > 0;
+  const mediaSlides = useMemo<Array<{ key: string; type: 'map' } | { key: string; type: 'photo'; attachment: LocalAttachment }>>(() => {
+    const slides: Array<{ key: string; type: 'map' } | { key: string; type: 'photo'; attachment: LocalAttachment }> = [];
+    if (hasMapPreview) {
+      slides.push({ key: `map-${selectedSurvey.id}`, type: 'map' });
+    }
+    for (const attachment of photoAttachments) {
+      slides.push({ key: `photo-${attachment.id}`, type: 'photo', attachment });
+    }
+    return slides;
+  }, [hasMapPreview, selectedSurvey.id, photoAttachments]);
+  const hasMediaSlides = mediaSlides.length > 0;
+  const [mediaPageIndex, setMediaPageIndex] = useState(0);
+
+  useEffect(() => {
+    setMediaPageIndex(0);
+  }, [selectedSurvey.id, mediaSlides.length]);
 
   const handleAddPicture = (): void => {
     if (selectedSurvey.status === 'submitted') {
@@ -222,6 +248,14 @@ export function SurveyDetailScreen({
     ]);
   };
 
+  const handleMediaScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    if (mediaSlides.length <= 1) return;
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const nextIndex = Math.round(offsetX / mediaSlideWidth);
+    const safeIndex = Math.max(0, Math.min(mediaSlides.length - 1, nextIndex));
+    setMediaPageIndex(safeIndex);
+  };
+
   return (
     <ScrollView style={styles.mainScroll} contentContainerStyle={styles.detailScreenContent}>
       <View style={styles.detailCard}>
@@ -233,41 +267,72 @@ export function SurveyDetailScreen({
         {surveyDetailTab !== 'debug' ? (
           hasMediaSlides ? (
             <View style={styles.mediaHeroSection}>
-              <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.mediaHeroCarousel}>
-                {hasMapPreview ? (
-                  <View style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
-                    <Image
-                      source={{ uri: buildMapPreviewUrl(gpsCoordinates.lat, gpsCoordinates.lng) }}
-                      style={styles.mediaHeroImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.mediaHeroCaption}>
-                      <Ionicons name="map-outline" size={14} color="#254a6d" />
-                      <Text style={styles.mediaHeroCaptionText}>Map preview</Text>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.mediaHeroCarousel}
+                decelerationRate="fast"
+                snapToInterval={mediaSlideWidth}
+                disableIntervalMomentum
+                onMomentumScrollEnd={handleMediaScrollEnd}
+              >
+                {mediaSlides.map((slide) =>
+                  slide.type === 'map' ? (
+                    <View key={slide.key} style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
+                      <MapView
+                        style={styles.mediaHeroMap}
+                        initialRegion={{
+                          latitude: gpsCoordinates?.lat ?? 0,
+                          longitude: gpsCoordinates?.lng ?? 0,
+                          latitudeDelta: 0.01,
+                          longitudeDelta: 0.01
+                        }}
+                        scrollEnabled={false}
+                        zoomEnabled={false}
+                        rotateEnabled={false}
+                        pitchEnabled={false}
+                      >
+                        {gpsCoordinates ? <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} /> : null}
+                      </MapView>
+                      <View style={styles.mediaHeroCaption}>
+                        <Ionicons name="map-outline" size={14} color="#254a6d" />
+                        <Text style={styles.mediaHeroCaptionText}>Map</Text>
+                      </View>
                     </View>
-                  </View>
-                ) : null}
-
-                {photoAttachments.map((attachment) => (
-                  <View key={`hero-photo-${attachment.id}`} style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
-                    <Image source={{ uri: attachment.local_uri ?? undefined }} style={styles.mediaHeroImage} resizeMode="cover" />
-                    <View style={styles.mediaHeroCaption}>
-                      <Ionicons name="image-outline" size={14} color="#254a6d" />
-                      <Text style={styles.mediaHeroCaptionText}>Photo</Text>
+                  ) : (
+                    <View key={slide.key} style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
+                      <Image source={{ uri: slide.attachment.local_uri ?? undefined }} style={styles.mediaHeroImage} resizeMode="cover" />
+                      <View style={styles.mediaHeroCaption}>
+                        <Ionicons name="image-outline" size={14} color="#254a6d" />
+                        <Text style={styles.mediaHeroCaptionText}>Photo</Text>
+                      </View>
+                      <Pressable
+                        style={[styles.mediaDeletePictureButton, selectedSurvey.status === 'submitted' ? styles.mediaDeletePictureButtonDisabled : null]}
+                        onPress={() => handleDeletePicture(slide.attachment.id)}
+                        disabled={selectedSurvey.status === 'submitted'}
+                      >
+                        <Ionicons name="trash-outline" size={13} color={selectedSurvey.status === 'submitted' ? '#8a9caf' : '#8f3737'} />
+                        <Text style={[styles.mediaDeletePictureButtonText, selectedSurvey.status === 'submitted' ? styles.mediaDeletePictureButtonTextDisabled : null]}>
+                          Delete
+                        </Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      style={[styles.mediaDeletePictureButton, selectedSurvey.status === 'submitted' ? styles.mediaDeletePictureButtonDisabled : null]}
-                      onPress={() => handleDeletePicture(attachment.id)}
-                      disabled={selectedSurvey.status === 'submitted'}
-                    >
-                      <Ionicons name="trash-outline" size={13} color={selectedSurvey.status === 'submitted' ? '#8a9caf' : '#8f3737'} />
-                      <Text style={[styles.mediaDeletePictureButtonText, selectedSurvey.status === 'submitted' ? styles.mediaDeletePictureButtonTextDisabled : null]}>
-                        Delete
-                      </Text>
-                    </Pressable>
-                  </View>
-                ))}
+                  )
+                )}
               </ScrollView>
+              {mediaSlides.length > 1 ? (
+                <View style={styles.mediaPagerRow}>
+                  <View style={styles.mediaDotsRow}>
+                    {mediaSlides.map((slide, index) => (
+                      <View key={`dot-${slide.key}`} style={[styles.mediaDot, index === mediaPageIndex ? styles.mediaDotActive : null]} />
+                    ))}
+                  </View>
+                  <Text style={styles.mediaPagerLabel}>
+                    {mediaPageIndex + 1}/{mediaSlides.length}
+                  </Text>
+                </View>
+              ) : null}
 
               {selectedSurvey.status !== 'submitted' ? (
                 <Pressable style={styles.mediaAddPictureButton} onPress={handleAddPicture}>
@@ -305,7 +370,7 @@ export function SurveyDetailScreen({
 
           <View style={styles.locationCard}>
             <Text style={styles.detailTitle}>Location</Text>
-            <Text style={styles.rowMeta}>{formatLocationSummary(detail?.location)}</Text>
+            <Text style={styles.rowMeta}>{formatLocationSummary(effectiveLocation)}</Text>
           </View>
 
           <View style={styles.factorTilesCard}>

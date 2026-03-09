@@ -14,6 +14,7 @@ export type LocalSurvey = {
   created_at: string;
   updated_at: string;
   completion_rate: number;
+  location?: Record<string, unknown>;
 };
 
 export type LocalAttachment = {
@@ -401,7 +402,8 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     sync_blocked: 0,
     created_at: now,
     updated_at: now,
-    completion_rate: computeCompletionRate('draft', payload)
+    completion_rate: computeCompletionRate('draft', payload),
+    location: (payload.location as Record<string, unknown> | undefined) ?? {}
   };
 }
 
@@ -689,14 +691,15 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
     sync_blocked: 0,
     created_at: existing.created_at ?? now,
     updated_at: now,
-    completion_rate: computeCompletionRate('draft', nextPayload)
+    completion_rate: computeCompletionRate('draft', nextPayload),
+    location: (nextPayload.location as Record<string, unknown> | undefined) ?? {}
   };
 }
 
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
   const db = await dbPromise;
   const rows = await db.getAllAsync<
-    Omit<LocalSurvey, 'completion_rate'> & {
+    Omit<LocalSurvey, 'completion_rate' | 'location'> & {
       payload_json: string | null;
     }
   >(
@@ -709,7 +712,8 @@ export async function listLocalSurveys(): Promise<LocalSurvey[]> {
     const { payload_json: _payloadJson, ...rest } = row;
     return {
       ...rest,
-      completion_rate: computeCompletionRate(row.status, payload)
+      completion_rate: computeCompletionRate(row.status, payload),
+      location: (payload?.location as Record<string, unknown> | undefined) ?? {}
     };
   });
 }

@@ -201,7 +201,6 @@ export const styles = StyleSheet.create({
   },
   mediaHeroSlide: {
     width: 320,
-    marginRight: 10,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
@@ -210,8 +209,39 @@ export const styles = StyleSheet.create({
   },
   mediaHeroImage: {
     width: '100%',
-    height: 200,
+    height: 250,
     backgroundColor: '#d7e2ee'
+  },
+  mediaHeroMap: {
+    width: '100%',
+    height: 250,
+    backgroundColor: '#d7e2ee'
+  },
+  mediaPagerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2
+  },
+  mediaDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  mediaDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+    backgroundColor: '#ccdae8'
+  },
+  mediaDotActive: {
+    width: 18,
+    backgroundColor: '#2d6fb5'
+  },
+  mediaPagerLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3a5f83'
   },
   mediaHeroCaption: {
     flexDirection: 'row',
@@ -297,6 +327,202 @@ export const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
     backgroundColor: '#fbfdff'
+  },
+  formLocationSection: {
+    gap: 8
+  },
+  formMapCard: {
+    borderWidth: 1,
+    borderColor: '#dbe7f4',
+    borderRadius: 14,
+    padding: 10,
+    marginHorizontal: -6,
+    gap: 6,
+    backgroundColor: '#f8fbff'
+  },
+  formMapFrame: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden'
+  },
+  formMap: {
+    width: '100%',
+    height: 360,
+    backgroundColor: '#dbe7f4'
+  },
+  locationCurrentMapButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#1f68a3',
+    backgroundColor: '#2d7fc4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: '#0f3d63',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 4
+  },
+  locationCurrentMapButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff'
+  },
+  locationAddressCard: {
+    borderWidth: 1,
+    borderColor: '#c9def3',
+    borderRadius: 10,
+    backgroundColor: '#eef6ff',
+    padding: 10,
+    gap: 4
+  },
+  locationAddressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  locationAddressLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1f5d8e'
+  },
+  locationAddressValue: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#1b486f'
+  },
+  factorSectionCard: {
+    borderWidth: 1,
+    borderColor: '#dbe7f4',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#f9fcff'
+  },
+  factorSectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  formFactorTilesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  formFactorTile: {
+    width: '31%',
+    minWidth: 92,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 8,
+    gap: 5
+  },
+  formFactorTileComplete: {
+    borderColor: '#a9d5be',
+    backgroundColor: '#effaf4'
+  },
+  formFactorTileIncomplete: {
+    borderColor: '#d3e1ef',
+    backgroundColor: '#ffffff'
+  },
+  formFactorTileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  formFactorTileTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#214b73'
+  },
+  formFactorTileMeta: {
+    fontSize: 11,
+    color: '#4e6b88'
+  },
+  factorDetailHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  factorDetailBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c8d9eb',
+    backgroundColor: '#eef5ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  factorDetailBackText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1e4f79'
+  },
+  factorDetailProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3a5f83'
+  },
+  factorDetailTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#12304f'
+  },
+  factorExplainBanner: {
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+    backgroundColor: '#e8f2ff',
+    borderWidth: 1,
+    borderColor: '#c3d9f2'
+  },
+  factorExplainBannerTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1f4f79',
+    textTransform: 'uppercase'
+  },
+  factorExplainBannerText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#234f77'
+  },
+  factorHintCard: {
+    borderWidth: 1,
+    borderColor: '#dbe7f4',
+    borderRadius: 10,
+    backgroundColor: '#f7fbff',
+    padding: 10,
+    gap: 4
+  },
+  factorHintTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#214b73'
+  },
+  factorHintText: {
+    fontSize: 12,
+    color: '#4b6784'
+  },
+  factorDetailFieldsCard: {
+    borderWidth: 1,
+    borderColor: '#dbe7f4',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    padding: 10,
+    gap: 10
+  },
+  factorDetailFieldBlock: {
+    gap: 4
   },
   factorTilesCard: {
     borderWidth: 1,
