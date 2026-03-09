@@ -78,7 +78,6 @@ export function SurveyFormScreen({
 }: SurveyFormScreenProps) {
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{screen === 'edit' ? 'Edit survey (dedicated view)' : 'Create survey (dedicated view)'}</Text>
       {screen === 'edit' && editingSurveyId ? <Text style={styles.meta}>Survey id: {editingSurveyId}</Text> : null}
       <Text style={styles.rowMeta}>Fields marked with * are required for submit.</Text>
 

@@ -54,7 +54,7 @@ export type SurveyDetailResponse = {
   };
 };
 
-export type SurveyDetailTab = 'summary' | 'factors' | 'photos' | 'events';
+export type SurveyDetailTab = 'summary' | 'events' | 'debug';
 
 export type SurveyEventItem = {
   id: string;

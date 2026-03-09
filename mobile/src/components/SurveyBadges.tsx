@@ -4,10 +4,9 @@ import { LocalSurvey } from '../storage';
 
 type SurveyBadgesProps = {
   survey: LocalSurvey;
-  attachmentCount: number;
 };
 
-export function SurveyBadges({ survey, attachmentCount }: SurveyBadgesProps) {
+export function SurveyBadges({ survey }: SurveyBadgesProps) {
   const isSubmitted = survey.status === 'submitted';
 
   return (
@@ -32,9 +31,6 @@ export function SurveyBadges({ survey, attachmentCount }: SurveyBadgesProps) {
       </View>
       <View style={[styles.badge, styles.badgeNeutral]}>
         <Text style={styles.badgeText}>visibility: {survey.visibility}</Text>
-      </View>
-      <View style={[styles.badge, styles.badgeNeutral]}>
-        <Text style={styles.badgeText}>photos: {attachmentCount}</Text>
       </View>
       {survey.sync_blocked === 1 ? (
         <View style={[styles.badge, styles.badgeBlocked]}>
