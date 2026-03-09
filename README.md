@@ -228,3 +228,22 @@ Implemented:
 
 Reference spec:
 - `specifications/technical/sync-conflict-resolution-v1.md`
+
+## Step 16 Survey Deletion End-to-End (Current)
+Implemented:
+- API survey deletion endpoint:
+  - `DELETE /v1/surveys/:id` (soft delete, idempotent `204`)
+- Sync batch supports survey deletion:
+  - `entity=survey`, `action=delete`
+- Deleting a survey now:
+  - sets `surveys.deleted_at`
+  - marks linked attachments deleted
+  - emits `deleted` audit event
+- Mobile:
+  - per-survey action: `Delete survey` (confirmation dialog)
+  - local purge + queued remote delete operation for offline-first behavior
+- Downsync:
+  - deleted surveys purge local surveys, attachments, and pending queue rows
+- e2e coverage:
+  - direct delete endpoint behavior
+  - survey delete operation via `/v1/sync`

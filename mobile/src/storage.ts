@@ -64,6 +64,11 @@ type SurveyQueuePayload = {
   expires_at?: string;
 };
 
+type SurveyDeleteQueuePayload = {
+  kind: 'survey_delete';
+  survey_id: string;
+};
+
 type UploadTargetResponse = {
   attachment_id: string;
   storage_key: string;
@@ -74,7 +79,7 @@ type UploadTargetResponse = {
 type SyncBatchOperation = {
   client_ref: string;
   entity: 'survey' | 'attachment';
-  action: 'upsert' | 'create';
+  action: 'upsert' | 'create' | 'delete';
   survey_id?: string;
   payload: Record<string, unknown>;
 };
@@ -313,6 +318,42 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
   };
 }
 
+export async function queueDeleteSurvey(surveyId: string): Promise<{ queued_delete: boolean }> {
+  const db = await dbPromise;
+  const now = new Date().toISOString();
+
+  const survey = await db.getFirstAsync<Pick<LocalSurvey, 'id' | 'sync_state'>>(
+    `SELECT id, sync_state
+     FROM local_surveys
+     WHERE id = ?`,
+    [surveyId]
+  );
+
+  if (!survey?.id) {
+    return { queued_delete: false };
+  }
+
+  await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ?`, [surveyId]);
+
+  // Keep remote state consistent even for unknown sync history by issuing an idempotent delete op.
+  const payload: SurveyDeleteQueuePayload = {
+    kind: 'survey_delete',
+    survey_id: surveyId
+  };
+
+  await db.runAsync(
+    `INSERT INTO sync_queue (survey_id, payload, status, retry_count, next_retry_at, created_at, updated_at)
+     VALUES (?, ?, 'pending', 0, NULL, ?, ?)`,
+    [surveyId, JSON.stringify(payload), now, now]
+  );
+
+  // Immediate local purge; server deletion will complete asynchronously.
+  await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [surveyId]);
+  await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [surveyId]);
+
+  return { queued_delete: true };
+}
+
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
   const db = await dbPromise;
   const rows = await db.getAllAsync<LocalSurvey>(
@@ -360,7 +401,7 @@ export async function syncPending(
 
   let synced = 0;
   let failed = 0;
-  const operationRows = new Map<string, { row: QueueRow; payload: SurveyQueuePayload | AttachmentQueuePayload }>();
+  const operationRows = new Map<string, { row: QueueRow; payload: SurveyQueuePayload | AttachmentQueuePayload | SurveyDeleteQueuePayload }>();
   const operations: SyncBatchOperation[] = [];
   const uploadOnlyRows: Array<{ row: QueueRow; payload: AttachmentQueuePayload; target: UploadTargetResponse }> = [];
 
@@ -408,6 +449,21 @@ export async function syncPending(
         entity: 'survey',
         action: 'upsert',
         payload: parsedPayload
+      });
+      continue;
+    }
+
+    if (isSurveyDeleteQueuePayload(parsedPayload)) {
+      const clientRef = String(row.id);
+      operationRows.set(clientRef, { row, payload: parsedPayload });
+      operations.push({
+        client_ref: clientRef,
+        entity: 'survey',
+        action: 'delete',
+        survey_id: parsedPayload.survey_id,
+        payload: {
+          id: parsedPayload.survey_id
+        }
       });
       continue;
     }
@@ -489,7 +545,11 @@ export async function syncPending(
             await handleAttachmentSyncFailure(db, linked.row, linked.payload, (error as Error).message);
           }
         } else {
-          await markSurveyQueueRowSynced(db, linked.row);
+          if (isSurveyDeleteQueuePayload(linked.payload)) {
+            await markSurveyDeleteRowSynced(db, linked.row);
+          } else {
+            await markSurveyQueueRowSynced(db, linked.row);
+          }
           synced += 1;
         }
         continue;
@@ -676,6 +736,12 @@ async function markSurveyQueueRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow
   );
 }
 
+async function markSurveyDeleteRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow): Promise<void> {
+  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id]);
+  await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [row.survey_id]);
+  await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [row.survey_id]);
+}
+
 async function uploadAttachmentAndMarkSynced(
   db: SQLite.SQLiteDatabase,
   row: QueueRow,
@@ -780,6 +846,14 @@ function isSurveyQueuePayload(payload: unknown): payload is SurveyQueuePayload {
   );
 }
 
+function isSurveyDeleteQueuePayload(payload: unknown): payload is SurveyDeleteQueuePayload {
+  if (!payload || typeof payload !== 'object') return false;
+  return (
+    (payload as { kind?: string }).kind === 'survey_delete' &&
+    typeof (payload as { survey_id?: string }).survey_id === 'string'
+  );
+}
+
 async function getLocalAttachmentById(
   db: SQLite.SQLiteDatabase,
   localAttachmentId: string
@@ -849,16 +923,15 @@ async function applyRemoteChanges(
 
   for (const survey of surveys) {
     if (!survey?.id) continue;
-
-    const pendingQueue = await hasPendingQueueForSurvey(db, survey.id);
     if (survey.deleted_at) {
-      if (!pendingQueue) {
-        await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [survey.id]);
-      }
-      await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ? AND sync_state = 'synced'`, [survey.id]);
+      await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ?`, [survey.id]);
+      await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [survey.id]);
+      await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [survey.id]);
       appliedSurveys += 1;
       continue;
     }
+
+    const pendingQueue = await hasPendingQueueForSurvey(db, survey.id);
 
     const existing = await db.getFirstAsync<{ id: string; sync_state: string }>(
       `SELECT id, sync_state FROM local_surveys WHERE id = ?`,

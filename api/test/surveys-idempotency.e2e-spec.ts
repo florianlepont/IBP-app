@@ -364,6 +364,64 @@ describe('Surveys idempotency (e2e)', () => {
     expect(eventTypes).toContain('attachment_deleted');
   });
 
+  it('soft-deletes survey via DELETE /v1/surveys/:id and records deleted event', async () => {
+    const email = `e2e-survey-delete-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-survey-delete-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Delete Forest',
+        status: 'draft',
+        visibility: 'private',
+        factors: {},
+        scores: {},
+        location: {}
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(204);
+
+    await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(404);
+
+    const listed = await request(app.getHttpServer())
+      .get('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect((listed.body.items as Array<{ id: string }>).some((survey) => survey.id === surveyId)).toBe(false);
+
+    const changes = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .query({ limit: 100 })
+      .expect(200);
+
+    const deletedEvent = (changes.body.events as Array<{ survey_id: string; event_type: string }>).find(
+      (event) => event.survey_id === surveyId && event.event_type === 'deleted'
+    );
+    expect(deletedEvent).toBeTruthy();
+
+    const deletedSurvey = (changes.body.surveys as Array<{ id: string; deleted_at: string | null }>).find(
+      (survey) => survey.id === surveyId
+    );
+    expect(deletedSurvey?.deleted_at).toBeTruthy();
+  });
+
   it('processes mixed operations via POST /v1/sync', async () => {
     const email = `e2e-sync-batch-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())
@@ -429,6 +487,63 @@ describe('Surveys idempotency (e2e)', () => {
       status: 'fatal_error'
     });
     expect(response.body.results[1].error.http_status).toBe(400);
+  });
+
+  it('processes survey delete operation via POST /v1/sync', async () => {
+    const email = `e2e-sync-delete-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-sync-delete-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Sync Delete Forest',
+        status: 'draft',
+        visibility: 'private',
+        factors: {},
+        scores: {},
+        location: {}
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        operations: [
+          {
+            client_ref: 'op-delete-survey',
+            entity: 'survey',
+            action: 'delete',
+            survey_id: surveyId,
+            payload: { id: surveyId }
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(response.body.results).toHaveLength(1);
+    expect(response.body.results[0]).toMatchObject({
+      client_ref: 'op-delete-survey',
+      entity: 'survey',
+      action: 'delete',
+      status: 'synced'
+    });
+    expect(response.body.results[0].data.id).toBe(surveyId);
+    expect(response.body.results[0].data.deleted_at).toBeTruthy();
+
+    await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(404);
   });
 
   it('returns sync_version_conflict details in POST /v1/sync result', async () => {

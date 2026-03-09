@@ -32,7 +32,7 @@ export type CreateAttachmentBody = {
 export type SyncOperation = {
   client_ref?: string;
   entity?: 'survey' | 'attachment';
-  action?: 'upsert' | 'create';
+  action?: 'upsert' | 'create' | 'delete';
   survey_id?: string;
   payload?: unknown;
 };

@@ -38,6 +38,12 @@ export class SurveysController {
     return this.surveysService.submitSurvey(user, id);
   }
 
+  @Delete(':id')
+  @HttpCode(204)
+  async deleteSurvey(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    await this.surveysService.deleteSurvey(user, id, { allowMissing: true });
+  }
+
   @Post(':id/attachments')
   async createAttachment(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() body: CreateAttachmentBody) {
     return this.surveysService.createAttachment(user, id, body);

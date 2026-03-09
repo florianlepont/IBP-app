@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Image,
   Platform,
@@ -21,6 +22,7 @@ import {
   LocalSurvey,
   pullRemoteChanges,
   queueLocalAttachment,
+  queueDeleteSurvey,
   retrySurveyNow,
   discardSurveyLocalChanges,
   submitSurvey,
@@ -279,6 +281,29 @@ export default function App() {
     }
   };
 
+  const confirmDeleteSurvey = (surveyId: string): void => {
+    Alert.alert(
+      'Delete survey',
+      'This will remove the survey locally and queue remote deletion.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            queueDeleteSurvey(surveyId)
+              .then(async (result) => {
+                await refreshLocalSurveys();
+                await refreshLocalAttachments();
+                setStatus(result.queued_delete ? `Deletion queued for ${surveyId}` : `Survey not found: ${surveyId}`);
+              })
+              .catch((error) => setStatus(`Delete error: ${(error as Error).message}`));
+          }
+        }
+      ]
+    );
+  };
+
   const guessMimeType = (uri: string): string => {
     const normalized = uri.toLowerCase();
     if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
@@ -511,6 +536,8 @@ export default function App() {
               ) : null}
               <View style={styles.miniSpacer} />
               <Button title="Attach photo (queue)" onPress={() => handleQueueAttachment(survey.id)} />
+              <View style={styles.miniSpacer} />
+              <Button title="Delete survey" onPress={() => confirmDeleteSurvey(survey.id)} />
               <View style={styles.miniSpacer} />
               {survey.sync_state === 'failed' ? (
                 <Button title="Retry now" onPress={() => handleRetrySurvey(survey.id)} />

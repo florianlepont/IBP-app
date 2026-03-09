@@ -257,6 +257,9 @@ Soft-delete a survey.
 
 Response `204`.
 
+Notes:
+- Idempotent in V1: returns `204` even if survey was already deleted or not found.
+
 ### GET /surveys/{id}/events
 Get survey audit trail events.
 
@@ -355,6 +358,15 @@ Request:
         "mime_type": "image/jpeg",
         "size_bytes": 2450000
       }
+    },
+    {
+      "client_ref": "queue-103",
+      "entity": "survey",
+      "action": "delete",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "payload": {
+        "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c"
+      }
     }
   ]
 }
@@ -390,6 +402,18 @@ Response `200`:
     {
       "client_ref": "queue-103",
       "entity": "survey",
+      "action": "delete",
+      "status": "synced",
+      "data": {
+        "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+        "deleted_at": "2026-03-09T11:00:00Z",
+        "already_deleted": false,
+        "missing": false
+      }
+    },
+    {
+      "client_ref": "queue-104",
+      "entity": "survey",
       "action": "upsert",
       "status": "fatal_error",
       "error": {
@@ -406,6 +430,10 @@ Response `200`:
 Rules:
 - Batch size max in V1: `100` operations.
 - Each operation is processed independently.
+- Supported operation set in V1:
+  - `survey.upsert`
+  - `survey.delete`
+  - `attachment.create`
 - `status` can be:
   - `synced`
   - `retryable_error` (typically `429` or `5xx`)
