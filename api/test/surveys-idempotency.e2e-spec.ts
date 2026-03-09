@@ -194,4 +194,60 @@ describe('Surveys idempotency (e2e)', () => {
       ibp_total: 32
     });
   });
+
+  it('exposes canonical factor_results on survey detail endpoint', async () => {
+    const email = `e2e-canonical-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-canonical-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Canonical Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: { native_genus_count: 4 },
+          B: { strata_count: 2, covered_autochthonous_percent: 100 },
+          C: { bmg_count: 0, bmm_count: 0, surface_ha: 1 },
+          D: { bmg_count: 0, bmm_count: 0, surface_ha: 1 },
+          E: { tgb_count: 0, gb_count: 0, surface_ha: 1 },
+          F: { trees_per_ha: 1 },
+          G: { open_flowering_percent: 0.5 },
+          H: { class_score: 2 },
+          I: { type_count: 1 },
+          J: { type_count: 0 }
+        },
+        location: {}
+      })
+      .expect(201);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(detail.body.id).toBe(surveyId);
+    expect(detail.body.factor_results).toBeTruthy();
+    expect(detail.body.factor_results.A).toMatchObject({
+      factor_id: 'factor_a',
+      selected_class: 'S2',
+      score_points: 2
+    });
+    expect(detail.body.factor_results.G).toMatchObject({
+      factor_id: 'factor_g',
+      selected_class: 'S2',
+      score_points: 2
+    });
+  });
 });

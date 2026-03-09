@@ -153,7 +153,9 @@ Response `200`:
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
   "server_status": "synced",
-  "updated_at": "2026-03-08T12:00:00Z"
+  "updated_at": "2026-03-08T12:00:00Z",
+  "warnings": [],
+  "factor_results": {}
 }
 ```
 
@@ -179,13 +181,48 @@ Response `200`:
 ### GET /surveys/{id}
 Get one survey with full payload.
 
-### PATCH /surveys/{id}/visibility
-Update survey visibility.
+Response `200`:
+```json
+{
+  "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+  "site_name": "Foret de Rambouillet",
+  "status": "draft",
+  "visibility": "private",
+  "region_version": "ACA",
+  "vegetation_stage": "collineen",
+  "factors": {},
+  "factor_results": {},
+  "scores": {
+    "ibp_peuplement_gestion": 20,
+    "ibp_contexte": 8,
+    "ibp_total": 28
+  },
+  "location": { "lat": 48.643, "lng": 1.829 },
+  "created_at": "2026-03-08T11:00:00Z",
+  "updated_at": "2026-03-08T12:00:00Z",
+  "submitted_at": null,
+  "expires_at": "2026-03-15T10:00:00Z",
+  "sync_version": 3
+}
+```
+
+### PATCH /surveys/{id}
+Partially update survey fields.
 
 Request:
 ```json
 {
-  "visibility": "public"
+  "site_name": "Foret de Rambouillet - Secteur Nord",
+  "visibility": "public",
+  "region_version": "ACA",
+  "vegetation_stage": "collineen",
+  "factors": {},
+  "scores": {
+    "ibp_peuplement_gestion": 20,
+    "ibp_contexte": 8,
+    "ibp_total": 28
+  },
+  "location": { "lat": 48.643, "lng": 1.829 }
 }
 ```
 
@@ -193,7 +230,7 @@ Response `200`:
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
-  "visibility": "public"
+  "updated_at": "2026-03-08T12:15:00Z"
 }
 ```
 
@@ -205,7 +242,13 @@ Response `200`:
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
   "status": "submitted",
-  "submitted_at": "2026-03-08T12:20:00Z"
+  "submitted_at": "2026-03-08T12:20:00Z",
+  "scores": {
+    "ibp_peuplement_gestion": 20,
+    "ibp_contexte": 8,
+    "ibp_total": 28
+  },
+  "warnings": []
 }
 ```
 

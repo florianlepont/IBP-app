@@ -37,6 +37,25 @@ type LoginResponse = {
 };
 
 type FactorKey = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
+type FactorClass = 'S0' | 'S1' | 'S2' | 'S5';
+
+type FactorCanonical = {
+  factor_id: string;
+  observed_value_raw: unknown;
+  selected_class: FactorClass;
+  score_points: number;
+  warnings: string[];
+};
+
+type SurveyDetailResponse = {
+  id: string;
+  factor_results: Record<string, FactorCanonical>;
+  scores: {
+    ibp_peuplement_gestion: number;
+    ibp_contexte: number;
+    ibp_total: number;
+  };
+};
 
 const HELP_BY_FACTOR: Record<FactorKey, string> = {
   A: 'Native tree taxa. Enter the observed count of native genera in the stand.',
@@ -75,6 +94,7 @@ export default function App() {
   const [accessToken, setAccessToken] = useState('');
   const [profile, setProfile] = useState<string>('Not logged in');
   const [surveys, setSurveys] = useState<LocalSurvey[]>([]);
+  const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
   const [status, setStatus] = useState<string>('Ready');
 
   const refreshLocalSurveys = async (): Promise<void> => {
@@ -193,6 +213,49 @@ export default function App() {
     await refreshLocalSurveys();
     setStatus(result.ok ? `Submitted ${candidate.id}` : `Submit failed: ${result.message}`);
   };
+
+  const handleLoadCanonicalDetails = async (surveyId: string): Promise<void> => {
+    if (!accessToken) {
+      setStatus('Login required before loading canonical details');
+      return;
+    }
+
+    try {
+      setStatus(`Loading canonical details for ${surveyId}...`);
+      const response = await fetch(`${apiUrl}/surveys/${surveyId}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        setStatus(`Load detail failed: HTTP ${response.status}`);
+        return;
+      }
+
+      const payload = (await response.json()) as SurveyDetailResponse;
+      setSurveyDetails((prev) => ({ ...prev, [surveyId]: payload }));
+      setStatus(`Canonical details loaded for ${surveyId}`);
+    } catch (error) {
+      setStatus(`Load detail error: ${(error as Error).message}`);
+    }
+  };
+
+  const formatPoints = (value: number): string => `${value} point${value > 1 ? 's' : ''}`;
+
+  const renderCanonicalFactor = (factorCode: string, factor: FactorCanonical) => (
+    <View key={`canonical-${factorCode}`} style={styles.canonicalRow}>
+      <Text style={styles.canonicalTitle}>Facteur {factorCode}</Text>
+      <Text style={styles.canonicalMeta}>Classe retenue: {factor.selected_class}</Text>
+      <Text style={styles.canonicalMeta}>Score: {formatPoints(factor.score_points)}</Text>
+      <Text style={styles.canonicalMeta}>ID canonique: {factor.factor_id}</Text>
+      {factor.warnings.length > 0 ? (
+        <Text style={styles.canonicalMeta}>Warnings: {factor.warnings.join(' | ')}</Text>
+      ) : null}
+    </View>
+  );
 
   const renderFactorSection = (
     key: FactorKey,
@@ -315,6 +378,25 @@ export default function App() {
               {survey.last_sync_error ? (
                 <Text style={styles.rowMeta}>last error: {survey.last_sync_error}</Text>
               ) : null}
+              <View style={styles.miniSpacer} />
+              <Button title="Load canonical details" onPress={() => handleLoadCanonicalDetails(survey.id)} />
+              {surveyDetails[survey.id] ? (
+                <View style={styles.canonicalCard}>
+                  <Text style={styles.canonicalHeader}>Scores globaux</Text>
+                  <Text style={styles.canonicalHeaderLine}>
+                    Peuplement/Gestion: {formatPoints(surveyDetails[survey.id].scores.ibp_peuplement_gestion)}
+                  </Text>
+                  <Text style={styles.canonicalHeaderLine}>
+                    Contexte: {formatPoints(surveyDetails[survey.id].scores.ibp_contexte)}
+                  </Text>
+                  <Text style={styles.canonicalHeaderLine}>
+                    Total IBP: {formatPoints(surveyDetails[survey.id].scores.ibp_total)}
+                  </Text>
+                  {Object.entries(surveyDetails[survey.id].factor_results)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([factorCode, factor]) => renderCanonicalFactor(factorCode, factor))}
+                </View>
+              ) : null}
             </View>
           ))}
           {surveys.length === 0 ? <Text style={styles.meta}>No local survey yet.</Text> : null}
@@ -418,6 +500,9 @@ const styles = StyleSheet.create({
   spacer: {
     height: 2
   },
+  miniSpacer: {
+    height: 4
+  },
   row: {
     borderTopWidth: 1,
     borderTopColor: '#e6eef7',
@@ -431,6 +516,39 @@ const styles = StyleSheet.create({
     color: '#17395e'
   },
   rowMeta: {
+    fontSize: 12,
+    color: '#55708b'
+  },
+  canonicalCard: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#d9e8f7',
+    borderRadius: 8,
+    padding: 8,
+    gap: 6,
+    backgroundColor: '#f7fbff'
+  },
+  canonicalHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a466f'
+  },
+  canonicalHeaderLine: {
+    fontSize: 12,
+    color: '#204f7b'
+  },
+  canonicalRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#e6eef7',
+    paddingTop: 6,
+    gap: 2
+  },
+  canonicalTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#204f7b'
+  },
+  canonicalMeta: {
     fontSize: 12,
     color: '#55708b'
   }
