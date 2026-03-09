@@ -22,6 +22,13 @@ export type SurveyPatchBody = {
   location?: Record<string, unknown>;
 };
 
+export type CreateAttachmentBody = {
+  mime_type?: string;
+  size_bytes?: number;
+  captured_at?: string;
+  metadata?: Record<string, unknown>;
+};
+
 type JsonObject = Record<string, unknown>;
 
 export type FactorCanonical = {
@@ -60,4 +67,18 @@ export type SurveyEventRow = {
   event_type: string;
   payload: JsonObject | null;
   created_at: string;
+};
+
+export type AttachmentRow = {
+  id: string;
+  survey_id: string;
+  storage_key: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  captured_at: string | null;
+  metadata: JsonObject | null;
+  upload_token: string;
+  uploaded_at: string | null;
+  deleted_at: string | null;
 };

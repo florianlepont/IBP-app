@@ -77,6 +77,7 @@ Required fields:
 Optional fields:
 - `captured_at` (timestamp, nullable)
 - `metadata` (jsonb, nullable) // EXIF or device metadata
+- `uploaded_at` (timestamp, nullable) // set once upload target is consumed
 
 ### 5) Survey Event (Audit Trail)
 Minimal audit history for reliability and moderation.

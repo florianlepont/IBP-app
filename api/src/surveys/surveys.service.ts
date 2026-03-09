@@ -5,18 +5,49 @@ import {
   NotFoundException,
   UnprocessableEntityException
 } from '@nestjs/common';
+import { CreateBucketCommand, DeleteObjectCommand, HeadBucketCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+import { mkdir, rm, writeFile } from 'fs/promises';
+import { dirname, join } from 'path';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
 import { IbpRulesService } from './ibp-rules.service';
-import { SurveyEventRow, SurveyPatchBody, SurveyRow, SurveyUpsertBody } from './surveys.types';
+import { AttachmentRow, CreateAttachmentBody, SurveyEventRow, SurveyPatchBody, SurveyRow, SurveyUpsertBody } from './surveys.types';
 
 @Injectable()
 export class SurveysService {
+  private readonly objectStorageMode: 'local' | 'minio';
+  private readonly s3Bucket: string;
+  private readonly s3Client?: S3Client;
+  private s3BucketReady = false;
+  private readonly uploadsRootDir: string;
+
   constructor(
     private readonly db: DatabaseService,
     private readonly ibpRules: IbpRulesService
-  ) {}
+  ) {
+    this.objectStorageMode = (process.env.OBJECT_STORAGE_MODE ?? 'local') === 'minio' ? 'minio' : 'local';
+    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? 'ibp-surveys';
+    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? '/tmp/ibp-uploads';
+
+    if (this.objectStorageMode === 'minio') {
+      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://localhost:9000';
+      const region = process.env.OBJECT_STORAGE_REGION ?? 'us-east-1';
+      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? 'minio';
+      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? 'minio123';
+
+      this.s3Client = new S3Client({
+        endpoint,
+        region,
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId,
+          secretAccessKey
+        }
+      });
+    }
+  }
 
   async listForUser(user: AuthenticatedUser, status?: string): Promise<Array<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>> {
     const filters: string[] = ['user_id = $1', 'deleted_at IS NULL'];
@@ -347,6 +378,210 @@ export class SurveysService {
     };
   }
 
+  async createAttachment(
+    user: AuthenticatedUser,
+    surveyId: string,
+    body: CreateAttachmentBody
+  ): Promise<{ attachment_id: string; storage_key: string; upload_url: string; confirm_url: string }> {
+    await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    if (!body?.mime_type || typeof body.mime_type !== 'string') {
+      throw new BadRequestException('mime_type is required');
+    }
+
+    if (!Number.isInteger(body.size_bytes) || (body.size_bytes ?? 0) <= 0) {
+      throw new BadRequestException('size_bytes must be a positive integer');
+    }
+
+    if ((body.size_bytes ?? 0) > 25 * 1024 * 1024) {
+      throw new BadRequestException('size_bytes exceeds V1 max size (25MB)');
+    }
+
+    const attachmentId = randomUUID();
+    const uploadToken = randomUUID();
+    const extension = this.extensionFromMime(body.mime_type);
+    const storageKey = `surveys/${surveyId}/${attachmentId}${extension}`;
+    const confirmUrl = this.buildConfirmUrl(surveyId, attachmentId, uploadToken);
+    const uploadUrl = await this.buildUploadUrl(storageKey, body.mime_type, confirmUrl);
+
+    await this.db.query(
+      `INSERT INTO attachments (id, survey_id, storage_key, mime_type, size_bytes, captured_at, metadata, upload_token, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW())`,
+      [
+        attachmentId,
+        surveyId,
+        storageKey,
+        body.mime_type,
+        body.size_bytes,
+        body.captured_at ?? null,
+        JSON.stringify(body.metadata ?? {}),
+        uploadToken
+      ]
+    );
+
+    await this.insertEvent(surveyId, user.id, 'attachment_created', {
+      attachment_id: attachmentId,
+      storage_key: storageKey,
+      mime_type: body.mime_type,
+      size_bytes: body.size_bytes
+    });
+
+    return {
+      attachment_id: attachmentId,
+      storage_key: storageKey,
+      upload_url: uploadUrl,
+      confirm_url: confirmUrl
+    };
+  }
+
+  async uploadAttachment(
+    user: AuthenticatedUser,
+    surveyId: string,
+    attachmentId: string,
+    token?: string,
+    file?: { buffer: Buffer; mimetype?: string; size?: number; originalname?: string }
+  ): Promise<{ attachment_id: string; uploaded_at: string }> {
+    if (!token) {
+      throw new BadRequestException('upload token is required');
+    }
+
+    await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    const existing = await this.db.query<AttachmentRow>(
+      `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
+       FROM attachments
+       WHERE id = $1 AND survey_id = $2 AND deleted_at IS NULL`,
+      [attachmentId, surveyId]
+    );
+
+    if (!existing.rows[0]) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    if (existing.rows[0].upload_token !== token) {
+      throw new BadRequestException('invalid upload token');
+    }
+
+    if (existing.rows[0].uploaded_at) {
+      return {
+        attachment_id: existing.rows[0].id,
+        uploaded_at: existing.rows[0].uploaded_at
+      };
+    }
+
+    if (this.objectStorageMode === 'minio') {
+      if (!this.s3Client) {
+        throw new BadRequestException('object storage client is not configured');
+      }
+      // In MinIO mode, file upload is done directly via presigned URL.
+      // Here we only confirm object existence before marking uploaded.
+      try {
+        await this.s3Client.send(
+          new HeadObjectCommand({
+            Bucket: this.s3Bucket,
+            Key: existing.rows[0].storage_key
+          })
+        );
+      } catch {
+        throw new BadRequestException('uploaded object not found in storage');
+      }
+    } else {
+      if (!file?.buffer || file.buffer.length === 0) {
+        throw new BadRequestException('file is required');
+      }
+
+      if (file.buffer.length > 25 * 1024 * 1024) {
+        throw new BadRequestException('file exceeds V1 max size (25MB)');
+      }
+
+      const storagePath = join(this.uploadsRootDir, existing.rows[0].storage_key);
+      await mkdir(dirname(storagePath), { recursive: true });
+      await writeFile(storagePath, file.buffer);
+    }
+
+    const updated = await this.db.query<{ id: string; uploaded_at: string }>(
+      `UPDATE attachments
+       SET uploaded_at = NOW()
+       WHERE id = $1 AND survey_id = $2
+       RETURNING id, uploaded_at::text`,
+      [attachmentId, surveyId]
+    );
+
+    await this.insertEvent(surveyId, user.id, 'attachment_uploaded', {
+      attachment_id: attachmentId,
+      storage_key: existing.rows[0].storage_key,
+      object_storage_mode: this.objectStorageMode,
+      bytes_written: file?.buffer?.length ?? null
+    });
+
+    return {
+      attachment_id: updated.rows[0].id,
+      uploaded_at: updated.rows[0].uploaded_at
+    };
+  }
+
+  async deleteAttachment(user: AuthenticatedUser, surveyId: string, attachmentId: string): Promise<void> {
+    await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    const existing = await this.db.query<AttachmentRow>(
+      `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
+       FROM attachments
+       WHERE id = $1 AND survey_id = $2 AND deleted_at IS NULL`,
+      [attachmentId, surveyId]
+    );
+
+    if (!existing.rows[0]) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    await this.db.query(
+      `UPDATE attachments
+       SET deleted_at = NOW()
+       WHERE id = $1 AND survey_id = $2`,
+      [attachmentId, surveyId]
+    );
+
+    if (this.objectStorageMode === 'minio') {
+      if (this.s3Client) {
+        await this.s3Client
+          .send(
+            new DeleteObjectCommand({
+              Bucket: this.s3Bucket,
+              Key: existing.rows[0].storage_key
+            })
+          )
+          .catch(() => undefined);
+      }
+    } else {
+      const storagePath = join(this.uploadsRootDir, existing.rows[0].storage_key);
+      await rm(storagePath, { force: true }).catch(() => undefined);
+    }
+
+    await this.insertEvent(surveyId, user.id, 'attachment_deleted', {
+      attachment_id: attachmentId,
+      storage_key: existing.rows[0].storage_key
+    });
+  }
+
+  async listAttachments(
+    user: AuthenticatedUser,
+    surveyId: string
+  ): Promise<{ items: Array<Pick<AttachmentRow, 'id' | 'survey_id' | 'storage_key' | 'mime_type' | 'size_bytes' | 'created_at' | 'uploaded_at'>> }> {
+    await this.getSurveyForUserOrThrow(surveyId, user.id);
+
+    const result = await this.db.query<
+      Pick<AttachmentRow, 'id' | 'survey_id' | 'storage_key' | 'mime_type' | 'size_bytes' | 'created_at' | 'uploaded_at'>
+    >(
+      `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, uploaded_at::text
+       FROM attachments
+       WHERE survey_id = $1 AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      [surveyId]
+    );
+
+    return { items: result.rows };
+  }
+
   async getEvents(user: AuthenticatedUser, surveyId: string): Promise<{ items: SurveyEventRow[] }> {
     await this.getSurveyForUserOrThrow(surveyId, user.id);
 
@@ -386,5 +621,56 @@ export class SurveysService {
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)]
     );
+  }
+
+  private extensionFromMime(mimeType: string): string {
+    const normalized = mimeType.trim().toLowerCase();
+    if (normalized === 'image/jpeg' || normalized === 'image/jpg') return '.jpg';
+    if (normalized === 'image/png') return '.png';
+    if (normalized === 'image/heic') return '.heic';
+    if (normalized === 'image/webp') return '.webp';
+    return '.bin';
+  }
+
+  private buildConfirmUrl(surveyId: string, attachmentId: string, uploadToken: string): string {
+    const token = encodeURIComponent(uploadToken);
+    return `/surveys/${surveyId}/attachments/${attachmentId}/upload?token=${token}`;
+  }
+
+  private async buildUploadUrl(storageKey: string, mimeType: string, fallbackUrl: string): Promise<string> {
+    if (this.objectStorageMode !== 'minio' || !this.s3Client) {
+      return fallbackUrl;
+    }
+
+    await this.ensureS3Bucket();
+
+    const command = new PutObjectCommand({
+      Bucket: this.s3Bucket,
+      Key: storageKey,
+      ContentType: mimeType
+    });
+
+    return getSignedUrl(this.s3Client, command, { expiresIn: 15 * 60 });
+  }
+
+  private async ensureS3Bucket(): Promise<void> {
+    if (this.s3BucketReady || !this.s3Client) return;
+
+    try {
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
+      this.s3BucketReady = true;
+      return;
+    } catch {
+      // Bucket might not exist yet.
+    }
+
+    try {
+      await this.s3Client.send(new CreateBucketCommand({ Bucket: this.s3Bucket }));
+      this.s3BucketReady = true;
+    } catch {
+      // If created concurrently by another request/process, verify it exists now.
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
+      this.s3BucketReady = true;
+    }
   }
 }

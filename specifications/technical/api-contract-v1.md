@@ -276,13 +276,18 @@ Response `200`:
 ## 2.1) Attachments
 
 ### POST /surveys/{id}/attachments
-Create an attachment record and return upload target.
+Create an attachment record and return an upload target URL.
 
 Request:
 ```json
 {
   "mime_type": "image/jpeg",
-  "size_bytes": 2450000
+  "size_bytes": 2450000,
+  "captured_at": "2026-03-09T09:10:00Z",
+  "metadata": {
+    "device": "ios",
+    "orientation": "portrait"
+  }
 }
 ```
 
@@ -291,7 +296,29 @@ Response `201`:
 {
   "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
   "storage_key": "surveys/2f3d8a59/photo-1.jpg",
-  "upload_url": "https://storage.example/upload-signed-url"
+  "upload_url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+  "confirm_url": "/surveys/2f3d8a59-7c53-4fdf-8df4-8e2325b6172c/attachments/6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0/upload?token=generated-token"
+}
+```
+
+Rules:
+- `size_bytes` must be a positive integer and <= 25MB in V1
+- `upload_url` is the generated upload target for binary data
+- `confirm_url` must be called after upload to mark `uploaded_at`
+- In local mode, `upload_url` can be the same API upload endpoint as `confirm_url`
+
+### PUT /surveys/{id}/attachments/{attachment_id}/upload?token=
+Consume the upload target with a real file upload and mark attachment as uploaded.
+
+Request:
+- Content type: `multipart/form-data`
+- Field: `file` (binary image payload)
+
+Response `200`:
+```json
+{
+  "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
+  "uploaded_at": "2026-03-09T09:12:00Z"
 }
 ```
 
