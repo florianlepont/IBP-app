@@ -124,6 +124,10 @@ Response `200`:
 }
 ```
 
+Notes:
+- `email_change_token_dev` is optional and exposed only in local development mode.
+- In non-development environments, confirmation token is sent via email (SMTP).
+
 ### POST /me/email/confirm
 Confirm a pending email change with token received via verification channel.
 
