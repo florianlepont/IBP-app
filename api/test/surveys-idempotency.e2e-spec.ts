@@ -431,6 +431,71 @@ describe('Surveys idempotency (e2e)', () => {
     expect(response.body.results[1].error.http_status).toBe(400);
   });
 
+  it('returns sync_version_conflict details in POST /v1/sync result', async () => {
+    const email = `e2e-sync-conflict-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-sync-conflict-survey-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 2,
+        site_name: 'Conflict Forest',
+        status: 'draft',
+        visibility: 'private',
+        factors: {},
+        scores: {},
+        location: {}
+      })
+      .expect(201);
+
+    const conflict = await request(app.getHttpServer())
+      .post('/v1/sync')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        operations: [
+          {
+            client_ref: 'op-conflict',
+            entity: 'survey',
+            action: 'upsert',
+            payload: {
+              id: surveyId,
+              sync_version: 1,
+              site_name: 'Conflict Forest - stale',
+              status: 'draft',
+              visibility: 'private',
+              factors: {},
+              scores: {},
+              location: {}
+            }
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(conflict.body.results).toHaveLength(1);
+    expect(conflict.body.results[0]).toMatchObject({
+      client_ref: 'op-conflict',
+      entity: 'survey',
+      action: 'upsert',
+      status: 'fatal_error'
+    });
+    expect(conflict.body.results[0].error.code).toBe('sync_version_conflict');
+    expect(conflict.body.results[0].error.http_status).toBe(409);
+    expect(conflict.body.results[0].error.details).toMatchObject({
+      survey_id: surveyId,
+      server_sync_version: 2,
+      client_sync_version: 1
+    });
+  });
+
   it('returns incremental changes via GET /v1/sync/changes with cursor', async () => {
     const email = `e2e-sync-changes-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())

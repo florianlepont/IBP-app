@@ -395,7 +395,8 @@ Response `200`:
       "error": {
         "code": "http_400",
         "message": "site_name is required",
-        "http_status": 400
+        "http_status": 400,
+        "details": null
       }
     }
   ]
@@ -409,6 +410,11 @@ Rules:
   - `synced`
   - `retryable_error` (typically `429` or `5xx`)
   - `fatal_error` (typically `4xx` validation/business errors)
+- `error.details` can include structured conflict metadata (example: `server_sync_version` / `client_sync_version`).
+- Retryable code family:
+  - `rate_limited`
+  - `network_gateway_error`
+  - `transient_upstream_error`
 - `client_ref` is echoed back for local queue reconciliation.
 
 ### GET /sync/changes?cursor=&limit=

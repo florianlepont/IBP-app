@@ -21,6 +21,8 @@ import {
   LocalSurvey,
   pullRemoteChanges,
   queueLocalAttachment,
+  retrySurveyNow,
+  discardSurveyLocalChanges,
   submitSurvey,
   syncPending
 } from './src/storage';
@@ -237,7 +239,13 @@ export default function App() {
       return;
     }
 
-    const candidate = surveys.find((s) => s.sync_state === 'synced' && s.status !== 'submitted');
+    const blocked = surveys.find((s) => s.sync_blocked === 1);
+    if (blocked) {
+      setStatus(`Sync conflict unresolved for ${blocked.id}. Use Retry now or Discard local change first.`);
+      return;
+    }
+
+    const candidate = surveys.find((s) => s.sync_state === 'synced' && s.status !== 'submitted' && s.sync_blocked !== 1);
     if (!candidate) {
       setStatus('No synced survey available to submit');
       return;
@@ -247,6 +255,28 @@ export default function App() {
     await refreshLocalSurveys();
     await refreshLocalAttachments();
     setStatus(result.ok ? `Submitted ${candidate.id}` : `Submit failed: ${result.message}`);
+  };
+
+  const handleRetrySurvey = async (surveyId: string): Promise<void> => {
+    try {
+      const result = await retrySurveyNow(surveyId);
+      await refreshLocalSurveys();
+      await refreshLocalAttachments();
+      setStatus(`Retry queued for ${surveyId} (${result.queued} queue item(s))`);
+    } catch (error) {
+      setStatus(`Retry error: ${(error as Error).message}`);
+    }
+  };
+
+  const handleDiscardSurvey = async (surveyId: string): Promise<void> => {
+    try {
+      const result = await discardSurveyLocalChanges(surveyId);
+      await refreshLocalSurveys();
+      await refreshLocalAttachments();
+      setStatus(`Local changes discarded for ${surveyId} (${result.removed_queue} queue item(s) removed)`);
+    } catch (error) {
+      setStatus(`Discard error: ${(error as Error).message}`);
+    }
   };
 
   const guessMimeType = (uri: string): string => {
@@ -376,7 +406,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.title}>IBP Step 14 - Batch Sync + Incremental Pull</Text>
+          <Text style={styles.title}>IBP Step 15 - Conflict Resolution + Robust Recovery</Text>
           <Text style={styles.subtitle}>API URL (editable)</Text>
           <TextInput
             style={styles.input}
@@ -468,13 +498,28 @@ export default function App() {
               <Text style={styles.rowMeta}>
                 status: {survey.status} | sync: {survey.sync_state} | v{survey.sync_version}
               </Text>
+              {survey.sync_blocked === 1 ? <Text style={styles.rowMeta}>sync_blocked: yes</Text> : null}
               <Text style={styles.rowMeta}>attachments: {surveyAttachments.length}</Text>
               {survey.last_sync_error ? (
                 <Text style={styles.rowMeta}>last error: {survey.last_sync_error}</Text>
               ) : null}
+              {survey.last_sync_error_code ? (
+                <Text style={styles.rowMeta}>error code: {survey.last_sync_error_code}</Text>
+              ) : null}
+              {survey.last_sync_error_at ? (
+                <Text style={styles.rowMeta}>error at: {survey.last_sync_error_at}</Text>
+              ) : null}
               <View style={styles.miniSpacer} />
               <Button title="Attach photo (queue)" onPress={() => handleQueueAttachment(survey.id)} />
               <View style={styles.miniSpacer} />
+              {survey.sync_state === 'failed' ? (
+                <Button title="Retry now" onPress={() => handleRetrySurvey(survey.id)} />
+              ) : null}
+              {survey.sync_state === 'failed' ? <View style={styles.miniSpacer} /> : null}
+              {survey.sync_state === 'failed' ? (
+                <Button title="Discard local change" onPress={() => handleDiscardSurvey(survey.id)} />
+              ) : null}
+              {survey.sync_state === 'failed' ? <View style={styles.miniSpacer} /> : null}
               <Button title="Load canonical details" onPress={() => handleLoadCanonicalDetails(survey.id)} />
               {surveyAttachments.length > 0 ? (
                 <View style={styles.attachmentCard}>
@@ -489,6 +534,9 @@ export default function App() {
                         state: {attachment.sync_state}
                         {attachment.remote_attachment_id ? ` | remote: ${attachment.remote_attachment_id}` : ''}
                       </Text>
+                      {attachment.last_sync_error_code ? (
+                        <Text style={styles.attachmentError}>code: {attachment.last_sync_error_code}</Text>
+                      ) : null}
                       {attachment.last_sync_error ? <Text style={styles.attachmentError}>error: {attachment.last_sync_error}</Text> : null}
                     </View>
                   ))}

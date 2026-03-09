@@ -61,6 +61,9 @@ Required fields:
 
 Optional fields:
 - `last_sync_error` (string, nullable)
+- `last_sync_error_code` (string, nullable)
+- `last_sync_error_at` (timestamp, nullable)
+- `sync_blocked` (boolean/integer flag, nullable) // local conflict guard
 - `deleted_at` (timestamp, nullable) // soft delete
 
 ### 4) Attachment
@@ -78,6 +81,8 @@ Optional fields:
 - `captured_at` (timestamp, nullable)
 - `metadata` (jsonb, nullable) // EXIF or device metadata
 - `uploaded_at` (timestamp, nullable) // set once upload target is consumed
+- `last_sync_error_code` (string, nullable) // local diagnostic mirror
+- `last_sync_error_at` (timestamp, nullable) // local diagnostic mirror
 - `deleted_at` (timestamp, nullable) // soft delete
 
 ### 5) Survey Event (Audit Trail)
@@ -105,6 +110,10 @@ Required fields:
 - `next_retry_at` (timestamp, nullable)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
+
+Optional fields:
+- `terminal_at` (timestamp, nullable)
+- `terminal_reason` (string, nullable)
 
 ### 7) Report
 User report for suspicious survey content.

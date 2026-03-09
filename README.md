@@ -206,3 +206,25 @@ Implemented:
 - e2e coverage added for:
   - mixed batch sync success/failure
   - incremental changes with cursor progression
+
+## Step 15 Conflict Resolution + Robust Recovery (Current)
+Implemented:
+- API `/v1/sync` error mapping now returns normalized `error.code` and optional `error.details`
+- `sync_version_conflict` now includes:
+  - `survey_id`
+  - `server_sync_version`
+  - `client_sync_version`
+- Mobile local diagnostics added:
+  - `last_sync_error_code`
+  - `last_sync_error_at`
+  - `sync_blocked` (survey-level)
+- Mobile retry policy hardened:
+  - hard retry cap (`8`) before terminal failure
+- New mobile conflict actions:
+  - `Retry now`
+  - `Discard local change`
+- Submit guard: blocked if unresolved survey sync conflict is present
+- Added e2e coverage for explicit `sync_version_conflict` payload in `/v1/sync`
+
+Reference spec:
+- `specifications/technical/sync-conflict-resolution-v1.md`

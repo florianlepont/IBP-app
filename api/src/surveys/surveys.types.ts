@@ -99,6 +99,7 @@ export type SyncResultError = {
   code: string;
   message: string;
   http_status?: number;
+  details?: Record<string, unknown>;
 };
 
 export type SyncOperationResult = {
