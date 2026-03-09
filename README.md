@@ -311,6 +311,10 @@ Implemented:
 - Survey list now supports a dedicated selected-survey detail panel:
   - tabs: `Summary`, `Factors`, `Photos`, `Events`
   - contextual actions moved into detail panel (`Edit`, `Attach`, `Delete`, `Submit`, conflict actions)
+- Survey detail now supports publication visibility management:
+  - `Set public` / `Set private` action
+  - works for both `draft` and `submitted` surveys
+  - local state is updated immediately after API confirmation
 - Photo actions are now split:
   - `Take photo (camera)` for real field capture
   - `Add photo from library` for fallback/import

@@ -148,6 +148,8 @@ Required fields:
 ## Consistency Rules
 - `expires_at = created_at + 7 days`
 - `visibility` default is `private`
+- `submitted` surveys are read-only for observation payload (`site_name`, region/stage, factors, location, scores)
+- `submitted` surveys may still change `visibility` (`private` <-> `public`)
 - Only `public` surveys are eligible for community surfaces
 - Switching `public -> private` must remove the survey from community surfaces
 - Deleted surveys must be excluded from user list and community surfaces

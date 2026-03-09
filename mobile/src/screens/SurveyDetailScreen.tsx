@@ -26,6 +26,7 @@ type SurveyDetailScreenProps = {
   onSubmitSurvey: (surveyId: string) => Promise<void>;
   onRetrySurvey: (surveyId: string) => Promise<void>;
   onDiscardSurvey: (surveyId: string) => Promise<void>;
+  onToggleVisibility: (surveyId: string, visibility: 'private' | 'public') => Promise<void>;
 };
 
 const renderCanonicalFactor = (factorCode: string, factor: FactorCanonical) => (
@@ -57,7 +58,8 @@ export function SurveyDetailScreen({
   onDeleteSurvey,
   onSubmitSurvey,
   onRetrySurvey,
-  onDiscardSurvey
+  onDiscardSurvey,
+  onToggleVisibility
 }: SurveyDetailScreenProps) {
   return (
     <View style={styles.detailCard}>
@@ -160,6 +162,12 @@ export function SurveyDetailScreen({
       ) : null}
 
       <View style={styles.detailSection}>
+        <Text style={styles.rowMeta}>visibility: {selectedSurvey.visibility}</Text>
+        <Button
+          title={selectedSurvey.visibility === 'public' ? 'Set private' : 'Set public'}
+          onPress={() => void onToggleVisibility(selectedSurvey.id, selectedSurvey.visibility === 'public' ? 'private' : 'public')}
+        />
+        <View style={styles.miniSpacer} />
         {selectedSurvey.status !== 'submitted' ? (
           <>
             <Button title="Edit survey" onPress={() => void onEditSurvey(selectedSurvey.id)} />
