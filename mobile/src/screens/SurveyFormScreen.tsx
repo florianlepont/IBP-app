@@ -1,8 +1,10 @@
-import { Button, Text, TextInput, View } from 'react-native';
-import { HELP_BY_FACTOR, REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from '../app/constants';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Pressable, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import MapView, { MapPressEvent, Marker, MarkerDragStartEndEvent } from 'react-native-maps';
+import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from '../app/constants';
 import { styles } from '../app/styles';
 import { AppScreen, FactorField, FactorKey, RegionVersion, SurveyLocationSource, VegetationStage } from '../app/types';
-import { FactorSection } from '../components/FactorSection';
 import { FilterChip } from '../components/FilterChip';
 
 type SurveyFormScreenProps = {
@@ -45,13 +47,27 @@ type SurveyFormScreenProps = {
       country: string | null;
     };
   };
+  onOpenFactor: (factor: FactorKey) => void;
   onSaveSurveyEdits: () => Promise<void>;
   onCreateDraft: () => Promise<void>;
-  onBackToSurveyList: () => void;
   status: string;
 };
 
 const FACTOR_ORDER: FactorKey[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+const DEFAULT_FRANCE_CENTER = { lat: 46.603354, lng: 1.888334 };
+const toAddressLabel = (item: Record<string, unknown>): string => {
+  const streetNumber = typeof item.streetNumber === 'string' ? item.streetNumber.trim() : '';
+  const street = typeof item.street === 'string' ? item.street.trim() : '';
+  const postalCode = typeof item.postalCode === 'string' ? item.postalCode.trim() : '';
+  const city = typeof item.city === 'string' ? item.city.trim() : '';
+  const region = typeof item.region === 'string' ? item.region.trim() : '';
+  const country = typeof item.country === 'string' ? item.country.trim() : '';
+
+  const line1 = [streetNumber, street].filter((part) => part.length > 0).join(' ');
+  const line2 = [postalCode, city].filter((part) => part.length > 0).join(' ');
+  const line3 = [region, country].filter((part) => part.length > 0).join(', ');
+  return [line1, line2, line3].filter((part) => part.length > 0).join(' - ');
+};
 
 export function SurveyFormScreen({
   screen,
@@ -71,11 +87,133 @@ export function SurveyFormScreen({
   onCaptureGpsLocation,
   factorSections,
   formErrors,
+  onOpenFactor,
   onSaveSurveyEdits,
   onCreateDraft,
-  onBackToSurveyList,
   status
 }: SurveyFormScreenProps) {
+  const [autoLocateRequested, setAutoLocateRequested] = useState(false);
+  const [resolvedGpsAddress, setResolvedGpsAddress] = useState('');
+  const [isResolvingGpsAddress, setIsResolvingGpsAddress] = useState(false);
+  const lastResolvedCoordinateKeyRef = useRef('');
+
+  const parsedLat = Number(gpsLocation.lat);
+  const parsedLng = Number(gpsLocation.lng);
+  const hasGpsCoordinates = Number.isFinite(parsedLat) && Number.isFinite(parsedLng);
+  const mapCenter = hasGpsCoordinates ? { lat: parsedLat, lng: parsedLng } : DEFAULT_FRANCE_CENTER;
+  const mapRegion = {
+    latitude: mapCenter.lat,
+    longitude: mapCenter.lng,
+    latitudeDelta: hasGpsCoordinates ? 0.02 : 3.8,
+    longitudeDelta: hasGpsCoordinates ? 0.02 : 3.8
+  };
+
+  const factorProgress = useMemo(
+    () =>
+      FACTOR_ORDER.reduce<Record<FactorKey, { complete: boolean; filled: number; total: number; invalid: number }>>((acc, factor) => {
+        const fields = factorSections[factor];
+        const total = fields.length;
+        const filled = fields.filter((field) => field.value.trim().length > 0).length;
+        const invalid = fields.filter((field) => Boolean(field.error)).length;
+        acc[factor] = {
+          complete: total > 0 && filled === total && invalid === 0,
+          filled,
+          total,
+          invalid
+        };
+        return acc;
+      }, {} as Record<FactorKey, { complete: boolean; filled: number; total: number; invalid: number }>),
+    [factorSections]
+  );
+
+  const completedFactorCount = FACTOR_ORDER.filter((factor) => factorProgress[factor]?.complete).length;
+
+  const handleMapPress = (event: MapPressEvent): void => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    setLocationSource('gps');
+    setGpsLocationField('lat', latitude.toFixed(6));
+    setGpsLocationField('lng', longitude.toFixed(6));
+    if (!gpsLocation.collected_at) {
+      setGpsLocationField('collected_at', new Date().toISOString());
+    }
+  };
+
+  const handleMarkerDragEnd = (event: MarkerDragStartEndEvent): void => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    setGpsLocationField('lat', latitude.toFixed(6));
+    setGpsLocationField('lng', longitude.toFixed(6));
+  };
+
+  const handleRequestCurrentLocation = (): void => {
+    setLocationSource('gps');
+    setAutoLocateRequested(true);
+    void onCaptureGpsLocation();
+  };
+
+  useEffect(() => {
+    if (screen !== 'create') {
+      setAutoLocateRequested(false);
+      return;
+    }
+
+    if (locationSource === 'manual') {
+      setAutoLocateRequested(false);
+      return;
+    }
+
+    if (locationSource === 'gps' && !hasGpsCoordinates && !autoLocateRequested) {
+      setAutoLocateRequested(true);
+      void onCaptureGpsLocation();
+    }
+  }, [screen, locationSource, hasGpsCoordinates, autoLocateRequested, onCaptureGpsLocation]);
+
+  useEffect(() => {
+    if (locationSource !== 'gps' || !hasGpsCoordinates) {
+      setResolvedGpsAddress('');
+      setIsResolvingGpsAddress(false);
+      return;
+    }
+
+    const coordinateKey = `${parsedLat.toFixed(5)},${parsedLng.toFixed(5)}`;
+    if (lastResolvedCoordinateKeyRef.current === coordinateKey) {
+      return;
+    }
+    lastResolvedCoordinateKeyRef.current = coordinateKey;
+
+    let cancelled = false;
+    const run = async (): Promise<void> => {
+      try {
+        setIsResolvingGpsAddress(true);
+        const Location = await import('expo-location');
+        const matches = await Location.reverseGeocodeAsync({
+          latitude: parsedLat,
+          longitude: parsedLng
+        });
+        if (cancelled) return;
+        const first = matches[0] as Record<string, unknown> | undefined;
+        if (!first) {
+          setResolvedGpsAddress('Adresse locale non disponible');
+          return;
+        }
+        const label = toAddressLabel(first);
+        setResolvedGpsAddress(label || 'Adresse locale non disponible');
+      } catch (_error) {
+        if (!cancelled) {
+          setResolvedGpsAddress('Adresse locale non disponible');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsResolvingGpsAddress(false);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [locationSource, hasGpsCoordinates, parsedLat, parsedLng]);
+
   return (
     <View style={styles.card}>
       {screen === 'edit' && editingSurveyId ? <Text style={styles.meta}>Survey id: {editingSurveyId}</Text> : null}
@@ -109,51 +247,53 @@ export function SurveyFormScreen({
         ))}
       </View>
 
-      <View style={styles.locationCard}>
-        <Text style={styles.label}>Location (required to submit) *</Text>
-        <View style={styles.filterChipsRow}>
-          <FilterChip label="GPS (device)" active={locationSource === 'gps'} onPress={() => setLocationSource('gps')} />
-          <FilterChip label="Manual address" active={locationSource === 'manual'} onPress={() => setLocationSource('manual')} />
-        </View>
+      <View style={styles.formLocationSection}>
+        <Text style={styles.label}>Location *</Text>
 
         {locationSource === 'gps' ? (
           <View style={styles.detailSection}>
-            <Button title="Capture current GPS" onPress={() => void onCaptureGpsLocation()} />
-            <Text style={styles.rowMeta}>or type values manually for simulator/testing.</Text>
+            <View style={styles.formMapCard}>
+              <View style={styles.formMapFrame}>
+                <MapView style={styles.formMap} region={mapRegion} onPress={handleMapPress}>
+                  {hasGpsCoordinates ? <Marker coordinate={{ latitude: parsedLat, longitude: parsedLng }} draggable onDragEnd={handleMarkerDragEnd} /> : null}
+                </MapView>
+                <Pressable style={styles.locationCurrentMapButton} onPress={handleRequestCurrentLocation}>
+                  <Ionicons name="locate" size={14} color="#ffffff" />
+                  <Text style={styles.locationCurrentMapButtonText}>Localisation actuelle</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.rowMeta}>
+                {screen === 'create'
+                  ? 'Position récupérée automatiquement à la création. Touchez la carte pour ajuster.'
+                  : 'Touchez la carte pour ajuster la position.'}
+              </Text>
+              {isResolvingGpsAddress ? (
+                <View style={styles.locationAddressCard}>
+                  <View style={styles.locationAddressHeader}>
+                    <Ionicons name="navigate-outline" size={14} color="#1f5d8e" />
+                    <Text style={styles.locationAddressLabel}>Adresse locale</Text>
+                  </View>
+                  <Text style={styles.locationAddressValue}>Recherche en cours...</Text>
+                </View>
+              ) : null}
+              {resolvedGpsAddress ? (
+                <View style={styles.locationAddressCard}>
+                  <View style={styles.locationAddressHeader}>
+                    <Ionicons name="location-outline" size={14} color="#1f5d8e" />
+                    <Text style={styles.locationAddressLabel}>Adresse locale</Text>
+                  </View>
+                  <Text style={styles.locationAddressValue}>{resolvedGpsAddress}</Text>
+                </View>
+              ) : null}
+            </View>
 
-            <Text style={styles.label}>Latitude *</Text>
-            <TextInput
-              style={styles.input}
-              value={gpsLocation.lat}
-              onChangeText={(value) => setGpsLocationField('lat', value)}
-              keyboardType="decimal-pad"
-              placeholder="48.643"
-            />
-            {formErrors.gps.lat ? <Text style={styles.fieldError}>{formErrors.gps.lat}</Text> : null}
-
-            <Text style={styles.label}>Longitude *</Text>
-            <TextInput
-              style={styles.input}
-              value={gpsLocation.lng}
-              onChangeText={(value) => setGpsLocationField('lng', value)}
-              keyboardType="decimal-pad"
-              placeholder="1.829"
-            />
-            {formErrors.gps.lng ? <Text style={styles.fieldError}>{formErrors.gps.lng}</Text> : null}
-
-            <Text style={styles.label}>Accuracy (m, optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={gpsLocation.accuracy_m}
-              onChangeText={(value) => setGpsLocationField('accuracy_m', value)}
-              keyboardType="decimal-pad"
-              placeholder="12"
-            />
-
-            {gpsLocation.collected_at ? <Text style={styles.rowMeta}>Captured at: {gpsLocation.collected_at}</Text> : null}
+            {formErrors.gps.lat || formErrors.gps.lng ? (
+              <Text style={styles.fieldError}>{formErrors.gps.lat ?? formErrors.gps.lng}</Text>
+            ) : null}
           </View>
         ) : (
           <View style={styles.detailSection}>
+            <Text style={styles.rowMeta}>Renseignez l'adresse complète si vous ne souhaitez pas utiliser la carte.</Text>
             <Text style={styles.label}>Address line *</Text>
             <TextInput
               style={styles.input}
@@ -194,17 +334,42 @@ export function SurveyFormScreen({
         )}
       </View>
 
-      {FACTOR_ORDER.map((factor) => (
-        <FactorSection key={factor} factorKey={factor} helpText={HELP_BY_FACTOR[factor]} fields={factorSections[factor]} />
-      ))}
+      <View style={styles.factorSectionCard}>
+        <View style={styles.factorSectionHeaderRow}>
+          <Text style={styles.label}>Factors</Text>
+          <Text style={styles.rowMeta}>
+            {completedFactorCount}/{FACTOR_ORDER.length} complete
+          </Text>
+        </View>
 
-      {screen === 'edit' ? (
-        <Button title="Save survey edits" onPress={() => void onSaveSurveyEdits()} />
-      ) : (
-        <Button title="Create offline draft" onPress={() => void onCreateDraft()} />
-      )}
-      <View style={styles.spacer} />
-      <Button title="Back to survey list" onPress={onBackToSurveyList} />
+        <View style={styles.formFactorTilesGrid}>
+          {FACTOR_ORDER.map((factor) => {
+            const progress = factorProgress[factor];
+            return (
+              <Pressable
+                key={`form-factor-tile-${factor}`}
+                style={[styles.formFactorTile, progress.complete ? styles.formFactorTileComplete : styles.formFactorTileIncomplete]}
+                onPress={() => onOpenFactor(factor)}
+              >
+                <View style={styles.formFactorTileHeader}>
+                  <Text style={styles.formFactorTileTitle}>Factor {factor}</Text>
+                  <Ionicons
+                    name={progress.complete ? 'checkmark-circle' : progress.invalid > 0 ? 'alert-circle' : 'ellipse-outline'}
+                    size={16}
+                    color={progress.complete ? '#1f7a56' : progress.invalid > 0 ? '#9a4e09' : '#6a829a'}
+                  />
+                </View>
+                <Text style={styles.formFactorTileMeta}>
+                  {progress.filled}/{progress.total} fields
+                </Text>
+                <Text style={styles.formFactorTileMeta}>{progress.complete ? 'Completed' : progress.invalid > 0 ? 'Validation needed' : 'To complete'}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {screen === 'edit' ? <Button title="Save" onPress={() => void onSaveSurveyEdits()} /> : <Button title="Save" onPress={() => void onCreateDraft()} />}
       <Text style={styles.status}>{status}</Text>
     </View>
   );

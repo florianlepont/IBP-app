@@ -110,6 +110,11 @@ export type SurveyManualLocation = {
   postal_code: string;
   city: string;
   country: string;
+  lat?: number;
+  lng?: number;
+  geocoded_at?: string;
+  geocode_query?: string;
+  geocode_provider?: string;
 };
 
 export type SurveyLocationPayload = SurveyGpsLocation | SurveyManualLocation | Record<string, unknown>;

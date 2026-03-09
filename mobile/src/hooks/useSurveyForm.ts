@@ -9,9 +9,7 @@ import {
   VegetationStage
 } from '../app/types';
 
-const toNum = (value: string): number => Number(value || '0');
-
-const toTextNum = (value: unknown, fallback = '0'): string => {
+const toTextNum = (value: unknown, fallback = ''): string => {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   if (typeof value === 'string' && value.trim().length > 0) return value;
   return fallback;
@@ -29,6 +27,15 @@ const asObject = (value: unknown): Record<string, unknown> =>
 const toFiniteNumber = (value: string): number | null => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toFiniteNumberInRange = (value: string, options?: { min?: number; max?: number; integer?: boolean }): number | null => {
+  const parsed = toFiniteNumber(value);
+  if (parsed === null) return null;
+  if (options?.integer && !Number.isInteger(parsed)) return null;
+  if (typeof options?.min === 'number' && parsed < options.min) return null;
+  if (typeof options?.max === 'number' && parsed > options.max) return null;
+  return parsed;
 };
 
 const hasText = (value: string): boolean => value.trim().length > 0;
@@ -130,33 +137,48 @@ export function useSurveyForm() {
     });
   };
 
-  const buildFactorsPayload = (): Record<string, unknown> => ({
-    A: { native_genus_count: toNum(factorA.native_genus_count) },
-    B: {
-      strata_count: toNum(factorB.strata_count),
-      covered_autochthonous_percent: toNum(factorB.covered_autochthonous_percent)
-    },
-    C: {
-      bmg_count: toNum(factorC.bmg_count),
-      bmm_count: toNum(factorC.bmm_count),
-      surface_ha: toNum(factorC.surface_ha)
-    },
-    D: {
-      bmg_count: toNum(factorD.bmg_count),
-      bmm_count: toNum(factorD.bmm_count),
-      surface_ha: toNum(factorD.surface_ha)
-    },
-    E: {
-      tgb_count: toNum(factorE.tgb_count),
-      gb_count: toNum(factorE.gb_count),
-      surface_ha: toNum(factorE.surface_ha)
-    },
-    F: { trees_per_ha: toNum(factorF.trees_per_ha) },
-    G: { open_flowering_percent: toNum(factorG.open_flowering_percent) },
-    H: { class_score: toNum(factorH.class_score) },
-    I: { type_count: toNum(factorI.type_count) },
-    J: { type_count: toNum(factorJ.type_count) }
-  });
+  const buildFactorsPayload = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {};
+
+    const a = toFiniteNumberInRange(factorA.native_genus_count, { min: 0, integer: true });
+    if (a !== null) payload.A = { native_genus_count: a };
+
+    const bStrata = toFiniteNumberInRange(factorB.strata_count, { min: 0, integer: true });
+    const bCover = toFiniteNumberInRange(factorB.covered_autochthonous_percent, { min: 0, max: 100 });
+    if (bStrata !== null && bCover !== null) payload.B = { strata_count: bStrata, covered_autochthonous_percent: bCover };
+
+    const cBmg = toFiniteNumberInRange(factorC.bmg_count, { min: 0, integer: true });
+    const cBmm = toFiniteNumberInRange(factorC.bmm_count, { min: 0, integer: true });
+    const cSurface = toFiniteNumberInRange(factorC.surface_ha, { min: 0.000001 });
+    if (cBmg !== null && cBmm !== null && cSurface !== null) payload.C = { bmg_count: cBmg, bmm_count: cBmm, surface_ha: cSurface };
+
+    const dBmg = toFiniteNumberInRange(factorD.bmg_count, { min: 0, integer: true });
+    const dBmm = toFiniteNumberInRange(factorD.bmm_count, { min: 0, integer: true });
+    const dSurface = toFiniteNumberInRange(factorD.surface_ha, { min: 0.000001 });
+    if (dBmg !== null && dBmm !== null && dSurface !== null) payload.D = { bmg_count: dBmg, bmm_count: dBmm, surface_ha: dSurface };
+
+    const eTgb = toFiniteNumberInRange(factorE.tgb_count, { min: 0, integer: true });
+    const eGb = toFiniteNumberInRange(factorE.gb_count, { min: 0, integer: true });
+    const eSurface = toFiniteNumberInRange(factorE.surface_ha, { min: 0.000001 });
+    if (eTgb !== null && eGb !== null && eSurface !== null) payload.E = { tgb_count: eTgb, gb_count: eGb, surface_ha: eSurface };
+
+    const f = toFiniteNumberInRange(factorF.trees_per_ha, { min: 0 });
+    if (f !== null) payload.F = { trees_per_ha: f };
+
+    const g = toFiniteNumberInRange(factorG.open_flowering_percent, { min: 0, max: 100 });
+    if (g !== null) payload.G = { open_flowering_percent: g };
+
+    const h = toFiniteNumberInRange(factorH.class_score, { integer: true });
+    if (h !== null && [0, 2, 5].includes(h)) payload.H = { class_score: h };
+
+    const i = toFiniteNumberInRange(factorI.type_count, { min: 0, integer: true });
+    if (i !== null) payload.I = { type_count: i };
+
+    const j = toFiniteNumberInRange(factorJ.type_count, { min: 0, integer: true });
+    if (j !== null) payload.J = { type_count: j };
+
+    return payload;
+  };
 
   const buildLocationPayload = (): SurveyLocationPayload => {
     if (locationSource === 'manual') {
@@ -214,23 +236,23 @@ export function useSurveyForm() {
     setFactorC({
       bmg_count: toTextNum(factorCObj.bmg_count),
       bmm_count: toTextNum(factorCObj.bmm_count),
-      surface_ha: toTextNum(factorCObj.surface_ha, '1')
+      surface_ha: toTextNum(factorCObj.surface_ha)
     });
     setFactorD({
       bmg_count: toTextNum(factorDObj.bmg_count),
       bmm_count: toTextNum(factorDObj.bmm_count),
-      surface_ha: toTextNum(factorDObj.surface_ha, '1')
+      surface_ha: toTextNum(factorDObj.surface_ha)
     });
     setFactorE({
       tgb_count: toTextNum(factorEObj.tgb_count),
       gb_count: toTextNum(factorEObj.gb_count),
-      surface_ha: toTextNum(factorEObj.surface_ha, '1')
+      surface_ha: toTextNum(factorEObj.surface_ha)
     });
     setFactorF({ trees_per_ha: toTextNum(factorFObj.trees_per_ha) });
     setFactorG({ open_flowering_percent: toTextNum(factorGObj.open_flowering_percent) });
-    setFactorH({ class_score: toTextNum(factorHObj.class_score, '2') });
-    setFactorI({ type_count: toTextNum(factorIObj.type_count, '1') });
-    setFactorJ({ type_count: toTextNum(factorJObj.type_count, '1') });
+    setFactorH({ class_score: toTextNum(factorHObj.class_score) });
+    setFactorI({ type_count: toTextNum(factorIObj.type_count) });
+    setFactorJ({ type_count: toTextNum(factorJObj.type_count) });
 
     setLocationSource(inferLocationSource(location));
     setGpsLocation({
