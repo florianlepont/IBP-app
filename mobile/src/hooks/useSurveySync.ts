@@ -3,12 +3,19 @@ import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { getSubmitBlockReason } from '../app/survey-logic';
 import {
+  AuthUser,
   LoginResponse,
+  RefreshResponse,
   SurveyDetailResponse,
   SurveyDetailTab,
   SurveyEventItem,
   SurveyEventsResponse
 } from '../app/types';
+import {
+  clearStoredAuthSession,
+  loadStoredAuthSession,
+  saveStoredAuthSession
+} from '../auth/session-storage';
 import {
   discardSurveyLocalChanges,
   LocalSurvey,
@@ -44,6 +51,11 @@ const guessMimeType = (uri: string): string => {
   return 'application/octet-stream';
 };
 
+const AUTH_REQUIRED_ERROR = 'AUTH_REQUIRED';
+
+const isUnauthorizedMessage = (message: string): boolean =>
+  /(^|[^0-9])401([^0-9]|$)|unauthorized|auth_required/i.test(message);
+
 export function useSurveySync({
   apiUrl,
   email,
@@ -58,12 +70,107 @@ export function useSurveySync({
   onStopEditing
 }: UseSurveySyncParams) {
   const [accessToken, setAccessToken] = useState('');
+  const [refreshToken, setRefreshToken] = useState('');
   const [profile, setProfile] = useState<string>('Not logged in');
   const [status, setStatus] = useState<string>('Ready');
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
   const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null);
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({});
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null);
+
+  const setProfileFromUser = (user: AuthUser): void => {
+    setProfile(`${user.display_name} (${user.email})`);
+  };
+
+  const clearSession = async (): Promise<void> => {
+    setAccessToken('');
+    setRefreshToken('');
+    setProfile('Not logged in');
+    setSurveyDetails({});
+    setSurveyEvents({});
+    await clearStoredAuthSession();
+  };
+
+  const fetchCurrentUser = async (token: string): Promise<AuthUser | null> => {
+    const response = await fetch(`${apiUrl}/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as AuthUser;
+  };
+
+  const refreshSessionTokens = async (tokenOverride?: string): Promise<{ accessToken: string; refreshToken: string } | null> => {
+    const activeRefreshToken = tokenOverride ?? refreshToken;
+    if (!activeRefreshToken || !activeRefreshToken.trim()) {
+      return null;
+    }
+
+    const response = await fetch(`${apiUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: activeRefreshToken })
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as RefreshResponse;
+    if (!payload.access_token || !payload.refresh_token) {
+      return null;
+    }
+
+    setAccessToken(payload.access_token);
+    setRefreshToken(payload.refresh_token);
+    await saveStoredAuthSession({
+      accessToken: payload.access_token,
+      refreshToken: payload.refresh_token
+    });
+
+    return {
+      accessToken: payload.access_token,
+      refreshToken: payload.refresh_token
+    };
+  };
+
+  const ensureAccessToken = async (): Promise<string | null> => {
+    if (accessToken) {
+      return accessToken;
+    }
+
+    const refreshed = await refreshSessionTokens();
+    return refreshed?.accessToken ?? null;
+  };
+
+  const withAuthRetry = async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
+    const token = await ensureAccessToken();
+    if (!token) {
+      throw new Error(AUTH_REQUIRED_ERROR);
+    }
+
+    try {
+      return await operation(token);
+    } catch (error) {
+      const message = (error as Error).message ?? '';
+      if (!isUnauthorizedMessage(message)) {
+        throw error;
+      }
+
+      const refreshed = await refreshSessionTokens();
+      if (!refreshed?.accessToken) {
+        throw new Error(AUTH_REQUIRED_ERROR);
+      }
+      return operation(refreshed.accessToken);
+    }
+  };
 
   const queueAttachmentAsset = async (
     surveyId: string,
@@ -91,6 +198,72 @@ export function useSurveySync({
     setStatus(`${source === 'camera' ? 'Camera photo' : 'Photo'} queued for survey ${surveyId}`);
   };
 
+  useEffect(() => {
+    let active = true;
+
+    const restoreSession = async (): Promise<void> => {
+      try {
+        const stored = await loadStoredAuthSession();
+        if (!stored) {
+          if (active) {
+            setStatus('Ready');
+          }
+          return;
+        }
+
+        if (active) {
+          setStatus('Restoring session...');
+          setAccessToken(stored.accessToken);
+          setRefreshToken(stored.refreshToken);
+        }
+
+        let nextAccessToken = stored.accessToken;
+        let nextRefreshToken = stored.refreshToken;
+        let user = nextAccessToken ? await fetchCurrentUser(nextAccessToken) : null;
+
+        if (!user) {
+          const refreshed = await refreshSessionTokens(stored.refreshToken);
+          if (refreshed) {
+            nextAccessToken = refreshed.accessToken;
+            nextRefreshToken = refreshed.refreshToken;
+            user = await fetchCurrentUser(nextAccessToken);
+          }
+        }
+
+        if (!active) {
+          return;
+        }
+
+        if (!user) {
+          await clearSession();
+          setStatus('Session expired. Please login');
+          return;
+        }
+
+        setAccessToken(nextAccessToken);
+        setRefreshToken(nextRefreshToken);
+        setProfileFromUser(user);
+        await saveStoredAuthSession({
+          accessToken: nextAccessToken,
+          refreshToken: nextRefreshToken
+        });
+        setStatus('Session restored');
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        await clearSession().catch(() => undefined);
+        setStatus(`Session restore error: ${(error as Error).message}`);
+      }
+    };
+
+    void restoreSession();
+
+    return () => {
+      active = false;
+    };
+  }, [apiUrl]);
+
   const handleLogin = async (): Promise<void> => {
     try {
       setStatus('Logging in...');
@@ -108,7 +281,12 @@ export function useSurveySync({
 
       const payload = (await response.json()) as LoginResponse;
       setAccessToken(payload.access_token);
-      setProfile(`${payload.user.display_name} (${payload.user.email})`);
+      setRefreshToken(payload.refresh_token);
+      setProfileFromUser(payload.user);
+      await saveStoredAuthSession({
+        accessToken: payload.access_token,
+        refreshToken: payload.refresh_token
+      });
       setStatus('Logged in');
     } catch (error) {
       setStatus(`Login error: ${(error as Error).message}`);
@@ -116,47 +294,42 @@ export function useSurveySync({
   };
 
   const handleSync = async (): Promise<void> => {
-    if (!accessToken) {
-      setStatus('Login required before sync');
-      return;
-    }
-
     try {
       setStatus('Sync in progress...');
-      const result = await syncPending(apiUrl, accessToken);
+      const result = await withAuthRetry((token) => syncPending(apiUrl, token));
       await refreshLocalSurveys();
       await refreshLocalAttachments();
       setStatus(
         `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`
       );
     } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before sync');
+        return;
+      }
       setStatus(`Sync error: ${(error as Error).message}`);
     }
   };
 
   const handlePullChanges = async (): Promise<void> => {
-    if (!accessToken) {
-      setStatus('Login required before pulling server changes');
-      return;
-    }
-
     try {
       setStatus('Pulling server changes...');
-      const result = await pullRemoteChanges(apiUrl, accessToken);
+      const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token));
       await refreshLocalSurveys();
       await refreshLocalAttachments();
       setStatus(`Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`);
     } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before pulling server changes');
+        return;
+      }
       setStatus(`Pull error: ${(error as Error).message}`);
     }
   };
 
   const handleSubmitSurvey = async (surveyId: string): Promise<void> => {
-    if (!accessToken) {
-      setStatus('Login required before submit');
-      return;
-    }
-
     const blockReason = getSubmitBlockReason(surveyId, surveys);
     if (blockReason === 'not_found') {
       setStatus(`Survey not found locally: ${surveyId}`);
@@ -180,16 +353,32 @@ export function useSurveySync({
       return;
     }
 
-    const result = await submitSurvey(apiUrl, accessToken, surveyId);
-    await refreshLocalSurveys();
-    await refreshLocalAttachments();
-    if (result.ok && accessToken) {
-      void handleLoadCanonicalDetails(surveyId, { silent: true });
+    try {
+      const result = await withAuthRetry(async (token) => {
+        const submitResult = await submitSurvey(apiUrl, token, surveyId);
+        if (!submitResult.ok && isUnauthorizedMessage(submitResult.message)) {
+          throw new Error(submitResult.message);
+        }
+        return submitResult;
+      });
+
+      await refreshLocalSurveys();
+      await refreshLocalAttachments();
+      if (result.ok) {
+        void handleLoadCanonicalDetails(surveyId, { silent: true });
+      }
+      if (result.ok && editingSurveyId === surveyId) {
+        onStopEditing();
+      }
+      setStatus(result.ok ? `Submitted ${surveyId}` : `Submit failed for ${surveyId}: ${result.message}`);
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before submit');
+        return;
+      }
+      setStatus(`Submit error for ${surveyId}: ${(error as Error).message}`);
     }
-    if (result.ok && editingSurveyId === surveyId) {
-      onStopEditing();
-    }
-    setStatus(result.ok ? `Submitted ${surveyId}` : `Submit failed for ${surveyId}: ${result.message}`);
   };
 
   const handleRetrySurvey = async (surveyId: string): Promise<void> => {
@@ -216,10 +405,19 @@ export function useSurveySync({
 
   const handleToggleVisibility = async (surveyId: string, visibility: 'private' | 'public'): Promise<void> => {
     try {
-      const result = await updateSurveyVisibility(apiUrl, accessToken, surveyId, visibility);
+      let result = await updateSurveyVisibility(apiUrl, accessToken, surveyId, visibility);
+      if (!result.ok && isUnauthorizedMessage(result.message)) {
+        const refreshed = await refreshSessionTokens();
+        if (!refreshed?.accessToken) {
+          await clearSession();
+          setStatus('Login required before changing visibility');
+          return;
+        }
+        result = await updateSurveyVisibility(apiUrl, refreshed.accessToken, surveyId, visibility);
+      }
       await refreshLocalSurveys();
       await refreshLocalAttachments();
-      if (accessToken) {
+      if (result.synced && (accessToken || refreshToken)) {
         void handleLoadCanonicalDetails(surveyId, { silent: true });
       }
       setStatus(result.ok ? result.message : `Visibility update warning for ${surveyId}: ${result.message}`);
@@ -320,39 +518,44 @@ export function useSurveySync({
 
   const handleLoadCanonicalDetails = async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
     const silent = options?.silent ?? false;
-    if (!accessToken) {
-      if (!silent) {
-        setStatus('Login required before loading canonical details');
-      }
-      return;
-    }
 
     try {
       setDetailsLoadingSurveyId(surveyId);
       if (!silent) {
         setStatus(`Loading canonical details for ${surveyId}...`);
       }
-      const response = await fetch(`${apiUrl}/surveys/${surveyId}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+      const payload = await withAuthRetry(async (token) => {
+        const response = await fetch(`${apiUrl}/surveys/${surveyId}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.status === 401) {
+          throw new Error('HTTP 401');
         }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        return (await response.json()) as SurveyDetailResponse;
       });
 
-      if (!response.ok) {
-        if (!silent) {
-          setStatus(`Load detail failed: HTTP ${response.status}`);
-        }
-        return;
-      }
-
-      const payload = (await response.json()) as SurveyDetailResponse;
       setSurveyDetails((previous) => ({ ...previous, [surveyId]: payload }));
       if (!silent) {
         setStatus(`Canonical details loaded for ${surveyId}`);
       }
     } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        if (!silent) {
+          setStatus('Login required before loading canonical details');
+        }
+        return;
+      }
       if (!silent) {
         setStatus(`Load detail error: ${(error as Error).message}`);
       }
@@ -363,44 +566,66 @@ export function useSurveySync({
 
   const handleLoadSurveyEvents = async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
     const silent = options?.silent ?? false;
-    if (!accessToken) {
-      if (!silent) {
-        setStatus('Login required before loading survey events');
-      }
-      return;
-    }
 
     try {
       setEventsLoadingSurveyId(surveyId);
       if (!silent) {
         setStatus(`Loading events for ${surveyId}...`);
       }
-      const response = await fetch(`${apiUrl}/surveys/${surveyId}/events`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+      const payload = await withAuthRetry(async (token) => {
+        const response = await fetch(`${apiUrl}/surveys/${surveyId}/events`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.status === 401) {
+          throw new Error('HTTP 401');
         }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        return (await response.json()) as SurveyEventsResponse;
       });
 
-      if (!response.ok) {
-        if (!silent) {
-          setStatus(`Load events failed: HTTP ${response.status}`);
-        }
-        return;
-      }
-
-      const payload = (await response.json()) as SurveyEventsResponse;
       setSurveyEvents((previous) => ({ ...previous, [surveyId]: payload.items ?? [] }));
       if (!silent) {
         setStatus(`Events loaded for ${surveyId}`);
       }
     } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        if (!silent) {
+          setStatus('Login required before loading survey events');
+        }
+        return;
+      }
       if (!silent) {
         setStatus(`Load events error: ${(error as Error).message}`);
       }
     } finally {
       setEventsLoadingSurveyId((current) => (current === surveyId ? null : current));
+    }
+  };
+
+  const handleLogout = async (): Promise<void> => {
+    try {
+      const token = await ensureAccessToken();
+      if (token) {
+        await fetch(`${apiUrl}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }).catch(() => undefined);
+      }
+    } finally {
+      await clearSession();
+      setStatus('Logged out');
     }
   };
 
@@ -435,6 +660,7 @@ export function useSurveySync({
 
   return {
     accessToken,
+    isAuthenticated: Boolean(accessToken || refreshToken),
     profile,
     status,
     setStatus,
@@ -443,6 +669,7 @@ export function useSurveySync({
     surveyEvents,
     eventsLoadingSurveyId,
     handleLogin,
+    handleLogout,
     handleSync,
     handlePullChanges,
     handleSubmitSurvey,

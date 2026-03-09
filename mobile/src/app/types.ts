@@ -1,12 +1,19 @@
+export type AuthUser = {
+  id: string;
+  email: string;
+  display_name: string;
+  role: string;
+};
+
 export type LoginResponse = {
   access_token: string;
   refresh_token: string;
-  user: {
-    id: string;
-    email: string;
-    display_name: string;
-    role: string;
-  };
+  user: AuthUser;
+};
+
+export type RefreshResponse = {
+  access_token: string;
+  refresh_token: string;
 };
 
 export type FactorKey = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
