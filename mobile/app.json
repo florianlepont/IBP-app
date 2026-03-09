@@ -25,7 +25,8 @@
         {
           "locationWhenInUsePermission": "Allow IBP App to access your location for survey georeferencing."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

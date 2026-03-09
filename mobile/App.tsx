@@ -263,6 +263,12 @@ export default function App() {
               <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
 
               <Button title="Login" onPress={() => void surveySync.handleLogin()} />
+              {surveySync.isAuthenticated ? (
+                <>
+                  <View style={styles.spacer} />
+                  <Button title="Logout" onPress={() => void surveySync.handleLogout()} />
+                </>
+              ) : null}
               <View style={styles.spacer} />
               <Button title="Pull server changes (advanced)" onPress={() => void surveySync.handlePullChanges()} />
               <View style={styles.spacer} />
