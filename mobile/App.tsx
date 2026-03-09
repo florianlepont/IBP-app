@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -10,11 +11,15 @@ import {
   TextInput,
   View
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   createLocalDraft,
   initLocalDb,
+  listLocalAttachments,
   listLocalSurveys,
+  LocalAttachment,
   LocalSurvey,
+  queueLocalAttachment,
   submitSurvey,
   syncPending
 } from './src/storage';
@@ -94,6 +99,7 @@ export default function App() {
   const [accessToken, setAccessToken] = useState('');
   const [profile, setProfile] = useState<string>('Not logged in');
   const [surveys, setSurveys] = useState<LocalSurvey[]>([]);
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
   const [status, setStatus] = useState<string>('Ready');
 
@@ -102,10 +108,16 @@ export default function App() {
     setSurveys(rows);
   };
 
+  const refreshLocalAttachments = async (): Promise<void> => {
+    const rows = await listLocalAttachments();
+    setAttachments(rows);
+  };
+
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
       await initLocalDb();
       await refreshLocalSurveys();
+      await refreshLocalAttachments();
     };
 
     bootstrap().catch((error) => setStatus(`Init error: ${(error as Error).message}`));
@@ -175,6 +187,7 @@ export default function App() {
       });
 
       await refreshLocalSurveys();
+      await refreshLocalAttachments();
       setStatus('Local IBP draft created with raw observations');
     } catch (error) {
       setStatus(`Draft error: ${(error as Error).message}`);
@@ -191,6 +204,7 @@ export default function App() {
       setStatus('Sync in progress...');
       const result = await syncPending(apiUrl, accessToken);
       await refreshLocalSurveys();
+      await refreshLocalAttachments();
       setStatus(`Sync complete: ${result.synced} synced, ${result.failed} failed`);
     } catch (error) {
       setStatus(`Sync error: ${(error as Error).message}`);
@@ -211,7 +225,60 @@ export default function App() {
 
     const result = await submitSurvey(apiUrl, accessToken, candidate.id);
     await refreshLocalSurveys();
+    await refreshLocalAttachments();
     setStatus(result.ok ? `Submitted ${candidate.id}` : `Submit failed: ${result.message}`);
+  };
+
+  const guessMimeType = (uri: string): string => {
+    const normalized = uri.toLowerCase();
+    if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
+    if (normalized.endsWith('.png')) return 'image/png';
+    if (normalized.endsWith('.heic')) return 'image/heic';
+    if (normalized.endsWith('.webp')) return 'image/webp';
+    return 'application/octet-stream';
+  };
+
+  const handleQueueAttachment = async (surveyId: string): Promise<void> => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setStatus('Media library permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        setStatus('No image selected');
+        return;
+      }
+
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType ?? guessMimeType(asset.uri);
+      const sizeBytes = typeof asset.fileSize === 'number' && asset.fileSize > 0 ? asset.fileSize : 500_000;
+
+      await queueLocalAttachment({
+        survey_id: surveyId,
+        local_uri: asset.uri,
+        mime_type: mimeType,
+        size_bytes: sizeBytes,
+        captured_at: new Date().toISOString(),
+        metadata: {
+          file_name: asset.fileName ?? null,
+          width: asset.width ?? null,
+          height: asset.height ?? null
+        }
+      });
+
+      await refreshLocalAttachments();
+      setStatus(`Photo queued for survey ${surveyId}`);
+    } catch (error) {
+      setStatus(`Attachment queue error: ${(error as Error).message}`);
+    }
   };
 
   const handleLoadCanonicalDetails = async (surveyId: string): Promise<void> => {
@@ -289,7 +356,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.title}>IBP Step 6.2 - Raw Observations A..J</Text>
+          <Text style={styles.title}>IBP Step 11 - Raw Observations + Attachment Queue</Text>
           <Text style={styles.subtitle}>API URL (editable)</Text>
           <TextInput
             style={styles.input}
@@ -362,24 +429,49 @@ export default function App() {
           <Button title="Submit first synced survey" onPress={handleSubmit} />
           <View style={styles.spacer} />
           <Button title="Refresh local list" onPress={refreshLocalSurveys} />
+          <View style={styles.spacer} />
+          <Button title="Refresh local attachments" onPress={refreshLocalAttachments} />
 
           <Text style={styles.status}>{status}</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.title}>Local Surveys ({surveys.length})</Text>
-          {surveys.map((survey) => (
-            <View key={survey.id} style={styles.row}>
+          {surveys.map((survey) => {
+            const surveyAttachments = attachments.filter((a) => a.survey_id === survey.id);
+            return (
+              <View key={survey.id} style={styles.row}>
               <Text style={styles.rowTitle}>{survey.site_name}</Text>
               <Text style={styles.rowMeta}>id: {survey.id}</Text>
               <Text style={styles.rowMeta}>
                 status: {survey.status} | sync: {survey.sync_state} | v{survey.sync_version}
               </Text>
+              <Text style={styles.rowMeta}>attachments: {surveyAttachments.length}</Text>
               {survey.last_sync_error ? (
                 <Text style={styles.rowMeta}>last error: {survey.last_sync_error}</Text>
               ) : null}
               <View style={styles.miniSpacer} />
+              <Button title="Attach photo (queue)" onPress={() => handleQueueAttachment(survey.id)} />
+              <View style={styles.miniSpacer} />
               <Button title="Load canonical details" onPress={() => handleLoadCanonicalDetails(survey.id)} />
+              {surveyAttachments.length > 0 ? (
+                <View style={styles.attachmentCard}>
+                  <Text style={styles.attachmentHeader}>Local Attachments</Text>
+                  {surveyAttachments.map((attachment) => (
+                    <View key={attachment.id} style={styles.attachmentRow}>
+                      <Image source={{ uri: attachment.local_uri }} style={styles.attachmentPreview} />
+                      <Text style={styles.attachmentText}>
+                        {attachment.id} | {attachment.mime_type} | {Math.round(attachment.size_bytes / 1024)} KB
+                      </Text>
+                      <Text style={styles.attachmentText}>
+                        state: {attachment.sync_state}
+                        {attachment.remote_attachment_id ? ` | remote: ${attachment.remote_attachment_id}` : ''}
+                      </Text>
+                      {attachment.last_sync_error ? <Text style={styles.attachmentError}>error: {attachment.last_sync_error}</Text> : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
               {surveyDetails[survey.id] ? (
                 <View style={styles.canonicalCard}>
                   <Text style={styles.canonicalHeader}>Scores globaux</Text>
@@ -397,8 +489,9 @@ export default function App() {
                     .map(([factorCode, factor]) => renderCanonicalFactor(factorCode, factor))}
                 </View>
               ) : null}
-            </View>
-          ))}
+              </View>
+            );
+          })}
           {surveys.length === 0 ? <Text style={styles.meta}>No local survey yet.</Text> : null}
         </View>
       </ScrollView>
@@ -518,6 +611,40 @@ const styles = StyleSheet.create({
   rowMeta: {
     fontSize: 12,
     color: '#55708b'
+  },
+  attachmentCard: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e6eef7',
+    borderRadius: 8,
+    padding: 8,
+    gap: 6,
+    backgroundColor: '#fbfdff'
+  },
+  attachmentHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#25567f'
+  },
+  attachmentRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#edf3fa',
+    paddingTop: 6,
+    gap: 2
+  },
+  attachmentPreview: {
+    width: 88,
+    height: 88,
+    borderRadius: 6,
+    backgroundColor: '#edf3fa'
+  },
+  attachmentText: {
+    fontSize: 11,
+    color: '#4c6985'
+  },
+  attachmentError: {
+    fontSize: 11,
+    color: '#9f3d3d'
   },
   canonicalCard: {
     marginTop: 8,

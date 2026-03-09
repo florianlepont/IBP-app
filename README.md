@@ -121,3 +121,58 @@ Implemented:
   - canonical class mapping and score points
   - non-blocking warnings (`factor_f_group_capped`, consistency checks)
   - submit-time blocking checks and aggregate score validation
+
+## Step 10 Attachments API Baseline (Current)
+Implemented:
+- New DB migration: `api/migrations/003_attachments.sql` (`attachments` table + indexes)
+- New endpoints:
+  - `POST /v1/surveys/:id/attachments`
+  - `DELETE /v1/surveys/:id/attachments/:attachmentId`
+- Attachment creation validates `mime_type` and `size_bytes` (25MB max in V1)
+- API returns `attachment_id`, `storage_key`, and a generated upload target URL
+- Attachment deletion is soft-delete (`deleted_at`)
+- Audit trail records:
+  - `attachment_created`
+  - `attachment_deleted`
+- e2e coverage added for full create/delete attachment flow
+
+## Step 11 Mobile Attachment Queue + Upload Target Consumption (Current)
+Implemented:
+- New API migration: `api/migrations/004_attachment_upload_tracking.sql`
+  - `attachments.upload_token`
+  - `attachments.uploaded_at`
+- New API endpoint:
+  - `PUT /v1/surveys/:id/attachments/:attachmentId/upload?token=...`
+- `POST /v1/surveys/:id/attachments` now returns:
+  - `upload_url` (binary upload target)
+  - `confirm_url` (server acknowledgment endpoint)
+- Mobile:
+  - Added image picker (`expo-image-picker`)
+  - Added local attachment table (`local_attachments`) in SQLite
+  - Added attachment queue payload type (`kind: attachment_upload`)
+  - Added per-survey UI action: `Attach photo (queue)`
+  - Sync engine now processes two operation types:
+    - survey upsert
+    - attachment create + upload target call
+- Added sync-state visibility for local attachments (`pending/synced/failed`) in UI
+
+## Step 12 Real File Upload + Attachment Detail Visibility (Current)
+Implemented:
+- Added object storage modes:
+  - `OBJECT_STORAGE_MODE=local`: upload through API (`multipart/form-data`) and local disk persistence
+  - `OBJECT_STORAGE_MODE=minio`: presigned `PUT` upload URL generated for MinIO, then confirmation call
+- MinIO setup env (API): `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY`, `OBJECT_STORAGE_BUCKET`
+- API confirmation endpoint:
+  - `PUT /v1/surveys/:id/attachments/:attachmentId/upload?token=...`
+- Local mode persistence path:
+  - `ATTACHMENTS_UPLOAD_DIR` (default `/tmp/ibp-uploads`)
+- Added attachment listing endpoint:
+  - `GET /v1/surveys/:id/attachments`
+- Attachment delete now removes stored file/object (best-effort)
+- Mobile sync uploads actual selected image file (API mode or direct presigned mode)
+- Mobile survey list now shows local attachment thumbnails and sync states
+- e2e attachment flow now validates:
+  - create attachment
+  - binary upload call
+  - list attachments
+  - delete + post-delete list check
