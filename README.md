@@ -108,3 +108,16 @@ Implemented:
   - `factor_results` (canonical normalized model)
   - `scores` (computed IBP aggregates)
 - Added e2e coverage to assert canonical factor results are returned by detail endpoint
+
+## Step 9 IBP Validation Matrix + Unit Test Harness (Current)
+Implemented:
+- Dedicated unit test suite for IBP rule engine (`api/test/ibp-rules.spec.ts`)
+- New API script: `npm --workspace api run test:unit`
+- Separate Jest config for unit tests: `api/jest.unit.config.js`
+- Reference validation matrix documented in:
+  - `specifications/technical/ibp-validation-matrix-v1.md`
+- Coverage includes:
+  - per-factor normalization A..J
+  - canonical class mapping and score points
+  - non-blocking warnings (`factor_f_group_capped`, consistency checks)
+  - submit-time blocking checks and aggregate score validation
