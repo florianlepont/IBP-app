@@ -741,6 +741,19 @@ export async function clearLocalIbpData(): Promise<void> {
   await db.runAsync(`DELETE FROM local_meta WHERE key = 'downsync_cursor'`);
 }
 
+export async function hasPendingSyncWork(): Promise<boolean> {
+  const db = await dbPromise;
+  const nowIso = new Date().toISOString();
+  const row = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) AS count
+     FROM sync_queue
+     WHERE status = 'pending'
+        OR (status = 'failed' AND (next_retry_at IS NULL OR next_retry_at <= ?))`,
+    [nowIso]
+  );
+  return Number(row?.count ?? 0) > 0;
+}
+
 export async function syncPending(
   apiUrl: string,
   accessToken: string
