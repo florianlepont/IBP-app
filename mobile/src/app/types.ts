@@ -77,7 +77,7 @@ export type PublicMapItem = {
   ibp_total: number;
 };
 
-export type SurveyStatusFilter = 'all' | 'draft' | 'submitted';
+export type SurveyStatusFilter = 'all' | 'draft' | 'submitted' | 'expired' | 'synced' | 'error';
 export type SurveyVisibilityFilter = 'all' | 'private' | 'public';
 export type SurveySyncFilter = 'all' | 'pending' | 'synced' | 'failed';
 export type SurveyBlockedFilter = 'all' | 'blocked' | 'unblocked';

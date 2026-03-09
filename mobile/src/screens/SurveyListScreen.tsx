@@ -1,6 +1,7 @@
 import { Button, Pressable, Text, TextInput, View } from 'react-native';
 import { ReactNode } from 'react';
 import { styles } from '../app/styles';
+import { formatDateTime } from '../app/formatters';
 import {
   SurveyAttachmentFilter,
   SurveyBlockedFilter,
@@ -94,6 +95,9 @@ export function SurveyListScreen({
           <FilterChip label="All" active={statusFilter === 'all'} onPress={() => setStatusFilter('all')} />
           <FilterChip label="Draft" active={statusFilter === 'draft'} onPress={() => setStatusFilter('draft')} />
           <FilterChip label="Submitted" active={statusFilter === 'submitted'} onPress={() => setStatusFilter('submitted')} />
+          <FilterChip label="Expired" active={statusFilter === 'expired'} onPress={() => setStatusFilter('expired')} />
+          <FilterChip label="Synced" active={statusFilter === 'synced'} onPress={() => setStatusFilter('synced')} />
+          <FilterChip label="Error" active={statusFilter === 'error'} onPress={() => setStatusFilter('error')} />
         </View>
       </View>
 
@@ -155,7 +159,9 @@ export function SurveyListScreen({
           <View key={survey.id} style={styles.row}>
             <Text style={styles.rowTitle}>{survey.site_name}</Text>
             <Text style={styles.rowMeta}>id: {survey.id}</Text>
+            <Text style={styles.rowMeta}>created: {formatDateTime(survey.created_at)}</Text>
             <Text style={styles.rowMeta}>updated: {survey.updated_at}</Text>
+            <Text style={styles.rowMeta}>completion: {survey.completion_rate}%</Text>
             <SurveyBadges survey={survey} attachmentCount={attachmentCount} />
             {selectedSurveyId === survey.id ? <Text style={styles.editingTag}>selected in detail panel</Text> : null}
             <View style={styles.miniSpacer} />

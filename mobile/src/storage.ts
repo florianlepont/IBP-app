@@ -11,7 +11,9 @@ export type LocalSurvey = {
   last_sync_error_code: string | null;
   last_sync_error_at: string | null;
   sync_blocked: number;
+  created_at: string;
   updated_at: string;
+  completion_rate: number;
 };
 
 export type LocalAttachment = {
@@ -120,6 +122,7 @@ type RemoteSurvey = {
   factors?: Record<string, unknown>;
   scores?: Record<string, unknown>;
   location?: Record<string, unknown>;
+  created_at?: string | null;
   expires_at?: string | null;
   sync_version: number;
   deleted_at?: string | null;
@@ -172,6 +175,103 @@ export type LocalAttachmentInput = {
 
 const dbPromise = SQLite.openDatabaseAsync('ibp-local.db');
 const MAX_RETRY_COUNT = 8;
+const FACTOR_KEYS: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J'> = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+const LEGACY_DEFAULT_FACTOR_VALUES: Record<string, Record<string, number>> = {
+  A: { native_genus_count: 2 },
+  B: { strata_count: 2, covered_autochthonous_percent: 70 },
+  C: { bmg_count: 0, bmm_count: 0, surface_ha: 1 },
+  D: { bmg_count: 0, bmm_count: 0, surface_ha: 1 },
+  E: { tgb_count: 0, gb_count: 0, surface_ha: 1 },
+  F: { trees_per_ha: 2 },
+  G: { open_flowering_percent: 2 },
+  H: { class_score: 2 },
+  I: { type_count: 1 },
+  J: { type_count: 1 }
+};
+
+const isFilledValue = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.some((item) => isFilledValue(item));
+  if (typeof value === 'object') {
+    const objectValues = Object.values(value as Record<string, unknown>);
+    return objectValues.some((item) => isFilledValue(item));
+  }
+  return false;
+};
+
+const hasValidGpsLocation = (location: Record<string, unknown>): boolean => {
+  if (location.source !== 'gps') return false;
+  return typeof location.lat === 'number' && Number.isFinite(location.lat) && typeof location.lng === 'number' && Number.isFinite(location.lng);
+};
+
+const hasValidManualLocation = (location: Record<string, unknown>): boolean => {
+  if (location.source !== 'manual') return false;
+  return (
+    typeof location.address_line === 'string' &&
+    location.address_line.trim().length > 0 &&
+    typeof location.postal_code === 'string' &&
+    location.postal_code.trim().length > 0 &&
+    typeof location.city === 'string' &&
+    location.city.trim().length > 0 &&
+    typeof location.country === 'string' &&
+    location.country.trim().length > 0
+  );
+};
+
+const isLegacyDefaultFactorValue = (factorKey: string, rawValue: unknown): boolean => {
+  const expected = LEGACY_DEFAULT_FACTOR_VALUES[factorKey];
+  if (!expected || !rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+    return false;
+  }
+  const value = rawValue as Record<string, unknown>;
+  const expectedKeys = Object.keys(expected);
+  if (Object.keys(value).length !== expectedKeys.length) {
+    return false;
+  }
+  return expectedKeys.every((key) => typeof value[key] === 'number' && value[key] === expected[key]);
+};
+
+const computeCompletionRate = (status: string, payload: SurveyQueuePayload | null): number => {
+  if (status === 'submitted') return 100;
+  if (!payload) return 0;
+
+  let completed = 0;
+  const total = 14;
+
+  if (typeof payload.site_name === 'string' && payload.site_name.trim().length > 0) completed += 1;
+  if (payload.region_version === 'ACA' || payload.region_version === 'M') completed += 1;
+  if (typeof payload.vegetation_stage === 'string' && payload.vegetation_stage.trim().length > 0) completed += 1;
+
+  const location = payload.location;
+  if (location && typeof location === 'object' && !Array.isArray(location)) {
+    if (hasValidGpsLocation(location as Record<string, unknown>) || hasValidManualLocation(location as Record<string, unknown>)) {
+      completed += 1;
+    }
+  }
+
+  const factors = payload.factors;
+  if (factors && typeof factors === 'object' && !Array.isArray(factors)) {
+    for (const factorKey of FACTOR_KEYS) {
+      const factorValue = (factors as Record<string, unknown>)[factorKey];
+      if (isLegacyDefaultFactorValue(factorKey, factorValue)) {
+        continue;
+      }
+      if (isFilledValue(factorValue)) {
+        completed += 1;
+      }
+    }
+  }
+
+  return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+};
+
+const toSurveyQueuePayload = (value: unknown): SurveyQueuePayload | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return isSurveyQueuePayload(value) ? value : null;
+};
 
 export async function initLocalDb(): Promise<void> {
   const db = await dbPromise;
@@ -189,6 +289,7 @@ export async function initLocalDb(): Promise<void> {
       last_sync_error_at TEXT,
       sync_blocked INTEGER NOT NULL DEFAULT 0,
       payload_json TEXT,
+      created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
@@ -238,6 +339,8 @@ export async function initLocalDb(): Promise<void> {
   await addColumnIfMissing(db, 'local_surveys', 'last_sync_error_at TEXT');
   await addColumnIfMissing(db, 'local_surveys', 'sync_blocked INTEGER NOT NULL DEFAULT 0');
   await addColumnIfMissing(db, 'local_surveys', 'payload_json TEXT');
+  await addColumnIfMissing(db, 'local_surveys', 'created_at TEXT');
+  await db.runAsync(`UPDATE local_surveys SET created_at = updated_at WHERE created_at IS NULL OR created_at = ''`);
   await addColumnIfMissing(db, 'local_surveys', `visibility TEXT NOT NULL DEFAULT 'private'`);
   await db.runAsync(`UPDATE local_surveys SET visibility = 'private' WHERE visibility IS NULL OR visibility = ''`);
   await addColumnIfMissing(db, 'sync_queue', 'next_retry_at TEXT');
@@ -268,9 +371,9 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
   };
 
   await db.runAsync(
-    `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, input.site_name, 'draft', 'private', 1, 'pending', null, null, null, 0, JSON.stringify(payload), now]
+    `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, input.site_name, 'draft', 'private', 1, 'pending', null, null, null, 0, JSON.stringify(payload), now, now]
   );
 
   await db.runAsync(
@@ -290,7 +393,9 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     last_sync_error_code: null,
     last_sync_error_at: null,
     sync_blocked: 0,
-    updated_at: now
+    created_at: now,
+    updated_at: now,
+    completion_rate: computeCompletionRate('draft', payload)
   };
 }
 
@@ -430,9 +535,10 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
     status: string;
     visibility: string | null;
     sync_version: number;
+    created_at: string | null;
     payload_json: string | null;
   }>(
-    `SELECT id, site_name, status, visibility, sync_version, payload_json
+    `SELECT id, site_name, status, visibility, sync_version, created_at, payload_json
      FROM local_surveys
      WHERE id = ?`,
     [input.survey_id]
@@ -512,18 +618,31 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
     last_sync_error_code: null,
     last_sync_error_at: null,
     sync_blocked: 0,
-    updated_at: now
+    created_at: existing.created_at ?? now,
+    updated_at: now,
+    completion_rate: computeCompletionRate('draft', nextPayload)
   };
 }
 
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
   const db = await dbPromise;
-  const rows = await db.getAllAsync<LocalSurvey>(
-    `SELECT id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, updated_at
+  const rows = await db.getAllAsync<
+    Omit<LocalSurvey, 'completion_rate'> & {
+      payload_json: string | null;
+    }
+  >(
+    `SELECT id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, created_at, updated_at, payload_json
      FROM local_surveys
      ORDER BY updated_at DESC`
   );
-  return rows;
+  return rows.map((row) => {
+    const payload = row.payload_json ? toSurveyQueuePayload(safeParseJson(row.payload_json)) : null;
+    const { payload_json: _payloadJson, ...rest } = row;
+    return {
+      ...rest,
+      completion_rate: computeCompletionRate(row.status, payload)
+    };
+  });
 }
 
 export async function listLocalAttachments(surveyId?: string): Promise<LocalAttachment[]> {
@@ -543,6 +662,14 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
      FROM local_attachments
      ORDER BY updated_at DESC`
   );
+}
+
+export async function clearLocalIbpData(): Promise<void> {
+  const db = await dbPromise;
+  await db.runAsync(`DELETE FROM sync_queue`);
+  await db.runAsync(`DELETE FROM local_attachments`);
+  await db.runAsync(`DELETE FROM local_surveys`);
+  await db.runAsync(`DELETE FROM local_meta WHERE key = 'downsync_cursor'`);
 }
 
 export async function syncPending(
@@ -1132,9 +1259,10 @@ async function applyRemoteChanges(
 
     if (!existing) {
       const payload = buildSurveyPayloadFromRemote(survey);
+      const createdAt = survey.created_at ?? now;
       await db.runAsync(
-        `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?, ?)`,
+        `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?, ?, ?)`,
         [
           survey.id,
           survey.site_name ?? 'Remote survey',
@@ -1142,6 +1270,7 @@ async function applyRemoteChanges(
           (survey.visibility as 'private' | 'public' | undefined) ?? 'private',
           survey.sync_version ?? 1,
           JSON.stringify(payload),
+          createdAt,
           now
         ]
       );

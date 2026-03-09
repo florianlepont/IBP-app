@@ -27,6 +27,8 @@ type ProfileScreenProps = {
   onLogout: () => Promise<void>;
   onSync: () => Promise<void>;
   onPullChanges: () => Promise<void>;
+  onDebugResetIbpData: () => Promise<void>;
+  onDebugResetUserData: () => Promise<void>;
   onRefreshLocalList: () => Promise<void>;
   onRefreshLocalAttachments: () => Promise<void>;
   onReloadProfile: () => Promise<AuthUser | null>;
@@ -54,6 +56,8 @@ export function ProfileScreen({
   onLogout,
   onSync,
   onPullChanges,
+  onDebugResetIbpData,
+  onDebugResetUserData,
   onRefreshLocalList,
   onRefreshLocalAttachments,
   onReloadProfile,
@@ -196,6 +200,11 @@ export function ProfileScreen({
         <Button title="Refresh local list" onPress={() => void onRefreshLocalList()} />
         <View style={styles.spacer} />
         <Button title="Refresh local attachments" onPress={() => void onRefreshLocalAttachments()} />
+        <View style={styles.spacer} />
+        <Text style={styles.subtitle}>Debug</Text>
+        <Button title="Debug: Clear IBP DB" onPress={() => void onDebugResetIbpData()} />
+        <View style={styles.spacer} />
+        <Button title="Debug: Clear User DB" onPress={() => void onDebugResetUserData()} />
       </View>
 
       <Text style={styles.status}>{status}</Text>

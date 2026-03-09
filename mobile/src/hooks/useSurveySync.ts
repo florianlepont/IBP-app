@@ -17,6 +17,7 @@ import {
   saveStoredAuthSession
 } from '../auth/session-storage';
 import {
+  clearLocalIbpData,
   discardSurveyLocalChanges,
   LocalSurvey,
   pullRemoteChanges,
@@ -641,6 +642,128 @@ export function useSurveySync({
     }
   };
 
+  const handleDebugResetIbpData = async (): Promise<void> => {
+    Alert.alert('Debug reset IBP data', 'This will delete all IBP surveys/events/attachments on server and clear local IBP data.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              setStatus('Debug reset IBP data in progress...');
+              const result = await withAuthRetry(async (token) => {
+                const response = await fetch(`${apiUrl}/debug/reset-ibp-data`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+
+                if (response.status === 401) {
+                  throw new Error('HTTP 401');
+                }
+
+                const body = (await response.json().catch(() => ({}))) as {
+                  surveys_deleted?: number;
+                  attachments_deleted?: number;
+                  events_deleted?: number;
+                  message?: string;
+                };
+                if (!response.ok) {
+                  throw new Error(body.message ?? `HTTP ${response.status}`);
+                }
+                return body;
+              });
+
+              await clearLocalIbpData();
+              await refreshLocalSurveys();
+              await refreshLocalAttachments();
+              setSurveyDetails({});
+              setSurveyEvents({});
+              onCloseSurveyDetail();
+              if (editingSurveyId) {
+                onStopEditing();
+              }
+              setStatus(
+                `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`
+              );
+            } catch (error) {
+              if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+                await clearSession();
+                setStatus('Login required before debug reset');
+                return;
+              }
+              setStatus(`Debug reset IBP error: ${(error as Error).message}`);
+            }
+          })();
+        }
+      }
+    ]);
+  };
+
+  const handleDebugResetUserData = async (): Promise<void> => {
+    Alert.alert('Debug reset user data', 'This will delete all users on server and clear your local session and IBP data.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              setStatus('Debug reset user data in progress...');
+              const result = await withAuthRetry(async (token) => {
+                const response = await fetch(`${apiUrl}/debug/reset-user-data`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+
+                if (response.status === 401) {
+                  throw new Error('HTTP 401');
+                }
+
+                const body = (await response.json().catch(() => ({}))) as {
+                  users_deleted?: number;
+                  surveys_deleted?: number;
+                  attachments_deleted?: number;
+                  events_deleted?: number;
+                  message?: string;
+                };
+                if (!response.ok) {
+                  throw new Error(body.message ?? `HTTP ${response.status}`);
+                }
+                return body;
+              });
+
+              await clearLocalIbpData();
+              onCloseSurveyDetail();
+              if (editingSurveyId) {
+                onStopEditing();
+              }
+              await clearSession();
+              await refreshLocalSurveys();
+              await refreshLocalAttachments();
+              setStatus(
+                `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`
+              );
+            } catch (error) {
+              if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+                await clearSession();
+                setStatus('Login required before debug reset');
+                return;
+              }
+              setStatus(`Debug reset user error: ${(error as Error).message}`);
+            }
+          })();
+        }
+      }
+    ]);
+  };
+
   const handleSubmitSurvey = async (surveyId: string): Promise<void> => {
     const blockReason = getSubmitBlockReason(surveyId, surveys);
     if (blockReason === 'not_found') {
@@ -739,12 +862,6 @@ export function useSurveySync({
   };
 
   const confirmDeleteSurvey = (surveyId: string): void => {
-    const current = surveys.find((survey) => survey.id === surveyId);
-    if (current?.status === 'submitted') {
-      setStatus(`Survey ${surveyId} is submitted and read-only`);
-      return;
-    }
-
     Alert.alert('Delete survey', 'This will remove the survey locally and queue remote deletion.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -993,6 +1110,8 @@ export function useSurveySync({
     handleRemoveProfilePicture,
     handleSync,
     handlePullChanges,
+    handleDebugResetIbpData,
+    handleDebugResetUserData,
     handleSubmitSurvey,
     handleRetrySurvey,
     handleDiscardSurvey,
