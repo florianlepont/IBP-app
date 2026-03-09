@@ -42,6 +42,14 @@ type UseSurveySyncParams = {
   onStopEditing: () => void;
 };
 
+type UpdateProfileInput = {
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  email: string;
+  profile_picture_url?: string | null;
+};
+
 const guessMimeType = (uri: string): string => {
   const normalized = uri.toLowerCase();
   if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
@@ -71,7 +79,10 @@ export function useSurveySync({
 }: UseSurveySyncParams) {
   const [accessToken, setAccessToken] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
+  const [sessionRestoring, setSessionRestoring] = useState(true);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<string>('Not logged in');
+  const [profileUpdating, setProfileUpdating] = useState(false);
   const [status, setStatus] = useState<string>('Ready');
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
   const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null);
@@ -79,12 +90,15 @@ export function useSurveySync({
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null);
 
   const setProfileFromUser = (user: AuthUser): void => {
+    setCurrentUser(user);
     setProfile(`${user.display_name} (${user.email})`);
   };
 
   const clearSession = async (): Promise<void> => {
     setAccessToken('');
     setRefreshToken('');
+    setSessionRestoring(false);
+    setCurrentUser(null);
     setProfile('Not logged in');
     setSurveyDetails({});
     setSurveyEvents({});
@@ -105,6 +119,297 @@ export function useSurveySync({
     }
 
     return (await response.json()) as AuthUser;
+  };
+
+  const handleLoadMyProfile = async (options?: { silent?: boolean }): Promise<AuthUser | null> => {
+    const silent = options?.silent ?? false;
+    try {
+      const user = await withAuthRetry(async (token) => {
+        const response = await fetch(`${apiUrl}/me`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.status === 401) {
+          throw new Error('HTTP 401');
+        }
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return (await response.json()) as AuthUser;
+      });
+
+      setProfileFromUser(user);
+      if (!silent) {
+        setStatus('Profile loaded');
+      }
+      return user;
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        if (!silent) {
+          setStatus('Login required before loading profile');
+        }
+        return null;
+      }
+
+      if (!silent) {
+        setStatus(`Profile load error: ${(error as Error).message}`);
+      }
+      return null;
+    }
+  };
+
+  const handleUpdateProfile = async (input: UpdateProfileInput): Promise<void> => {
+    const payload = {
+      first_name: input.first_name.trim(),
+      last_name: input.last_name.trim(),
+      display_name: input.display_name.trim(),
+      email: input.email.trim().toLowerCase(),
+      ...(Object.prototype.hasOwnProperty.call(input, 'profile_picture_url')
+        ? { profile_picture_url: input.profile_picture_url ?? null }
+        : {})
+    };
+
+    if (!payload.display_name) {
+      setStatus('Display name is required');
+      return;
+    }
+    if (!payload.email || !payload.email.includes('@')) {
+      setStatus('A valid email is required');
+      return;
+    }
+
+    try {
+      setProfileUpdating(true);
+      const user = await withAuthRetry(async (token) => {
+        const response = await fetch(`${apiUrl}/me`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.status === 401) {
+          throw new Error('HTTP 401');
+        }
+
+        const body = (await response.json().catch(() => ({}))) as { message?: string };
+        if (!response.ok) {
+          throw new Error(body.message ?? `HTTP ${response.status}`);
+        }
+        return body as AuthUser;
+      });
+
+      setProfileFromUser(user);
+      if (user.email_change_required) {
+        setStatus(`Profile updated. Email confirmation required for ${user.email_change_pending_to ?? 'pending email'}`);
+      } else {
+        setStatus('Profile updated');
+      }
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before updating profile');
+        return;
+      }
+      setStatus(`Profile update error: ${(error as Error).message}`);
+    } finally {
+      setProfileUpdating(false);
+    }
+  };
+
+  const handleConfirmEmailChange = async (token: string): Promise<void> => {
+    if (!token.trim()) {
+      setStatus('Email confirmation token is required');
+      return;
+    }
+
+    try {
+      setProfileUpdating(true);
+      const user = await withAuthRetry(async (access) => {
+        const response = await fetch(`${apiUrl}/me/email/confirm`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${access}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ token: token.trim() })
+        });
+
+        const body = (await response.json().catch(() => ({}))) as { message?: string };
+        if (response.status === 401) {
+          throw new Error('HTTP 401');
+        }
+        if (!response.ok) {
+          throw new Error(body.message ?? `HTTP ${response.status}`);
+        }
+        return body as AuthUser;
+      });
+
+      setProfileFromUser(user);
+      setStatus('Email address confirmed');
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before confirming email');
+        return;
+      }
+      setStatus(`Email confirmation error: ${(error as Error).message}`);
+    } finally {
+      setProfileUpdating(false);
+    }
+  };
+
+  const uploadProfilePictureFromAsset = async (asset: ImagePicker.ImagePickerAsset): Promise<void> => {
+    const mimeType = asset.mimeType ?? guessMimeType(asset.uri);
+    const payload = new FormData();
+    payload.append('file', {
+      uri: asset.uri,
+      type: mimeType,
+      name: asset.fileName ?? `profile-${Date.now()}`
+    } as any);
+
+    try {
+      setProfileUpdating(true);
+      setStatus('Uploading profile picture...');
+      const uploadResponse = await withAuthRetry(async (token) => {
+        const response = await fetch(`${apiUrl}/me/profile-picture`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: payload
+        });
+
+        if (response.status === 401) {
+          throw new Error('HTTP 401');
+        }
+        const body = (await response.json().catch(() => ({}))) as {
+          profile_picture_url?: string;
+          message?: string;
+        };
+        if (!response.ok || !body.profile_picture_url) {
+          throw new Error(body.message ?? `HTTP ${response.status}`);
+        }
+        return body.profile_picture_url;
+      });
+
+      const baseUser = currentUser ?? (await handleLoadMyProfile({ silent: true }));
+      if (!baseUser) {
+        setStatus('Profile picture uploaded, but profile refresh requires login');
+        return;
+      }
+
+      await handleUpdateProfile({
+        first_name: baseUser.first_name,
+        last_name: baseUser.last_name,
+        display_name: baseUser.display_name,
+        email: baseUser.email,
+        profile_picture_url: uploadResponse
+      });
+      setStatus('Profile picture uploaded');
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before uploading profile picture');
+        return;
+      }
+      setStatus(`Profile picture upload error: ${(error as Error).message}`);
+    } finally {
+      setProfileUpdating(false);
+    }
+  };
+
+  const handlePickProfilePictureFromLibrary = async (): Promise<void> => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setStatus('Media library permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8
+      });
+      if (result.canceled || !result.assets?.[0]) {
+        setStatus('No image selected');
+        return;
+      }
+
+      await uploadProfilePictureFromAsset(result.assets[0]);
+    } catch (error) {
+      setStatus(`Profile image picker error: ${(error as Error).message}`);
+    }
+  };
+
+  const handleTakeProfilePictureFromCamera = async (): Promise<void> => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setStatus('Camera permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8
+      });
+      if (result.canceled || !result.assets?.[0]) {
+        setStatus('No photo captured');
+        return;
+      }
+
+      await uploadProfilePictureFromAsset(result.assets[0]);
+    } catch (error) {
+      setStatus(`Profile camera error: ${(error as Error).message}`);
+    }
+  };
+
+  const handleRemoveProfilePicture = async (): Promise<void> => {
+    const baseUser = currentUser ?? (await handleLoadMyProfile({ silent: true }));
+    if (!baseUser) {
+      setStatus('Login required before removing profile picture');
+      return;
+    }
+
+    try {
+      setProfileUpdating(true);
+      await withAuthRetry(async (token) => {
+        await fetch(`${apiUrl}/me/profile-picture`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }).catch(() => undefined);
+        return true;
+      });
+      await handleUpdateProfile({
+        first_name: baseUser.first_name,
+        last_name: baseUser.last_name,
+        display_name: baseUser.display_name,
+        email: baseUser.email,
+        profile_picture_url: null
+      });
+      setStatus('Profile picture removed');
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        setStatus('Login required before removing profile picture');
+        return;
+      }
+      setStatus(`Profile picture remove error: ${(error as Error).message}`);
+    } finally {
+      setProfileUpdating(false);
+    }
   };
 
   const refreshSessionTokens = async (tokenOverride?: string): Promise<{ accessToken: string; refreshToken: string } | null> => {
@@ -203,10 +508,14 @@ export function useSurveySync({
 
     const restoreSession = async (): Promise<void> => {
       try {
+        if (active) {
+          setSessionRestoring(true);
+        }
         const stored = await loadStoredAuthSession();
         if (!stored) {
           if (active) {
             setStatus('Ready');
+            setSessionRestoring(false);
           }
           return;
         }
@@ -248,12 +557,14 @@ export function useSurveySync({
           refreshToken: nextRefreshToken
         });
         setStatus('Session restored');
+        setSessionRestoring(false);
       } catch (error) {
         if (!active) {
           return;
         }
         await clearSession().catch(() => undefined);
         setStatus(`Session restore error: ${(error as Error).message}`);
+        setSessionRestoring(false);
       }
     };
 
@@ -266,6 +577,7 @@ export function useSurveySync({
 
   const handleLogin = async (): Promise<void> => {
     try {
+      setSessionRestoring(false);
       setStatus('Logging in...');
 
       const response = await fetch(`${apiUrl}/auth/login`, {
@@ -660,8 +972,11 @@ export function useSurveySync({
 
   return {
     accessToken,
+    sessionRestoring,
     isAuthenticated: Boolean(accessToken || refreshToken),
+    currentUser,
     profile,
+    profileUpdating,
     status,
     setStatus,
     surveyDetails,
@@ -670,6 +985,12 @@ export function useSurveySync({
     eventsLoadingSurveyId,
     handleLogin,
     handleLogout,
+    handleLoadMyProfile,
+    handleUpdateProfile,
+    handleConfirmEmailChange,
+    handlePickProfilePictureFromLibrary,
+    handleTakeProfilePictureFromCamera,
+    handleRemoveProfilePicture,
     handleSync,
     handlePullChanges,
     handleSubmitSurvey,

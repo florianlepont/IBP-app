@@ -5,9 +5,16 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f2f5fa'
   },
+  appLayout: {
+    flex: 1
+  },
+  mainScroll: {
+    flex: 1
+  },
   content: {
     padding: 16,
-    gap: 14
+    gap: 14,
+    paddingBottom: 20
   },
   card: {
     backgroundColor: '#ffffff',
@@ -111,6 +118,36 @@ export const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
     backgroundColor: '#fbfdff'
+  },
+  avatarCard: {
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#fbfdff'
+  },
+  avatarImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#e8eff8'
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef4fb'
+  },
+  infoCard: {
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
+    backgroundColor: '#f7fbff'
   },
   detailCard: {
     borderWidth: 1,
@@ -343,5 +380,36 @@ export const styles = StyleSheet.create({
   canonicalMeta: {
     fontSize: 12,
     color: '#55708b'
+  },
+  tabBar: {
+    borderTopWidth: 1,
+    borderTopColor: '#d9e4f1',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    gap: 8
+  },
+  tabButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d3e0ee',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#f8fbff'
+  },
+  tabButtonActive: {
+    borderColor: '#2d6fb5',
+    backgroundColor: '#e8f2ff'
+  },
+  tabButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#355a80'
+  },
+  tabButtonTextActive: {
+    color: '#1d4f84'
   }
 });
