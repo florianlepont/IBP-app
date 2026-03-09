@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "jest --runInBand --config jest.unit.config.js"
   },
   "dependencies": {
     "expo": "~54.0.0",
