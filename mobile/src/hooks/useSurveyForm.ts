@@ -35,6 +35,44 @@ const hasText = (value: string): boolean => value.trim().length > 0;
 
 type GpsFormValue = typeof DEFAULT_SURVEY_FORM.gpsLocation;
 type ManualFormValue = typeof DEFAULT_SURVEY_FORM.manualLocation;
+type FieldError = string | null;
+
+type SurveyFormErrors = {
+  siteName: FieldError;
+  gps: {
+    lat: FieldError;
+    lng: FieldError;
+  };
+  manual: {
+    address_line: FieldError;
+    postal_code: FieldError;
+    city: FieldError;
+    country: FieldError;
+  };
+};
+
+const requiredError = (value: string, label: string): FieldError => (value.trim().length === 0 ? `${label} is required` : null);
+
+const numberError = (value: string, label: string, options?: { min?: number; max?: number; integer?: boolean }): FieldError => {
+  if (value.trim().length === 0) return `${label} is required`;
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return `${label} must be a number`;
+  if (options?.integer && !Number.isInteger(parsed)) return `${label} must be an integer`;
+  if (typeof options?.min === 'number' && parsed < options.min) return `${label} must be >= ${options.min}`;
+  if (typeof options?.max === 'number' && parsed > options.max) return `${label} must be <= ${options.max}`;
+  return null;
+};
+
+const oneOfError = (value: string, label: string, allowed: number[]): FieldError => {
+  const base = numberError(value, label, { integer: true });
+  if (base) return base;
+  const parsed = Number(value);
+  if (!allowed.includes(parsed)) {
+    return `${label} must be one of: ${allowed.join(', ')}`;
+  }
+  return null;
+};
 
 const inferLocationSource = (location: Record<string, unknown>): SurveyLocationSource => {
   if (location.source === 'manual') return 'manual';
@@ -209,6 +247,23 @@ export function useSurveyForm() {
     });
   };
 
+  const formErrors = useMemo<SurveyFormErrors>(
+    () => ({
+      siteName: requiredError(siteName, 'Site name'),
+      gps: {
+        lat: locationSource === 'gps' ? numberError(gpsLocation.lat, 'Latitude', { min: -90, max: 90 }) : null,
+        lng: locationSource === 'gps' ? numberError(gpsLocation.lng, 'Longitude', { min: -180, max: 180 }) : null
+      },
+      manual: {
+        address_line: locationSource === 'manual' ? requiredError(manualLocation.address_line, 'Address line') : null,
+        postal_code: locationSource === 'manual' ? requiredError(manualLocation.postal_code, 'Postal code') : null,
+        city: locationSource === 'manual' ? requiredError(manualLocation.city, 'City') : null,
+        country: locationSource === 'manual' ? requiredError(manualLocation.country, 'Country') : null
+      }
+    }),
+    [siteName, locationSource, gpsLocation.lat, gpsLocation.lng, manualLocation.address_line, manualLocation.postal_code, manualLocation.city, manualLocation.country]
+  );
+
   const resetSurveyForm = (): void => {
     setSiteName(DEFAULT_SURVEY_FORM.siteName);
     setRegionVersion(DEFAULT_SURVEY_FORM.regionVersion);
@@ -230,35 +285,145 @@ export function useSurveyForm() {
 
   const factorSections = useMemo<Record<FactorKey, FactorField[]>>(
     () => ({
-      A: [{ label: 'native_genus_count', value: factorA.native_genus_count, onChange: (value) => setFactorA({ native_genus_count: value }) }],
+      A: [
+        {
+          label: 'native_genus_count',
+          value: factorA.native_genus_count,
+          onChange: (value) => setFactorA({ native_genus_count: value }),
+          required: true,
+          error: numberError(factorA.native_genus_count, 'native_genus_count', { min: 0, integer: true })
+        }
+      ],
       B: [
-        { label: 'strata_count', value: factorB.strata_count, onChange: (value) => setFactorB((prev) => ({ ...prev, strata_count: value })) },
+        {
+          label: 'strata_count',
+          value: factorB.strata_count,
+          onChange: (value) => setFactorB((prev) => ({ ...prev, strata_count: value })),
+          required: true,
+          error: numberError(factorB.strata_count, 'strata_count', { min: 0, integer: true })
+        },
         {
           label: 'covered_autochthonous_percent',
           value: factorB.covered_autochthonous_percent,
-          onChange: (value) => setFactorB((prev) => ({ ...prev, covered_autochthonous_percent: value }))
+          onChange: (value) => setFactorB((prev) => ({ ...prev, covered_autochthonous_percent: value })),
+          required: true,
+          error: numberError(factorB.covered_autochthonous_percent, 'covered_autochthonous_percent', { min: 0, max: 100 })
         }
       ],
       C: [
-        { label: 'bmg_count', value: factorC.bmg_count, onChange: (value) => setFactorC((prev) => ({ ...prev, bmg_count: value })) },
-        { label: 'bmm_count', value: factorC.bmm_count, onChange: (value) => setFactorC((prev) => ({ ...prev, bmm_count: value })) },
-        { label: 'surface_ha', value: factorC.surface_ha, onChange: (value) => setFactorC((prev) => ({ ...prev, surface_ha: value })) }
+        {
+          label: 'bmg_count',
+          value: factorC.bmg_count,
+          onChange: (value) => setFactorC((prev) => ({ ...prev, bmg_count: value })),
+          required: true,
+          error: numberError(factorC.bmg_count, 'bmg_count', { min: 0, integer: true })
+        },
+        {
+          label: 'bmm_count',
+          value: factorC.bmm_count,
+          onChange: (value) => setFactorC((prev) => ({ ...prev, bmm_count: value })),
+          required: true,
+          error: numberError(factorC.bmm_count, 'bmm_count', { min: 0, integer: true })
+        },
+        {
+          label: 'surface_ha',
+          value: factorC.surface_ha,
+          onChange: (value) => setFactorC((prev) => ({ ...prev, surface_ha: value })),
+          required: true,
+          error: numberError(factorC.surface_ha, 'surface_ha', { min: 0.000001 })
+        }
       ],
       D: [
-        { label: 'bmg_count', value: factorD.bmg_count, onChange: (value) => setFactorD((prev) => ({ ...prev, bmg_count: value })) },
-        { label: 'bmm_count', value: factorD.bmm_count, onChange: (value) => setFactorD((prev) => ({ ...prev, bmm_count: value })) },
-        { label: 'surface_ha', value: factorD.surface_ha, onChange: (value) => setFactorD((prev) => ({ ...prev, surface_ha: value })) }
+        {
+          label: 'bmg_count',
+          value: factorD.bmg_count,
+          onChange: (value) => setFactorD((prev) => ({ ...prev, bmg_count: value })),
+          required: true,
+          error: numberError(factorD.bmg_count, 'bmg_count', { min: 0, integer: true })
+        },
+        {
+          label: 'bmm_count',
+          value: factorD.bmm_count,
+          onChange: (value) => setFactorD((prev) => ({ ...prev, bmm_count: value })),
+          required: true,
+          error: numberError(factorD.bmm_count, 'bmm_count', { min: 0, integer: true })
+        },
+        {
+          label: 'surface_ha',
+          value: factorD.surface_ha,
+          onChange: (value) => setFactorD((prev) => ({ ...prev, surface_ha: value })),
+          required: true,
+          error: numberError(factorD.surface_ha, 'surface_ha', { min: 0.000001 })
+        }
       ],
       E: [
-        { label: 'tgb_count', value: factorE.tgb_count, onChange: (value) => setFactorE((prev) => ({ ...prev, tgb_count: value })) },
-        { label: 'gb_count', value: factorE.gb_count, onChange: (value) => setFactorE((prev) => ({ ...prev, gb_count: value })) },
-        { label: 'surface_ha', value: factorE.surface_ha, onChange: (value) => setFactorE((prev) => ({ ...prev, surface_ha: value })) }
+        {
+          label: 'tgb_count',
+          value: factorE.tgb_count,
+          onChange: (value) => setFactorE((prev) => ({ ...prev, tgb_count: value })),
+          required: true,
+          error: numberError(factorE.tgb_count, 'tgb_count', { min: 0, integer: true })
+        },
+        {
+          label: 'gb_count',
+          value: factorE.gb_count,
+          onChange: (value) => setFactorE((prev) => ({ ...prev, gb_count: value })),
+          required: true,
+          error: numberError(factorE.gb_count, 'gb_count', { min: 0, integer: true })
+        },
+        {
+          label: 'surface_ha',
+          value: factorE.surface_ha,
+          onChange: (value) => setFactorE((prev) => ({ ...prev, surface_ha: value })),
+          required: true,
+          error: numberError(factorE.surface_ha, 'surface_ha', { min: 0.000001 })
+        }
       ],
-      F: [{ label: 'trees_per_ha', value: factorF.trees_per_ha, onChange: (value) => setFactorF({ trees_per_ha: value }) }],
-      G: [{ label: 'open_flowering_percent', value: factorG.open_flowering_percent, onChange: (value) => setFactorG({ open_flowering_percent: value }) }],
-      H: [{ label: 'class_score (0|2|5)', value: factorH.class_score, onChange: (value) => setFactorH({ class_score: value }) }],
-      I: [{ label: 'type_count', value: factorI.type_count, onChange: (value) => setFactorI({ type_count: value }) }],
-      J: [{ label: 'type_count', value: factorJ.type_count, onChange: (value) => setFactorJ({ type_count: value }) }]
+      F: [
+        {
+          label: 'trees_per_ha',
+          value: factorF.trees_per_ha,
+          onChange: (value) => setFactorF({ trees_per_ha: value }),
+          required: true,
+          error: numberError(factorF.trees_per_ha, 'trees_per_ha', { min: 0 })
+        }
+      ],
+      G: [
+        {
+          label: 'open_flowering_percent',
+          value: factorG.open_flowering_percent,
+          onChange: (value) => setFactorG({ open_flowering_percent: value }),
+          required: true,
+          error: numberError(factorG.open_flowering_percent, 'open_flowering_percent', { min: 0, max: 100 })
+        }
+      ],
+      H: [
+        {
+          label: 'class_score (0|2|5)',
+          value: factorH.class_score,
+          onChange: (value) => setFactorH({ class_score: value }),
+          required: true,
+          error: oneOfError(factorH.class_score, 'class_score', [0, 2, 5])
+        }
+      ],
+      I: [
+        {
+          label: 'type_count',
+          value: factorI.type_count,
+          onChange: (value) => setFactorI({ type_count: value }),
+          required: true,
+          error: numberError(factorI.type_count, 'type_count', { min: 0, integer: true })
+        }
+      ],
+      J: [
+        {
+          label: 'type_count',
+          value: factorJ.type_count,
+          onChange: (value) => setFactorJ({ type_count: value }),
+          required: true,
+          error: numberError(factorJ.type_count, 'type_count', { min: 0, integer: true })
+        }
+      ]
     }),
     [factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ]
   );
@@ -286,6 +451,7 @@ export function useSurveyForm() {
     applyGpsLocation,
     handleRegionChange,
     factorSections,
+    formErrors,
     applyDraftToForm,
     resetSurveyForm,
     buildDraftInput

@@ -32,6 +32,19 @@ type SurveyFormScreenProps = {
   setManualLocationField: (field: 'address_line' | 'postal_code' | 'city' | 'country', value: string) => void;
   onCaptureGpsLocation: () => Promise<void>;
   factorSections: Record<FactorKey, FactorField[]>;
+  formErrors: {
+    siteName: string | null;
+    gps: {
+      lat: string | null;
+      lng: string | null;
+    };
+    manual: {
+      address_line: string | null;
+      postal_code: string | null;
+      city: string | null;
+      country: string | null;
+    };
+  };
   onSaveSurveyEdits: () => Promise<void>;
   onCreateDraft: () => Promise<void>;
   onBackToSurveyList: () => void;
@@ -57,6 +70,7 @@ export function SurveyFormScreen({
   setManualLocationField,
   onCaptureGpsLocation,
   factorSections,
+  formErrors,
   onSaveSurveyEdits,
   onCreateDraft,
   onBackToSurveyList,
@@ -66,11 +80,13 @@ export function SurveyFormScreen({
     <View style={styles.card}>
       <Text style={styles.title}>{screen === 'edit' ? 'Edit survey (dedicated view)' : 'Create survey (dedicated view)'}</Text>
       {screen === 'edit' && editingSurveyId ? <Text style={styles.meta}>Survey id: {editingSurveyId}</Text> : null}
+      <Text style={styles.rowMeta}>Fields marked with * are required for submit.</Text>
 
-      <Text style={styles.label}>Site name</Text>
+      <Text style={styles.label}>Site name *</Text>
       <TextInput style={styles.input} value={siteName} onChangeText={setSiteName} />
+      {formErrors.siteName ? <Text style={styles.fieldError}>{formErrors.siteName}</Text> : null}
 
-      <Text style={styles.label}>Region version</Text>
+      <Text style={styles.label}>Region version *</Text>
       <View style={styles.filterChipsRow}>
         {REGION_OPTIONS.map((option) => (
           <FilterChip
@@ -82,7 +98,7 @@ export function SurveyFormScreen({
         ))}
       </View>
 
-      <Text style={styles.label}>Vegetation stage</Text>
+      <Text style={styles.label}>Vegetation stage *</Text>
       <View style={styles.filterChipsRow}>
         {VEGETATION_STAGE_OPTIONS_BY_REGION[regionVersion].map((option) => (
           <FilterChip
@@ -95,7 +111,7 @@ export function SurveyFormScreen({
       </View>
 
       <View style={styles.locationCard}>
-        <Text style={styles.label}>Location (required to submit)</Text>
+        <Text style={styles.label}>Location (required to submit) *</Text>
         <View style={styles.filterChipsRow}>
           <FilterChip label="GPS (device)" active={locationSource === 'gps'} onPress={() => setLocationSource('gps')} />
           <FilterChip label="Manual address" active={locationSource === 'manual'} onPress={() => setLocationSource('manual')} />
@@ -106,7 +122,7 @@ export function SurveyFormScreen({
             <Button title="Capture current GPS" onPress={() => void onCaptureGpsLocation()} />
             <Text style={styles.rowMeta}>or type values manually for simulator/testing.</Text>
 
-            <Text style={styles.label}>Latitude</Text>
+            <Text style={styles.label}>Latitude *</Text>
             <TextInput
               style={styles.input}
               value={gpsLocation.lat}
@@ -114,8 +130,9 @@ export function SurveyFormScreen({
               keyboardType="decimal-pad"
               placeholder="48.643"
             />
+            {formErrors.gps.lat ? <Text style={styles.fieldError}>{formErrors.gps.lat}</Text> : null}
 
-            <Text style={styles.label}>Longitude</Text>
+            <Text style={styles.label}>Longitude *</Text>
             <TextInput
               style={styles.input}
               value={gpsLocation.lng}
@@ -123,6 +140,7 @@ export function SurveyFormScreen({
               keyboardType="decimal-pad"
               placeholder="1.829"
             />
+            {formErrors.gps.lng ? <Text style={styles.fieldError}>{formErrors.gps.lng}</Text> : null}
 
             <Text style={styles.label}>Accuracy (m, optional)</Text>
             <TextInput
@@ -137,37 +155,42 @@ export function SurveyFormScreen({
           </View>
         ) : (
           <View style={styles.detailSection}>
-            <Text style={styles.label}>Address line</Text>
+            <Text style={styles.label}>Address line *</Text>
             <TextInput
               style={styles.input}
               value={manualLocation.address_line}
               onChangeText={(value) => setManualLocationField('address_line', value)}
               placeholder="12 Rue de la Foret"
             />
+            {formErrors.manual.address_line ? <Text style={styles.fieldError}>{formErrors.manual.address_line}</Text> : null}
 
-            <Text style={styles.label}>Postal code</Text>
+            <Text style={styles.label}>Postal code *</Text>
             <TextInput
               style={styles.input}
               value={manualLocation.postal_code}
               onChangeText={(value) => setManualLocationField('postal_code', value)}
+              keyboardType="number-pad"
               placeholder="75001"
             />
+            {formErrors.manual.postal_code ? <Text style={styles.fieldError}>{formErrors.manual.postal_code}</Text> : null}
 
-            <Text style={styles.label}>City</Text>
+            <Text style={styles.label}>City *</Text>
             <TextInput
               style={styles.input}
               value={manualLocation.city}
               onChangeText={(value) => setManualLocationField('city', value)}
               placeholder="Paris"
             />
+            {formErrors.manual.city ? <Text style={styles.fieldError}>{formErrors.manual.city}</Text> : null}
 
-            <Text style={styles.label}>Country</Text>
+            <Text style={styles.label}>Country *</Text>
             <TextInput
               style={styles.input}
               value={manualLocation.country}
               onChangeText={(value) => setManualLocationField('country', value)}
               placeholder="France"
             />
+            {formErrors.manual.country ? <Text style={styles.fieldError}>{formErrors.manual.country}</Text> : null}
           </View>
         )}
       </View>

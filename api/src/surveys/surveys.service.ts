@@ -654,7 +654,12 @@ export class SurveysService {
     };
   }
 
-  async deleteAttachment(user: AuthenticatedUser, surveyId: string, attachmentId: string): Promise<void> {
+  async deleteAttachment(
+    user: AuthenticatedUser,
+    surveyId: string,
+    attachmentId: string,
+    options?: { allowMissing?: boolean }
+  ): Promise<{ survey_id: string; attachment_id: string; missing: boolean; deleted: boolean }> {
     await this.getSurveyForUserOrThrow(surveyId, user.id);
 
     const existing = await this.db.query<AttachmentRow>(
@@ -665,6 +670,14 @@ export class SurveysService {
     );
 
     if (!existing.rows[0]) {
+      if (options?.allowMissing) {
+        return {
+          survey_id: surveyId,
+          attachment_id: attachmentId,
+          missing: true,
+          deleted: false
+        };
+      }
       throw new NotFoundException('Attachment not found');
     }
 
@@ -681,6 +694,13 @@ export class SurveysService {
       attachment_id: attachmentId,
       storage_key: existing.rows[0].storage_key
     });
+
+    return {
+      survey_id: surveyId,
+      attachment_id: attachmentId,
+      missing: false,
+      deleted: true
+    };
   }
 
   async listAttachments(
@@ -873,6 +893,30 @@ export class SurveysService {
             throw new BadRequestException('attachment create payload is required');
           }
           const data = await this.createAttachment(user, operation.survey_id, operation.payload as CreateAttachmentBody);
+          results.push({
+            client_ref: clientRef,
+            entity: operation.entity,
+            action: operation.action,
+            status: 'synced',
+            data: data as Record<string, unknown>
+          });
+          continue;
+        }
+
+        if (operation.entity === 'attachment' && operation.action === 'delete') {
+          const payloadAttachmentId =
+            operation.payload && typeof operation.payload === 'object'
+              ? (operation.payload as { attachment_id?: unknown }).attachment_id
+              : undefined;
+
+          if (!operation.survey_id || typeof operation.survey_id !== 'string') {
+            throw new BadRequestException('survey_id is required for attachment delete');
+          }
+          if (!payloadAttachmentId || typeof payloadAttachmentId !== 'string') {
+            throw new BadRequestException('attachment_id is required for attachment delete');
+          }
+
+          const data = await this.deleteAttachment(user, operation.survey_id, payloadAttachmentId, { allowMissing: true });
           results.push({
             client_ref: clientRef,
             entity: operation.entity,

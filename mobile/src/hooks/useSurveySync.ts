@@ -21,6 +21,7 @@ import {
   discardSurveyLocalChanges,
   LocalSurvey,
   pullRemoteChanges,
+  queueDeleteAttachment,
   queueDeleteSurvey,
   queueLocalAttachment,
   retrySurveyNow,
@@ -945,6 +946,51 @@ export function useSurveySync({
     }
   };
 
+  const handleDeleteAttachment = async (surveyId: string, localAttachmentId: string): Promise<void> => {
+    const current = surveys.find((survey) => survey.id === surveyId);
+    if (current?.status === 'submitted') {
+      setStatus(`Survey ${surveyId} is submitted and read-only`);
+      return;
+    }
+
+    try {
+      const result = await queueDeleteAttachment(surveyId, localAttachmentId);
+      if (!result.removed_local) {
+        setStatus(`Attachment not found locally: ${localAttachmentId}`);
+        return;
+      }
+
+      if (result.queued_delete) {
+        try {
+          const syncResult = await withAuthRetry((token) => syncPending(apiUrl, token));
+          await refreshLocalSurveys();
+          await refreshLocalAttachments();
+          setStatus(
+            `Attachment removed and synced: ${syncResult.synced} synced, ${syncResult.failed} failed, ${syncResult.pulled_surveys} surveys pulled, ${syncResult.pulled_attachments} attachments pulled`
+          );
+          return;
+        } catch (error) {
+          if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+            await refreshLocalSurveys();
+            await refreshLocalAttachments();
+            setStatus('Attachment removed locally. Login and sync to propagate server deletion.');
+            return;
+          }
+          await refreshLocalSurveys();
+          await refreshLocalAttachments();
+          setStatus(`Attachment removed locally; delete queued (sync pending: ${(error as Error).message})`);
+          return;
+        }
+      }
+
+      await refreshLocalSurveys();
+      await refreshLocalAttachments();
+      setStatus('Attachment removed locally');
+    } catch (error) {
+      setStatus(`Attachment delete error: ${(error as Error).message}`);
+    }
+  };
+
   const handleLoadCanonicalDetails = async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
     const silent = options?.silent ?? false;
 
@@ -1119,6 +1165,7 @@ export function useSurveySync({
     confirmDeleteSurvey,
     handleQueueAttachmentFromLibrary,
     handleQueueAttachmentFromCamera,
+    handleDeleteAttachment,
     handleLoadCanonicalDetails,
     handleLoadSurveyEvents
   };

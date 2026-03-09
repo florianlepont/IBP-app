@@ -273,6 +273,16 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     color: '#55708b'
   },
+  warningText: {
+    fontSize: 12,
+    color: '#a45b12',
+    fontWeight: '600'
+  },
+  fieldError: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#b33a3a'
+  },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
