@@ -20,7 +20,8 @@ type SurveyDetailScreenProps = {
   onLoadCanonicalDetails: (surveyId: string) => Promise<void>;
   onLoadSurveyEvents: (surveyId: string) => Promise<void>;
   onEditSurvey: (surveyId: string) => Promise<void> | void;
-  onAttachPhoto: (surveyId: string) => Promise<void> | void;
+  onTakePhoto: (surveyId: string) => Promise<void> | void;
+  onPickPhoto: (surveyId: string) => Promise<void> | void;
   onDeleteSurvey: (surveyId: string) => void;
   onSubmitSurvey: (surveyId: string) => Promise<void>;
   onRetrySurvey: (surveyId: string) => Promise<void>;
@@ -51,7 +52,8 @@ export function SurveyDetailScreen({
   onLoadCanonicalDetails,
   onLoadSurveyEvents,
   onEditSurvey,
-  onAttachPhoto,
+  onTakePhoto,
+  onPickPhoto,
   onDeleteSurvey,
   onSubmitSurvey,
   onRetrySurvey,
@@ -162,7 +164,9 @@ export function SurveyDetailScreen({
           <>
             <Button title="Edit survey" onPress={() => void onEditSurvey(selectedSurvey.id)} />
             <View style={styles.miniSpacer} />
-            <Button title="Attach photo (queue)" onPress={() => void onAttachPhoto(selectedSurvey.id)} />
+            <Button title="Take photo (camera)" onPress={() => void onTakePhoto(selectedSurvey.id)} />
+            <View style={styles.miniSpacer} />
+            <Button title="Add photo from library" onPress={() => void onPickPhoto(selectedSurvey.id)} />
             <View style={styles.miniSpacer} />
             <Button title="Delete survey" onPress={() => onDeleteSurvey(selectedSurvey.id)} />
             <View style={styles.miniSpacer} />

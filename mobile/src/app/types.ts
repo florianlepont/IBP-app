@@ -61,6 +61,26 @@ export type VegetationStage =
   | 'meso_mediterraneen'
   | 'supra_mediterraneen';
 
+export type SurveyLocationSource = 'gps' | 'manual';
+
+export type SurveyGpsLocation = {
+  source: 'gps';
+  lat: number;
+  lng: number;
+  accuracy_m?: number;
+  collected_at: string;
+};
+
+export type SurveyManualLocation = {
+  source: 'manual';
+  address_line: string;
+  postal_code: string;
+  city: string;
+  country: string;
+};
+
+export type SurveyLocationPayload = SurveyGpsLocation | SurveyManualLocation | Record<string, unknown>;
+
 export type FactorField = {
   label: string;
   value: string;

@@ -141,6 +141,7 @@ export type DraftInput = {
   region_version: 'ACA' | 'M';
   vegetation_stage: string;
   factors: Record<string, unknown>;
+  location?: Record<string, unknown>;
 };
 
 export type UpdateDraftInput = {
@@ -253,7 +254,7 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     region_version: input.region_version,
     vegetation_stage: input.vegetation_stage,
     factors: input.factors,
-    location: {}
+    location: input.location ?? {}
   };
 
   await db.runAsync(

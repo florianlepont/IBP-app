@@ -107,8 +107,7 @@ export default function App() {
       await updateLocalDraft({
         survey_id: editingSurveyId,
         ...surveyForm.buildDraftInput(),
-        visibility: 'private',
-        location: {}
+        visibility: 'private'
       });
 
       await surveyList.refreshLocalSurveys();
@@ -139,6 +138,34 @@ export default function App() {
     surveyList.openSurvey(surveyId);
     setSurveyDetailTab('summary');
     surveySync.setStatus(`Survey ${surveyId} opened`);
+  };
+
+  const handleCaptureGpsLocation = async (): Promise<void> => {
+    try {
+      const Location = await import('expo-location');
+
+      surveySync.setStatus('Requesting GPS permission...');
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        surveySync.setStatus('Location permission is required');
+        return;
+      }
+
+      surveySync.setStatus('Capturing GPS location...');
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+
+      surveyForm.applyGpsLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy_m: position.coords.accuracy ?? undefined,
+        collected_at: new Date(position.timestamp).toISOString()
+      });
+      surveySync.setStatus('GPS location captured');
+    } catch (error) {
+      surveySync.setStatus(`GPS error: ${(error as Error).message}`);
+    }
   };
 
   const handleCloseSurveyDetail = (): void => {
@@ -232,7 +259,8 @@ export default function App() {
                   onLoadCanonicalDetails={surveySync.handleLoadCanonicalDetails}
                   onLoadSurveyEvents={surveySync.handleLoadSurveyEvents}
                   onEditSurvey={handleStartEditSurvey}
-                  onAttachPhoto={surveySync.handleQueueAttachment}
+                  onTakePhoto={surveySync.handleQueueAttachmentFromCamera}
+                  onPickPhoto={surveySync.handleQueueAttachmentFromLibrary}
                   onDeleteSurvey={surveySync.confirmDeleteSurvey}
                   onSubmitSurvey={surveySync.handleSubmitSurvey}
                   onRetrySurvey={surveySync.handleRetrySurvey}
@@ -251,6 +279,13 @@ export default function App() {
             vegetationStage={surveyForm.vegetationStage}
             setVegetationStage={surveyForm.setVegetationStage}
             onRegionChange={surveyForm.handleRegionChange}
+            locationSource={surveyForm.locationSource}
+            setLocationSource={surveyForm.setLocationSource}
+            gpsLocation={surveyForm.gpsLocation}
+            manualLocation={surveyForm.manualLocation}
+            setGpsLocationField={surveyForm.setGpsLocationField}
+            setManualLocationField={surveyForm.setManualLocationField}
+            onCaptureGpsLocation={handleCaptureGpsLocation}
             factorSections={surveyForm.factorSections}
             onSaveSurveyEdits={handleSaveSurveyEdits}
             onCreateDraft={handleCreateDraft}

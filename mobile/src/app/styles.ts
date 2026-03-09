@@ -133,6 +133,14 @@ export const styles = StyleSheet.create({
   detailSection: {
     gap: 6
   },
+  locationCard: {
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#fbfdff'
+  },
   eventRow: {
     borderTopWidth: 1,
     borderTopColor: '#e4edf7',

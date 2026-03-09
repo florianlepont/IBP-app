@@ -64,6 +64,32 @@ export function useSurveySync({
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({});
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null);
 
+  const queueAttachmentAsset = async (
+    surveyId: string,
+    asset: ImagePicker.ImagePickerAsset,
+    source: 'camera' | 'library'
+  ): Promise<void> => {
+    const mimeType = asset.mimeType ?? guessMimeType(asset.uri);
+    const sizeBytes = typeof asset.fileSize === 'number' && asset.fileSize > 0 ? asset.fileSize : 500_000;
+
+    await queueLocalAttachment({
+      survey_id: surveyId,
+      local_uri: asset.uri,
+      mime_type: mimeType,
+      size_bytes: sizeBytes,
+      captured_at: new Date().toISOString(),
+      metadata: {
+        source,
+        file_name: asset.fileName ?? null,
+        width: asset.width ?? null,
+        height: asset.height ?? null
+      }
+    });
+
+    await refreshLocalAttachments();
+    setStatus(`${source === 'camera' ? 'Camera photo' : 'Photo'} queued for survey ${surveyId}`);
+  };
+
   const handleLogin = async (): Promise<void> => {
     try {
       setStatus('Logging in...');
@@ -212,7 +238,7 @@ export function useSurveySync({
     ]);
   };
 
-  const handleQueueAttachment = async (surveyId: string): Promise<void> => {
+  const handleQueueAttachmentFromLibrary = async (surveyId: string): Promise<void> => {
     const current = surveys.find((survey) => survey.id === surveyId);
     if (current?.status === 'submitted') {
       setStatus(`Survey ${surveyId} is submitted and read-only`);
@@ -237,25 +263,38 @@ export function useSurveySync({
         return;
       }
 
-      const asset = result.assets[0];
-      const mimeType = asset.mimeType ?? guessMimeType(asset.uri);
-      const sizeBytes = typeof asset.fileSize === 'number' && asset.fileSize > 0 ? asset.fileSize : 500_000;
+      await queueAttachmentAsset(surveyId, result.assets[0], 'library');
+    } catch (error) {
+      setStatus(`Attachment queue error: ${(error as Error).message}`);
+    }
+  };
 
-      await queueLocalAttachment({
-        survey_id: surveyId,
-        local_uri: asset.uri,
-        mime_type: mimeType,
-        size_bytes: sizeBytes,
-        captured_at: new Date().toISOString(),
-        metadata: {
-          file_name: asset.fileName ?? null,
-          width: asset.width ?? null,
-          height: asset.height ?? null
-        }
+  const handleQueueAttachmentFromCamera = async (surveyId: string): Promise<void> => {
+    const current = surveys.find((survey) => survey.id === surveyId);
+    if (current?.status === 'submitted') {
+      setStatus(`Survey ${surveyId} is submitted and read-only`);
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setStatus('Camera permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8
       });
 
-      await refreshLocalAttachments();
-      setStatus(`Photo queued for survey ${surveyId}`);
+      if (result.canceled || !result.assets?.[0]) {
+        setStatus('No photo captured');
+        return;
+      }
+
+      await queueAttachmentAsset(surveyId, result.assets[0], 'camera');
     } catch (error) {
       setStatus(`Attachment queue error: ${(error as Error).message}`);
     }
@@ -392,7 +431,8 @@ export function useSurveySync({
     handleRetrySurvey,
     handleDiscardSurvey,
     confirmDeleteSurvey,
-    handleQueueAttachment,
+    handleQueueAttachmentFromLibrary,
+    handleQueueAttachmentFromCamera,
     handleLoadCanonicalDetails,
     handleLoadSurveyEvents
   };

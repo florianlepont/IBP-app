@@ -42,7 +42,7 @@ describe('Surveys idempotency (e2e)', () => {
       visibility: 'private',
       factors: {},
       scores: {},
-      location: {}
+      location: { source: 'gps', lat: 48.643, lng: 1.829 }
     };
 
     const first = await request(app.getHttpServer())
@@ -90,7 +90,7 @@ describe('Surveys idempotency (e2e)', () => {
         region_version: 'ACA',
         vegetation_stage: 'collineen',
         factors: { A: 1, I: 2 },
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -101,6 +101,43 @@ describe('Surveys idempotency (e2e)', () => {
 
     expect(Array.isArray(submit.body.errors)).toBe(true);
     expect(submit.body.errors.join(' ')).toContain('factor B is required');
+  });
+
+  it('rejects submit when location is missing', async () => {
+    const email = `e2e-submit-no-location-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-submit-no-location-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'No Location Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: {
+          A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+        },
+        location: {}
+      })
+      .expect(201);
+
+    const submit = await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(422);
+
+    expect(Array.isArray(submit.body.errors)).toBe(true);
+    expect(submit.body.errors.join(' ')).toContain('location is required for submit');
   });
 
   it('submits valid IBP survey and returns computed scores', async () => {
@@ -127,7 +164,7 @@ describe('Surveys idempotency (e2e)', () => {
         factors: {
           A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
         },
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -177,7 +214,7 @@ describe('Surveys idempotency (e2e)', () => {
           I: { type_count: 2 },
           J: { type_count: 1 }
         },
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -228,7 +265,7 @@ describe('Surveys idempotency (e2e)', () => {
           I: { type_count: 1 },
           J: { type_count: 0 }
         },
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -275,7 +312,7 @@ describe('Surveys idempotency (e2e)', () => {
         factors: {
           A: 1
         },
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -385,7 +422,7 @@ describe('Surveys idempotency (e2e)', () => {
         visibility: 'private',
         factors: {},
         scores: {},
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -449,7 +486,7 @@ describe('Surveys idempotency (e2e)', () => {
               visibility: 'private',
               factors: {},
               scores: {},
-              location: {}
+              location: { source: 'gps', lat: 48.643, lng: 1.829 }
             }
           },
           {
@@ -463,7 +500,7 @@ describe('Surveys idempotency (e2e)', () => {
               visibility: 'private',
               factors: {},
               scores: {},
-              location: {}
+              location: { source: 'gps', lat: 48.643, lng: 1.829 }
             }
           }
         ]
@@ -510,7 +547,7 @@ describe('Surveys idempotency (e2e)', () => {
         visibility: 'private',
         factors: {},
         scores: {},
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -567,7 +604,7 @@ describe('Surveys idempotency (e2e)', () => {
         visibility: 'private',
         factors: {},
         scores: {},
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 
@@ -588,7 +625,7 @@ describe('Surveys idempotency (e2e)', () => {
               visibility: 'private',
               factors: {},
               scores: {},
-              location: {}
+              location: { source: 'gps', lat: 48.643, lng: 1.829 }
             }
           }
         ]
@@ -632,7 +669,7 @@ describe('Surveys idempotency (e2e)', () => {
         visibility: 'private',
         factors: {},
         scores: {},
-        location: {}
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
       })
       .expect(201);
 

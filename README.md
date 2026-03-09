@@ -303,9 +303,17 @@ Implemented:
   - `Edit survey (dedicated view)`
   - both separated from main list screen
 - Region selection in form now uses explicit options (`ACA` / `M`) instead of free text input.
+- Survey form now includes a `Location` block:
+  - mode switch: `GPS (device)` or `Manual address`
+  - GPS capture button (with typed lat/lng fallback for simulator)
+  - manual fallback fields: `address_line`, `postal_code`, `city`, `country`
+  - location payload is persisted in local draft and sent in sync upserts
 - Survey list now supports a dedicated selected-survey detail panel:
   - tabs: `Summary`, `Factors`, `Photos`, `Events`
   - contextual actions moved into detail panel (`Edit`, `Attach`, `Delete`, `Submit`, conflict actions)
+- Photo actions are now split:
+  - `Take photo (camera)` for real field capture
+  - `Add photo from library` for fallback/import
 - Factors tab:
   - auto-loads canonical IBP breakdown when a survey is opened (if user is logged in)
   - includes `Refresh canonical details` action

@@ -141,12 +141,20 @@ Request:
     "ibp_total": 28
   },
   "location": {
+    "source": "gps",
     "lat": 48.643,
-    "lng": 1.829
+    "lng": 1.829,
+    "accuracy_m": 12,
+    "collected_at": "2026-03-09T09:10:00Z"
   },
   "expires_at": "2026-03-15T10:00:00Z"
 }
 ```
+
+`location` accepted shapes in V1:
+- GPS: `{ "source": "gps", "lat": number, "lng": number, "accuracy_m"?: number, "collected_at"?: string }`
+- Manual fallback: `{ "source": "manual", "address_line": string, "postal_code": string, "city": string, "country": string }`
+- Submit validation requires either valid GPS coordinates or a complete manual fallback address.
 
 Response `200`:
 ```json
@@ -197,7 +205,13 @@ Response `200`:
     "ibp_contexte": 8,
     "ibp_total": 28
   },
-  "location": { "lat": 48.643, "lng": 1.829 },
+  "location": {
+    "source": "gps",
+    "lat": 48.643,
+    "lng": 1.829,
+    "accuracy_m": 12,
+    "collected_at": "2026-03-09T09:10:00Z"
+  },
   "created_at": "2026-03-08T11:00:00Z",
   "updated_at": "2026-03-08T12:00:00Z",
   "submitted_at": null,
@@ -222,7 +236,13 @@ Request:
     "ibp_contexte": 8,
     "ibp_total": 28
   },
-  "location": { "lat": 48.643, "lng": 1.829 }
+  "location": {
+    "source": "manual",
+    "address_line": "12 Rue de la Foret",
+    "postal_code": "75001",
+    "city": "Paris",
+    "country": "France"
+  }
 }
 ```
 
@@ -236,6 +256,10 @@ Response `200`:
 
 ### POST /surveys/{id}/submit
 Attempt submission transition (`draft` -> `submitted`) with server-side checks.
+Blocking checks include:
+- all required IBP factors complete and valid
+- survey not expired
+- location present with either GPS (`lat`,`lng`) or complete manual address fallback
 
 Response `200`:
 ```json
@@ -251,6 +275,8 @@ Response `200`:
   "warnings": []
 }
 ```
+
+If location is missing/invalid, API returns `422` with error code `location_required`.
 
 ### DELETE /surveys/{id}
 Soft-delete a survey.

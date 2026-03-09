@@ -68,6 +68,7 @@ export class IbpRulesService {
     vegetation_stage?: string | null;
     expires_at?: string | null;
     factors?: Factors | null;
+    location?: Record<string, unknown> | null;
   }): IbpValidationResult {
     const issues: IbpValidationIssue[] = [];
     const factorResults: Record<string, FactorCanonical> = {};
@@ -85,6 +86,16 @@ export class IbpRulesService {
       issues.push(this.issue('expires_at_required', 'expires_at is required', true));
     } else if (new Date() > new Date(input.expires_at)) {
       issues.push(this.issue('survey_expired', 'survey is expired and cannot be submitted', true));
+    }
+
+    if (!this.isValidSubmitLocation(input.location)) {
+      issues.push(
+        this.issue(
+          'location_required',
+          'location is required for submit: provide GPS (lat,lng) or complete manual address',
+          true
+        )
+      );
     }
 
     const thresholdRegion = this.resolveThresholdRegion(region, input.vegetation_stage ?? undefined);
@@ -395,6 +406,16 @@ export class IbpRulesService {
     return null;
   }
 
+  private pickNonEmptyString(obj: Record<string, unknown>, keys: string[]): string | null {
+    for (const k of keys) {
+      const v = obj[k];
+      if (typeof v === 'string' && v.trim().length > 0) {
+        return v.trim();
+      }
+    }
+    return null;
+  }
+
   private asNumber(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string' && value.trim() !== '') {
@@ -406,6 +427,35 @@ export class IbpRulesService {
 
   private isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private isValidSubmitLocation(location: unknown): boolean {
+    if (!this.isObject(location)) {
+      return false;
+    }
+
+    const sourceRaw = location.source;
+    const source = typeof sourceRaw === 'string' ? sourceRaw.trim().toLowerCase() : '';
+
+    const lat = this.pickNumber(location, ['lat']);
+    const lng = this.pickNumber(location, ['lng']);
+    const hasGps = lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+
+    const addressLine = this.pickNonEmptyString(location, ['address_line']);
+    const postalCode = this.pickNonEmptyString(location, ['postal_code']);
+    const city = this.pickNonEmptyString(location, ['city']);
+    const country = this.pickNonEmptyString(location, ['country']);
+    const hasManualAddress = Boolean(addressLine && postalCode && city && country);
+
+    if (source === 'gps') {
+      return hasGps;
+    }
+
+    if (source === 'manual') {
+      return hasManualAddress;
+    }
+
+    return hasGps || hasManualAddress;
   }
 
   private issue(code: string, message: string, blocking: boolean, factor?: string): IbpValidationIssue {

@@ -37,6 +37,19 @@ export const DEFAULT_SURVEY_FORM = {
   siteName: 'Foret de Rambouillet',
   regionVersion: 'ACA' as RegionVersion,
   vegetationStage: 'collineen' as VegetationStage,
+  locationSource: 'gps' as const,
+  gpsLocation: {
+    lat: '',
+    lng: '',
+    accuracy_m: '',
+    collected_at: ''
+  },
+  manualLocation: {
+    address_line: '',
+    postal_code: '',
+    city: '',
+    country: ''
+  },
   factorA: { native_genus_count: '2' },
   factorB: { strata_count: '2', covered_autochthonous_percent: '70' },
   factorC: { bmg_count: '0', bmm_count: '0', surface_ha: '1' },
