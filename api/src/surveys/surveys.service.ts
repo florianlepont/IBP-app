@@ -18,6 +18,7 @@ import { mapSyncError } from './sync-error.utils';
 import {
   AttachmentRow,
   CreateAttachmentBody,
+  ParcelRow,
   SurveyEventRow,
   SurveyPatchBody,
   SurveyVisibilityPatchBody,
@@ -67,7 +68,14 @@ export class SurveysService {
   async listForUser(
     user: AuthenticatedUser,
     input?: { status?: string; from?: string; to?: string; q?: string }
-  ): Promise<Array<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>> {
+  ): Promise<
+    Array<
+      Pick<
+        SurveyRow,
+        'id' | 'site_name' | 'status' | 'visibility' | 'parcel_id' | 'observation_year' | 'version_number' | 'updated_at' | 'sync_version'
+      >
+    >
+  > {
     const filters: string[] = ['user_id = $1', 'deleted_at IS NULL'];
     const values: unknown[] = [user.id];
 
@@ -92,11 +100,13 @@ export class SurveysService {
     const query = input?.q?.trim();
     if (query) {
       values.push(`%${query}%`);
-      filters.push(`site_name ILIKE $${values.length}`);
+      filters.push(`(site_name ILIKE $${values.length} OR parcel_id ILIKE $${values.length})`);
     }
 
-    const result = await this.db.query<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>(
-      `SELECT id, site_name, status, visibility, updated_at::text, sync_version
+    const result = await this.db.query<
+      Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'parcel_id' | 'observation_year' | 'version_number' | 'updated_at' | 'sync_version'>
+    >(
+      `SELECT id, site_name, status, visibility, parcel_id, observation_year, version_number, updated_at::text, sync_version
        FROM surveys
        WHERE ${filters.join(' AND ')}
        ORDER BY updated_at DESC`,
@@ -153,16 +163,26 @@ export class SurveysService {
     };
 
     const existing = await this.getSurveyForUser(body.id, user.id, false);
+    const locationPayload = this.normalizeLocationPayload(body.location ?? existing?.location ?? {});
+    const normalizedParcelId = this.normalizeParcelId(body.parcel_id) ?? existing?.parcel_id ?? null;
+    const resolvedParcel = normalizedParcelId
+      ? await this.ensureParcelById(normalizedParcelId, locationPayload)
+      : await this.resolveParcelFromLocation(locationPayload);
+    const parcelId = normalizedParcelId ?? resolvedParcel?.parcel_id ?? null;
+    const observationYear = this.normalizeObservationYear(body.observation_year) ?? existing?.observation_year ?? (parcelId ? now.getUTCFullYear() : null);
+    const versionNumber =
+      this.normalizeVersionNumber(body.version_number) ?? existing?.version_number ?? (parcelId ? await this.getDefaultVersionNumber(parcelId, body.id) : null);
+    const previousSurveyId = this.normalizePreviousSurveyId(body.previous_survey_id) ?? existing?.previous_survey_id ?? null;
 
     if (!existing) {
       const createdAt = now.toISOString();
       const insertResult = await this.db.query<{ id: string; updated_at: string }>(
         `INSERT INTO surveys (
-          id, user_id, site_name, status, visibility, region_version, vegetation_stage,
+          id, user_id, site_name, status, visibility, parcel_id, observation_year, version_number, previous_survey_id, region_version, vegetation_stage,
           factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+          $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20
         )
         RETURNING id, updated_at::text`,
         [
@@ -171,12 +191,16 @@ export class SurveysService {
           body.site_name,
           body.status ?? 'draft',
           body.visibility ?? 'private',
+          parcelId,
+          observationYear,
+          versionNumber,
+          previousSurveyId,
           body.region_version ?? null,
           body.vegetation_stage ?? null,
           JSON.stringify(body.factors ?? {}),
           JSON.stringify(draftValidation.factor_results ?? {}),
           JSON.stringify(computedScores),
-          JSON.stringify(body.location ?? {}),
+          JSON.stringify(locationPayload),
           createdAt,
           createdAt,
           null,
@@ -227,15 +251,19 @@ export class SurveysService {
        SET site_name = $3,
            status = $4,
            visibility = $5,
-           region_version = $6,
-           vegetation_stage = $7,
-           factors = $8::jsonb,
-           factor_results = $9::jsonb,
-           scores = $10::jsonb,
-           location = $11::jsonb,
-           expires_at = $12,
-           sync_version = $13,
-           updated_at = $14
+           parcel_id = $6,
+           observation_year = $7,
+           version_number = $8,
+           previous_survey_id = $9,
+           region_version = $10,
+           vegetation_stage = $11,
+           factors = $12::jsonb,
+           factor_results = $13::jsonb,
+           scores = $14::jsonb,
+           location = $15::jsonb,
+           expires_at = $16,
+           sync_version = $17,
+           updated_at = $18
        WHERE id = $1 AND user_id = $2
        RETURNING id, updated_at::text`,
       [
@@ -244,12 +272,16 @@ export class SurveysService {
         body.site_name,
         body.status ?? existing.status,
         body.visibility ?? existing.visibility,
+        parcelId,
+        observationYear,
+        versionNumber,
+        previousSurveyId,
         body.region_version ?? existing.region_version,
         body.vegetation_stage ?? existing.vegetation_stage,
         JSON.stringify(body.factors ?? existing.factors ?? {}),
         JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
         JSON.stringify(computedScores),
-        JSON.stringify(body.location ?? existing.location ?? {}),
+        JSON.stringify(locationPayload),
         expiresAt,
         body.sync_version,
         now.toISOString()
@@ -305,16 +337,37 @@ export class SurveysService {
       }
     }
 
+    const normalizedLocation = body.location ? this.normalizeLocationPayload(body.location) : null;
+    const normalizedParcelId = this.normalizeParcelId(body.parcel_id);
+    const resolvedParcel = normalizedParcelId
+      ? await this.ensureParcelById(normalizedParcelId, normalizedLocation ?? existing.location)
+      : normalizedLocation
+        ? await this.resolveParcelFromLocation(normalizedLocation)
+        : null;
+    const parcelIdForPatch = normalizedParcelId ?? resolvedParcel?.parcel_id ?? null;
+    const observationYearForPatch =
+      this.normalizeObservationYear(body.observation_year) ??
+      (parcelIdForPatch && !existing.observation_year ? new Date().getUTCFullYear() : null);
+    const versionNumberForPatch =
+      this.normalizeVersionNumber(body.version_number) ??
+      (parcelIdForPatch && !existing.version_number ? await this.getDefaultVersionNumber(parcelIdForPatch, surveyId) : null);
+    const hasPreviousSurveyId = Object.prototype.hasOwnProperty.call(body, 'previous_survey_id');
+    const previousSurveyIdForPatch = hasPreviousSurveyId ? this.normalizePreviousSurveyId(body.previous_survey_id) : null;
+
     const result = await this.db.query<{ id: string; updated_at: string }>(
       `UPDATE surveys
        SET site_name = COALESCE($3, site_name),
            visibility = COALESCE($4, visibility),
-           region_version = COALESCE($5, region_version),
-           vegetation_stage = COALESCE($6, vegetation_stage),
-           factors = COALESCE($7::jsonb, factors),
-           factor_results = COALESCE($8::jsonb, factor_results),
-           scores = COALESCE($9::jsonb, scores),
-           location = COALESCE($10::jsonb, location),
+           parcel_id = COALESCE($5, parcel_id),
+           observation_year = COALESCE($6, observation_year),
+           version_number = COALESCE($7, version_number),
+           previous_survey_id = COALESCE($8, previous_survey_id),
+           region_version = COALESCE($9, region_version),
+           vegetation_stage = COALESCE($10, vegetation_stage),
+           factors = COALESCE($11::jsonb, factors),
+           factor_results = COALESCE($12::jsonb, factor_results),
+           scores = COALESCE($13::jsonb, scores),
+           location = COALESCE($14::jsonb, location),
            updated_at = NOW()
        WHERE id = $1 AND user_id = $2
        RETURNING id, updated_at::text`,
@@ -323,6 +376,10 @@ export class SurveysService {
         user.id,
         body.site_name ?? null,
         body.visibility ?? null,
+        parcelIdForPatch,
+        observationYearForPatch,
+        versionNumberForPatch,
+        previousSurveyIdForPatch,
         body.region_version ?? null,
         body.vegetation_stage ?? null,
         body.factors ? JSON.stringify(body.factors) : null,
@@ -330,7 +387,7 @@ export class SurveysService {
           ? JSON.stringify((body as SurveyPatchBody & { factor_results?: SurveyRow['factor_results'] }).factor_results)
           : null,
         body.scores ? JSON.stringify(body.scores) : null,
-        body.location ? JSON.stringify(body.location) : null
+        normalizedLocation ? JSON.stringify(normalizedLocation) : null
       ]
     );
 
@@ -402,6 +459,10 @@ export class SurveysService {
       | 'site_name'
       | 'status'
       | 'visibility'
+      | 'parcel_id'
+      | 'observation_year'
+      | 'version_number'
+      | 'previous_survey_id'
       | 'region_version'
       | 'vegetation_stage'
       | 'factors'
@@ -422,6 +483,10 @@ export class SurveysService {
       site_name: survey.site_name,
       status: survey.status,
       visibility: survey.visibility,
+      parcel_id: survey.parcel_id,
+      observation_year: survey.observation_year,
+      version_number: survey.version_number,
+      previous_survey_id: survey.previous_survey_id,
       region_version: survey.region_version,
       vegetation_stage: survey.vegetation_stage,
       factors: survey.factors,
@@ -449,8 +514,21 @@ export class SurveysService {
       factors: existing.factors,
       location: existing.location
     });
+    const parcelValidation = await this.validateParcelSubmit(existing);
 
-    if (!validation.ok || !validation.scores) {
+    if (parcelValidation.versionConflict) {
+      throw new ConflictException({
+        code: 'parcel_version_conflict',
+        message: 'Parcel version conflict',
+        details: {
+          parcel_id: existing.parcel_id,
+          expected_version_number: parcelValidation.versionConflict.expectedVersionNumber,
+          client_version_number: existing.version_number
+        }
+      });
+    }
+
+    if (!validation.ok || !validation.scores || parcelValidation.errors.length > 0) {
       const isExpired = validation.issues.some((issue) => issue.code === 'survey_expired');
       if (isExpired && existing.status !== 'expired') {
         await this.db.query(
@@ -467,8 +545,9 @@ export class SurveysService {
       }
 
       throw new UnprocessableEntityException({
+        code: parcelValidation.code,
         message: 'Survey cannot be submitted',
-        errors: validation.errors,
+        errors: [...validation.errors, ...parcelValidation.errors],
         warnings: validation.warnings
       });
     }
@@ -851,6 +930,179 @@ export class SurveysService {
     return { items };
   }
 
+  async getPublicParcelStatuses(input?: { bbox?: string; zoom?: string; year?: string }): Promise<{
+    items: Array<{
+      parcel_id: string;
+      study_status: 'studied' | 'not_studied';
+      latest_submitted_survey_id: string | null;
+      latest_observation_year: number | null;
+      latest_ibp_total: number | null;
+    }>;
+  }> {
+    const zoom = this.toFiniteNumber(input?.zoom);
+    if (zoom !== null && zoom < 15) {
+      return { items: [] };
+    }
+
+    const bbox = this.parseBbox(input?.bbox);
+    const year = this.normalizeObservationYear(input?.year);
+    const values: unknown[] = [year];
+    const bboxFilters: string[] = [];
+
+    if (bbox) {
+      values.push(bbox.minLng, bbox.maxLng, bbox.minLat, bbox.maxLat);
+      bboxFilters.push(`(p.centroid ->> 'lng')::double precision BETWEEN $2::double precision AND $3::double precision`);
+      bboxFilters.push(`(p.centroid ->> 'lat')::double precision BETWEEN $4::double precision AND $5::double precision`);
+    }
+
+    const result = await this.db.query<{
+      parcel_id: string;
+      study_status: 'studied' | 'not_studied';
+      latest_submitted_survey_id: string | null;
+      latest_observation_year: number | null;
+      latest_ibp_total: number | null;
+    }>(
+      `WITH latest_public AS (
+         SELECT
+           s.parcel_id,
+           s.id,
+           s.observation_year,
+           s.version_number,
+           s.submitted_at,
+           s.scores,
+           ROW_NUMBER() OVER (
+             PARTITION BY s.parcel_id
+             ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
+           ) AS rank_in_parcel
+         FROM surveys s
+         WHERE s.deleted_at IS NULL
+           AND s.status = 'submitted'
+           AND s.visibility = 'public'
+           AND s.parcel_id IS NOT NULL
+           AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
+       )
+       SELECT
+         p.parcel_id,
+         CASE WHEN lp.parcel_id IS NULL THEN 'not_studied' ELSE 'studied' END AS study_status,
+         lp.id AS latest_submitted_survey_id,
+         lp.observation_year AS latest_observation_year,
+         (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
+       FROM parcels p
+       LEFT JOIN latest_public lp
+         ON lp.parcel_id = p.parcel_id
+        AND lp.rank_in_parcel = 1
+       ${bboxFilters.length ? `WHERE ${bboxFilters.join(' AND ')}` : ''}
+       ORDER BY p.parcel_id ASC
+       LIMIT 1000`,
+      values
+    );
+
+    return {
+      items: result.rows.map((row) => ({
+        parcel_id: row.parcel_id,
+        study_status: row.study_status,
+        latest_submitted_survey_id: row.latest_submitted_survey_id,
+        latest_observation_year: row.latest_observation_year,
+        latest_ibp_total: row.latest_ibp_total
+      }))
+    };
+  }
+
+  async resolveParcelByCoordinates(input?: { lat?: string; lng?: string }): Promise<{
+    parcel: {
+      parcel_id: string;
+      commune_code: string;
+      section: string;
+      number: string;
+      centroid: { lat: number; lng: number };
+    };
+  }> {
+    const lat = this.toFiniteNumber(input?.lat);
+    const lng = this.toFiniteNumber(input?.lng);
+    if (lat === null || lng === null) {
+      throw new BadRequestException('lat and lng query parameters are required');
+    }
+
+    const parcel = await this.resolveParcelFromLocation({ source: 'gps', lat, lng });
+    if (!parcel) {
+      throw new UnprocessableEntityException({
+        code: 'parcel_invalid',
+        message: 'Parcel could not be resolved from coordinates'
+      });
+    }
+
+    const centroid = this.normalizeCentroid(parcel.centroid);
+    if (!centroid) {
+      throw new UnprocessableEntityException({
+        code: 'parcel_invalid',
+        message: 'Resolved parcel has invalid centroid metadata'
+      });
+    }
+
+    return {
+      parcel: {
+        parcel_id: parcel.parcel_id,
+        commune_code: parcel.commune_code,
+        section: parcel.section,
+        number: parcel.number,
+        centroid
+      }
+    };
+  }
+
+  async getParcelSurveyHistory(
+    user: AuthenticatedUser,
+    parcelIdRaw: string,
+    limitRaw?: string
+  ): Promise<{
+    parcel_id: string;
+    items: Array<{
+      survey_id: string;
+      observation_year: number | null;
+      version_number: number | null;
+      scores: Record<string, unknown>;
+      factor_results: Record<string, unknown>;
+      submitted_at: string;
+    }>;
+  }> {
+    const parcelId = this.normalizeParcelId(parcelIdRaw);
+    if (!parcelId) {
+      throw new BadRequestException('parcel_id is required');
+    }
+
+    const limit = this.normalizeParcelHistoryLimit(limitRaw);
+    const result = await this.db.query<{
+      survey_id: string;
+      observation_year: number | null;
+      version_number: number | null;
+      scores: Record<string, unknown>;
+      factor_results: Record<string, unknown>;
+      submitted_at: string;
+    }>(
+      `SELECT
+         id AS survey_id,
+         observation_year,
+         version_number,
+         scores,
+         factor_results,
+         submitted_at::text
+       FROM surveys
+       WHERE parcel_id = $1
+         AND deleted_at IS NULL
+         AND status = 'submitted'
+         AND submitted_at IS NOT NULL
+         AND (visibility = 'public' OR user_id = $2)
+       ORDER BY observation_year ASC NULLS LAST, version_number ASC NULLS LAST, submitted_at ASC
+       LIMIT $3`,
+      [parcelId, user.id, limit]
+    );
+
+    return {
+      parcel_id: parcelId,
+      items: result.rows
+    };
+  }
+
   async syncBatch(user: AuthenticatedUser, body: SyncBatchBody): Promise<{ results: SyncOperationResult[] }> {
     const operations = body.operations;
     if (!Array.isArray(operations) || operations.length === 0) {
@@ -1053,6 +1305,10 @@ export class SurveysService {
          site_name,
          status,
          visibility,
+         parcel_id,
+         observation_year,
+         version_number,
+         previous_survey_id,
          region_version,
          vegetation_stage,
          factors,
@@ -1130,6 +1386,10 @@ export class SurveysService {
          site_name,
          status,
          visibility,
+         parcel_id,
+         observation_year,
+         version_number,
+         previous_survey_id,
          region_version,
          vegetation_stage,
          factors,
@@ -1207,6 +1467,10 @@ export class SurveysService {
          s.site_name,
          s.status,
          s.visibility,
+         s.parcel_id,
+         s.observation_year,
+         s.version_number,
+         s.previous_survey_id,
          s.region_version,
          s.vegetation_stage,
          s.factors,
@@ -1256,6 +1520,10 @@ export class SurveysService {
   private getSubmittedReadOnlyFields(body: SurveyPatchBody): string[] {
     const readonlyFields: Array<keyof SurveyPatchBody> = [
       'site_name',
+      'parcel_id',
+      'observation_year',
+      'version_number',
+      'previous_survey_id',
       'region_version',
       'vegetation_stage',
       'factors',
@@ -1342,6 +1610,321 @@ export class SurveysService {
       await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
       this.s3BucketReady = true;
     }
+  }
+
+  private normalizeLocationPayload(value?: SurveyRow['location']): SurveyRow['location'] {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return value;
+  }
+
+  private normalizeParcelId(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const normalized = value.trim().toUpperCase();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private normalizeObservationYear(value: unknown): number | null {
+    const parsed = this.toFiniteNumber(value);
+    if (parsed === null) {
+      return null;
+    }
+    const integer = Math.trunc(parsed);
+    if (integer < 1900 || integer > 2200) {
+      return null;
+    }
+    return integer;
+  }
+
+  private normalizeVersionNumber(value: unknown): number | null {
+    const parsed = this.toFiniteNumber(value);
+    if (parsed === null) {
+      return null;
+    }
+    const integer = Math.trunc(parsed);
+    return integer >= 1 ? integer : null;
+  }
+
+  private normalizePreviousSurveyId(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private toFiniteNumber(value: unknown): number | null {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+
+  private normalizeCentroid(value: Record<string, unknown>): { lat: number; lng: number } | null {
+    const lat = this.toFiniteNumber(value.lat);
+    const lng = this.toFiniteNumber(value.lng);
+    if (lat === null || lng === null) {
+      return null;
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return null;
+    }
+    return {
+      lat: Number(lat.toFixed(6)),
+      lng: Number(lng.toFixed(6))
+    };
+  }
+
+  private parseParcelIdentifier(parcelId: string): { communeCode: string; section: string; number: string } {
+    const normalized = parcelId.trim().toUpperCase();
+    const match = /^(\d{5})([A-Z]{1,3})(\d{1,4})$/.exec(normalized);
+    if (match) {
+      return {
+        communeCode: match[1],
+        section: match[2].padEnd(2, 'A').slice(0, 3),
+        number: match[3].padStart(4, '0').slice(-4)
+      };
+    }
+    return {
+      communeCode: '00000',
+      section: 'AA',
+      number: '0000'
+    };
+  }
+
+  private buildSyntheticParcelDescriptor(lat: number, lng: number): {
+    parcelId: string;
+    communeCode: string;
+    section: string;
+    number: string;
+    centroid: { lat: number; lng: number };
+  } {
+    const latKey = Math.round((lat + 90) * 10000);
+    const lngKey = Math.round((lng + 180) * 10000);
+    const communeCode = String(Math.abs((latKey * 13 + lngKey * 7) % 100000)).padStart(5, '0');
+    const section = `${String.fromCharCode(65 + (Math.abs(latKey) % 26))}${String.fromCharCode(65 + (Math.abs(lngKey) % 26))}`;
+    const number = String(Math.abs((latKey * 31 + lngKey * 17) % 10000)).padStart(4, '0');
+
+    return {
+      parcelId: `${communeCode}${section}${number}`,
+      communeCode,
+      section,
+      number,
+      centroid: {
+        lat: Number(lat.toFixed(6)),
+        lng: Number(lng.toFixed(6))
+      }
+    };
+  }
+
+  private async resolveParcelFromLocation(location: SurveyRow['location']): Promise<ParcelRow | null> {
+    const centroid = this.normalizeCentroid(location);
+    if (!centroid) {
+      return null;
+    }
+    const descriptor = this.buildSyntheticParcelDescriptor(centroid.lat, centroid.lng);
+    const result = await this.db.query<ParcelRow>(
+      `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
+       ON CONFLICT (parcel_id) DO UPDATE
+         SET centroid = COALESCE(NULLIF(parcels.centroid, '{}'::jsonb), EXCLUDED.centroid),
+             updated_at = NOW()
+       RETURNING
+         id::text,
+         parcel_id,
+         commune_code,
+         section,
+         number,
+         geometry,
+         centroid,
+         area_m2,
+         source,
+         created_at::text,
+         updated_at::text`,
+      [
+        randomUUID(),
+        descriptor.parcelId,
+        descriptor.communeCode,
+        descriptor.section,
+        descriptor.number,
+        JSON.stringify({}),
+        JSON.stringify(descriptor.centroid),
+        'synthetic_v1'
+      ]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  private async ensureParcelById(parcelId: string, location?: SurveyRow['location']): Promise<ParcelRow> {
+    const existing = await this.db.query<ParcelRow>(
+      `SELECT
+         id::text,
+         parcel_id,
+         commune_code,
+         section,
+         number,
+         geometry,
+         centroid,
+         area_m2,
+         source,
+         created_at::text,
+         updated_at::text
+       FROM parcels
+       WHERE parcel_id = $1`,
+      [parcelId]
+    );
+    if (existing.rows[0]) {
+      return existing.rows[0];
+    }
+
+    const parsed = this.parseParcelIdentifier(parcelId);
+    const centroid = location ? this.normalizeCentroid(location) : null;
+    const inserted = await this.db.query<ParcelRow>(
+      `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
+       ON CONFLICT (parcel_id) DO UPDATE
+         SET updated_at = NOW()
+       RETURNING
+         id::text,
+         parcel_id,
+         commune_code,
+         section,
+         number,
+         geometry,
+         centroid,
+         area_m2,
+         source,
+         created_at::text,
+         updated_at::text`,
+      [
+        randomUUID(),
+        parcelId,
+        parsed.communeCode,
+        parsed.section,
+        parsed.number,
+        JSON.stringify({}),
+        JSON.stringify(centroid ?? {}),
+        'manual'
+      ]
+    );
+
+    return inserted.rows[0];
+  }
+
+  private async getDefaultVersionNumber(parcelId: string, surveyIdToExclude?: string): Promise<number> {
+    const result = await this.db.query<{ next_version: number }>(
+      `SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
+       FROM surveys
+       WHERE parcel_id = $1
+         AND deleted_at IS NULL
+         AND status = 'submitted'
+         AND ($2::text IS NULL OR id <> $2)`,
+      [parcelId, surveyIdToExclude ?? null]
+    );
+    return result.rows[0]?.next_version ?? 1;
+  }
+
+  private async validateParcelSubmit(
+    survey: SurveyRow
+  ): Promise<{
+    code?: 'parcel_required' | 'parcel_invalid';
+    errors: string[];
+    versionConflict?: { expectedVersionNumber: number };
+  }> {
+    const errors: string[] = [];
+    const parcelId = survey.parcel_id;
+    const observationYear = survey.observation_year;
+    const versionNumber = survey.version_number;
+
+    if (!parcelId) {
+      errors.push('parcel_id is required for submit');
+    }
+    if (!observationYear) {
+      errors.push('observation_year is required for submit');
+    }
+    if (!versionNumber) {
+      errors.push('version_number is required for submit');
+    }
+
+    if (errors.length > 0 || !parcelId || !observationYear || !versionNumber) {
+      return {
+        code: 'parcel_required',
+        errors
+      };
+    }
+
+    const parcelExists = await this.db.query<{ parcel_id: string }>(
+      `SELECT parcel_id
+       FROM parcels
+       WHERE parcel_id = $1
+       LIMIT 1`,
+      [parcelId]
+    );
+
+    if (!parcelExists.rows[0]) {
+      return {
+        code: 'parcel_invalid',
+        errors: ['parcel_id does not exist in parcel registry']
+      };
+    }
+
+    const expectedVersionNumber = await this.getDefaultVersionNumber(parcelId, survey.id);
+    if (versionNumber !== expectedVersionNumber) {
+      return {
+        errors: [],
+        versionConflict: {
+          expectedVersionNumber
+        }
+      };
+    }
+
+    return {
+      errors: []
+    };
+  }
+
+  private normalizeParcelHistoryLimit(limitRaw?: string): number {
+    const parsed = this.toFiniteNumber(limitRaw);
+    if (parsed === null) {
+      return 20;
+    }
+    const integer = Math.trunc(parsed);
+    if (integer <= 0) {
+      return 20;
+    }
+    return Math.min(100, integer);
+  }
+
+  private parseBbox(raw?: string): { minLng: number; minLat: number; maxLng: number; maxLat: number } | null {
+    if (!raw || raw.trim().length === 0) {
+      return null;
+    }
+
+    const parts = raw.split(',').map((part) => part.trim());
+    if (parts.length !== 4) {
+      throw new BadRequestException('bbox must contain exactly 4 comma-separated numbers');
+    }
+
+    const minLng = this.toFiniteNumber(parts[0]);
+    const minLat = this.toFiniteNumber(parts[1]);
+    const maxLng = this.toFiniteNumber(parts[2]);
+    const maxLat = this.toFiniteNumber(parts[3]);
+    if (minLng === null || minLat === null || maxLng === null || maxLat === null) {
+      throw new BadRequestException('bbox contains invalid coordinate values');
+    }
+    if (minLng >= maxLng || minLat >= maxLat) {
+      throw new BadRequestException('bbox bounds are invalid');
+    }
+
+    return { minLng, minLat, maxLng, maxLat };
   }
 
   private normalizeChangesLimit(limitRaw?: number): number {

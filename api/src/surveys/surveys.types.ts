@@ -17,6 +17,10 @@ export type SurveyUpsertBody = {
   site_name?: string;
   status?: 'draft' | 'submitted' | 'synced' | 'error' | 'expired';
   visibility?: 'private' | 'public';
+  parcel_id?: string;
+  observation_year?: number;
+  version_number?: number;
+  previous_survey_id?: string;
   region_version?: 'ACA' | 'M';
   vegetation_stage?: string;
   factors?: Record<string, unknown>;
@@ -28,6 +32,10 @@ export type SurveyUpsertBody = {
 export type SurveyPatchBody = {
   site_name?: string;
   visibility?: 'private' | 'public';
+  parcel_id?: string;
+  observation_year?: number;
+  version_number?: number;
+  previous_survey_id?: string;
   region_version?: 'ACA' | 'M';
   vegetation_stage?: string;
   factors?: Record<string, unknown>;
@@ -74,6 +82,10 @@ export type SurveyRow = {
   site_name: string;
   status: 'draft' | 'submitted' | 'synced' | 'error' | 'expired';
   visibility: 'private' | 'public';
+  parcel_id: string | null;
+  observation_year: number | null;
+  version_number: number | null;
+  previous_survey_id: string | null;
   region_version: string | null;
   vegetation_stage: string | null;
   factors: JsonObject;
@@ -136,6 +148,10 @@ export type SyncChangeSurvey = Pick<
   | 'site_name'
   | 'status'
   | 'visibility'
+  | 'parcel_id'
+  | 'observation_year'
+  | 'version_number'
+  | 'previous_survey_id'
   | 'region_version'
   | 'vegetation_stage'
   | 'factors'
@@ -149,6 +165,20 @@ export type SyncChangeSurvey = Pick<
   | 'sync_version'
   | 'deleted_at'
 >;
+
+export type ParcelRow = {
+  id: string;
+  parcel_id: string;
+  commune_code: string;
+  section: string;
+  number: string;
+  geometry: JsonObject;
+  centroid: { lat?: number; lng?: number; [key: string]: unknown };
+  area_m2: number | null;
+  source: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type SyncChangeAttachment = Pick<
   AttachmentRow,
