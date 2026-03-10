@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthUser } from '../app/types';
 import { ApiError } from '../api/client';
-import { getMyProfile, loginWithCredentials, logoutSession, refreshAuthTokens } from '../api/ibp-api';
+import {
+  getMyProfile,
+  loginWithCredentials,
+  logoutSession,
+  refreshAuthTokens,
+  registerWithCredentials
+} from '../api/ibp-api';
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from '../auth/session-storage';
 import { OperationScope, OperationState } from './operation-status';
 
@@ -26,6 +32,7 @@ type UseAuthSessionParams = {
   apiUrl: string;
   email: string;
   password: string;
+  displayName: string;
   reportStatus: (scope: OperationScope, state: OperationState, message: string) => void;
   onSessionCleared?: () => void | Promise<void>;
 };
@@ -34,6 +41,7 @@ export function useAuthSession({
   apiUrl,
   email,
   password,
+  displayName,
   reportStatus,
   onSessionCleared
 }: UseAuthSessionParams) {
@@ -226,7 +234,7 @@ export function useAuthSession({
     try {
       setSessionRestoring(false);
       reportStatus('auth', 'running', 'Logging in...');
-      const payload = await loginWithCredentials(apiUrl, email, password);
+      const payload = await loginWithCredentials(apiUrl, email, password, { createIfMissing: false });
       setAccessToken(payload.access_token);
       setRefreshToken(payload.refresh_token);
       setProfileFromUser(payload.user);
@@ -239,6 +247,24 @@ export function useAuthSession({
       reportStatus('auth', 'error', `Login error: ${(error as Error).message}`);
     }
   }, [apiUrl, email, password, reportStatus, setProfileFromUser]);
+
+  const handleRegister = useCallback(async (): Promise<void> => {
+    try {
+      setSessionRestoring(false);
+      reportStatus('auth', 'running', 'Creating account...');
+      const payload = await registerWithCredentials(apiUrl, email, password, displayName);
+      setAccessToken(payload.access_token);
+      setRefreshToken(payload.refresh_token);
+      setProfileFromUser(payload.user);
+      await saveStoredAuthSession({
+        accessToken: payload.access_token,
+        refreshToken: payload.refresh_token
+      });
+      reportStatus('auth', 'success', 'Account created and logged in');
+    } catch (error) {
+      reportStatus('auth', 'error', `Registration error: ${(error as Error).message}`);
+    }
+  }, [apiUrl, displayName, email, password, reportStatus, setProfileFromUser]);
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
@@ -266,6 +292,7 @@ export function useAuthSession({
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
+    handleRegister,
     handleLogout
   };
 }

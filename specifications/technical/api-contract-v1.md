@@ -30,11 +30,12 @@ Request:
 ```json
 {
   "email": "user@example.com",
-  "password": "secret"
+  "password": "secret",
+  "create_if_missing": false
 }
 ```
 
-Response `200`:
+Response `201`:
 ```json
 {
   "access_token": "jwt",
@@ -48,8 +49,34 @@ Response `200`:
 ```
 
 Notes:
-- V1 currently supports a `login-or-create` behavior: if the email does not exist yet, a contributor account is created on first successful login.
+- `create_if_missing` is optional. If omitted, server behavior depends on `AUTH_LOGIN_OR_CREATE_ENABLED` and environment defaults.
+- For strict login-only UX, clients should send `create_if_missing: false`.
 - If an existing account has no password hash (bootstrap/legacy case), the first successful login stores the provided password hash.
+
+### POST /auth/register
+Create a new account and immediately authenticate it.
+
+Request:
+```json
+{
+  "email": "new-user@example.com",
+  "password": "secret",
+  "display_name": "New User"
+}
+```
+
+Response `201`:
+```json
+{
+  "access_token": "jwt",
+  "refresh_token": "jwt",
+  "user": {
+    "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
+    "display_name": "New User",
+    "role": "contributor"
+  }
+}
+```
 
 ### POST /auth/refresh
 Rotate tokens using refresh token.

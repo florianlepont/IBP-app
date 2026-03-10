@@ -42,6 +42,34 @@ describe('Auth + profile (e2e)', () => {
     expect(me.body.email_change_required).toBe(false);
   });
 
+  it('registers a new account and blocks duplicate registration', async () => {
+    const email = `e2e-register-${Date.now()}@ibp.local`;
+
+    const register = await request(app.getHttpServer())
+      .post('/v1/auth/register')
+      .send({ email, password: 'demo123', display_name: 'New User' })
+      .expect(201);
+
+    expect(register.body.user.email).toBe(email);
+    expect(register.body.user.display_name).toBe('New User');
+    expect(typeof register.body.access_token).toBe('string');
+    expect(typeof register.body.refresh_token).toBe('string');
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/register')
+      .send({ email, password: 'demo123' })
+      .expect(409);
+  });
+
+  it('rejects login when account does not exist and create_if_missing is false', async () => {
+    const email = `e2e-login-no-create-${Date.now()}@ibp.local`;
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123', create_if_missing: false })
+      .expect(401);
+  });
+
   it('requires email confirmation before changing login email', async () => {
     const email = `e2e-email-pending-${Date.now()}@ibp.local`;
     const requestedEmail = `e2e-email-confirmed-${Date.now()}@ibp.local`;

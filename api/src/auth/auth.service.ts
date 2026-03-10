@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
@@ -20,15 +20,20 @@ type TokenKind = 'access' | 'refresh';
 export class AuthService {
   constructor(private readonly db: DatabaseService) {}
 
-  async login(email: string, password: string): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser }> {
+  async login(
+    email: string,
+    password: string,
+    options?: { createIfMissing?: boolean }
+  ): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser }> {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
       throw new UnauthorizedException('Email and password are required');
     }
 
+    const createIfMissing = options?.createIfMissing ?? this.isLoginOrCreateEnabled();
     let user = await this.findUserByEmail(normalizedEmail);
     if (!user) {
-      if (!this.isLoginOrCreateEnabled()) {
+      if (!createIfMissing || !this.isLoginOrCreateEnabled()) {
         throw new UnauthorizedException('Invalid credentials');
       }
       user = await this.createUser(normalizedEmail, password);
@@ -40,6 +45,33 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const refreshToken = await this.issueRefreshToken(user.id);
+
+    return {
+      access_token: this.signToken(user.id, 'access'),
+      refresh_token: refreshToken,
+      user: this.toPublicUser(user)
+    };
+  }
+
+  async register(
+    email: string,
+    password: string,
+    displayName: string
+  ): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedDisplayName = displayName.trim();
+
+    if (!normalizedEmail || !password) {
+      throw new BadRequestException('Email and password are required');
+    }
+
+    const existing = await this.findUserByEmail(normalizedEmail);
+    if (existing) {
+      throw new ConflictException('Account already exists');
+    }
+
+    const user = await this.createUser(normalizedEmail, password, normalizedDisplayName);
     const refreshToken = await this.issueRefreshToken(user.id);
 
     return {
@@ -152,17 +184,26 @@ export class AuthService {
     return existing.rows[0] ?? null;
   }
 
-  private async createUser(email: string, password: string): Promise<UserRow> {
+  private async createUser(email: string, password: string, displayNameOverride?: string): Promise<UserRow> {
     const id = randomUUID();
-    const displayName = email.split('@')[0] || 'Contributor';
+    const displayName = displayNameOverride?.trim() || email.split('@')[0] || 'Contributor';
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const created = await this.db.query<UserRow>(
-      `INSERT INTO users (id, email, password_hash, role, first_name, last_name, display_name)
-       VALUES ($1, $2, $3, 'contributor', '', '', $4)
-       RETURNING id, email, role, first_name, last_name, display_name, profile_picture_url, password_hash`,
-      [id, email, passwordHash, displayName]
-    );
+    let created;
+    try {
+      created = await this.db.query<UserRow>(
+        `INSERT INTO users (id, email, password_hash, role, first_name, last_name, display_name)
+         VALUES ($1, $2, $3, 'contributor', '', '', $4)
+         RETURNING id, email, role, first_name, last_name, display_name, profile_picture_url, password_hash`,
+        [id, email, passwordHash, displayName]
+      );
+    } catch (error) {
+      const errorCode = (error as { code?: string } | null)?.code;
+      if (errorCode === '23505') {
+        throw new ConflictException('Account already exists');
+      }
+      throw error;
+    }
 
     return created.rows[0];
   }

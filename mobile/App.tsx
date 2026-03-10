@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -49,8 +49,9 @@ type FormMode = 'create' | 'edit';
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL);
-  const [email, setEmail] = useState('demo@ibp.local');
-  const [password, setPassword] = useState('demo123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [formMode, setFormMode] = useState<FormMode>('create');
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null);
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>('summary');
@@ -74,6 +75,7 @@ export default function App() {
     apiUrl,
     email,
     password,
+    displayName,
     surveys: surveyList.surveys,
     selectedSurveyId: surveyList.selectedSurveyId,
     surveyDetailTab,
@@ -259,13 +261,13 @@ export default function App() {
         headerTitleStyle: {
           fontSize: 30,
           fontWeight: '800',
-          color: '#12304f'
+          color: '#1d4f3a'
         },
         headerStyle: {
-          backgroundColor: '#f2f5fa'
+          backgroundColor: '#e8eee7'
         },
         headerShadowVisible: false,
-        headerTintColor: '#12304f'
+        headerTintColor: '#1d4f3a'
       }}
     >
       <SurveysStack.Screen
@@ -482,21 +484,27 @@ export default function App() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.appLayout}>
         {!surveySync.isAuthenticated ? (
-          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-            <AuthGateScreen
-              apiUrl={apiUrl}
-              onApiUrlChange={setApiUrl}
-              email={email}
-              onEmailChange={setEmail}
-              password={password}
-              onPasswordChange={setPassword}
-              onLogin={surveySync.handleLogin}
-              status={surveySync.sessionRestoring ? 'Restoring session...' : surveySync.status}
-            />
-          </ScrollView>
+          <AuthGateScreen
+            apiUrl={apiUrl}
+            onApiUrlChange={setApiUrl}
+            email={email}
+            onEmailChange={setEmail}
+            password={password}
+            onPasswordChange={setPassword}
+            displayName={displayName}
+            onDisplayNameChange={setDisplayName}
+            onLogin={surveySync.handleLogin}
+            onRegister={surveySync.handleRegister}
+            logoSource={require('./assets/logo-etats-sauvages.png')}
+            heroBackgroundSource={require('./assets/auth/hero-canopy.png')}
+            heroForegroundLeftSource={require('./assets/auth/fern.png')}
+            heroForegroundRightSource={require('./assets/auth/marten.png')}
+            heroBirdSource={require('./assets/auth/woodpecker.png')}
+            status={surveySync.sessionRestoring ? 'Restoring session...' : surveySync.status}
+          />
         ) : (
           <NavigationContainer ref={navigationRef}>
             <Tab.Navigator
@@ -506,16 +514,25 @@ export default function App() {
                 headerTitleStyle: {
                   fontSize: 30,
                   fontWeight: '800',
-                  color: '#12304f'
+                  color: '#1d4f3a'
                 },
                 headerStyle: {
-                  backgroundColor: '#f2f5fa'
+                  backgroundColor: '#e8eee7'
                 },
                 headerShadowVisible: false,
-                tabBarActiveTintColor: '#1d4f84',
-                tabBarInactiveTintColor: '#6b859f',
+                tabBarActiveTintColor: '#1f6b49',
+                tabBarInactiveTintColor: '#6d8576',
                 tabBarStyle: {
-                  backgroundColor: '#ffffff'
+                  backgroundColor: '#f7faf5',
+                  borderTopColor: '#d1ddcf',
+                  borderTopWidth: 1,
+                  height: Platform.select({ ios: 84, default: 68 }),
+                  paddingBottom: Platform.select({ ios: 22, default: 10 }),
+                  paddingTop: Platform.select({ ios: 8, default: 6 })
+                },
+                tabBarLabelStyle: {
+                  fontSize: 13,
+                  fontWeight: '600'
                 },
                 tabBarLabel: route.name === 'publicMap' ? 'Map' : route.name === 'surveys' ? 'Surveys' : 'Account',
                 tabBarIcon: ({ color, size }) => {

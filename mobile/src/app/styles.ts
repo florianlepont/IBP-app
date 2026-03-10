@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f2f5fa'
+    backgroundColor: '#e8eee7'
   },
   appLayout: {
     flex: 1
@@ -21,7 +21,9 @@ export const styles = StyleSheet.create({
     paddingBottom: 20
   },
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f6faf4',
+    borderWidth: 1,
+    borderColor: '#d5e1d2',
     borderRadius: 12,
     padding: 16,
     gap: 10
@@ -29,24 +31,24 @@ export const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#12304f'
+    color: '#1d4f3a'
   },
   subtitle: {
     fontSize: 12,
-    color: '#34516f'
+    color: '#4c6c59'
   },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1d3e61'
+    color: '#265742'
   },
   input: {
     borderWidth: 1,
-    borderColor: '#c8d7e6',
+    borderColor: '#c2d4c3',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: '#fdfefe'
+    backgroundColor: '#eef4ee'
   },
   factorGrid: {
     flexDirection: 'row',
@@ -96,11 +98,11 @@ export const styles = StyleSheet.create({
   status: {
     marginTop: 6,
     fontSize: 13,
-    color: '#17395e'
+    color: '#2c5a45'
   },
   meta: {
     fontSize: 12,
-    color: '#4b6480'
+    color: '#577262'
   },
   authCompact: {
     borderWidth: 1,
@@ -651,6 +653,9 @@ export const styles = StyleSheet.create({
   filterGroup: {
     gap: 6
   },
+  filterGroupCompact: {
+    gap: 6
+  },
   surveyListContainer: {
     flex: 1,
     padding: 16,
@@ -665,13 +670,24 @@ export const styles = StyleSheet.create({
   },
   filterLabel: {
     fontSize: 12,
-    color: '#3f5c79',
+    color: '#3d5f4c',
     fontWeight: '600'
+  },
+  filterLabelCompact: {
+    fontSize: 12,
+    color: '#3d5f4c',
+    fontWeight: '700'
   },
   filterChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8
+  },
+  filterChipsInlineRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    gap: 8,
+    paddingRight: 8
   },
   filterToolbarRow: {
     flexDirection: 'row',
@@ -683,50 +699,50 @@ export const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     borderWidth: 1,
-    borderColor: '#c6d8ea',
-    backgroundColor: '#f7fbff',
+    borderColor: '#bfd2c0',
+    backgroundColor: '#edf5ed',
     alignItems: 'center',
     justifyContent: 'center'
   },
   filterAdvancedToggle: {
     borderWidth: 1,
-    borderColor: '#c6d8ea',
+    borderColor: '#bfd2c0',
     borderRadius: 999,
-    backgroundColor: '#f7fbff',
+    backgroundColor: '#edf5ed',
     paddingHorizontal: 14,
     paddingVertical: 9
   },
   filterAdvancedToggleText: {
     fontSize: 12,
-    color: '#355a80',
+    color: '#325844',
     fontWeight: '600'
   },
   filterAdvancedPanel: {
     borderWidth: 1,
-    borderColor: '#d9e4f1',
+    borderColor: '#cddbcf',
     borderRadius: 10,
     padding: 10,
     gap: 8,
-    backgroundColor: '#fbfdff'
+    backgroundColor: '#f3f8f2'
   },
   filterChip: {
     borderWidth: 1,
-    borderColor: '#c6d8ea',
+    borderColor: '#bfd2c0',
     borderRadius: 999,
-    backgroundColor: '#f7fbff',
+    backgroundColor: '#edf5ed',
     paddingHorizontal: 10,
     paddingVertical: 6
   },
   filterChipActive: {
-    borderColor: '#2d6fb5',
-    backgroundColor: '#e8f2ff'
+    borderColor: '#2a774f',
+    backgroundColor: '#dff1e5'
   },
   filterChipText: {
     fontSize: 12,
-    color: '#335a80'
+    color: '#355845'
   },
   filterChipTextActive: {
-    color: '#1d4f84',
+    color: '#1f6543',
     fontWeight: '600'
   },
   filterReset: {
@@ -734,11 +750,11 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#edf3fa'
+    backgroundColor: '#e4efe4'
   },
   filterResetText: {
     fontSize: 12,
-    color: '#2f5478',
+    color: '#315441',
     fontWeight: '600'
   },
   spacer: {
@@ -786,22 +802,22 @@ export const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#254b6f'
+    color: '#2e5843'
   },
   badgeNeutral: {
-    backgroundColor: '#edf3fa'
+    backgroundColor: '#e5ece5'
   },
   badgeStatusDraft: {
     backgroundColor: '#fff0cc'
   },
   badgeStatusSubmitted: {
-    backgroundColor: '#dff4e8'
+    backgroundColor: '#d8efdf'
   },
   badgeSyncPending: {
-    backgroundColor: '#f4ebff'
+    backgroundColor: '#ebece6'
   },
   badgeSyncSynced: {
-    backgroundColor: '#dcf3ea'
+    backgroundColor: '#d8ede0'
   },
   badgeSyncFailed: {
     backgroundColor: '#ffe2e2'
@@ -881,14 +897,14 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: '#e3ecf6',
+    borderColor: '#d6e2d4',
     borderRadius: 12,
     padding: 10,
-    backgroundColor: '#f9fcff'
+    backgroundColor: '#f7faf5'
   },
   surveyListItemCardSelected: {
-    borderColor: '#9abfe2',
-    backgroundColor: '#eef6ff'
+    borderColor: '#96c3a5',
+    backgroundColor: '#e9f4ea'
   },
   surveyListItemMedia: {
     width: 70,
@@ -898,7 +914,7 @@ export const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 10,
-    backgroundColor: '#e8eff8'
+    backgroundColor: '#e3ebe2'
   },
   surveyListItemPreviewPlaceholder: {
     width: '100%',
@@ -906,7 +922,7 @@ export const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#edf3fa'
+    backgroundColor: '#e8efe7'
   },
   surveyListItemContent: {
     flex: 1,
@@ -915,11 +931,11 @@ export const styles = StyleSheet.create({
   surveyListItemTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#17395e'
+    color: '#204f3b'
   },
   surveyListItemMeta: {
     fontSize: 12,
-    color: '#55708b'
+    color: '#607869'
   },
   surveyCompletionRow: {
     gap: 6
@@ -927,18 +943,18 @@ export const styles = StyleSheet.create({
   surveyCompletionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#2f5478'
+    color: '#2b573f'
   },
   surveyCompletionTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: '#dde8f5',
+    backgroundColor: '#d8e3d8',
     overflow: 'hidden'
   },
   surveyCompletionFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#1d6fb6'
+    backgroundColor: '#2f8057'
   },
   debugCard: {
     borderWidth: 1,
@@ -1087,8 +1103,8 @@ export const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1d4f84',
-    shadowColor: '#0b2744',
+    backgroundColor: '#2a764f',
+    shadowColor: '#18432e',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.22,
     shadowRadius: 10,
