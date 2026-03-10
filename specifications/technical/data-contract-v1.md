@@ -92,7 +92,7 @@ Required fields:
 - `id` (uuid)
 - `survey_id` (uuid)
 - `actor_id` (uuid, nullable for system events)
-- `event_type` (enum: `created` | `updated` | `submitted` | `synced` | `sync_failed` | `expired` | `visibility_changed` | `deleted` | `reported`)
+- `event_type` (enum: `created` | `updated` | `submitted` | `synced` | `sync_failed` | `expired` | `visibility_changed` | `deleted` | `reported` | `attachment_created` | `attachment_uploaded` | `attachment_deleted`)
 - `payload` (jsonb, nullable)
 - `created_at` (timestamp)
 
@@ -103,7 +103,7 @@ Required fields:
 - `id` (uuid)
 - `entity_type` (enum: `survey` | `attachment` | `report`)
 - `entity_id` (uuid)
-- `operation` (enum: `upsert` | `delete` | `create` | `visibility_update`) // `create` for attachments, `visibility_update` for offline publication toggle
+- `operation` (enum: `upsert` | `delete` | `create` | `visibility_update`) // `create` for attachment creation, `delete` for survey/attachment delete, `visibility_update` for offline publication toggle
 - `payload` (jsonb)
 - `status` (enum: `pending` | `processing` | `failed`)
 - `retry_count` (integer)
@@ -133,7 +133,7 @@ Anonymized representation used by community map surfaces.
 
 Required fields:
 - `survey_id` (uuid)
-- `display_location` (jsonb) // reduced precision
+- `display_location` (jsonb) // reduced precision (2 decimals in current API read model)
 - `survey_date` (date)
 - `region_code` (string)
 - `ibp_total` (integer)
