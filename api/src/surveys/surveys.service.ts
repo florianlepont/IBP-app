@@ -963,14 +963,89 @@ export class SurveysService {
            OR (e.created_at = $2::timestamptz AND e.id > $3)
          )
        ORDER BY e.created_at ASC, e.id ASC
+      LIMIT $4`,
+      [user.id, parsedCursor.timestamp, parsedCursor.eventId, limit + 1]
+    );
+
+    const hasMoreEvents = rawEvents.rows.length > limit;
+    const events = hasMoreEvents ? rawEvents.rows.slice(0, limit) : rawEvents.rows;
+
+    if (events.length > 0) {
+      const surveyIds = Array.from(new Set(events.map((event) => event.survey_id)));
+      const attachmentIds = Array.from(
+        new Set(
+          events
+            .map((event) => this.extractAttachmentId(event.payload))
+            .filter((value): value is string => Boolean(value))
+        )
+      );
+
+      const surveys = surveyIds.length ? await this.loadSyncChangeSurveys(user.id, surveyIds) : [];
+      const attachments = attachmentIds.length ? await this.loadSyncChangeAttachmentsByIds(user.id, attachmentIds) : [];
+
+      const lastEvent = events[events.length - 1];
+      const cursorOut = this.buildChangesCursor(lastEvent.created_at, lastEvent.id);
+
+      return {
+        cursor_in: parsedCursor.original,
+        cursor_out: cursorOut,
+        has_more: hasMoreEvents,
+        events,
+        surveys,
+        attachments
+      };
+    }
+
+    // Fallback path: include surveys changed without explicit survey_events (e.g. direct DB inserts for debug/demo).
+    const rawSurveys = await this.db.query<SyncChangeSurvey>(
+      `SELECT
+         id,
+         site_name,
+         status,
+         visibility,
+         region_version,
+         vegetation_stage,
+         factors,
+         factor_results,
+         scores,
+         location,
+         created_at::text,
+         updated_at::text,
+         submitted_at::text,
+         expires_at::text,
+         sync_version,
+         deleted_at::text
+       FROM surveys
+       WHERE user_id = $1
+         AND (
+           updated_at > $2::timestamptz
+           OR (updated_at = $2::timestamptz AND id > $3)
+         )
+       ORDER BY updated_at ASC, id ASC
        LIMIT $4`,
       [user.id, parsedCursor.timestamp, parsedCursor.eventId, limit + 1]
     );
 
-    const hasMore = rawEvents.rows.length > limit;
-    const events = hasMore ? rawEvents.rows.slice(0, limit) : rawEvents.rows;
+    const hasMoreSurveys = rawSurveys.rows.length > limit;
+    const surveysByCursor = hasMoreSurveys ? rawSurveys.rows.slice(0, limit) : rawSurveys.rows;
+    const surveys: SyncChangeSurvey[] = [...surveysByCursor];
 
-    if (events.length === 0) {
+    if (surveys.length < limit) {
+      const surveysWithoutEvents = await this.loadSyncChangeSurveysWithoutEvents(user.id, limit);
+      const knownSurveyIds = new Set(surveys.map((survey) => survey.id));
+      for (const survey of surveysWithoutEvents) {
+        if (knownSurveyIds.has(survey.id)) {
+          continue;
+        }
+        surveys.push(survey);
+        knownSurveyIds.add(survey.id);
+        if (surveys.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    if (surveys.length === 0) {
       return {
         cursor_in: parsedCursor.original,
         cursor_out: parsedCursor.original,
@@ -981,79 +1056,132 @@ export class SurveysService {
       };
     }
 
-    const surveyIds = Array.from(new Set(events.map((event) => event.survey_id)));
-    const attachmentIds = Array.from(
-      new Set(
-        events
-          .map((event) => this.extractAttachmentId(event.payload))
-          .filter((value): value is string => Boolean(value))
-      )
-    );
-
-    const surveys = surveyIds.length
-      ? (
-          await this.db.query<SyncChangeSurvey>(
-            `SELECT
-               id,
-               site_name,
-               status,
-               visibility,
-               region_version,
-               vegetation_stage,
-               factors,
-               factor_results,
-               scores,
-               location,
-               created_at::text,
-               updated_at::text,
-               submitted_at::text,
-               expires_at::text,
-               sync_version,
-               deleted_at::text
-             FROM surveys
-             WHERE user_id = $1
-               AND id = ANY($2::text[])
-             ORDER BY updated_at ASC, id ASC`,
-            [user.id, surveyIds]
-          )
-        ).rows
-      : [];
-
-    const attachments = attachmentIds.length
-      ? (
-          await this.db.query<SyncChangeAttachment>(
-            `SELECT
-               a.id,
-               a.survey_id,
-               a.storage_key,
-               a.mime_type,
-               a.size_bytes,
-               a.captured_at::text,
-               a.metadata,
-               a.created_at::text,
-               a.uploaded_at::text,
-               a.deleted_at::text
-             FROM attachments a
-             JOIN surveys s ON s.id = a.survey_id
-             WHERE s.user_id = $1
-               AND a.id = ANY($2::text[])
-             ORDER BY a.created_at ASC, a.id ASC`,
-            [user.id, attachmentIds]
-          )
-        ).rows
-      : [];
-
-    const lastEvent = events[events.length - 1];
-    const cursorOut = this.buildChangesCursor(lastEvent.created_at, lastEvent.id);
+    const surveyIds = surveys.map((survey) => survey.id);
+    const attachments = await this.loadSyncChangeAttachmentsBySurveyIds(user.id, surveyIds);
+    const cursorOut =
+      surveysByCursor.length > 0
+        ? this.buildChangesCursor(surveysByCursor[surveysByCursor.length - 1].updated_at, surveysByCursor[surveysByCursor.length - 1].id)
+        : parsedCursor.original;
 
     return {
       cursor_in: parsedCursor.original,
       cursor_out: cursorOut,
-      has_more: hasMore,
-      events,
+      has_more: surveysByCursor.length > 0 ? hasMoreSurveys : false,
+      events: [],
       surveys,
       attachments
     };
+  }
+
+  private async loadSyncChangeSurveys(userId: string, surveyIds: string[]): Promise<SyncChangeSurvey[]> {
+    const result = await this.db.query<SyncChangeSurvey>(
+      `SELECT
+         id,
+         site_name,
+         status,
+         visibility,
+         region_version,
+         vegetation_stage,
+         factors,
+         factor_results,
+         scores,
+         location,
+         created_at::text,
+         updated_at::text,
+         submitted_at::text,
+         expires_at::text,
+         sync_version,
+         deleted_at::text
+       FROM surveys
+       WHERE user_id = $1
+         AND id = ANY($2::text[])
+       ORDER BY updated_at ASC, id ASC`,
+      [userId, surveyIds]
+    );
+
+    return result.rows;
+  }
+
+  private async loadSyncChangeAttachmentsByIds(userId: string, attachmentIds: string[]): Promise<SyncChangeAttachment[]> {
+    const result = await this.db.query<SyncChangeAttachment>(
+      `SELECT
+         a.id,
+         a.survey_id,
+         a.storage_key,
+         a.mime_type,
+         a.size_bytes,
+         a.captured_at::text,
+         a.metadata,
+         a.created_at::text,
+         a.uploaded_at::text,
+         a.deleted_at::text
+       FROM attachments a
+       JOIN surveys s ON s.id = a.survey_id
+       WHERE s.user_id = $1
+         AND a.id = ANY($2::text[])
+       ORDER BY a.created_at ASC, a.id ASC`,
+      [userId, attachmentIds]
+    );
+
+    return result.rows;
+  }
+
+  private async loadSyncChangeAttachmentsBySurveyIds(userId: string, surveyIds: string[]): Promise<SyncChangeAttachment[]> {
+    const result = await this.db.query<SyncChangeAttachment>(
+      `SELECT
+         a.id,
+         a.survey_id,
+         a.storage_key,
+         a.mime_type,
+         a.size_bytes,
+         a.captured_at::text,
+         a.metadata,
+         a.created_at::text,
+         a.uploaded_at::text,
+         a.deleted_at::text
+       FROM attachments a
+       JOIN surveys s ON s.id = a.survey_id
+       WHERE s.user_id = $1
+         AND a.survey_id = ANY($2::text[])
+       ORDER BY a.created_at ASC, a.id ASC`,
+      [userId, surveyIds]
+    );
+
+    return result.rows;
+  }
+
+  private async loadSyncChangeSurveysWithoutEvents(userId: string, limit: number): Promise<SyncChangeSurvey[]> {
+    const result = await this.db.query<SyncChangeSurvey>(
+      `SELECT
+         s.id,
+         s.site_name,
+         s.status,
+         s.visibility,
+         s.region_version,
+         s.vegetation_stage,
+         s.factors,
+         s.factor_results,
+         s.scores,
+         s.location,
+         s.created_at::text,
+         s.updated_at::text,
+         s.submitted_at::text,
+         s.expires_at::text,
+         s.sync_version,
+         s.deleted_at::text
+       FROM surveys s
+       WHERE s.user_id = $1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM survey_events e
+           WHERE e.survey_id = s.id
+         )
+       ORDER BY s.updated_at ASC, s.id ASC
+       LIMIT $2`,
+      [userId, limit]
+    );
+
+    return result.rows;
   }
 
   private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {

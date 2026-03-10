@@ -3,9 +3,11 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request = require('supertest');
 import { AppModule } from '../src/app.module';
+import { DatabaseService } from '../src/database/database.service';
 
 describe('Surveys idempotency (e2e)', () => {
   let app: INestApplication;
+  let db: DatabaseService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -13,6 +15,7 @@ describe('Surveys idempotency (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    db = moduleFixture.get(DatabaseService);
     app.setGlobalPrefix('v1');
     await app.init();
   });
@@ -1101,5 +1104,131 @@ describe('Surveys idempotency (e2e)', () => {
     expect(deltaChanges.body.attachments.some((attachment: { id: string }) => attachment.id === createdAttachment.body.attachment_id)).toBe(true);
     expect(typeof deltaChanges.body.cursor_out).toBe('string');
     expect(deltaChanges.body.cursor_out).not.toBe(cursorOut);
+  });
+
+  it('returns surveys without events via GET /v1/sync/changes fallback', async () => {
+    const email = `e2e-sync-changes-fallback-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+
+    const me = await request(app.getHttpServer())
+      .get('/v1/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    const userId = me.body.id as string;
+
+    const surveyId = `e2e-sync-no-event-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const payloadFactors = JSON.stringify({
+      A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+    });
+    const payloadScores = JSON.stringify({
+      ibp_peuplement_gestion: 7,
+      ibp_contexte: 5,
+      ibp_total: 12
+    });
+    const payloadLocation = JSON.stringify({
+      source: 'gps',
+      lat: 48.643,
+      lng: 1.829
+    });
+
+    await db.query(
+      `INSERT INTO surveys (
+         id, user_id, site_name, status, visibility, region_version, vegetation_stage,
+         factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
+       ) VALUES (
+         $1, $2, $3, 'submitted', 'public', 'ACA', 'collineen',
+         $4::jsonb, '{}'::jsonb, $5::jsonb, $6::jsonb, $7::timestamptz, $8::timestamptz, $9::timestamptz, ($8::timestamptz + INTERVAL '365 days'), 1
+       )`,
+      [surveyId, userId, 'No Event Forest', payloadFactors, payloadScores, payloadLocation, nowIso, nowIso, nowIso]
+    );
+
+    const changes = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .query({ limit: 20 })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(Array.isArray(changes.body.events)).toBe(true);
+    expect(changes.body.events.length).toBe(0);
+    expect(Array.isArray(changes.body.surveys)).toBe(true);
+    expect(changes.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true);
+    expect(typeof changes.body.cursor_out).toBe('string');
+
+    const cursorOut = changes.body.cursor_out as string;
+    const delta = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .query({ cursor: cursorOut, limit: 20 })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(delta.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true);
+  });
+
+  it('returns surveys without events even when cursor is newer than survey.updated_at', async () => {
+    const email = `e2e-sync-changes-fallback-cursor-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const me = await request(app.getHttpServer())
+      .get('/v1/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    const userId = me.body.id as string;
+
+    const eventSurveyId = `e2e-sync-cursor-anchor-${Date.now()}`;
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: eventSurveyId,
+        sync_version: 1,
+        site_name: 'Cursor Anchor',
+        status: 'draft',
+        visibility: 'private',
+        factors: {},
+        scores: {},
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    const anchorChanges = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .query({ limit: 20 })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    const anchorCursor = anchorChanges.body.cursor_out as string;
+    expect(typeof anchorCursor).toBe('string');
+
+    const surveyId = `e2e-sync-no-event-old-${Date.now()}`;
+    const oldIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const payloadLocation = JSON.stringify({ source: 'gps', lat: 48.643, lng: 1.829 });
+
+    await db.query(
+      `INSERT INTO surveys (
+         id, user_id, site_name, status, visibility, region_version, vegetation_stage,
+         factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
+       ) VALUES (
+         $1, $2, $3, 'submitted', 'public', 'ACA', 'collineen',
+         '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, $4::jsonb, $5::timestamptz, $6::timestamptz, $7::timestamptz, ($6::timestamptz + INTERVAL '365 days'), 1
+       )`,
+      [surveyId, userId, 'No Event Forest Old', payloadLocation, oldIso, oldIso, oldIso]
+    );
+
+    const delta = await request(app.getHttpServer())
+      .get('/v1/sync/changes')
+      .query({ cursor: anchorCursor, limit: 20 })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(delta.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true);
   });
 });
