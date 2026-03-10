@@ -506,6 +506,162 @@ describe('Surveys idempotency (e2e)', () => {
     expect(afterItems.some((item) => item.survey_id === submittedPublicId)).toBe(false);
   });
 
+  it('resolves a parcel from coordinates and returns parcel history entries', async () => {
+    const email = `e2e-parcel-history-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const validFactors = {
+      A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+    };
+
+    const resolved = await request(app.getHttpServer())
+      .get('/v1/parcels/resolve')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .query({ lat: '48.703', lng: '2.191' })
+      .expect(200);
+
+    const parcelId = resolved.body.parcel?.parcel_id as string;
+    expect(parcelId).toBeTruthy();
+    expect(typeof resolved.body.parcel?.commune_code).toBe('string');
+
+    const surveyIdV1 = `e2e-parcel-history-v1-${Date.now()}`;
+    const surveyIdV2 = `e2e-parcel-history-v2-${Date.now()}`;
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyIdV1,
+        sync_version: 1,
+        site_name: 'Parcel History Forest V1',
+        status: 'draft',
+        visibility: 'private',
+        parcel_id: parcelId,
+        observation_year: 2025,
+        version_number: 1,
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: validFactors,
+        location: { source: 'gps', lat: 48.703, lng: 2.191 }
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyIdV1}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyIdV2,
+        sync_version: 1,
+        site_name: 'Parcel History Forest V2',
+        status: 'draft',
+        visibility: 'private',
+        parcel_id: parcelId,
+        observation_year: 2026,
+        version_number: 2,
+        previous_survey_id: surveyIdV1,
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: validFactors,
+        location: { source: 'gps', lat: 48.7031, lng: 2.1911 }
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyIdV2}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    const history = await request(app.getHttpServer())
+      .get(`/v1/parcels/${encodeURIComponent(parcelId)}/surveys/history`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .query({ limit: 10 })
+      .expect(200);
+
+    expect(history.body.parcel_id).toBe(parcelId);
+    const items = history.body.items as Array<{ survey_id: string; observation_year: number; version_number: number }>;
+    expect(items.some((item) => item.survey_id === surveyIdV1)).toBe(true);
+    expect(items.some((item) => item.survey_id === surveyIdV2)).toBe(true);
+  });
+
+  it('exposes parcel study status on /v1/public/parcels/status', async () => {
+    const email = `e2e-parcel-status-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const validFactors = {
+      A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 1, I: 2, J: 2
+    };
+    const surveyId = `e2e-parcel-status-${Date.now()}`;
+
+    const upsert = await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Parcel Status Forest',
+        status: 'draft',
+        visibility: 'private',
+        observation_year: 2026,
+        version_number: 1,
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        factors: validFactors,
+        location: { source: 'gps', lat: 43.6045, lng: 1.444 }
+      })
+      .expect(201);
+
+    expect(upsert.body.id).toBe(surveyId);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    const parcelId = detail.body.parcel_id as string;
+    expect(parcelId).toBeTruthy();
+
+    await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/v1/surveys/${surveyId}/visibility`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ visibility: 'public' })
+      .expect(200);
+
+    const statuses = await request(app.getHttpServer())
+      .get('/v1/public/parcels/status')
+      .query({ bbox: '1.0,43.0,2.0,44.0', zoom: 16, year: 2026 })
+      .expect(200);
+
+    const items = statuses.body.items as Array<{ parcel_id: string; study_status: string; latest_observation_year: number }>;
+    const parcelItem = items.find((item) => item.parcel_id === parcelId);
+    expect(parcelItem).toBeTruthy();
+    expect(parcelItem?.study_status).toBe('studied');
+    expect(parcelItem?.latest_observation_year).toBe(2026);
+
+    const lowZoom = await request(app.getHttpServer())
+      .get('/v1/public/parcels/status')
+      .query({ bbox: '1.0,43.0,2.0,44.0', zoom: 14 })
+      .expect(200);
+    expect(lowZoom.body.items).toEqual([]);
+  });
+
   it('submits a full raw-observation payload A..J and computes exact scores', async () => {
     const email = `e2e-raw-full-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())
