@@ -29,12 +29,40 @@ type ResetUserDataResponse = {
   message?: string;
 };
 
-export async function loginWithCredentials(apiUrl: string, email: string, password: string): Promise<LoginResponse> {
+export async function loginWithCredentials(
+  apiUrl: string,
+  email: string,
+  password: string,
+  options?: { createIfMissing?: boolean }
+): Promise<LoginResponse> {
+  const payload: Record<string, unknown> = { email, password };
+  if (typeof options?.createIfMissing === 'boolean') {
+    payload.create_if_missing = options.createIfMissing;
+  }
+
   return apiRequest<LoginResponse>({
     baseUrl: apiUrl,
     path: '/auth/login',
     method: 'POST',
-    json: { email, password }
+    json: payload
+  });
+}
+
+export async function registerWithCredentials(
+  apiUrl: string,
+  email: string,
+  password: string,
+  displayName: string
+): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>({
+    baseUrl: apiUrl,
+    path: '/auth/register',
+    method: 'POST',
+    json: {
+      email,
+      password,
+      display_name: displayName
+    }
   });
 }
 

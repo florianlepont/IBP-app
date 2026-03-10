@@ -28,10 +28,14 @@ jest.mock('react-native', () => {
   };
 
   return {
-    Button: ({ children, ...props }: { children?: React.ReactNode }) => React.createElement('Button', props, children),
     Text: mockComponent('Text'),
     TextInput: mockComponent('TextInput'),
+    Pressable: mockComponent('Pressable'),
+    Image: mockComponent('Image'),
+    ImageBackground: mockComponent('ImageBackground'),
+    ScrollView: mockComponent('ScrollView'),
     View: mockComponent('View'),
+    useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }),
     StyleSheet: {
       create: <T extends object>(value: T): T => value
     }
@@ -41,8 +45,9 @@ jest.mock('react-native', () => {
 import { AuthGateScreen } from './AuthGateScreen';
 
 describe('AuthGateScreen', () => {
-  it('calls login handler when pressing Login', async () => {
+  it('calls login handler when submitting in login mode', async () => {
     const onLogin = jest.fn(async () => undefined);
+    const onRegister = jest.fn(async () => undefined);
 
     let component: renderer.ReactTestRenderer;
     await act(async () => {
@@ -54,17 +59,63 @@ describe('AuthGateScreen', () => {
           onEmailChange: jest.fn(),
           password: 'demo123',
           onPasswordChange: jest.fn(),
+          displayName: '',
+          onDisplayNameChange: jest.fn(),
           onLogin,
+          onRegister,
           status: 'Ready'
         })
       );
     });
 
-    const loginButton = component!.root.findByProps({ title: 'Login' });
+    const submitButton = component!.root.findByProps({ testID: 'auth-submit' });
     await act(async () => {
-      loginButton.props.onPress();
+      submitButton.props.onPress();
     });
 
     expect(onLogin).toHaveBeenCalledTimes(1);
+    expect(onRegister).not.toHaveBeenCalled();
+  });
+
+  it('calls register handler in register mode when confirmation matches', async () => {
+    const onLogin = jest.fn(async () => undefined);
+    const onRegister = jest.fn(async () => undefined);
+
+    let component: renderer.ReactTestRenderer;
+    await act(async () => {
+      component = renderer.create(
+        React.createElement(AuthGateScreen, {
+          apiUrl: 'http://localhost:3000/v1',
+          onApiUrlChange: jest.fn(),
+          email: 'new-user@ibp.local',
+          onEmailChange: jest.fn(),
+          password: 'demo123',
+          onPasswordChange: jest.fn(),
+          displayName: 'New User',
+          onDisplayNameChange: jest.fn(),
+          onLogin,
+          onRegister,
+          status: 'Ready'
+        })
+      );
+    });
+
+    const registerModeButton = component!.root.findByProps({ testID: 'auth-mode-register' });
+    await act(async () => {
+      registerModeButton.props.onPress();
+    });
+
+    const confirmPasswordInput = component!.root.findByProps({ testID: 'auth-confirm-password' });
+    await act(async () => {
+      confirmPasswordInput.props.onChangeText('demo123');
+    });
+
+    const submitButton = component!.root.findByProps({ testID: 'auth-submit' });
+    await act(async () => {
+      submitButton.props.onPress();
+    });
+
+    expect(onRegister).toHaveBeenCalledTimes(1);
+    expect(onLogin).not.toHaveBeenCalled();
   });
 });

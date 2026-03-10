@@ -39,6 +39,7 @@ type UseSurveySyncParams = {
   apiUrl: string;
   email: string;
   password: string;
+  displayName: string;
   surveys: LocalSurvey[];
   selectedSurveyId: string | null;
   surveyDetailTab: SurveyDetailTab;
@@ -76,6 +77,7 @@ export function useSurveySync({
   apiUrl,
   email,
   password,
+  displayName,
   surveys,
   selectedSurveyId,
   surveyDetailTab,
@@ -123,11 +125,13 @@ export function useSurveySync({
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
+    handleRegister,
     handleLogout
   } = useAuthSession({
     apiUrl,
     email,
     password,
+    displayName,
     reportStatus,
     onSessionCleared: clearSurveySessionState
   });
@@ -890,6 +894,7 @@ export function useSurveySync({
     surveyEvents,
     eventsLoadingSurveyId,
     handleLogin,
+    handleRegister,
     handleLogout,
     handleLoadMyProfile,
     handleUpdateProfile,

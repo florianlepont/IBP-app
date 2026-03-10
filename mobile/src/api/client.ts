@@ -18,9 +18,11 @@ type ApiRequestOptions = {
   json?: unknown;
   headers?: Record<string, string>;
   expectJson?: boolean;
+  timeoutMs?: number;
 };
 
 type JsonLike = Record<string, unknown>;
+const DEFAULT_API_TIMEOUT_MS = 15000;
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '');
@@ -47,10 +49,24 @@ function errorMessageForStatus(status: number, parsedBody: unknown): string {
   return `HTTP ${status}`;
 }
 
+function resolveTimeoutMs(timeoutMs?: number): number {
+  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return timeoutMs;
+  }
+
+  const fromEnv = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? '');
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return fromEnv;
+  }
+
+  return DEFAULT_API_TIMEOUT_MS;
+}
+
 export async function apiRequest<T>(options: ApiRequestOptions): Promise<T> {
   const method = options.method ?? 'GET';
   const headers: Record<string, string> = { ...(options.headers ?? {}) };
   const baseUrl = normalizeBaseUrl(options.baseUrl);
+  const timeoutMs = resolveTimeoutMs(options.timeoutMs);
 
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
@@ -62,11 +78,25 @@ export async function apiRequest<T>(options: ApiRequestOptions): Promise<T> {
     body = JSON.stringify(options.json);
   }
 
-  const response = await fetch(`${baseUrl}${options.path}`, {
-    method,
-    headers,
-    body
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${options.path}`, {
+      method,
+      headers,
+      body,
+      signal: controller.signal
+    });
+  } catch (error) {
+    const errorName = (error as { name?: string } | null)?.name;
+    if (errorName === 'AbortError') {
+      throw new ApiError(408, `Request timeout after ${timeoutMs}ms`, null);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const parsedBody = await parseResponseBody(response);
   if (!response.ok) {

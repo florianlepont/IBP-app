@@ -74,29 +74,29 @@ export function SurveyListScreen({
           autoCorrect={false}
         />
 
-        <View style={styles.filterGroup}>
-          <Text style={styles.filterLabel}>Status</Text>
-          <View style={styles.filterChipsRow}>
+        <View style={styles.filterGroupCompact}>
+          <Text style={styles.filterLabelCompact}>Status</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
             <FilterChip label="All" active={statusFilter === 'all'} onPress={() => setStatusFilter('all')} />
             <FilterChip label="Draft" active={statusFilter === 'draft'} onPress={() => setStatusFilter('draft')} />
             <FilterChip label="Submitted" active={statusFilter === 'submitted'} onPress={() => setStatusFilter('submitted')} />
             <FilterChip label="Expired" active={statusFilter === 'expired'} onPress={() => setStatusFilter('expired')} />
             <FilterChip label="Synced" active={statusFilter === 'synced'} onPress={() => setStatusFilter('synced')} />
             <FilterChip label="Error" active={statusFilter === 'error'} onPress={() => setStatusFilter('error')} />
-          </View>
+          </ScrollView>
         </View>
 
-        <View style={styles.filterGroup}>
-          <Text style={styles.filterLabel}>Visibility</Text>
-          <View style={styles.filterChipsRow}>
+        <View style={styles.filterGroupCompact}>
+          <Text style={styles.filterLabelCompact}>Visibility</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
             <FilterChip label="All" active={visibilityFilter === 'all'} onPress={() => setVisibilityFilter('all')} />
             <FilterChip label="Private" active={visibilityFilter === 'private'} onPress={() => setVisibilityFilter('private')} />
             <FilterChip label="Public" active={visibilityFilter === 'public'} onPress={() => setVisibilityFilter('public')} />
-          </View>
+          </ScrollView>
         </View>
         <View style={styles.filterToolbarRow}>
           <Pressable style={styles.filterIconButton} onPress={() => setAdvancedFiltersOpen((value) => !value)}>
-            <Ionicons name="funnel-outline" size={18} color="#2f5478" />
+            <Ionicons name="funnel-outline" size={18} color="#2a5b43" />
           </Pressable>
           <Pressable style={styles.filterAdvancedToggle} onPress={() => setAdvancedFiltersOpen((value) => !value)}>
             <Text style={styles.filterAdvancedToggleText}>{advancedFiltersOpen ? 'Hide advanced filters' : 'Advanced filters'}</Text>
@@ -105,41 +105,41 @@ export function SurveyListScreen({
 
         {advancedFiltersOpen ? (
           <View style={styles.filterAdvancedPanel}>
-            <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Sync</Text>
-              <View style={styles.filterChipsRow}>
+            <View style={styles.filterGroupCompact}>
+              <Text style={styles.filterLabelCompact}>Sync</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
                 <FilterChip label="All" active={syncFilter === 'all'} onPress={() => setSyncFilter('all')} />
                 <FilterChip label="Pending" active={syncFilter === 'pending'} onPress={() => setSyncFilter('pending')} />
                 <FilterChip label="Synced" active={syncFilter === 'synced'} onPress={() => setSyncFilter('synced')} />
                 <FilterChip label="Failed" active={syncFilter === 'failed'} onPress={() => setSyncFilter('failed')} />
-              </View>
+              </ScrollView>
             </View>
 
-            <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Blocked</Text>
-              <View style={styles.filterChipsRow}>
+            <View style={styles.filterGroupCompact}>
+              <Text style={styles.filterLabelCompact}>Blocked</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
                 <FilterChip label="All" active={blockedFilter === 'all'} onPress={() => setBlockedFilter('all')} />
                 <FilterChip label="Blocked only" active={blockedFilter === 'blocked'} onPress={() => setBlockedFilter('blocked')} />
                 <FilterChip label="Unblocked" active={blockedFilter === 'unblocked'} onPress={() => setBlockedFilter('unblocked')} />
-              </View>
+              </ScrollView>
             </View>
 
-            <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Attachments</Text>
-              <View style={styles.filterChipsRow}>
+            <View style={styles.filterGroupCompact}>
+              <Text style={styles.filterLabelCompact}>Attachments</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
                 <FilterChip label="All" active={attachmentFilter === 'all'} onPress={() => setAttachmentFilter('all')} />
                 <FilterChip label="With photo" active={attachmentFilter === 'with'} onPress={() => setAttachmentFilter('with')} />
                 <FilterChip label="Without photo" active={attachmentFilter === 'without'} onPress={() => setAttachmentFilter('without')} />
-              </View>
+              </ScrollView>
             </View>
 
-            <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Sort</Text>
-              <View style={styles.filterChipsRow}>
+            <View style={styles.filterGroupCompact}>
+              <Text style={styles.filterLabelCompact}>Sort</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
                 <FilterChip label="Updated (newest)" active={sortMode === 'updated_desc'} onPress={() => setSortMode('updated_desc')} />
                 <FilterChip label="Updated (oldest)" active={sortMode === 'updated_asc'} onPress={() => setSortMode('updated_asc')} />
                 <FilterChip label="Site A-Z" active={sortMode === 'site_asc'} onPress={() => setSortMode('site_asc')} />
-              </View>
+              </ScrollView>
             </View>
 
             <Pressable onPress={resetFilters} style={styles.filterReset}>
@@ -167,7 +167,7 @@ export function SurveyListScreen({
                   <Image source={{ uri: firstAttachmentWithPreview.local_uri }} style={styles.surveyListItemPreview} />
                 ) : (
                   <View style={styles.surveyListItemPreviewPlaceholder}>
-                    <Ionicons name="image-outline" size={20} color="#7a93ad" />
+                    <Ionicons name="image-outline" size={20} color="#7a8f82" />
                   </View>
                 )}
               </View>
