@@ -4,19 +4,20 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Network from 'expo-network';
 import { getSubmitBlockReason } from '../app/survey-logic';
 import {
-  AuthUser,
-  LoginResponse,
-  RefreshResponse,
   SurveyDetailResponse,
   SurveyDetailTab,
-  SurveyEventItem,
-  SurveyEventsResponse
+  SurveyEventItem
 } from '../app/types';
 import {
-  clearStoredAuthSession,
-  loadStoredAuthSession,
-  saveStoredAuthSession
-} from '../auth/session-storage';
+  confirmMyEmail,
+  deleteMyProfilePicture,
+  loadSurveyDetail,
+  loadSurveyEvents,
+  patchMyProfile,
+  resetIbpData,
+  resetUserData,
+  uploadMyProfilePicture
+} from '../api/ibp-api';
 import {
   clearLocalIbpData,
   discardSurveyLocalChanges,
@@ -31,6 +32,8 @@ import {
   syncPending,
   updateSurveyVisibility
 } from '../storage';
+import { createInitialOperationStatus, updateOperationStatus } from './operation-status';
+import { AUTH_REQUIRED_ERROR, useAuthSession } from './useAuthSession';
 
 type UseSurveySyncParams = {
   apiUrl: string;
@@ -63,9 +66,7 @@ const guessMimeType = (uri: string): string => {
   return 'application/octet-stream';
 };
 
-const AUTH_REQUIRED_ERROR = 'AUTH_REQUIRED';
-
-const isUnauthorizedMessage = (message: string): boolean =>
+const isUnauthorizedResultMessage = (message: string): boolean =>
   /(^|[^0-9])401([^0-9]|$)|unauthorized|auth_required/i.test(message);
 
 const isOnlineNetworkState = (state: Network.NetworkState): boolean =>
@@ -84,13 +85,9 @@ export function useSurveySync({
   onCloseSurveyDetail,
   onStopEditing
 }: UseSurveySyncParams) {
-  const [accessToken, setAccessToken] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
-  const [sessionRestoring, setSessionRestoring] = useState(true);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<string>('Not logged in');
   const [profileUpdating, setProfileUpdating] = useState(false);
-  const [status, setStatus] = useState<string>('Ready');
+  const [statusText, setStatusText] = useState<string>('Ready');
+  const [operationStatus, setOperationStatus] = useState(createInitialOperationStatus('Ready'));
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
   const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null);
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({});
@@ -99,79 +96,41 @@ export function useSurveySync({
   const lastOnlineStateRef = useRef<boolean | null>(null);
   const lastAutoSyncAtRef = useRef<number>(0);
 
-  const setProfileFromUser = (user: AuthUser): void => {
-    setCurrentUser(user);
-    setProfile(`${user.display_name} (${user.email})`);
-  };
-
-  const clearSession = async (): Promise<void> => {
-    setAccessToken('');
-    setRefreshToken('');
-    setSessionRestoring(false);
-    setCurrentUser(null);
-    setProfile('Not logged in');
+  const clearSurveySessionState = useCallback((): void => {
     setSurveyDetails({});
     setSurveyEvents({});
-    await clearStoredAuthSession();
-  };
+  }, []);
 
-  const fetchCurrentUser = async (token: string): Promise<AuthUser | null> => {
-    const response = await fetch(`${apiUrl}/me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
+  const reportStatus = useCallback((scope: 'session' | 'auth' | 'profile' | 'sync' | 'survey' | 'attachment' | 'debug', state: 'idle' | 'running' | 'success' | 'error', message: string): void => {
+    setStatusText(message);
+    setOperationStatus((current) => updateOperationStatus(current, scope, state, message));
+  }, []);
 
-    if (!response.ok) {
-      return null;
-    }
+  const setStatus = useCallback((message: string): void => {
+    reportStatus('session', 'idle', message);
+  }, [reportStatus]);
 
-    return (await response.json()) as AuthUser;
-  };
-
-  const handleLoadMyProfile = async (options?: { silent?: boolean }): Promise<AuthUser | null> => {
-    const silent = options?.silent ?? false;
-    try {
-      const user = await withAuthRetry(async (token) => {
-        const response = await fetch(`${apiUrl}/me`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.status === 401) {
-          throw new Error('HTTP 401');
-        }
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return (await response.json()) as AuthUser;
-      });
-
-      setProfileFromUser(user);
-      if (!silent) {
-        setStatus('Profile loaded');
-      }
-      return user;
-    } catch (error) {
-      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-        await clearSession();
-        if (!silent) {
-          setStatus('Login required before loading profile');
-        }
-        return null;
-      }
-
-      if (!silent) {
-        setStatus(`Profile load error: ${(error as Error).message}`);
-      }
-      return null;
-    }
-  };
+  const {
+    accessToken,
+    refreshToken,
+    sessionRestoring,
+    currentUser,
+    profile,
+    isAuthenticated,
+    setProfileFromUser,
+    clearSession,
+    refreshSessionTokens,
+    withAuthRetry,
+    handleLoadMyProfile,
+    handleLogin,
+    handleLogout
+  } = useAuthSession({
+    apiUrl,
+    email,
+    password,
+    reportStatus,
+    onSessionCleared: clearSurveySessionState
+  });
 
   const handleUpdateProfile = async (input: UpdateProfileInput): Promise<void> => {
     const payload = {
@@ -195,26 +154,7 @@ export function useSurveySync({
 
     try {
       setProfileUpdating(true);
-      const user = await withAuthRetry(async (token) => {
-        const response = await fetch(`${apiUrl}/me`, {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (response.status === 401) {
-          throw new Error('HTTP 401');
-        }
-
-        const body = (await response.json().catch(() => ({}))) as { message?: string };
-        if (!response.ok) {
-          throw new Error(body.message ?? `HTTP ${response.status}`);
-        }
-        return body as AuthUser;
-      });
+      const user = await withAuthRetry((token) => patchMyProfile(apiUrl, token, payload));
 
       setProfileFromUser(user);
       if (user.email_change_required) {
@@ -242,25 +182,7 @@ export function useSurveySync({
 
     try {
       setProfileUpdating(true);
-      const user = await withAuthRetry(async (access) => {
-        const response = await fetch(`${apiUrl}/me/email/confirm`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${access}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ token: token.trim() })
-        });
-
-        const body = (await response.json().catch(() => ({}))) as { message?: string };
-        if (response.status === 401) {
-          throw new Error('HTTP 401');
-        }
-        if (!response.ok) {
-          throw new Error(body.message ?? `HTTP ${response.status}`);
-        }
-        return body as AuthUser;
-      });
+      const user = await withAuthRetry((access) => confirmMyEmail(apiUrl, access, token.trim()));
 
       setProfileFromUser(user);
       setStatus('Email address confirmed');
@@ -289,23 +211,9 @@ export function useSurveySync({
       setProfileUpdating(true);
       setStatus('Uploading profile picture...');
       const uploadResponse = await withAuthRetry(async (token) => {
-        const response = await fetch(`${apiUrl}/me/profile-picture`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
-          body: payload
-        });
-
-        if (response.status === 401) {
-          throw new Error('HTTP 401');
-        }
-        const body = (await response.json().catch(() => ({}))) as {
-          profile_picture_url?: string;
-          message?: string;
-        };
-        if (!response.ok || !body.profile_picture_url) {
-          throw new Error(body.message ?? `HTTP ${response.status}`);
+        const body = await uploadMyProfilePicture(apiUrl, token, payload);
+        if (!body.profile_picture_url) {
+          throw new Error(body.message ?? 'Profile picture URL missing after upload');
         }
         return body.profile_picture_url;
       });
@@ -393,15 +301,7 @@ export function useSurveySync({
 
     try {
       setProfileUpdating(true);
-      await withAuthRetry(async (token) => {
-        await fetch(`${apiUrl}/me/profile-picture`, {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }).catch(() => undefined);
-        return true;
-      });
+      await withAuthRetry((token) => deleteMyProfilePicture(apiUrl, token));
       await handleUpdateProfile({
         first_name: baseUser.first_name,
         last_name: baseUser.last_name,
@@ -419,71 +319,6 @@ export function useSurveySync({
       setStatus(`Profile picture remove error: ${(error as Error).message}`);
     } finally {
       setProfileUpdating(false);
-    }
-  };
-
-  const refreshSessionTokens = async (tokenOverride?: string): Promise<{ accessToken: string; refreshToken: string } | null> => {
-    const activeRefreshToken = tokenOverride ?? refreshToken;
-    if (!activeRefreshToken || !activeRefreshToken.trim()) {
-      return null;
-    }
-
-    const response = await fetch(`${apiUrl}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: activeRefreshToken })
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as RefreshResponse;
-    if (!payload.access_token || !payload.refresh_token) {
-      return null;
-    }
-
-    setAccessToken(payload.access_token);
-    setRefreshToken(payload.refresh_token);
-    await saveStoredAuthSession({
-      accessToken: payload.access_token,
-      refreshToken: payload.refresh_token
-    });
-
-    return {
-      accessToken: payload.access_token,
-      refreshToken: payload.refresh_token
-    };
-  };
-
-  const ensureAccessToken = async (): Promise<string | null> => {
-    if (accessToken) {
-      return accessToken;
-    }
-
-    const refreshed = await refreshSessionTokens();
-    return refreshed?.accessToken ?? null;
-  };
-
-  const withAuthRetry = async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
-    const token = await ensureAccessToken();
-    if (!token) {
-      throw new Error(AUTH_REQUIRED_ERROR);
-    }
-
-    try {
-      return await operation(token);
-    } catch (error) {
-      const message = (error as Error).message ?? '';
-      if (!isUnauthorizedMessage(message)) {
-        throw error;
-      }
-
-      const refreshed = await refreshSessionTokens();
-      if (!refreshed?.accessToken) {
-        throw new Error(AUTH_REQUIRED_ERROR);
-      }
-      return operation(refreshed.accessToken);
     }
   };
 
@@ -516,107 +351,6 @@ export function useSurveySync({
     }
   };
 
-  useEffect(() => {
-    let active = true;
-
-    const restoreSession = async (): Promise<void> => {
-      try {
-        if (active) {
-          setSessionRestoring(true);
-        }
-        const stored = await loadStoredAuthSession();
-        if (!stored) {
-          if (active) {
-            setStatus('Ready');
-            setSessionRestoring(false);
-          }
-          return;
-        }
-
-        if (active) {
-          setStatus('Restoring session...');
-          setAccessToken(stored.accessToken);
-          setRefreshToken(stored.refreshToken);
-        }
-
-        let nextAccessToken = stored.accessToken;
-        let nextRefreshToken = stored.refreshToken;
-        let user = nextAccessToken ? await fetchCurrentUser(nextAccessToken) : null;
-
-        if (!user) {
-          const refreshed = await refreshSessionTokens(stored.refreshToken);
-          if (refreshed) {
-            nextAccessToken = refreshed.accessToken;
-            nextRefreshToken = refreshed.refreshToken;
-            user = await fetchCurrentUser(nextAccessToken);
-          }
-        }
-
-        if (!active) {
-          return;
-        }
-
-        if (!user) {
-          await clearSession();
-          setStatus('Session expired. Please login');
-          return;
-        }
-
-        setAccessToken(nextAccessToken);
-        setRefreshToken(nextRefreshToken);
-        setProfileFromUser(user);
-        await saveStoredAuthSession({
-          accessToken: nextAccessToken,
-          refreshToken: nextRefreshToken
-        });
-        setStatus('Session restored');
-        setSessionRestoring(false);
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-        await clearSession().catch(() => undefined);
-        setStatus(`Session restore error: ${(error as Error).message}`);
-        setSessionRestoring(false);
-      }
-    };
-
-    void restoreSession();
-
-    return () => {
-      active = false;
-    };
-  }, [apiUrl]);
-
-  const handleLogin = async (): Promise<void> => {
-    try {
-      setSessionRestoring(false);
-      setStatus('Logging in...');
-
-      const response = await fetch(`${apiUrl}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      if (!response.ok) {
-        setStatus(`Login failed: HTTP ${response.status}`);
-        return;
-      }
-
-      const payload = (await response.json()) as LoginResponse;
-      setAccessToken(payload.access_token);
-      setRefreshToken(payload.refresh_token);
-      setProfileFromUser(payload.user);
-      await saveStoredAuthSession({
-        accessToken: payload.access_token,
-        refreshToken: payload.refresh_token
-      });
-      setStatus('Logged in');
-    } catch (error) {
-      setStatus(`Login error: ${(error as Error).message}`);
-    }
-  };
 
   const runSync = useCallback(async (mode: 'manual' | 'auto', trigger?: string): Promise<void> => {
     if (syncInProgressRef.current) {
@@ -705,30 +439,7 @@ export function useSurveySync({
           void (async () => {
             try {
               setStatus('Debug reset IBP data in progress...');
-              const result = await withAuthRetry(async (token) => {
-                const response = await fetch(`${apiUrl}/debug/reset-ibp-data`, {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                });
-
-                if (response.status === 401) {
-                  throw new Error('HTTP 401');
-                }
-
-                const body = (await response.json().catch(() => ({}))) as {
-                  surveys_deleted?: number;
-                  attachments_deleted?: number;
-                  events_deleted?: number;
-                  message?: string;
-                };
-                if (!response.ok) {
-                  throw new Error(body.message ?? `HTTP ${response.status}`);
-                }
-                return body;
-              });
+              const result = await withAuthRetry((token) => resetIbpData(apiUrl, token));
 
               await clearLocalIbpData();
               await refreshLocalSurveys();
@@ -766,31 +477,7 @@ export function useSurveySync({
           void (async () => {
             try {
               setStatus('Debug reset user data in progress...');
-              const result = await withAuthRetry(async (token) => {
-                const response = await fetch(`${apiUrl}/debug/reset-user-data`, {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                });
-
-                if (response.status === 401) {
-                  throw new Error('HTTP 401');
-                }
-
-                const body = (await response.json().catch(() => ({}))) as {
-                  users_deleted?: number;
-                  surveys_deleted?: number;
-                  attachments_deleted?: number;
-                  events_deleted?: number;
-                  message?: string;
-                };
-                if (!response.ok) {
-                  throw new Error(body.message ?? `HTTP ${response.status}`);
-                }
-                return body;
-              });
+              const result = await withAuthRetry((token) => resetUserData(apiUrl, token));
 
               await clearLocalIbpData();
               onCloseSurveyDetail();
@@ -844,7 +531,7 @@ export function useSurveySync({
     try {
       const result = await withAuthRetry(async (token) => {
         const submitResult = await submitSurvey(apiUrl, token, surveyId);
-        if (!submitResult.ok && isUnauthorizedMessage(submitResult.message)) {
+        if (!submitResult.ok && isUnauthorizedResultMessage(submitResult.message)) {
           throw new Error(submitResult.message);
         }
         return submitResult;
@@ -894,7 +581,7 @@ export function useSurveySync({
   const handleToggleVisibility = async (surveyId: string, visibility: 'private' | 'public'): Promise<void> => {
     try {
       let result = await updateSurveyVisibility(apiUrl, accessToken, surveyId, visibility);
-      if (!result.ok && isUnauthorizedMessage(result.message)) {
+      if (!result.ok && isUnauthorizedResultMessage(result.message)) {
         const refreshed = await refreshSessionTokens();
         if (!refreshed?.accessToken) {
           await clearSession();
@@ -1054,25 +741,7 @@ export function useSurveySync({
       if (!silent) {
         setStatus(`Loading canonical details for ${surveyId}...`);
       }
-      const payload = await withAuthRetry(async (token) => {
-        const response = await fetch(`${apiUrl}/surveys/${surveyId}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.status === 401) {
-          throw new Error('HTTP 401');
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        return (await response.json()) as SurveyDetailResponse;
-      });
+      const payload = await withAuthRetry((token) => loadSurveyDetail(apiUrl, token, surveyId));
 
       setSurveyDetails((previous) => ({ ...previous, [surveyId]: payload }));
       if (!silent) {
@@ -1102,25 +771,7 @@ export function useSurveySync({
       if (!silent) {
         setStatus(`Loading events for ${surveyId}...`);
       }
-      const payload = await withAuthRetry(async (token) => {
-        const response = await fetch(`${apiUrl}/surveys/${surveyId}/events`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.status === 401) {
-          throw new Error('HTTP 401');
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        return (await response.json()) as SurveyEventsResponse;
-      });
+      const payload = await withAuthRetry((token) => loadSurveyEvents(apiUrl, token, surveyId));
 
       setSurveyEvents((previous) => ({ ...previous, [surveyId]: payload.items ?? [] }));
       if (!silent) {
@@ -1139,23 +790,6 @@ export function useSurveySync({
       }
     } finally {
       setEventsLoadingSurveyId((current) => (current === surveyId ? null : current));
-    }
-  };
-
-  const handleLogout = async (): Promise<void> => {
-    try {
-      const token = await ensureAccessToken();
-      if (token) {
-        await fetch(`${apiUrl}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }).catch(() => undefined);
-      }
-    } finally {
-      await clearSession();
-      setStatus('Logged out');
     }
   };
 
@@ -1244,11 +878,12 @@ export function useSurveySync({
   return {
     accessToken,
     sessionRestoring,
-    isAuthenticated: Boolean(accessToken || refreshToken),
+    isAuthenticated,
     currentUser,
     profile,
     profileUpdating,
-    status,
+    status: statusText,
+    operationStatus,
     setStatus,
     surveyDetails,
     detailsLoadingSurveyId,
