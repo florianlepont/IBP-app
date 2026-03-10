@@ -15,6 +15,7 @@ type PublicMapScreenProps = {
   onChangeToDate: (value: string) => void;
   onChangeRegion: (value: string) => void;
   onLoad: () => Promise<void>;
+  onReportSurvey: (surveyId: string, reason: string) => Promise<{ ok: boolean; message: string }>;
 };
 
 const DEFAULT_REGION: Region = {
@@ -72,10 +73,16 @@ export function PublicMapScreen({
   onChangeFromDate,
   onChangeToDate,
   onChangeRegion,
-  onLoad
+  onLoad,
+  onReportSurvey
 }: PublicMapScreenProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
+  const [selectedItem, setSelectedItem] = useState<PublicMapItem | null>(null);
+  const [reportPanelOpen, setReportPanelOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSending, setReportSending] = useState(false);
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const targetRegion = useMemo(() => computeRegionFromItems(items), [items]);
 
@@ -92,6 +99,12 @@ export function PublicMapScreen({
             coordinate={{
               latitude: item.display_location.lat,
               longitude: item.display_location.lng
+            }}
+            onPress={() => {
+              setSelectedItem(item);
+              setReportPanelOpen(false);
+              setReportReason('');
+              setReportMessage(null);
             }}
             pinColor="#2a7a52"
             title={`IBP ${item.ibp_total}`}
@@ -167,6 +180,75 @@ export function PublicMapScreen({
           </View>
         ) : null}
       </View>
+
+      {selectedItem ? (
+        <View style={[screenStyles.reportCard, { bottom: Math.max(84, insets.bottom + 62) }]}>
+          <View style={screenStyles.reportHeaderRow}>
+            <Text style={screenStyles.reportTitle}>Survey {selectedItem.survey_id}</Text>
+            <Pressable onPress={() => setSelectedItem(null)}>
+              <Ionicons name="close" size={18} color="#40654f" />
+            </Pressable>
+          </View>
+          <Text style={screenStyles.reportMeta}>
+            {selectedItem.region_code} · {selectedItem.survey_date} · IBP {selectedItem.ibp_total}
+          </Text>
+
+          {!reportPanelOpen ? (
+            <Pressable style={screenStyles.reportOpenButton} onPress={() => setReportPanelOpen(true)}>
+              <Ionicons name="flag-outline" size={14} color="#6e3f1a" />
+              <Text style={screenStyles.reportOpenButtonText}>Report this survey</Text>
+            </Pressable>
+          ) : (
+            <View style={screenStyles.reportForm}>
+              <Text style={screenStyles.inputLabel}>Reason (required)</Text>
+              <TextInput
+                style={screenStyles.reportInput}
+                value={reportReason}
+                onChangeText={setReportReason}
+                autoCapitalize="sentences"
+                autoCorrect
+                multiline
+                numberOfLines={3}
+                placeholder="Explain why this survey looks suspicious"
+                placeholderTextColor="#8a9287"
+              />
+              <View style={screenStyles.reportActionsRow}>
+                <Pressable
+                  style={screenStyles.reportCancelButton}
+                  onPress={() => {
+                    setReportPanelOpen(false);
+                    setReportReason('');
+                    setReportMessage(null);
+                  }}
+                  disabled={reportSending}
+                >
+                  <Text style={screenStyles.reportCancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[screenStyles.reportSubmitButton, reportSending ? screenStyles.reportSubmitButtonDisabled : null]}
+                  disabled={reportSending}
+                  onPress={() => {
+                    if (reportSending) return;
+                    setReportSending(true);
+                    void onReportSurvey(selectedItem.survey_id, reportReason)
+                      .then((result) => {
+                        setReportMessage(result.message);
+                        if (result.ok) {
+                          setReportPanelOpen(false);
+                          setReportReason('');
+                        }
+                      })
+                      .finally(() => setReportSending(false));
+                  }}
+                >
+                  <Text style={screenStyles.reportSubmitButtonText}>{reportSending ? 'Sending...' : 'Send report'}</Text>
+                </Pressable>
+              </View>
+              {reportMessage ? <Text style={screenStyles.reportMessage}>{reportMessage}</Text> : null}
+            </View>
+          )}
+        </View>
+      ) : null}
 
       {!loading && items.length === 0 ? (
         <View style={[screenStyles.emptyStateCard, { bottom: Math.max(18, insets.bottom + 10) }]}>
@@ -301,6 +383,100 @@ const screenStyles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8
+  },
+  reportCard: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#c9d7ca',
+    backgroundColor: 'rgba(245, 250, 246, 0.97)',
+    padding: 10,
+    gap: 8
+  },
+  reportHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  reportTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2d5a44'
+  },
+  reportMeta: {
+    fontSize: 11,
+    color: '#486956'
+  },
+  reportOpenButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#e2c2a3',
+    backgroundColor: '#fbefe3',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  reportOpenButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#74441e'
+  },
+  reportForm: {
+    gap: 8
+  },
+  reportInput: {
+    borderWidth: 1,
+    borderColor: '#cad3ca',
+    backgroundColor: '#f4f8f4',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 72,
+    textAlignVertical: 'top'
+  },
+  reportActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8
+  },
+  reportCancelButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c8d5ca',
+    backgroundColor: '#edf4ee',
+    paddingHorizontal: 12,
+    paddingVertical: 7
+  },
+  reportCancelButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4b6657'
+  },
+  reportSubmitButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#7e3f11',
+    backgroundColor: '#94501b',
+    paddingHorizontal: 12,
+    paddingVertical: 7
+  },
+  reportSubmitButtonDisabled: {
+    borderColor: '#a7adb0',
+    backgroundColor: '#b8bdc0'
+  },
+  reportSubmitButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff7f2'
+  },
+  reportMessage: {
+    fontSize: 11,
+    color: '#4e6656'
   },
   emptyStateCard: {
     position: 'absolute',

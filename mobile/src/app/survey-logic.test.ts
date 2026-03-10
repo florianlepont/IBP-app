@@ -87,6 +87,8 @@ describe('filterAndSortSurveys', () => {
 
   const baseFilters: SurveyListFilters = {
     surveyQuery: '',
+    surveyFromDate: '',
+    surveyToDate: '',
     statusFilter: 'all',
     visibilityFilter: 'all',
     syncFilter: 'all',
@@ -149,6 +151,16 @@ describe('filterAndSortSurveys', () => {
     const result = filterAndSortSurveys(withExpired, { ...baseFilters, statusFilter: 'expired' }, attachmentCounts);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('s-a');
+  });
+
+  test('filters by updated date range', () => {
+    const attachmentCounts = buildAttachmentCountBySurvey(attachments);
+    const result = filterAndSortSurveys(
+      surveys,
+      { ...baseFilters, surveyFromDate: '2026-03-08', surveyToDate: '2026-03-09' },
+      attachmentCounts
+    );
+    expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-b']);
   });
 });
 

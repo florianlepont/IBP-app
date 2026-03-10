@@ -10,6 +10,7 @@ import {
 } from '../app/types';
 import {
   confirmMyEmail,
+  createSurveyReport,
   deleteMyProfilePicture,
   loadSurveyDetail,
   loadSurveyEvents,
@@ -407,6 +408,38 @@ export function useSurveySync({
         return;
       }
       setStatus(`Pull error: ${(error as Error).message}`);
+    }
+  };
+
+  const handleReportSurvey = async (surveyId: string, reason: string): Promise<{ ok: boolean; message: string }> => {
+    const surveyIdTrimmed = surveyId.trim();
+    const reasonTrimmed = reason.trim();
+    if (!surveyIdTrimmed) {
+      const message = 'Survey id is required before reporting';
+      setStatus(message);
+      return { ok: false, message };
+    }
+    if (!reasonTrimmed) {
+      const message = 'Report reason is required';
+      setStatus(message);
+      return { ok: false, message };
+    }
+
+    try {
+      await withAuthRetry((token) => createSurveyReport(apiUrl, token, { survey_id: surveyIdTrimmed, reason: reasonTrimmed }));
+      const message = 'Report sent to moderation';
+      setStatus(message);
+      return { ok: true, message };
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession();
+        const message = 'Login required before reporting a survey';
+        setStatus(message);
+        return { ok: false, message };
+      }
+      const message = `Report error: ${(error as Error).message}`;
+      setStatus(message);
+      return { ok: false, message };
     }
   };
 
@@ -904,6 +937,7 @@ export function useSurveySync({
     handleRemoveProfilePicture,
     handleSync,
     handlePullChanges,
+    handleReportSurvey,
     handleDebugResetIbpData,
     handleDebugResetUserData,
     handleSubmitSurvey,

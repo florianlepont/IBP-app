@@ -21,6 +21,10 @@ type SurveyListScreenProps = {
   attachmentsBySurvey: Record<string, LocalAttachment[]>;
   surveyQuery: string;
   setSurveyQuery: (value: string) => void;
+  surveyFromDate: string;
+  setSurveyFromDate: (value: string) => void;
+  surveyToDate: string;
+  setSurveyToDate: (value: string) => void;
   statusFilter: SurveyStatusFilter;
   setStatusFilter: (value: SurveyStatusFilter) => void;
   visibilityFilter: SurveyVisibilityFilter;
@@ -44,6 +48,10 @@ export function SurveyListScreen({
   attachmentsBySurvey,
   surveyQuery,
   setSurveyQuery,
+  surveyFromDate,
+  setSurveyFromDate,
+  surveyToDate,
+  setSurveyToDate,
   statusFilter,
   setStatusFilter,
   visibilityFilter,
@@ -105,6 +113,26 @@ export function SurveyListScreen({
 
         {advancedFiltersOpen ? (
           <View style={styles.filterAdvancedPanel}>
+            <View style={styles.filterGroupCompact}>
+              <Text style={styles.filterLabelCompact}>Updated date range</Text>
+              <TextInput
+                style={styles.input}
+                value={surveyFromDate}
+                onChangeText={setSurveyFromDate}
+                placeholder="From (YYYY-MM-DD)"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TextInput
+                style={styles.input}
+                value={surveyToDate}
+                onChangeText={setSurveyToDate}
+                placeholder="To (YYYY-MM-DD)"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
             <View style={styles.filterGroupCompact}>
               <Text style={styles.filterLabelCompact}>Sync</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>

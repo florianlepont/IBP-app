@@ -6,6 +6,15 @@ const parseDate = (value: string): number => {
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
+const parseDateFilterBoundary = (value: string, boundary: 'start' | 'end'): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const suffix = boundary === 'start' ? 'T00:00:00.000Z' : 'T23:59:59.999Z';
+  const timestamp = Date.parse(`${trimmed}${suffix}`);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
 export const buildAttachmentCountBySurvey = (attachments: LocalAttachment[]): Record<string, number> => {
   const counts: Record<string, number> = {};
   for (const attachment of attachments) {
@@ -59,8 +68,14 @@ export const filterAndSortSurveys = (
   attachmentCountBySurvey: Record<string, number>
 ): LocalSurvey[] => {
   const query = filters.surveyQuery.trim().toLowerCase();
+  const fromBoundary = parseDateFilterBoundary(filters.surveyFromDate, 'start');
+  const toBoundary = parseDateFilterBoundary(filters.surveyToDate, 'end');
 
   const filtered = surveys.filter((survey) => {
+    const updatedAtTs = parseDate(survey.updated_at);
+    if (fromBoundary !== null && updatedAtTs < fromBoundary) return false;
+    if (toBoundary !== null && updatedAtTs > toBoundary) return false;
+
     if (filters.statusFilter !== 'all') {
       if (filters.statusFilter === 'synced') {
         if (!(survey.status === 'synced' || survey.sync_state === 'synced')) return false;
