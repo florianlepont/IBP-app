@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Network from 'expo-network';
+import { evaluateSubmitReadinessFromDraft } from '../app/ibp-scoring';
 import { getSubmitBlockReason } from '../app/survey-logic';
 import {
   SurveyDetailResponse,
@@ -22,8 +23,10 @@ import {
 import {
   clearLocalIbpData,
   discardSurveyLocalChanges,
+  getLocalSurveyDraft,
   hasPendingSyncWork,
   LocalSurvey,
+  markSurveyExpiredLocally,
   pullRemoteChanges,
   queueDeleteAttachment,
   queueDeleteSurvey,
@@ -73,6 +76,32 @@ const isUnauthorizedResultMessage = (message: string): boolean =>
 
 const isOnlineNetworkState = (state: Network.NetworkState): boolean =>
   Boolean(state.isConnected) && (state.isInternetReachable ?? true);
+
+const formatSubmitReadinessError = (surveyId: string, readiness: ReturnType<typeof evaluateSubmitReadinessFromDraft>): string => {
+  if (readiness.expired) {
+    return `Survey ${surveyId} is expired and cannot be submitted`;
+  }
+
+  const parts: string[] = [];
+  if (readiness.missing_factors.length > 0) {
+    parts.push(`missing/invalid factors: ${readiness.missing_factors.join(', ')}`);
+  }
+  if (readiness.missing_fields.includes('region_version')) {
+    parts.push('missing region version');
+  }
+  if (readiness.missing_fields.includes('vegetation_stage')) {
+    parts.push('missing vegetation stage');
+  }
+  if (readiness.missing_fields.includes('location')) {
+    parts.push('missing location (GPS or full manual address)');
+  }
+
+  if (parts.length === 0) {
+    return `Survey ${surveyId} is not ready for submit`;
+  }
+
+  return `Submit blocked for ${surveyId}: ${parts.join(' | ')}`;
+};
 
 export function useSurveySync({
   apiUrl,
@@ -566,6 +595,34 @@ export function useSurveySync({
     }
 
     try {
+      const draft = await getLocalSurveyDraft(surveyId);
+      if (!draft) {
+        setStatus(`Survey not found locally: ${surveyId}`);
+        return;
+      }
+
+      const readiness = evaluateSubmitReadinessFromDraft({
+        region_version: draft.region_version,
+        vegetation_stage: draft.vegetation_stage,
+        factors: draft.factors,
+        location: draft.location,
+        expires_at: draft.expires_at
+      });
+
+      if (!readiness.ready) {
+        if (readiness.expired) {
+          await markSurveyExpiredLocally(surveyId);
+          await refreshLocalSurveys();
+        }
+        setStatus(formatSubmitReadinessError(surveyId, readiness));
+        return;
+      }
+    } catch (error) {
+      setStatus(`Submit check error for ${surveyId}: ${(error as Error).message}`);
+      return;
+    }
+
+    try {
       const result = await withAuthRetry(async (token) => {
         const submitResult = await submitSurvey(apiUrl, token, surveyId);
         if (!submitResult.ok && isUnauthorizedResultMessage(submitResult.message)) {
@@ -582,7 +639,7 @@ export function useSurveySync({
       if (result.ok && editingSurveyId === surveyId) {
         onStopEditing();
       }
-      setStatus(result.ok ? `Submitted ${surveyId}` : `Submit failed for ${surveyId}: ${result.message}`);
+      setStatus(result.ok ? `Submitted ${surveyId}` : `Submit blocked for ${surveyId}: ${result.message}`);
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession();
@@ -871,6 +928,22 @@ export function useSurveySync({
     if (lastOnlineStateRef.current === true) {
       void maybeAutoSync('auth-ready');
     }
+  }, [accessToken, refreshToken, maybeAutoSync]);
+
+  useEffect(() => {
+    if (!(accessToken || refreshToken)) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      if (lastOnlineStateRef.current === true) {
+        void maybeAutoSync('heartbeat');
+      }
+    }, 30_000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, [accessToken, refreshToken, maybeAutoSync]);
 
   useEffect(() => {

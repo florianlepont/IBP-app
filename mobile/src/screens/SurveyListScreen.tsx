@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '../app/styles';
 import { formatDateTime } from '../app/formatters';
+import { formatSurveyUiStatusLabel, resolveSurveyUiStatus } from '../app/survey-logic';
 import {
   SurveyAttachmentFilter,
   SurveyBlockedFilter,
@@ -183,6 +184,17 @@ export function SurveyListScreen({
             Boolean(attachment.local_uri?.trim())
           );
           const completionRate = Math.max(0, Math.min(100, survey.completion_rate));
+          const uiStatus = resolveSurveyUiStatus(survey);
+          const statusBadgeStyle =
+            uiStatus === 'submitted'
+              ? styles.badgeStatusSubmitted
+              : uiStatus === 'expired' || uiStatus === 'sync_blocked'
+                ? styles.badgeBlocked
+                : uiStatus === 'sync_error'
+                  ? styles.badgeSyncFailed
+                  : uiStatus === 'sync_pending'
+                    ? styles.badgeSyncPending
+                    : styles.badgeStatusDraft;
 
           return (
             <Pressable
@@ -209,20 +221,8 @@ export function SurveyListScreen({
                   </View>
                 </View>
                 <View style={styles.badgeRow}>
-                  <View style={[styles.badge, survey.status === 'submitted' ? styles.badgeStatusSubmitted : styles.badgeStatusDraft]}>
-                    <Text style={styles.badgeText}>status: {survey.status}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.badge,
-                      survey.sync_state === 'synced'
-                        ? styles.badgeSyncSynced
-                        : survey.sync_state === 'pending'
-                          ? styles.badgeSyncPending
-                          : styles.badgeSyncFailed
-                    ]}
-                  >
-                    <Text style={styles.badgeText}>sync: {survey.sync_state}</Text>
+                  <View style={[styles.badge, statusBadgeStyle]}>
+                    <Text style={styles.badgeText}>state: {formatSurveyUiStatusLabel(uiStatus)}</Text>
                   </View>
                   <View style={[styles.badge, styles.badgeNeutral]}>
                     <Text style={styles.badgeText}>visibility: {survey.visibility}</Text>

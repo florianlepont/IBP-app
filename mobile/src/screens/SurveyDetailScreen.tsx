@@ -1,27 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, Button, Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
+import { computeIbpTotalsFromRetainedScores, computeRetainedScoresFromRawFactors, evaluateSubmitReadinessFromDraft } from '../app/ibp-scoring';
+import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION, defaultVegetationStageForRegion, normalizeVegetationStageForRegion } from '../app/constants';
 import { formatDateTime, formatEventPayload, formatPoints, formatRemainingTime, isLessThan24HoursRemaining, resolveSubmissionDeadline } from '../app/formatters';
 import { styles } from '../app/styles';
-import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from '../app/types';
+import { FactorKey, RegionVersion, SurveyDetailResponse, SurveyDetailTab, SurveyEventItem, VegetationStage } from '../app/types';
 import { FilterChip } from '../components/FilterChip';
 import { SurveyBadges } from '../components/SurveyBadges';
-import { LocalAttachment, LocalSurvey } from '../storage';
+import { getLocalSurveyDraft, LocalAttachment, LocalSurvey } from '../storage';
 
 type SurveyDetailScreenProps = {
   selectedSurvey: LocalSurvey;
   selectedSurveyAttachments: LocalAttachment[];
   surveyDetailTab: SurveyDetailTab;
   setSurveyDetailTab: (tab: SurveyDetailTab) => void;
-  editingSurveyId: string | null;
   surveyDetails: Record<string, SurveyDetailResponse>;
   detailsLoadingSurveyId: string | null;
   surveyEvents: Record<string, SurveyEventItem[]>;
   eventsLoadingSurveyId: string | null;
-  onLoadCanonicalDetails: (surveyId: string) => Promise<void>;
   onLoadSurveyEvents: (surveyId: string) => Promise<void>;
-  onEditSurvey: (surveyId: string) => Promise<void> | void;
   onTakePhoto: (surveyId: string) => Promise<void> | void;
   onPickPhoto: (surveyId: string) => Promise<void> | void;
   onDeleteAttachment: (surveyId: string, localAttachmentId: string) => Promise<void> | void;
@@ -30,6 +29,11 @@ type SurveyDetailScreenProps = {
   onRetrySurvey: (surveyId: string) => Promise<void>;
   onDiscardSurvey: (surveyId: string) => Promise<void>;
   onToggleVisibility: (surveyId: string, visibility: 'private' | 'public') => Promise<void>;
+  onOpenFactor: (surveyId: string, factor: FactorKey) => Promise<void> | void;
+  onRenameSurvey: (surveyId: string, nextSiteName: string) => Promise<void> | void;
+  onUpdateRegionVersion: (surveyId: string, region: RegionVersion) => Promise<void> | void;
+  onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void> | void;
+  onOpenLocation: (surveyId: string) => Promise<void> | void;
 };
 
 const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -54,33 +58,6 @@ const asFiniteNumber = (value: unknown): number | null => {
   return null;
 };
 
-const formatLocationSummary = (location?: Record<string, unknown>): string => {
-  if (!location || typeof location !== 'object') return 'not available';
-  const source = typeof location.source === 'string' ? location.source : '';
-
-  if (source === 'gps') {
-    const lat = asFiniteNumber(location.lat);
-    const lng = asFiniteNumber(location.lng);
-    if (lat === null || lng === null) return 'GPS selected (coordinates missing)';
-    return `GPS ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
-
-  if (source === 'manual') {
-    const parts = [
-      typeof location.address_line === 'string' ? location.address_line : '',
-      typeof location.postal_code === 'string' ? location.postal_code : '',
-      typeof location.city === 'string' ? location.city : '',
-      typeof location.country === 'string' ? location.country : ''
-    ]
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-    if (parts.length === 0) return 'manual address selected (details missing)';
-    return parts.join(', ');
-  }
-
-  return 'not available';
-};
-
 const resolveGpsCoordinates = (location?: Record<string, unknown>): { lat: number; lng: number } | null => {
   if (!location || typeof location !== 'object') return null;
   const lat = asFiniteNumber(location.lat);
@@ -100,6 +77,23 @@ const hasLocationContent = (location?: Record<string, unknown>): boolean => {
 };
 
 type ActionButtonVariant = 'neutral' | 'primary' | 'danger' | 'success';
+type DisplayedScores = {
+  ibp_total: number;
+  ibp_peuplement_gestion: number;
+  ibp_contexte: number;
+};
+type DisplayedFactorResult = {
+  selected_class: string;
+  warnings: string[];
+};
+type LocalDraftMeta = {
+  site_name: string;
+  region_version: RegionVersion;
+  vegetation_stage: VegetationStage;
+};
+
+const FACTOR_KEYS = new Set<FactorKey>(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']);
+const isFactorKey = (value: string): value is FactorKey => FACTOR_KEYS.has(value as FactorKey);
 
 type ActionButtonProps = {
   label: string;
@@ -146,14 +140,11 @@ export function SurveyDetailScreen({
   selectedSurveyAttachments,
   surveyDetailTab,
   setSurveyDetailTab,
-  editingSurveyId,
   surveyDetails,
   detailsLoadingSurveyId,
   surveyEvents,
   eventsLoadingSurveyId,
-  onLoadCanonicalDetails,
   onLoadSurveyEvents,
-  onEditSurvey,
   onTakePhoto,
   onPickPhoto,
   onDeleteAttachment,
@@ -161,7 +152,12 @@ export function SurveyDetailScreen({
   onSubmitSurvey,
   onRetrySurvey,
   onDiscardSurvey,
-  onToggleVisibility
+  onToggleVisibility,
+  onOpenFactor,
+  onRenameSurvey,
+  onUpdateRegionVersion,
+  onUpdateVegetationStage,
+  onOpenLocation
 }: SurveyDetailScreenProps) {
   const { width: viewportWidth } = useWindowDimensions();
   const detail = surveyDetails[selectedSurvey.id];
@@ -179,6 +175,13 @@ export function SurveyDetailScreen({
   const canonicalFactorEntries = detail
     ? Object.entries(detail.factor_results).sort(([left], [right]) => left.localeCompare(right))
     : [];
+  const [localDraftScores, setLocalDraftScores] = useState<DisplayedScores | null>(null);
+  const [localDraftFactorEntries, setLocalDraftFactorEntries] = useState<Array<[string, DisplayedFactorResult]>>([]);
+  const [localSubmitReady, setLocalSubmitReady] = useState<boolean | null>(null);
+  const [localMissingFactorCount, setLocalMissingFactorCount] = useState<number | null>(null);
+  const [localDraftMeta, setLocalDraftMeta] = useState<LocalDraftMeta | null>(null);
+  const [isRenamingSite, setIsRenamingSite] = useState(false);
+  const [siteNameInput, setSiteNameInput] = useState('');
   const mediaSlideWidth = Math.max(300, viewportWidth - 36);
   const localLocation = selectedSurvey.location;
   const effectiveLocation = hasLocationContent(localLocation) ? localLocation : detail?.location;
@@ -200,6 +203,137 @@ export function SurveyDetailScreen({
   useEffect(() => {
     setMediaPageIndex(0);
   }, [selectedSurvey.id, mediaSlides.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async (): Promise<void> => {
+      try {
+        const draft = await getLocalSurveyDraft(selectedSurvey.id);
+        if (!draft || cancelled) {
+          if (!cancelled) {
+            setLocalDraftScores(null);
+            setLocalDraftFactorEntries([]);
+            setLocalSubmitReady(null);
+            setLocalMissingFactorCount(null);
+            setLocalDraftMeta(null);
+          }
+          return;
+        }
+
+        const retained = computeRetainedScoresFromRawFactors(
+          typeof draft.factors === 'object' && draft.factors && !Array.isArray(draft.factors) ? draft.factors : {},
+          draft.region_version,
+          typeof draft.vegetation_stage === 'string' ? draft.vegetation_stage : ''
+        );
+
+        const totals = computeIbpTotalsFromRetainedScores(retained);
+        const regionVersion: RegionVersion = draft.region_version === 'M' ? 'M' : 'ACA';
+        const vegetationStage = normalizeVegetationStageForRegion(
+          regionVersion,
+          typeof draft.vegetation_stage === 'string' ? draft.vegetation_stage : defaultVegetationStageForRegion(regionVersion)
+        );
+        const readiness = evaluateSubmitReadinessFromDraft({
+          region_version: draft.region_version,
+          vegetation_stage: draft.vegetation_stage,
+          factors: draft.factors,
+          location: draft.location,
+          expires_at: draft.expires_at
+        });
+        const entries = Object.entries(retained)
+          .filter(([, score]) => Boolean(score))
+          .sort(([left], [right]) => left.localeCompare(right))
+          .reduce<Array<[string, DisplayedFactorResult]>>((acc, [factorCode, score]) => {
+            if (!score) return acc;
+            acc.push([
+              factorCode,
+              {
+                selected_class: score.selected_class,
+                warnings: []
+              }
+            ]);
+            return acc;
+          }, []);
+
+        if (cancelled) return;
+        setLocalDraftScores({
+          ibp_total: totals.ibp_total,
+          ibp_peuplement_gestion: totals.ibp_peuplement_gestion,
+          ibp_contexte: totals.ibp_contexte
+        });
+        setLocalDraftFactorEntries(entries);
+        setLocalSubmitReady(readiness.ready);
+        setLocalMissingFactorCount(readiness.missing_factors.length);
+        setLocalDraftMeta({
+          site_name: typeof draft.site_name === 'string' && draft.site_name.trim().length > 0 ? draft.site_name : selectedSurvey.site_name,
+          region_version: regionVersion,
+          vegetation_stage: vegetationStage
+        });
+      } catch (_error) {
+        if (!cancelled) {
+          setLocalDraftScores(null);
+          setLocalDraftFactorEntries([]);
+          setLocalSubmitReady(null);
+          setLocalMissingFactorCount(null);
+          setLocalDraftMeta(null);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSurvey.id, selectedSurvey.updated_at]);
+
+  const useLocalDraftView = selectedSurvey.status !== 'submitted' && localDraftScores !== null;
+  const displayedScores: DisplayedScores | null = useMemo(() => {
+    if (useLocalDraftView && localDraftScores) {
+      return localDraftScores;
+    }
+    if (detail?.scores) {
+      return detail.scores;
+    }
+    return localDraftScores;
+  }, [useLocalDraftView, localDraftScores, detail?.scores]);
+  const displayedFactorEntries = useMemo<Array<[string, DisplayedFactorResult]>>(() => {
+    if (useLocalDraftView && localDraftFactorEntries.length > 0) {
+      return localDraftFactorEntries;
+    }
+    if (canonicalFactorEntries.length > 0) {
+      return canonicalFactorEntries as Array<[string, DisplayedFactorResult]>;
+    }
+    return localDraftFactorEntries;
+  }, [useLocalDraftView, localDraftFactorEntries, canonicalFactorEntries]);
+  const showSubmitReadyBanner =
+    selectedSurvey.sync_state === 'synced' &&
+    selectedSurvey.status !== 'submitted' &&
+    selectedSurvey.sync_blocked !== 1 &&
+    localSubmitReady === true;
+  const completedFactorCountForSubmit = localMissingFactorCount === null ? null : 10 - localMissingFactorCount;
+  const showSubmitProgressBanner =
+    selectedSurvey.status !== 'submitted' &&
+    localSubmitReady === false &&
+    (localMissingFactorCount ?? 0) > 0 &&
+    completedFactorCountForSubmit !== null;
+  const factorsCompleted = completedFactorCountForSubmit ?? Math.min(10, displayedFactorEntries.length);
+  const factorsRemaining = Math.max(0, 10 - factorsCompleted);
+  const canEditSurvey = selectedSurvey.status !== 'submitted';
+  const activeRegion: RegionVersion = useMemo(() => {
+    if (localDraftMeta) return localDraftMeta.region_version;
+    return detail?.region_version === 'M' ? 'M' : 'ACA';
+  }, [localDraftMeta, detail?.region_version]);
+  const activeVegetationStage: VegetationStage = useMemo(() => {
+    if (localDraftMeta) return localDraftMeta.vegetation_stage;
+    const fallback = defaultVegetationStageForRegion(activeRegion);
+    return normalizeVegetationStageForRegion(activeRegion, typeof detail?.vegetation_stage === 'string' ? detail.vegetation_stage : fallback);
+  }, [localDraftMeta, activeRegion, detail?.vegetation_stage]);
+  const activeSiteName = (localDraftMeta?.site_name ?? detail?.site_name ?? selectedSurvey.site_name).trim() || selectedSurvey.site_name;
+
+  useEffect(() => {
+    setIsRenamingSite(false);
+    setSiteNameInput(activeSiteName);
+  }, [selectedSurvey.id, activeSiteName]);
 
   const handleAddPicture = (): void => {
     if (selectedSurvey.status === 'submitted') {
@@ -248,6 +382,26 @@ export function SurveyDetailScreen({
     ]);
   };
 
+  const handleSaveSiteRename = (): void => {
+    const nextName = siteNameInput.trim();
+    if (!canEditSurvey) {
+      return;
+    }
+    if (!nextName) {
+      Alert.alert('Invalid name', 'Survey name cannot be empty.');
+      return;
+    }
+    void onRenameSurvey(selectedSurvey.id, nextName);
+    setIsRenamingSite(false);
+  };
+
+  const handleOpenLocationEditor = (): void => {
+    if (!canEditSurvey) {
+      return;
+    }
+    void onOpenLocation(selectedSurvey.id);
+  };
+
   const handleMediaScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
     if (mediaSlides.length <= 1) return;
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -260,7 +414,33 @@ export function SurveyDetailScreen({
     <ScrollView style={styles.mainScroll} contentContainerStyle={styles.detailScreenContent}>
       <View style={styles.detailCard}>
         <View style={styles.detailHeader}>
-          <Text style={styles.detailSurveyTitle}>{selectedSurvey.site_name}</Text>
+          {isRenamingSite ? (
+            <View style={styles.detailRenameRow}>
+              <TextInput style={styles.detailRenameInput} value={siteNameInput} onChangeText={setSiteNameInput} autoFocus />
+              <Pressable style={styles.detailRenameSaveButton} onPress={handleSaveSiteRename}>
+                <Text style={styles.detailRenameSaveButtonText}>Save</Text>
+              </Pressable>
+              <Pressable
+                style={styles.detailRenameCancelButton}
+                onPress={() => {
+                  setIsRenamingSite(false);
+                  setSiteNameInput(activeSiteName);
+                }}
+              >
+                <Text style={styles.detailRenameCancelButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => {
+                if (!canEditSurvey) return;
+                setIsRenamingSite(true);
+              }}
+            >
+              <Text style={styles.detailSurveyTitle}>{activeSiteName}</Text>
+              {canEditSurvey ? <Text style={styles.rowMeta}>Tap survey name to rename.</Text> : null}
+            </Pressable>
+          )}
         </View>
         <SurveyBadges survey={selectedSurvey} />
 
@@ -288,6 +468,7 @@ export function SurveyDetailScreen({
                           latitudeDelta: 0.01,
                           longitudeDelta: 0.01
                         }}
+                        onPress={handleOpenLocationEditor}
                         scrollEnabled={false}
                         zoomEnabled={false}
                         rotateEnabled={false}
@@ -297,7 +478,7 @@ export function SurveyDetailScreen({
                       </MapView>
                       <View style={styles.mediaHeroCaption}>
                         <Ionicons name="map-outline" size={14} color="#254a6d" />
-                        <Text style={styles.mediaHeroCaptionText}>Map</Text>
+                        <Text style={styles.mediaHeroCaptionText}>{canEditSurvey ? 'Map (tap to edit location)' : 'Map'}</Text>
                       </View>
                     </View>
                   ) : (
@@ -358,7 +539,53 @@ export function SurveyDetailScreen({
 
       {surveyDetailTab === 'summary' ? (
         <View style={styles.detailSection}>
-          {selectedSurvey.status === 'submitted' ? <Text style={styles.rowMeta}>submitted survey: read-only</Text> : null}
+          {selectedSurvey.status !== 'submitted' ? (
+            <View style={styles.factorsProgressCard}>
+              <View style={styles.factorsProgressHeader}>
+                <Ionicons name="analytics-outline" size={16} color="#2f5d87" />
+                <Text style={styles.factorsProgressTitle}>Factors progress: {factorsCompleted}/10 completed</Text>
+              </View>
+              <Text style={styles.factorsProgressText}>{factorsRemaining} factor(s) remaining before submit.</Text>
+            </View>
+          ) : null}
+
+          {showSubmitReadyBanner ? (
+            <View style={styles.submitReadyBanner}>
+              <View style={styles.submitReadyBannerHeader}>
+                <Ionicons name="checkmark-circle" size={16} color="#236449" />
+                <Text style={styles.submitReadyBannerTitle}>Your survey is ready to be submitted</Text>
+              </View>
+              <Text style={styles.submitReadyBannerText}>All required factors and required fields are complete.</Text>
+              <Pressable style={styles.submitReadyBannerCta} onPress={() => void onSubmitSurvey(selectedSurvey.id)}>
+                <Ionicons name="paper-plane-outline" size={14} color="#ffffff" />
+                <Text style={styles.submitReadyBannerCtaText}>Submit survey</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {showSubmitProgressBanner ? (
+            <View style={styles.submitProgressBanner}>
+              <View style={styles.submitProgressBannerHeader}>
+                <Ionicons name="hourglass-outline" size={16} color="#8f6a1d" />
+                <Text style={styles.submitProgressBannerTitle}>
+                  Factors progress: {completedFactorCountForSubmit}/10 completed
+                </Text>
+              </View>
+              <Text style={styles.submitProgressBannerText}>
+                This survey can be submitted once all factors are completed.
+              </Text>
+            </View>
+          ) : null}
+
+          {selectedSurvey.status === 'submitted' ? (
+            <View style={styles.submittedReadonlyBanner}>
+              <View style={styles.submittedReadonlyBannerHeader}>
+                <Ionicons name="checkmark-done-circle" size={16} color="#2a7a56" />
+                <Text style={styles.submittedReadonlyBannerTitle}>Your survey has been submitted</Text>
+              </View>
+              <Text style={styles.submittedReadonlyBannerText}>No update possible.</Text>
+            </View>
+          ) : null}
           <View style={[styles.deadlineCard, isDraftNearDeadline ? styles.deadlineCardWarning : null]}>
             <Text style={styles.deadlineLabel}>Time remaining</Text>
             <Text style={[styles.deadlineValue, isDraftNearDeadline ? styles.deadlineValueWarning : null]}>
@@ -369,42 +596,76 @@ export function SurveyDetailScreen({
           </View>
 
           <View style={styles.locationCard}>
-            <Text style={styles.detailTitle}>Location</Text>
-            <Text style={styles.rowMeta}>{formatLocationSummary(effectiveLocation)}</Text>
+            <Text style={styles.detailTitle}>Region and vegetation</Text>
+            {canEditSurvey ? <Text style={styles.rowMeta}>Tap to update directly from detail.</Text> : null}
+            <View style={styles.filterChipsRow}>
+              {REGION_OPTIONS.map((option) => (
+                <FilterChip
+                  key={`detail-region-${option.value}`}
+                  label={option.label}
+                  active={activeRegion === option.value}
+                  onPress={() => {
+                    if (!canEditSurvey) return;
+                    void onUpdateRegionVersion(selectedSurvey.id, option.value);
+                  }}
+                />
+              ))}
+            </View>
+            <View style={styles.filterChipsRow}>
+              {VEGETATION_STAGE_OPTIONS_BY_REGION[activeRegion].map((option) => (
+                <FilterChip
+                  key={`detail-stage-${option.value}`}
+                  label={option.label}
+                  active={activeVegetationStage === option.value}
+                  onPress={() => {
+                    if (!canEditSurvey) return;
+                    void onUpdateVegetationStage(selectedSurvey.id, option.value);
+                  }}
+                />
+              ))}
+            </View>
           </View>
 
           <View style={styles.factorTilesCard}>
             <View style={styles.factorTilesHeader}>
               <Text style={styles.detailTitle}>Factors</Text>
-              <Pressable style={styles.factorReloadButton} onPress={() => void onLoadCanonicalDetails(selectedSurvey.id)}>
-                <Ionicons name="refresh-outline" size={14} color="#255178" />
-                <Text style={styles.factorReloadButtonText}>Refresh</Text>
-              </Pressable>
             </View>
             {detailsLoadingSurveyId === selectedSurvey.id ? <Text style={styles.rowMeta}>Loading factors...</Text> : null}
-            {detail ? (
+            {displayedScores ? (
               <>
+                {useLocalDraftView ? <Text style={styles.rowMeta}>Showing local draft score (latest edits).</Text> : null}
+                <View style={styles.scoreHeroCard}>
+                  <Text style={styles.scoreHeroLabel}>IBP Total</Text>
+                  <Text style={styles.scoreHeroValue}>{formatPoints(displayedScores.ibp_total)}</Text>
+                  <Text style={styles.scoreHeroMeta}>P/G {formatPoints(displayedScores.ibp_peuplement_gestion)} · C {formatPoints(displayedScores.ibp_contexte)}</Text>
+                </View>
                 <View style={styles.factorTotalsRow}>
                   <View style={styles.factorTotalPill}>
-                    <Text style={styles.factorTotalText}>P/G {formatPoints(detail.scores.ibp_peuplement_gestion)}</Text>
+                    <Text style={styles.factorTotalText}>P/G {formatPoints(displayedScores.ibp_peuplement_gestion)}</Text>
                   </View>
                   <View style={styles.factorTotalPill}>
-                    <Text style={styles.factorTotalText}>C {formatPoints(detail.scores.ibp_contexte)}</Text>
-                  </View>
-                  <View style={[styles.factorTotalPill, styles.factorTotalPillStrong]}>
-                    <Text style={styles.factorTotalText}>Total {formatPoints(detail.scores.ibp_total)}</Text>
+                    <Text style={styles.factorTotalText}>C {formatPoints(displayedScores.ibp_contexte)}</Text>
                   </View>
                 </View>
                 <View style={styles.factorTilesGrid}>
-                  {canonicalFactorEntries.map(([factorCode, factor]) => (
-                    <View key={`factor-tile-${factorCode}`} style={styles.factorTile}>
+                  {displayedFactorEntries.map(([factorCode, factor]) => (
+                    <Pressable
+                      key={`factor-tile-${factorCode}`}
+                      style={[styles.factorTile, canEditSurvey && isFactorKey(factorCode) ? styles.factorTileEditable : null]}
+                      onPress={() => {
+                        if (!canEditSurvey) return;
+                        if (!isFactorKey(factorCode)) return;
+                        void onOpenFactor(selectedSurvey.id, factorCode);
+                      }}
+                    >
                       <View style={styles.factorTileIconWrap}>
                         <Ionicons name={FACTOR_ICONS[factorCode] ?? 'ellipse-outline'} size={16} color="#1f4f79" />
                       </View>
                       <Text style={styles.factorTileCode}>Factor {factorCode}</Text>
                       <Text style={styles.factorTileClass}>{factor.selected_class}</Text>
+                      {canEditSurvey && isFactorKey(factorCode) ? <Text style={styles.factorTileHint}>Tap to update</Text> : null}
                       {factor.warnings.length > 0 ? <Text style={styles.factorTileWarning}>warning</Text> : null}
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               </>
@@ -441,17 +702,6 @@ export function SurveyDetailScreen({
                 variant="neutral"
                 onPress={() => void onToggleVisibility(selectedSurvey.id, selectedSurvey.visibility === 'public' ? 'private' : 'public')}
               />
-              {selectedSurvey.status !== 'submitted' ? (
-                <ActionButton
-                  label="Update"
-                  icon="create-outline"
-                  variant="primary"
-                  onPress={() => void onEditSurvey(selectedSurvey.id)}
-                />
-              ) : null}
-              {selectedSurvey.sync_state === 'synced' && selectedSurvey.status !== 'submitted' && selectedSurvey.sync_blocked !== 1 ? (
-                <ActionButton label="Submit survey" icon="paper-plane-outline" variant="success" onPress={() => void onSubmitSurvey(selectedSurvey.id)} />
-              ) : null}
               <ActionButton label="Delete survey" icon="trash-outline" variant="danger" onPress={() => onDeleteSurvey(selectedSurvey.id)} />
             </View>
 

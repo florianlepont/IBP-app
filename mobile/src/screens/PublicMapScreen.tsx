@@ -7,6 +7,7 @@ import { PublicMapItem } from '../app/types';
 
 type PublicMapScreenProps = {
   items: PublicMapItem[];
+  ownSurveyIds: string[];
   loading: boolean;
   fromDate: string;
   toDate: string;
@@ -66,6 +67,7 @@ function computeRegionFromItems(items: PublicMapItem[]): Region {
 
 export function PublicMapScreen({
   items,
+  ownSurveyIds,
   loading,
   fromDate,
   toDate,
@@ -84,7 +86,9 @@ export function PublicMapScreen({
   const [reportSending, setReportSending] = useState(false);
   const [reportMessage, setReportMessage] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  const ownSurveyIdSet = useMemo(() => new Set(ownSurveyIds), [ownSurveyIds]);
   const targetRegion = useMemo(() => computeRegionFromItems(items), [items]);
+  const selectedItemIsOwnSurvey = selectedItem ? ownSurveyIdSet.has(selectedItem.survey_id) : false;
 
   useEffect(() => {
     setMapRegion(targetRegion);
@@ -193,7 +197,12 @@ export function PublicMapScreen({
             {selectedItem.region_code} · {selectedItem.survey_date} · IBP {selectedItem.ibp_total}
           </Text>
 
-          {!reportPanelOpen ? (
+          {selectedItemIsOwnSurvey ? (
+            <View style={screenStyles.reportOwnSurveyInfo}>
+              <Ionicons name="information-circle-outline" size={14} color="#40654f" />
+              <Text style={screenStyles.reportOwnSurveyInfoText}>You cannot report your own survey.</Text>
+            </View>
+          ) : !reportPanelOpen ? (
             <Pressable style={screenStyles.reportOpenButton} onPress={() => setReportPanelOpen(true)}>
               <Ionicons name="flag-outline" size={14} color="#6e3f1a" />
               <Text style={screenStyles.reportOpenButtonText}>Report this survey</Text>
@@ -425,6 +434,21 @@ const screenStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#74441e'
+  },
+  reportOwnSurveyInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#c8d9cb',
+    backgroundColor: '#eaf2ea',
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  reportOwnSurveyInfoText: {
+    fontSize: 12,
+    color: '#355544'
   },
   reportForm: {
     gap: 8

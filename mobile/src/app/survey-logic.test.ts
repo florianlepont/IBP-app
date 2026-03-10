@@ -1,5 +1,12 @@
 import { normalizeVegetationStageForRegion } from './vegetation';
-import { buildAttachmentCountBySurvey, filterAndSortSurveys, getSubmitBlockReason } from './survey-logic';
+import {
+  buildAttachmentCountBySurvey,
+  filterAndSortSurveys,
+  formatSurveyUiStatusLabel,
+  getSubmitBlockReason,
+  resolveEffectiveSurveyStatus,
+  resolveSurveyUiStatus
+} from './survey-logic';
 import { LocalAttachment, LocalSurvey } from '../storage';
 import { SurveyListFilters } from './types';
 
@@ -76,6 +83,13 @@ describe('filterAndSortSurveys', () => {
       last_sync_error: 'network timeout',
       sync_blocked: 1,
       updated_at: '2026-03-07T10:00:00.000Z'
+    }),
+    makeSurvey({
+      id: 's-d',
+      site_name: 'Delta Grove',
+      status: 'draft',
+      sync_state: 'synced',
+      updated_at: '2026-03-06T10:00:00.000Z'
     })
   ];
 
@@ -111,8 +125,7 @@ describe('filterAndSortSurveys', () => {
   test('filters by attachment presence', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
     const result = filterAndSortSurveys(surveys, { ...baseFilters, attachmentFilter: 'without' }, attachmentCounts);
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('s-b');
+    expect(result.map((survey) => survey.id)).toEqual(['s-b', 's-d']);
   });
 
   test('filters by visibility', () => {
@@ -128,14 +141,14 @@ describe('filterAndSortSurveys', () => {
   test('sorts by site name ascending', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
     const result = filterAndSortSurveys(surveys, { ...baseFilters, sortMode: 'site_asc' }, attachmentCounts);
-    expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-b', 's-c']);
+    expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-b', 's-d', 's-c']);
   });
 
-  test('filters by status synced using sync_state', () => {
+  test('filters by status synced without overriding submitted status', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
     const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'synced' }, attachmentCounts);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('s-b');
+    expect(result[0].id).toBe('s-d');
   });
 
   test('filters by status error using failed sync_state', () => {
@@ -161,6 +174,26 @@ describe('filterAndSortSurveys', () => {
       attachmentCounts
     );
     expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-b']);
+  });
+
+  test('resolves effective status with lifecycle priority', () => {
+    expect(resolveEffectiveSurveyStatus(makeSurvey({ status: 'submitted', sync_state: 'synced' }))).toBe('submitted');
+    expect(resolveEffectiveSurveyStatus(makeSurvey({ status: 'draft', sync_state: 'synced' }))).toBe('synced');
+    expect(resolveEffectiveSurveyStatus(makeSurvey({ status: 'draft', sync_state: 'failed' }))).toBe('error');
+  });
+
+  test('resolves single UI state for display', () => {
+    expect(resolveSurveyUiStatus(makeSurvey({ status: 'submitted', sync_state: 'synced' }))).toBe('submitted');
+    expect(resolveSurveyUiStatus(makeSurvey({ status: 'expired', sync_state: 'failed' }))).toBe('expired');
+    expect(resolveSurveyUiStatus(makeSurvey({ status: 'draft', sync_state: 'pending' }))).toBe('sync_pending');
+    expect(resolveSurveyUiStatus(makeSurvey({ status: 'draft', sync_state: 'failed', sync_blocked: 1 }))).toBe('sync_blocked');
+    expect(resolveSurveyUiStatus(makeSurvey({ status: 'draft', sync_state: 'synced' }))).toBe('draft');
+  });
+
+  test('formats UI state labels', () => {
+    expect(formatSurveyUiStatusLabel('submitted')).toBe('Submitted');
+    expect(formatSurveyUiStatusLabel('sync_error')).toBe('Sync error');
+    expect(formatSurveyUiStatusLabel('sync_pending')).toBe('Sync pending');
   });
 });
 

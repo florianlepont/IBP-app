@@ -3,8 +3,9 @@ import { Button, Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { MapPressEvent, Marker, MarkerDragStartEndEvent } from 'react-native-maps';
 import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from '../app/constants';
+import { computeIbpTotalsFromRetainedScores } from '../app/ibp-scoring';
 import { styles } from '../app/styles';
-import { AppScreen, FactorField, FactorKey, RegionVersion, SurveyLocationSource, VegetationStage } from '../app/types';
+import { AppScreen, FactorField, FactorKey, FactorRetainedScore, RegionVersion, SurveyLocationSource, VegetationStage } from '../app/types';
 import { FilterChip } from '../components/FilterChip';
 
 type SurveyFormScreenProps = {
@@ -34,6 +35,7 @@ type SurveyFormScreenProps = {
   setManualLocationField: (field: 'address_line' | 'postal_code' | 'city' | 'country', value: string) => void;
   onCaptureGpsLocation: () => Promise<void>;
   factorSections: Record<FactorKey, FactorField[]>;
+  factorRetainedScores: Record<FactorKey, FactorRetainedScore | null>;
   formErrors: {
     siteName: string | null;
     gps: {
@@ -86,6 +88,7 @@ export function SurveyFormScreen({
   setManualLocationField,
   onCaptureGpsLocation,
   factorSections,
+  factorRetainedScores,
   formErrors,
   onOpenFactor,
   onSaveSurveyEdits,
@@ -127,6 +130,7 @@ export function SurveyFormScreen({
   );
 
   const completedFactorCount = FACTOR_ORDER.filter((factor) => factorProgress[factor]?.complete).length;
+  const scoreTotals = useMemo(() => computeIbpTotalsFromRetainedScores(factorRetainedScores), [factorRetainedScores]);
 
   const handleMapPress = (event: MapPressEvent): void => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
@@ -218,6 +222,15 @@ export function SurveyFormScreen({
     <View style={styles.card}>
       {screen === 'edit' && editingSurveyId ? <Text style={styles.meta}>Survey id: {editingSurveyId}</Text> : null}
       <Text style={styles.rowMeta}>Fields marked with * are required for submit.</Text>
+      <View style={styles.formScoreHeroCard}>
+        <Text style={styles.formScoreHeroLabel}>IBP Total (en cours)</Text>
+        <Text style={styles.formScoreHeroValue}>{scoreTotals.ibp_total}</Text>
+        <Text style={styles.formScoreHeroMeta}>
+          P/G {scoreTotals.ibp_peuplement_gestion} · C {scoreTotals.ibp_contexte} ·
+          {' '}
+          {scoreTotals.completed_factors}/10 facteurs scoreables
+        </Text>
+      </View>
 
       <Text style={styles.label}>Site name *</Text>
       <TextInput style={styles.input} value={siteName} onChangeText={setSiteName} />
@@ -345,6 +358,7 @@ export function SurveyFormScreen({
         <View style={styles.formFactorTilesGrid}>
           {FACTOR_ORDER.map((factor) => {
             const progress = factorProgress[factor];
+            const retainedScore = factorRetainedScores[factor];
             return (
               <Pressable
                 key={`form-factor-tile-${factor}`}
@@ -363,13 +377,18 @@ export function SurveyFormScreen({
                   {progress.filled}/{progress.total} fields
                 </Text>
                 <Text style={styles.formFactorTileMeta}>{progress.complete ? 'Completed' : progress.invalid > 0 ? 'Validation needed' : 'To complete'}</Text>
+                {retainedScore ? (
+                  <Text style={styles.formFactorTileScore}>
+                    Score {retainedScore.score} ({retainedScore.selected_class})
+                  </Text>
+                ) : null}
               </Pressable>
             );
           })}
         </View>
       </View>
 
-      {screen === 'edit' ? <Button title="Save" onPress={() => void onSaveSurveyEdits()} /> : <Button title="Save" onPress={() => void onCreateDraft()} />}
+      {editingSurveyId ? <Button title="Save" onPress={() => void onSaveSurveyEdits()} /> : <Button title="Save" onPress={() => void onCreateDraft()} />}
       <Text style={styles.status}>{status}</Text>
     </View>
   );

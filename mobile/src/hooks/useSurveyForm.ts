@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_SURVEY_FORM, defaultVegetationStageForRegion, normalizeVegetationStageForRegion } from '../app/constants';
+import { computeRetainedScoresFromRawFactors } from '../app/ibp-scoring';
 import {
   FactorField,
+  FactorRetainedScore,
   FactorKey,
   RegionVersion,
   SurveyLocationPayload,
@@ -269,6 +271,42 @@ export function useSurveyForm() {
     });
   };
 
+  const factorRetainedScores = useMemo<Record<FactorKey, FactorRetainedScore | null>>(
+    () =>
+      computeRetainedScoresFromRawFactors(
+        {
+          A: { native_genus_count: factorA.native_genus_count },
+          B: {
+            strata_count: factorB.strata_count,
+            covered_autochthonous_percent: factorB.covered_autochthonous_percent
+          },
+          C: {
+            bmg_count: factorC.bmg_count,
+            bmm_count: factorC.bmm_count,
+            surface_ha: factorC.surface_ha
+          },
+          D: {
+            bmg_count: factorD.bmg_count,
+            bmm_count: factorD.bmm_count,
+            surface_ha: factorD.surface_ha
+          },
+          E: {
+            tgb_count: factorE.tgb_count,
+            gb_count: factorE.gb_count,
+            surface_ha: factorE.surface_ha
+          },
+          F: { trees_per_ha: factorF.trees_per_ha },
+          G: { open_flowering_percent: factorG.open_flowering_percent },
+          H: { class_score: factorH.class_score },
+          I: { type_count: factorI.type_count },
+          J: { type_count: factorJ.type_count }
+        },
+        regionVersion,
+        vegetationStage
+      ),
+    [factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ, regionVersion, vegetationStage]
+  );
+
   const formErrors = useMemo<SurveyFormErrors>(
     () => ({
       siteName: requiredError(siteName, 'Site name'),
@@ -450,13 +488,18 @@ export function useSurveyForm() {
     [factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ]
   );
 
-  const buildDraftInput = () => ({
-    site_name: siteName.trim() || 'Unnamed site',
-    region_version: regionVersion,
-    vegetation_stage: vegetationStage,
-    factors: buildFactorsPayload(),
-    location: buildLocationPayload()
-  });
+  const draftInput = useMemo(
+    () => ({
+      site_name: siteName.trim() || 'Unnamed site',
+      region_version: regionVersion,
+      vegetation_stage: vegetationStage,
+      factors: buildFactorsPayload(),
+      location: buildLocationPayload()
+    }),
+    [siteName, regionVersion, vegetationStage, factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ, locationSource, gpsLocation, manualLocation]
+  );
+
+  const buildDraftInput = () => draftInput;
 
   return {
     siteName,
@@ -473,7 +516,9 @@ export function useSurveyForm() {
     applyGpsLocation,
     handleRegionChange,
     factorSections,
+    factorRetainedScores,
     formErrors,
+    draftInput,
     applyDraftToForm,
     resetSurveyForm,
     buildDraftInput
