@@ -5,6 +5,7 @@ import { NavigationContainer, NavigationContainerRef } from '@react-navigation/n
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { loadStoredApiUrl, saveStoredApiUrl } from './src/app/api-url-storage';
 import { DEFAULT_API_URL, DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from './src/app/constants';
 import { fetchPublicMapItems } from './src/api/ibp-api';
 import { styles } from './src/app/styles';
@@ -102,6 +103,25 @@ export default function App() {
       setFormMode('create');
     }
   });
+
+  useEffect(() => {
+    let active = true;
+    void loadStoredApiUrl()
+      .then((stored) => {
+        if (active && stored) {
+          setApiUrl(stored);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleApiUrlChange = (value: string): void => {
+    setApiUrl(value);
+    void saveStoredApiUrl(value).catch(() => undefined);
+  };
 
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
@@ -698,7 +718,7 @@ export default function App() {
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
             <SettingsScreen
               apiUrl={apiUrl}
-              onApiUrlChange={setApiUrl}
+              onApiUrlChange={handleApiUrlChange}
               onSync={surveySync.handleSync}
               onPullChanges={surveySync.handlePullChanges}
               onRefreshLocalList={surveyList.refreshLocalSurveys}
@@ -720,7 +740,7 @@ export default function App() {
         {!surveySync.isAuthenticated ? (
           <AuthGateScreen
             apiUrl={apiUrl}
-            onApiUrlChange={setApiUrl}
+            onApiUrlChange={handleApiUrlChange}
             email={email}
             onEmailChange={setEmail}
             password={password}

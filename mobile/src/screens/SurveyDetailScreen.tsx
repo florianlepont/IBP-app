@@ -92,7 +92,8 @@ type LocalDraftMeta = {
   vegetation_stage: VegetationStage;
 };
 
-const FACTOR_KEYS = new Set<FactorKey>(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']);
+const FACTOR_ORDER: FactorKey[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER);
 const isFactorKey = (value: string): value is FactorKey => FACTOR_KEYS.has(value as FactorKey);
 
 type ActionButtonProps = {
@@ -240,20 +241,16 @@ export function SurveyDetailScreen({
           location: draft.location,
           expires_at: draft.expires_at
         });
-        const entries = Object.entries(retained)
-          .filter(([, score]) => Boolean(score))
-          .sort(([left], [right]) => left.localeCompare(right))
-          .reduce<Array<[string, DisplayedFactorResult]>>((acc, [factorCode, score]) => {
-            if (!score) return acc;
-            acc.push([
-              factorCode,
-              {
-                selected_class: score.selected_class,
-                warnings: []
-              }
-            ]);
-            return acc;
-          }, []);
+        const entries = FACTOR_ORDER.map<[string, DisplayedFactorResult]>((factorCode) => {
+          const score = retained[factorCode];
+          return [
+            factorCode,
+            {
+              selected_class: score?.selected_class ?? 'Not filled',
+              warnings: []
+            }
+          ];
+        });
 
         if (cancelled) return;
         setLocalDraftScores({
@@ -305,6 +302,7 @@ export function SurveyDetailScreen({
     }
     return localDraftFactorEntries;
   }, [useLocalDraftView, localDraftFactorEntries, canonicalFactorEntries]);
+  const showFactorLoadingHint = detailsLoadingSurveyId === selectedSurvey.id && !displayedScores && displayedFactorEntries.length === 0;
   const showSubmitReadyBanner =
     selectedSurvey.sync_state === 'synced' &&
     selectedSurvey.status !== 'submitted' &&
@@ -316,8 +314,6 @@ export function SurveyDetailScreen({
     localSubmitReady === false &&
     (localMissingFactorCount ?? 0) > 0 &&
     completedFactorCountForSubmit !== null;
-  const factorsCompleted = completedFactorCountForSubmit ?? Math.min(10, displayedFactorEntries.length);
-  const factorsRemaining = Math.max(0, 10 - factorsCompleted);
   const canEditSurvey = selectedSurvey.status !== 'submitted';
   const activeRegion: RegionVersion = useMemo(() => {
     if (localDraftMeta) return localDraftMeta.region_version;
@@ -329,6 +325,9 @@ export function SurveyDetailScreen({
     return normalizeVegetationStageForRegion(activeRegion, typeof detail?.vegetation_stage === 'string' ? detail.vegetation_stage : fallback);
   }, [localDraftMeta, activeRegion, detail?.vegetation_stage]);
   const activeSiteName = (localDraftMeta?.site_name ?? detail?.site_name ?? selectedSurvey.site_name).trim() || selectedSurvey.site_name;
+  const activeRegionLabel = REGION_OPTIONS.find((option) => option.value === activeRegion)?.label ?? activeRegion;
+  const activeVegetationLabel =
+    VEGETATION_STAGE_OPTIONS_BY_REGION[activeRegion].find((option) => option.value === activeVegetationStage)?.label ?? activeVegetationStage;
 
   useEffect(() => {
     setIsRenamingSite(false);
@@ -539,16 +538,6 @@ export function SurveyDetailScreen({
 
       {surveyDetailTab === 'summary' ? (
         <View style={styles.detailSection}>
-          {selectedSurvey.status !== 'submitted' ? (
-            <View style={styles.factorsProgressCard}>
-              <View style={styles.factorsProgressHeader}>
-                <Ionicons name="analytics-outline" size={16} color="#2f5d87" />
-                <Text style={styles.factorsProgressTitle}>Factors progress: {factorsCompleted}/10 completed</Text>
-              </View>
-              <Text style={styles.factorsProgressText}>{factorsRemaining} factor(s) remaining before submit.</Text>
-            </View>
-          ) : null}
-
           {showSubmitReadyBanner ? (
             <View style={styles.submitReadyBanner}>
               <View style={styles.submitReadyBannerHeader}>
@@ -586,51 +575,60 @@ export function SurveyDetailScreen({
               <Text style={styles.submittedReadonlyBannerText}>No update possible.</Text>
             </View>
           ) : null}
-          <View style={[styles.deadlineCard, isDraftNearDeadline ? styles.deadlineCardWarning : null]}>
-            <Text style={styles.deadlineLabel}>Time remaining</Text>
-            <Text style={[styles.deadlineValue, isDraftNearDeadline ? styles.deadlineValueWarning : null]}>
-              {detailStatus === 'submitted' ? 'Submitted' : remainingTime}
-            </Text>
-            {detailStatus !== 'submitted' ? <Text style={styles.rowMeta}>Deadline: {formatDateTime(submissionDeadline)}</Text> : null}
-            {isDraftNearDeadline ? <Text style={styles.warningText}>Less than 24h left before survey expiration.</Text> : null}
-          </View>
+          {selectedSurvey.status !== 'submitted' ? (
+            <View style={[styles.deadlineCard, isDraftNearDeadline ? styles.deadlineCardWarning : null]}>
+              <Text style={styles.deadlineLabel}>Time remaining</Text>
+              <Text style={[styles.deadlineValue, isDraftNearDeadline ? styles.deadlineValueWarning : null]}>{remainingTime}</Text>
+              <Text style={styles.rowMeta}>Deadline: {formatDateTime(submissionDeadline)}</Text>
+              {isDraftNearDeadline ? <Text style={styles.warningText}>Less than 24h left before survey expiration.</Text> : null}
+            </View>
+          ) : null}
 
           <View style={styles.locationCard}>
             <Text style={styles.detailTitle}>Region and vegetation</Text>
             {canEditSurvey ? <Text style={styles.rowMeta}>Tap to update directly from detail.</Text> : null}
-            <View style={styles.filterChipsRow}>
-              {REGION_OPTIONS.map((option) => (
-                <FilterChip
-                  key={`detail-region-${option.value}`}
-                  label={option.label}
-                  active={activeRegion === option.value}
-                  onPress={() => {
-                    if (!canEditSurvey) return;
-                    void onUpdateRegionVersion(selectedSurvey.id, option.value);
-                  }}
-                />
-              ))}
-            </View>
-            <View style={styles.filterChipsRow}>
-              {VEGETATION_STAGE_OPTIONS_BY_REGION[activeRegion].map((option) => (
-                <FilterChip
-                  key={`detail-stage-${option.value}`}
-                  label={option.label}
-                  active={activeVegetationStage === option.value}
-                  onPress={() => {
-                    if (!canEditSurvey) return;
-                    void onUpdateVegetationStage(selectedSurvey.id, option.value);
-                  }}
-                />
-              ))}
-            </View>
+            {canEditSurvey ? (
+              <>
+                <View style={styles.filterChipsRow}>
+                  {REGION_OPTIONS.map((option) => (
+                    <FilterChip
+                      key={`detail-region-${option.value}`}
+                      label={option.label}
+                      active={activeRegion === option.value}
+                      onPress={() => {
+                        if (!canEditSurvey) return;
+                        void onUpdateRegionVersion(selectedSurvey.id, option.value);
+                      }}
+                    />
+                  ))}
+                </View>
+                <View style={styles.filterChipsRow}>
+                  {VEGETATION_STAGE_OPTIONS_BY_REGION[activeRegion].map((option) => (
+                    <FilterChip
+                      key={`detail-stage-${option.value}`}
+                      label={option.label}
+                      active={activeVegetationStage === option.value}
+                      onPress={() => {
+                        if (!canEditSurvey) return;
+                        void onUpdateVegetationStage(selectedSurvey.id, option.value);
+                      }}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryItem}>Region: {activeRegionLabel}</Text>
+                <Text style={styles.summaryItem}>Vegetation: {activeVegetationLabel}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.factorTilesCard}>
             <View style={styles.factorTilesHeader}>
               <Text style={styles.detailTitle}>Factors</Text>
             </View>
-            {detailsLoadingSurveyId === selectedSurvey.id ? <Text style={styles.rowMeta}>Loading factors...</Text> : null}
+            {showFactorLoadingHint ? <Text style={styles.rowMeta}>Loading factors...</Text> : null}
             {displayedScores ? (
               <>
                 {useLocalDraftView ? <Text style={styles.rowMeta}>Showing local draft score (latest edits).</Text> : null}
@@ -648,25 +646,38 @@ export function SurveyDetailScreen({
                   </View>
                 </View>
                 <View style={styles.factorTilesGrid}>
-                  {displayedFactorEntries.map(([factorCode, factor]) => (
-                    <Pressable
-                      key={`factor-tile-${factorCode}`}
-                      style={[styles.factorTile, canEditSurvey && isFactorKey(factorCode) ? styles.factorTileEditable : null]}
-                      onPress={() => {
-                        if (!canEditSurvey) return;
-                        if (!isFactorKey(factorCode)) return;
-                        void onOpenFactor(selectedSurvey.id, factorCode);
-                      }}
-                    >
-                      <View style={styles.factorTileIconWrap}>
-                        <Ionicons name={FACTOR_ICONS[factorCode] ?? 'ellipse-outline'} size={16} color="#1f4f79" />
-                      </View>
-                      <Text style={styles.factorTileCode}>Factor {factorCode}</Text>
-                      <Text style={styles.factorTileClass}>{factor.selected_class}</Text>
-                      {canEditSurvey && isFactorKey(factorCode) ? <Text style={styles.factorTileHint}>Tap to update</Text> : null}
-                      {factor.warnings.length > 0 ? <Text style={styles.factorTileWarning}>warning</Text> : null}
-                    </Pressable>
-                  ))}
+                  {displayedFactorEntries.map(([factorCode, factor]) => {
+                    const factorCompleted = factor.selected_class !== 'Not filled';
+
+                    return (
+                      <Pressable
+                        key={`factor-tile-${factorCode}`}
+                        style={[
+                          styles.factorTile,
+                          factorCompleted ? styles.factorTileCompleted : styles.factorTilePending,
+                          canEditSurvey && isFactorKey(factorCode) ? styles.factorTileEditable : null
+                        ]}
+                        onPress={() => {
+                          if (!canEditSurvey) return;
+                          if (!isFactorKey(factorCode)) return;
+                          void onOpenFactor(selectedSurvey.id, factorCode);
+                        }}
+                      >
+                        <View style={[styles.factorTileIconWrap, factorCompleted ? styles.factorTileIconWrapCompleted : styles.factorTileIconWrapPending]}>
+                          <Ionicons name={FACTOR_ICONS[factorCode] ?? 'ellipse-outline'} size={16} color={factorCompleted ? '#216448' : '#1f4f79'} />
+                        </View>
+                        <Text style={styles.factorTileCode}>Factor {factorCode}</Text>
+                        <Text style={[styles.factorTileClass, factorCompleted ? styles.factorTileClassCompleted : styles.factorTileClassPending]}>
+                          {factor.selected_class}
+                        </Text>
+                        <View style={[styles.factorTileStatusPill, factorCompleted ? styles.factorTileStatusPillCompleted : styles.factorTileStatusPillPending]}>
+                          <Ionicons name={factorCompleted ? 'checkmark-circle' : 'ellipse-outline'} size={12} color={factorCompleted ? '#216448' : '#365f84'} />
+                        </View>
+                        {canEditSurvey && isFactorKey(factorCode) ? <Text style={styles.factorTileHint}>Tap to update</Text> : null}
+                        {factor.warnings.length > 0 ? <Text style={styles.factorTileWarning}>warning</Text> : null}
+                      </Pressable>
+                    );
+                  })}
                 </View>
               </>
             ) : (

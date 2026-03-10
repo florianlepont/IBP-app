@@ -1,5 +1,10 @@
 import { Text, View } from 'react-native';
-import { formatSurveyUiStatusLabel, resolveSurveyUiStatus } from '../app/survey-logic';
+import {
+  formatSurveySyncDisplayLabel,
+  formatSurveyWorkflowStatusLabel,
+  resolveSurveySyncDisplay,
+  resolveSurveyWorkflowStatus
+} from '../app/survey-logic';
 import { styles } from '../app/styles';
 import { LocalSurvey } from '../storage';
 
@@ -8,25 +13,37 @@ type SurveyBadgesProps = {
 };
 
 export function SurveyBadges({ survey }: SurveyBadgesProps) {
-  const uiStatus = resolveSurveyUiStatus(survey);
-  const statusBadgeStyle =
-    uiStatus === 'submitted'
+  const workflowStatus = resolveSurveyWorkflowStatus(survey);
+  const syncDisplay = resolveSurveySyncDisplay(survey);
+
+  const workflowBadgeStyle =
+    workflowStatus === 'submitted'
       ? styles.badgeStatusSubmitted
-      : uiStatus === 'expired' || uiStatus === 'sync_blocked'
+      : workflowStatus === 'expired'
         ? styles.badgeBlocked
-        : uiStatus === 'sync_error'
-          ? styles.badgeSyncFailed
-          : uiStatus === 'sync_pending'
-            ? styles.badgeSyncPending
-            : styles.badgeStatusDraft;
+        : workflowStatus === 'pending'
+          ? styles.badgeSyncPending
+          : styles.badgeStatusDraft;
+
+  const syncBadgeStyle =
+    syncDisplay === 'sync'
+      ? styles.badgeSyncSynced
+      : syncDisplay === 'sync_error'
+        ? styles.badgeSyncFailed
+        : syncDisplay === 'sync_blocked'
+          ? styles.badgeBlocked
+          : styles.badgeNeutral;
 
   return (
     <View style={styles.badgeRow}>
-      <View style={[styles.badge, statusBadgeStyle]}>
-        <Text style={styles.badgeText}>state: {formatSurveyUiStatusLabel(uiStatus)}</Text>
+      <View style={[styles.badge, workflowBadgeStyle]}>
+        <Text style={styles.badgeText}>{formatSurveyWorkflowStatusLabel(workflowStatus)}</Text>
+      </View>
+      <View style={[styles.badge, syncBadgeStyle]}>
+        <Text style={styles.badgeText}>{formatSurveySyncDisplayLabel(syncDisplay)}</Text>
       </View>
       <View style={[styles.badge, styles.badgeNeutral]}>
-        <Text style={styles.badgeText}>visibility: {survey.visibility}</Text>
+        <Text style={styles.badgeText}>{survey.visibility}</Text>
       </View>
     </View>
   );

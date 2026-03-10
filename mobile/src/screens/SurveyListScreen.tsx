@@ -3,7 +3,12 @@ import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '../app/styles';
 import { formatDateTime } from '../app/formatters';
-import { formatSurveyUiStatusLabel, resolveSurveyUiStatus } from '../app/survey-logic';
+import {
+  formatSurveySyncDisplayLabel,
+  formatSurveyWorkflowStatusLabel,
+  resolveSurveySyncDisplay,
+  resolveSurveyWorkflowStatus
+} from '../app/survey-logic';
 import {
   SurveyAttachmentFilter,
   SurveyBlockedFilter,
@@ -84,14 +89,12 @@ export function SurveyListScreen({
         />
 
         <View style={styles.filterGroupCompact}>
-          <Text style={styles.filterLabelCompact}>Status</Text>
+          <Text style={styles.filterLabelCompact}>Submit</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
             <FilterChip label="All" active={statusFilter === 'all'} onPress={() => setStatusFilter('all')} />
             <FilterChip label="Draft" active={statusFilter === 'draft'} onPress={() => setStatusFilter('draft')} />
             <FilterChip label="Submitted" active={statusFilter === 'submitted'} onPress={() => setStatusFilter('submitted')} />
             <FilterChip label="Expired" active={statusFilter === 'expired'} onPress={() => setStatusFilter('expired')} />
-            <FilterChip label="Synced" active={statusFilter === 'synced'} onPress={() => setStatusFilter('synced')} />
-            <FilterChip label="Error" active={statusFilter === 'error'} onPress={() => setStatusFilter('error')} />
           </ScrollView>
         </View>
 
@@ -184,17 +187,24 @@ export function SurveyListScreen({
             Boolean(attachment.local_uri?.trim())
           );
           const completionRate = Math.max(0, Math.min(100, survey.completion_rate));
-          const uiStatus = resolveSurveyUiStatus(survey);
-          const statusBadgeStyle =
-            uiStatus === 'submitted'
+          const workflowStatus = resolveSurveyWorkflowStatus(survey);
+          const syncDisplay = resolveSurveySyncDisplay(survey);
+          const workflowBadgeStyle =
+            workflowStatus === 'submitted'
               ? styles.badgeStatusSubmitted
-              : uiStatus === 'expired' || uiStatus === 'sync_blocked'
+              : workflowStatus === 'expired'
                 ? styles.badgeBlocked
-                : uiStatus === 'sync_error'
-                  ? styles.badgeSyncFailed
-                  : uiStatus === 'sync_pending'
-                    ? styles.badgeSyncPending
-                    : styles.badgeStatusDraft;
+                : workflowStatus === 'pending'
+                  ? styles.badgeSyncPending
+                  : styles.badgeStatusDraft;
+          const syncBadgeStyle =
+            syncDisplay === 'sync'
+              ? styles.badgeSyncSynced
+              : syncDisplay === 'sync_error'
+                ? styles.badgeSyncFailed
+                : syncDisplay === 'sync_blocked'
+                  ? styles.badgeBlocked
+                  : styles.badgeNeutral;
 
           return (
             <Pressable
@@ -221,11 +231,14 @@ export function SurveyListScreen({
                   </View>
                 </View>
                 <View style={styles.badgeRow}>
-                  <View style={[styles.badge, statusBadgeStyle]}>
-                    <Text style={styles.badgeText}>state: {formatSurveyUiStatusLabel(uiStatus)}</Text>
+                  <View style={[styles.badge, workflowBadgeStyle]}>
+                    <Text style={styles.badgeText}>{formatSurveyWorkflowStatusLabel(workflowStatus)}</Text>
+                  </View>
+                  <View style={[styles.badge, syncBadgeStyle]}>
+                    <Text style={styles.badgeText}>{formatSurveySyncDisplayLabel(syncDisplay)}</Text>
                   </View>
                   <View style={[styles.badge, styles.badgeNeutral]}>
-                    <Text style={styles.badgeText}>visibility: {survey.visibility}</Text>
+                    <Text style={styles.badgeText}>{survey.visibility}</Text>
                   </View>
                 </View>
               </View>
