@@ -129,6 +129,8 @@ export type FactorField = {
 
 export type SurveyListFilters = {
   surveyQuery: string;
+  surveyFromDate: string;
+  surveyToDate: string;
   statusFilter: SurveyStatusFilter;
   visibilityFilter: SurveyVisibilityFilter;
   syncFilter: SurveySyncFilter;

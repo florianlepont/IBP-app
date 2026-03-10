@@ -29,6 +29,11 @@ type ResetUserDataResponse = {
   message?: string;
 };
 
+type CreateReportResponse = {
+  id: string;
+  status: 'open' | 'reviewed';
+};
+
 export async function loginWithCredentials(
   apiUrl: string,
   email: string,
@@ -186,6 +191,20 @@ export async function fetchPublicMapItems(
     baseUrl: apiUrl,
     path: `/public/map-items${suffix}`,
     method: 'GET'
+  });
+}
+
+export async function createSurveyReport(
+  apiUrl: string,
+  accessToken: string,
+  input: { survey_id: string; reason: string }
+): Promise<CreateReportResponse> {
+  return apiRequest<CreateReportResponse>({
+    baseUrl: apiUrl,
+    path: '/reports',
+    method: 'POST',
+    token: accessToken,
+    json: input
   });
 }
 

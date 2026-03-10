@@ -13,8 +13,14 @@ export class SurveysController {
   constructor(private readonly surveysService: SurveysService) {}
 
   @Get()
-  async list(@CurrentUser() user: AuthenticatedUser, @Query('status') status?: string) {
-    const items = await this.surveysService.listForUser(user, status);
+  async list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('status') status?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('q') q?: string
+  ) {
+    const items = await this.surveysService.listForUser(user, { status, from, to, q });
     return { items, next_cursor: null };
   }
 

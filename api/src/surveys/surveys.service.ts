@@ -64,13 +64,35 @@ export class SurveysService {
     }
   }
 
-  async listForUser(user: AuthenticatedUser, status?: string): Promise<Array<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>> {
+  async listForUser(
+    user: AuthenticatedUser,
+    input?: { status?: string; from?: string; to?: string; q?: string }
+  ): Promise<Array<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>> {
     const filters: string[] = ['user_id = $1', 'deleted_at IS NULL'];
     const values: unknown[] = [user.id];
 
-    if (status) {
-      values.push(status);
+    const normalizedStatus = this.normalizeSurveyStatusFilter(input?.status);
+    if (normalizedStatus) {
+      values.push(normalizedStatus);
       filters.push(`status = $${values.length}`);
+    }
+
+    const fromDate = normalizeDateInput(input?.from);
+    if (fromDate) {
+      values.push(fromDate);
+      filters.push(`updated_at::date >= $${values.length}::date`);
+    }
+
+    const toDate = normalizeDateInput(input?.to);
+    if (toDate) {
+      values.push(toDate);
+      filters.push(`updated_at::date <= $${values.length}::date`);
+    }
+
+    const query = input?.q?.trim();
+    if (query) {
+      values.push(`%${query}%`);
+      filters.push(`site_name ILIKE $${values.length}`);
     }
 
     const result = await this.db.query<Pick<SurveyRow, 'id' | 'site_name' | 'status' | 'visibility' | 'updated_at' | 'sync_version'>>(
@@ -82,6 +104,19 @@ export class SurveysService {
     );
 
     return result.rows;
+  }
+
+  private normalizeSurveyStatusFilter(status?: string): SurveyRow['status'] | null {
+    if (!status || typeof status !== 'string') {
+      return null;
+    }
+
+    const normalized = status.trim().toLowerCase();
+    if (normalized === 'draft' || normalized === 'submitted' || normalized === 'synced' || normalized === 'error' || normalized === 'expired') {
+      return normalized;
+    }
+
+    return null;
   }
 
   async upsertForUser(

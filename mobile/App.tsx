@@ -281,6 +281,10 @@ export default function App() {
               attachmentsBySurvey={surveyList.attachmentsBySurvey}
               surveyQuery={surveyList.surveyQuery}
               setSurveyQuery={surveyList.setSurveyQuery}
+              surveyFromDate={surveyList.surveyFromDate}
+              setSurveyFromDate={surveyList.setSurveyFromDate}
+              surveyToDate={surveyList.surveyToDate}
+              setSurveyToDate={surveyList.setSurveyToDate}
               statusFilter={surveyList.statusFilter}
               setStatusFilter={surveyList.setStatusFilter}
               visibilityFilter={surveyList.visibilityFilter}
@@ -430,6 +434,7 @@ export default function App() {
         onChangeToDate={setPublicMapToDate}
         onChangeRegion={setPublicMapRegion}
         onLoad={handleLoadPublicMap}
+        onReportSurvey={surveySync.handleReportSurvey}
       />
     </View>
   );
