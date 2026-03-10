@@ -24,13 +24,16 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - User authentication.
 - Basic user profile management (first name, last name, display name, profile picture).
 - List of personal surveys (draft, submitted, synced).
+- Survey-to-parcel linkage using French cadastral parcel identifiers.
+- Longitudinal parcel tracking (multi-year history and comparison of IBP total + factor scores).
+- Survey versioning per parcel context (`1`, `2`, `3`, ...).
 - Guided IBP survey entry (required/optional fields).
 - On-demand pedagogical help during survey entry for complex IBP fields.
 - Photo attachments and geolocation.
 - Offline mode + synchronization.
 - Survey statuses (draft, expired, submitted, synced, error).
 - Personal point counter based on completed IBP surveys.
-- Basic public map of completed IBP surveys in France (with privacy constraints).
+- Explore map focused on parcel analysis in France (parcel status, latest IBP score, and access to parcel history).
 - User-controlled survey visibility: private (default) or public (shared with community).
 - Post-publication survey management (delete survey, switch private/public).
 - Association visibility surfaces in-app (mission, impact, actions).
@@ -41,6 +44,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Push notifications (new badges, ranking updates, moderation feedback).
 - PDF/Excel export.
 - KPI dashboards (average time, error rate, sync success rate).
+- Forest analytics and insights in Explore (regional score summaries, trends, factor distributions).
 - Multi-language support.
 - In-app documentation section (learning hub) to explore IBP methodology outside survey flow.
 - Advanced donation features (recurring donation, campaign-specific donation, donation impact dashboard).
@@ -50,9 +54,15 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 
 ## 5) Cross-Epic Business Rules
 - A survey is linked to a single site (or checkpoint).
+- A survey must be linked to one cadastral parcel (`parcel_id`) before submission.
+- GPS/manual address remains required for positioning, but is not the primary business identifier of a survey.
 - Some fields are mandatory depending on survey type.
 - A photo may be required to validate certain anomalies.
 - A survey can only be submitted when all required fields are completed.
+- A survey can only be submitted when cadastral linkage is valid (`parcel_id` resolved and confirmed).
+- Surveys on the same parcel are tracked longitudinally by observation year and version number.
+- Historical comparison must be available at parcel level (IBP total trend + factor-by-factor trend).
+- Explore is a parcel intelligence surface (parcel status + parcel scores), not a generic point-only map.
 - Each submitted survey has a visibility setting: `private` or `public`.
 - Only `public` surveys are eligible for community surfaces (public map, community feeds, public stats).
 - Changing a survey from `public` to `private` must remove it from community surfaces.
@@ -60,6 +70,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Pedagogical content must be accessible on demand during survey entry without interrupting form completion.
 - A draft survey expires 7 days after creation; after that, it becomes expired ("caduc") and cannot be submitted.
 - Public map data is anonymized (no personal data exposed).
+- At high zoom level, map surfaces (create/update/detail/explore) must display cadastral parcels and their study status (`studied` vs `not_studied`).
 - Points are awarded only for valid submitted surveys (not drafts).
 - Anti-cheat rules are needed (duplicate locations, spam submissions, fake entries).
 - Donation prompts must stay transparent and non-blocking for core app usage.
@@ -72,6 +83,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Epic E - Data Quality and Trust: `specifications/epics/epic-e-data-quality-trust.md`
 - Epic F - Participatory Experience and Gamification: `specifications/epics/epic-f-participatory-gamification.md`
 - Epic G - IBP Information, Association Visibility and Donation: `specifications/epics/epic-g-ibp-information-association-and-donation.md`
+- Epic H - Forest Insights and Analytics (V2): `specifications/epics/epic-h-forest-insights-analytics.md`
 
 ## 7) Suggested Delivery Priority
 1. Epic A - Access and Security
@@ -81,6 +93,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 5. Epic E - Data Quality and Trust
 6. Epic F - Participatory Experience and Gamification
 7. Epic G - IBP Information, Association Visibility and Donation
+8. Epic H - Forest Insights and Analytics (V2 backlog)
 
 ## 9) Non-Functional Requirements
 - Platforms:
@@ -99,7 +112,11 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - What are the exact roles and associated permissions (contributor, moderator)?
 - What is the conflict resolution policy during synchronization?
 - Are GPS and photos mandatory for all survey types?
+- Which cadastral source should be authoritative in production (Cadastre API, vector tiles mirror, or hybrid)?
+- What is the exact rule for multiple submissions on the same parcel and year (single submitted version vs multiple versions)?
+- What precision/tiling strategy should be used for parcel rendering in offline mode?
 - What exact scoring model should be used (base points, bonus, penalties)?
+- Which statistical rules should be applied for regional analytics (minimum sample size, outlier handling, confidence display)?
 - Is ranking individual-only, or also by teams/organizations?
 - What level of geographic precision is acceptable for public map display?
 - What moderation policy should Etats-Sauvages apply for disputed surveys?

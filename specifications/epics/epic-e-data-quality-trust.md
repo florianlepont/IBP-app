@@ -13,10 +13,12 @@ Acceptance criteria:
 - Main events are timestamped.
 
 ### US-E2 - Search a Survey
-As a user, I want to search a survey by site/date/status so I can find information quickly.
+As a user, I want to search a survey by site/parcel/date/status so I can find information quickly.
 
 Acceptance criteria:
 - A text search by site is available.
+- Parcel id filter is available.
+- Year/version filters are available.
 - Date and status filters are available.
 
 ### US-E3 - Report Suspicious Content

@@ -32,9 +32,12 @@ Excluded:
 
 ## 4) Global Form Rules
 - A survey is linked to one site/stand.
+- A survey must be linked to one French cadastral parcel (`parcel_id`) before submission.
+- For parcel follow-up, survey metadata includes `observation_year` and `version_number`.
 - A draft expires 7 days after creation.
 - After 7 days, status becomes `expired` and submission is rejected.
 - Submission requires all mandatory factors to be filled and scorable.
+- Submission is blocked when cadastral linkage metadata is missing/invalid.
 - Allowed factor scores are generally `{0,1,2,5}`.
 - Exception: factors `I` and `J` use `{0,2,5}`.
 - Subscores:
