@@ -1,7 +1,7 @@
 # V1 Technical Architecture (Blocks and Responsibilities)
 
 ## Status
-Aligned with accepted V1 data/API contracts (updated on 2026-03-08)
+Aligned with accepted V1 data/API contracts (updated on 2026-03-08). V1.1 parcel/history extension proposed on 2026-03-10.
 
 ## Objective
 Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP MVP.
@@ -12,7 +12,9 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Relational database
 - Object storage for photos
 - External services (maps/geocoding, donation provider)
+- Cadastral parcel service/layer (France)
 - Optional public read model for map surfaces
+- Optional analytics aggregation read model (V2)
 
 ## Responsibilities by Block
 
@@ -21,6 +23,7 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Local survey persistence (drafts and pending sync operations)
 - Sync queue handling (retry and error state management)
 - Photo capture and geolocation collection
+- Parcel lookup/selection UX and parcel history visualization
 - Profile management UI (`/me`)
 - Local auth token lifecycle (`/auth/login`, `/auth/refresh`, `/auth/logout`)
 
@@ -29,16 +32,19 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - User profile read/update
 - Survey CRUD and business workflow enforcement
 - Server-side IBP validation and score verification
+- Parcel linkage validation (`parcel_id`) and versioning checks (`observation_year`, `version_number`)
 - Final survey status transitions
 - Minimal audit trail recording
 - Attachment upload orchestration (record + signed upload URL)
 - Reporting and moderation actions
 - Public map read endpoint (anonymized data only)
+- Parcel history read endpoints (scores and factors over years)
 
 ### 3) PostgreSQL
-- Core tables: `users`, `auth_sessions`, `surveys`, `attachments`, `survey_events`, `reports`
+- Core tables: `users`, `auth_sessions`, `surveys`, `attachments`, `survey_events`, `reports`, `parcels`
 - Status integrity constraints
 - Query indexes for search (`site_name`, `status`, `date`)
+- Query indexes for parcel workflows (`parcel_id`, `observation_year`, `version_number`)
 - Role-based access for moderation endpoints
 
 ### 4) Object Storage
@@ -49,6 +55,16 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Materialized/read table for public map payloads
 - Reduced geographic precision
 - Strict exclusion of private/deleted surveys
+
+### 6) Cadastral Parcel Layer (V1.1 Addendum)
+- Resolve parcel from point (`lat/lng`) and serve parcel geometry metadata.
+- Provide high-zoom parcel status overlay (`studied` vs `not_studied`).
+- Support mobile caching strategy for recently viewed parcel areas.
+
+### 7) Analytics Aggregation Read Model (V2 Addendum)
+- Build region/year/factor aggregates for Explore insights.
+- Provide trend-oriented payloads without exposing personal data.
+- Refresh with scheduled jobs or incremental updates from submitted surveys.
 
 ## Main Technical Flows
 
@@ -90,6 +106,28 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 2. API returns anonymized items from read model
 3. Only surveys with `visibility=public` and not deleted are exposed
 
+### H) Parcel Resolution and Versioning
+1. Mobile captures GPS or manual address
+2. API/service resolves candidate cadastral parcel (`parcel_id`)
+3. User confirms parcel linkage in create/update flow
+4. API validates parcel existence and version sequencing at submit
+
+### I) Parcel History Comparison
+1. Mobile requests parcel survey history
+2. API returns chronological submitted surveys with totals and factor results
+3. Detail screen renders trend and deltas for comparison
+
+### J) High Zoom Parcel Map Status
+1. Client reaches high zoom threshold in create/update/detail/explore map
+2. Mobile requests parcel status layer by bbox/zoom
+3. API returns parcel statuses without personal data
+4. Client renders parcel boundaries and `studied`/`not_studied` state
+
+### K) Explore Analytics (V2)
+1. Client requests analytics aggregates (regions/factors/trends)
+2. API serves pre-aggregated read models
+3. UI renders insights with confidence/sample indicators
+
 ## Security and Compliance Baseline (V1)
 - TLS for all API communication
 - Encrypted local storage for sensitive mobile data
@@ -101,3 +139,5 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Advanced moderation workflows
 - Advanced push notification workflows
 - Full data warehouse architecture
+- Full national cadastral offline mirror on device
+- Explore advanced analytics dashboards (regional/global insights)

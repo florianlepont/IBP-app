@@ -11,6 +11,7 @@ As a contributor, I want to complete a guided form so I do not miss any required
 
 Acceptance criteria:
 - Required fields are clearly identified.
+- The form captures mandatory parcel linkage metadata (`parcel_id`, observation year, version).
 - The form includes all IBP factors (`A` to `J`) and each factor can be completed from the survey form flow.
 - Field types are appropriate (text, number, list, date, boolean).
 - Validation errors are displayed per field.
@@ -33,13 +34,15 @@ Acceptance criteria:
 - I can remove a photo before submission.
 - Photos remain linked to the survey after synchronization.
 
-### US-C4 - Geolocation
-As a contributor, I want to record the survey GPS location to ensure traceability.
+### US-C4 - Parcel Linkage From Location
+As a contributor, I want to position my survey and link it to a cadastral parcel to ensure traceability and longitudinal follow-up.
 
 Acceptance criteria:
-- During creation/submission, location is captured if permission is granted.
+- During creation, location is captured if permission is granted.
 - If geolocation is unavailable, the app asks the user to enter the address manually.
 - Manual address entry is required before submission when GPS coordinates are missing.
+- The app resolves/selects a cadastral parcel from location (or manual parcel search fallback) and stores `parcel_id`.
+- Submission is blocked if parcel linkage is missing or invalid.
 
 ### US-C5 - Submit Survey
 As a contributor, I want to submit a completed survey to share my observation.
@@ -47,6 +50,7 @@ As a contributor, I want to submit a completed survey to share my observation.
 Acceptance criteria:
 - Submission is blocked until all IBP factors (`A` to `J`) are completed and scoreable.
 - Submission is blocked if required non-factor data is missing (at least location data: GPS coordinates, or full manual address when GPS is unavailable).
+- Submission is blocked if cadastral parcel linkage metadata is missing (`parcel_id`, observation year, version).
 - When submission is blocked, the app displays an explicit reason and identifies missing items (missing factors and/or required fields).
 - Submission is blocked if the survey is older than 7 days; the survey transitions to status `expired`.
 - After a successful submission request, survey status transitions to `submitted` and the survey becomes read-only for data entry.
@@ -70,3 +74,12 @@ Acceptance criteria:
 - Default visibility is `private`.
 - I can change visibility later from survey detail.
 - `Public` surveys are shareable to community surfaces; `private` surveys remain visible only to the contributor and authorized moderators/admins.
+
+### US-C8 - Survey Versioning and Historical Context
+As a contributor, I want each new survey on the same parcel to be versioned and compared to previous years.
+
+Acceptance criteria:
+- A survey on a parcel has an explicit version number (`1`, `2`, `3`, ...) and observation year.
+- The app proposes a default next version when creating a new survey on an already studied parcel.
+- Before and during entry, the app can show previous scores for the same parcel (total and factors).
+- In survey detail, historical trend can be viewed without leaving the survey flow.

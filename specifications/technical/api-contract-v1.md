@@ -1,7 +1,7 @@
 # V1 API Contract
 
 ## Status
-Accepted for current scope (validated on 2026-03-08, non-exhaustive by design)
+Accepted for V1 baseline (validated on 2026-03-08, non-exhaustive by design). V1.1 parcel/history extension proposed on 2026-03-10.
 
 Base path: `/v1`
 
@@ -228,6 +228,10 @@ Request:
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
   "sync_version": 3,
   "site_name": "Foret de Rambouillet",
+  "parcel_id": "75101AB0123",
+  "observation_year": 2026,
+  "version_number": 2,
+  "previous_survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172b",
   "status": "submitted",
   "visibility": "private",
   "region_version": "ACA",
@@ -254,6 +258,12 @@ Request:
 - Manual fallback: `{ "source": "manual", "address_line": string, "postal_code": string, "city": string, "country": string }`
 - Submit validation requires either valid GPS coordinates or a complete manual fallback address.
 
+V1.1 addendum fields:
+- `parcel_id`: French cadastral parcel identifier (required at submit).
+- `observation_year`: integer year used for longitudinal history.
+- `version_number`: integer (`>=1`) for parcel-level survey versioning.
+- `previous_survey_id`: optional link to previous survey version on same parcel.
+
 Response `200`:
 ```json
 {
@@ -275,6 +285,9 @@ Response `200`:
     {
       "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
       "site_name": "Foret de Rambouillet",
+      "parcel_id": "75101AB0123",
+      "observation_year": 2026,
+      "version_number": 2,
       "status": "draft",
       "visibility": "private",
       "updated_at": "2026-03-08T11:00:00Z"
@@ -292,6 +305,10 @@ Response `200`:
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
   "site_name": "Foret de Rambouillet",
+  "parcel_id": "75101AB0123",
+  "observation_year": 2026,
+  "version_number": 2,
+  "previous_survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172b",
   "status": "draft",
   "visibility": "private",
   "region_version": "ACA",
@@ -392,6 +409,7 @@ Blocking checks include:
 - all required IBP factors complete and valid
 - survey not expired
 - location present with either GPS (`lat`,`lng`) or complete manual address fallback
+- parcel linkage complete and valid (`parcel_id`, `observation_year`, `version_number`)
 
 Response `200`:
 ```json
@@ -409,6 +427,7 @@ Response `200`:
 ```
 
 If location is missing/invalid, API returns `422` with error code `location_required`.
+If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 
 ### DELETE /surveys/{id}
 Soft-delete a survey.
@@ -753,6 +772,136 @@ Response `200`:
 }
 ```
 
+### GET /public/parcels/status?bbox=&zoom=&year=
+Return parcel study status for high zoom map rendering.
+
+Rules:
+- Endpoint is enabled only from configured zoom threshold (for example `zoom >= 15`).
+- Output excludes personal data.
+- `study_status` is derived from submitted surveys history.
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "parcel_id": "75101AB0123",
+      "study_status": "studied",
+      "latest_observation_year": 2026,
+      "latest_ibp_total": 28
+    }
+  ]
+}
+```
+
+### GET /parcels/resolve?lat=&lng=
+Resolve a cadastral parcel candidate from coordinates.
+
+Response `200`:
+```json
+{
+  "parcel": {
+    "parcel_id": "75101AB0123",
+    "commune_code": "75101",
+    "section": "AB",
+    "number": "0123",
+    "centroid": { "lat": 48.8566, "lng": 2.3522 }
+  }
+}
+```
+
+### GET /parcels/{parcel_id}/surveys/history?limit=
+Return longitudinal survey history for one parcel.
+
+Response `200`:
+```json
+{
+  "parcel_id": "75101AB0123",
+  "items": [
+    {
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172b",
+      "observation_year": 2025,
+      "version_number": 1,
+      "scores": {
+        "ibp_total": 24,
+        "ibp_peuplement_gestion": 17,
+        "ibp_contexte": 7
+      },
+      "factor_results": {},
+      "submitted_at": "2025-06-10T09:00:00Z"
+    },
+    {
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "observation_year": 2026,
+      "version_number": 2,
+      "scores": {
+        "ibp_total": 28,
+        "ibp_peuplement_gestion": 20,
+        "ibp_contexte": 8
+      },
+      "factor_results": {},
+      "submitted_at": "2026-06-12T09:00:00Z"
+    }
+  ]
+}
+```
+
+## 6) Analytics (V2 Addendum, Out of MVP)
+
+### GET /analytics/regions?year_from=&year_to=
+Return aggregated IBP metrics by region.
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "region_code": "ACA",
+      "year_from": 2024,
+      "year_to": 2026,
+      "sample_size": 1834,
+      "ibp_total_avg": 27.4,
+      "ibp_total_median": 27.0,
+      "ibp_pg_avg": 18.9,
+      "ibp_context_avg": 8.5,
+      "refreshed_at": "2026-03-10T12:00:00Z"
+    }
+  ]
+}
+```
+
+### GET /analytics/factors/distribution?region=&year_from=&year_to=
+Return factor distribution analytics (A..J) for selected scope.
+
+Response `200`:
+```json
+{
+  "region_code": "ACA",
+  "year_from": 2024,
+  "year_to": 2026,
+  "sample_size": 1834,
+  "factors": {
+    "A": { "avg": 2.4, "median": 2.0 },
+    "B": { "avg": 2.1, "median": 2.0 }
+  },
+  "refreshed_at": "2026-03-10T12:00:00Z"
+}
+```
+
+### GET /analytics/parcels/trends?parcel_id=
+Return score trend for one parcel over years/versions.
+
+Response `200`:
+```json
+{
+  "parcel_id": "75101AB0123",
+  "items": [
+    { "observation_year": 2025, "version_number": 1, "ibp_total": 24 },
+    { "observation_year": 2026, "version_number": 2, "ibp_total": 28 }
+  ]
+}
+```
+
 ## Standard Error Codes
 - `400` validation error
 - `401` unauthorized
@@ -762,3 +911,9 @@ Response `200`:
 - `409` conflict/version mismatch
 - `422` business rule violation
 - `500` internal server error
+
+Common business error codes (non-exhaustive):
+- `location_required`
+- `parcel_required`
+- `parcel_invalid`
+- `parcel_version_conflict`
