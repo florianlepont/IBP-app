@@ -166,7 +166,7 @@ export default function App() {
         autosaveSignatureRef.current = JSON.stringify(initialDraftInput);
         setEditingSurveyId(created.id);
         surveyList.setSelectedSurveyId(created.id);
-        surveySync.setStatus(`Draft ${created.id} initialized. Autosave is active.`);
+        surveySync.setStatus(`Draft ${created.id} initialized.`);
       } catch (error) {
         surveySync.setStatus(`Draft bootstrap error: ${(error as Error).message}`);
       } finally {
