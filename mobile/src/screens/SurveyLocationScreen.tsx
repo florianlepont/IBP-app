@@ -218,27 +218,6 @@ export function SurveyLocationScreen({
               </View>
             ) : null}
           </View>
-          <Text style={styles.rowMeta}>You can also enter GPS coordinates manually.</Text>
-          <Text style={styles.label}>Latitude *</Text>
-          <TextInput
-            style={styles.input}
-            value={gpsLocation.lat}
-            onChangeText={(value) => setGpsLocationField('lat', value)}
-            keyboardType="decimal-pad"
-            placeholder="48.8566"
-          />
-          <Text style={styles.label}>Longitude *</Text>
-          <TextInput
-            style={styles.input}
-            value={gpsLocation.lng}
-            onChangeText={(value) => setGpsLocationField('lng', value)}
-            keyboardType="decimal-pad"
-            placeholder="2.3522"
-          />
-
-          {formErrors.gps.lat || formErrors.gps.lng ? (
-            <Text style={styles.fieldError}>{formErrors.gps.lat ?? formErrors.gps.lng}</Text>
-          ) : null}
         </View>
       ) : locationViewMode === 'coordinates' ? (
         <View style={styles.detailSection}>

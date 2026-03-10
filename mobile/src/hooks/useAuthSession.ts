@@ -183,14 +183,27 @@ export function useAuthSession({
 
         let nextAccessToken = stored.accessToken;
         let nextRefreshToken = stored.refreshToken;
-        let user = nextAccessToken ? await getMyProfile(apiUrl, nextAccessToken).catch(() => null) : null;
+        let lastProfileError: unknown = null;
+        let user = nextAccessToken
+          ? await getMyProfile(apiUrl, nextAccessToken).catch((error) => {
+              lastProfileError = error;
+              return null;
+            })
+          : null;
 
         if (!user) {
-          const refreshed = await refreshSessionTokens(stored.refreshToken);
-          if (refreshed) {
-            nextAccessToken = refreshed.accessToken;
-            nextRefreshToken = refreshed.refreshToken;
-            user = await getMyProfile(apiUrl, nextAccessToken).catch(() => null);
+          try {
+            const refreshed = await refreshAuthTokens(apiUrl, stored.refreshToken);
+            if (refreshed.access_token && refreshed.refresh_token) {
+              nextAccessToken = refreshed.access_token;
+              nextRefreshToken = refreshed.refresh_token;
+              user = await getMyProfile(apiUrl, nextAccessToken).catch((error) => {
+                lastProfileError = error;
+                return null;
+              });
+            }
+          } catch {
+            // Keep stored tokens and retry profile loading later when network is back.
           }
         }
 
@@ -199,8 +212,15 @@ export function useAuthSession({
         }
 
         if (!user) {
-          await clearSession();
-          reportStatus('session', 'error', 'Session expired. Please login');
+          if (isUnauthorizedError(lastProfileError)) {
+            await clearSession();
+            reportStatus('session', 'error', 'Session expired. Please login');
+            return;
+          }
+          setAccessToken(nextAccessToken);
+          setRefreshToken(nextRefreshToken);
+          reportStatus('session', 'success', 'Session restored (offline). Profile will load when API is reachable');
+          setSessionRestoring(false);
           return;
         }
 
@@ -228,7 +248,7 @@ export function useAuthSession({
     return () => {
       active = false;
     };
-  }, [apiUrl, clearSession, refreshSessionTokens, reportStatus, setProfileFromUser]);
+  }, [apiUrl, clearSession, reportStatus, setProfileFromUser]);
 
   const handleLogin = useCallback(async (): Promise<void> => {
     try {

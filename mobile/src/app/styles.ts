@@ -696,6 +696,14 @@ export const styles = StyleSheet.create({
     padding: 8,
     gap: 5
   },
+  factorTileCompleted: {
+    borderColor: '#a9d8bf',
+    backgroundColor: '#eff9f3'
+  },
+  factorTilePending: {
+    borderColor: '#dbe7f4',
+    backgroundColor: '#f7fbff'
+  },
   factorTileEditable: {
     borderColor: '#b7d3f0',
     backgroundColor: '#f2f8ff'
@@ -708,6 +716,12 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  factorTileIconWrapCompleted: {
+    backgroundColor: '#dff3e7'
+  },
+  factorTileIconWrapPending: {
+    backgroundColor: '#eaf3ff'
+  },
   factorTileCode: {
     fontSize: 11,
     color: '#3e6285',
@@ -717,6 +731,26 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#1e4b74'
+  },
+  factorTileClassCompleted: {
+    color: '#216448'
+  },
+  factorTileClassPending: {
+    color: '#4f6983'
+  },
+  factorTileStatusPill: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    width: 18,
+    height: 18,
+    borderRadius: 9
+  },
+  factorTileStatusPillCompleted: {
+    backgroundColor: '#ddf3e5'
+  },
+  factorTileStatusPillPending: {
+    backgroundColor: '#e8f1fb'
   },
   factorTileWarning: {
     fontSize: 10,

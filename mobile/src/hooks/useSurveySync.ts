@@ -127,10 +127,12 @@ export function useSurveySync({
   const syncInProgressRef = useRef(false);
   const lastOnlineStateRef = useRef<boolean | null>(null);
   const lastAutoSyncAtRef = useRef<number>(0);
+  const detailAutoLoadCooldownUntilRef = useRef<Record<string, number>>({});
 
   const clearSurveySessionState = useCallback((): void => {
     setSurveyDetails({});
     setSurveyEvents({});
+    detailAutoLoadCooldownUntilRef.current = {};
   }, []);
 
   const reportStatus = useCallback((scope: 'session' | 'auth' | 'profile' | 'sync' | 'survey' | 'attachment' | 'debug', state: 'idle' | 'running' | 'success' | 'error', message: string): void => {
@@ -838,10 +840,15 @@ export function useSurveySync({
       const payload = await withAuthRetry((token) => loadSurveyDetail(apiUrl, token, surveyId));
 
       setSurveyDetails((previous) => ({ ...previous, [surveyId]: payload }));
+      if (detailAutoLoadCooldownUntilRef.current[surveyId]) {
+        delete detailAutoLoadCooldownUntilRef.current[surveyId];
+      }
       if (!silent) {
         setStatus(`Canonical details loaded for ${surveyId}`);
       }
     } catch (error) {
+      // Prevent endless request loops on non-fetchable surveys (local-only or server errors).
+      detailAutoLoadCooldownUntilRef.current[surveyId] = Date.now() + 60_000;
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession();
         if (!silent) {
@@ -960,14 +967,25 @@ export function useSurveySync({
     if (!selectedSurveyId || !accessToken) {
       return;
     }
+    const selectedSurvey = surveys.find((survey) => survey.id === selectedSurveyId);
+    if (!selectedSurvey) {
+      return;
+    }
+    if (selectedSurvey.status !== 'submitted' && selectedSurvey.status !== 'expired' && selectedSurvey.sync_state !== 'synced') {
+      return;
+    }
     if (surveyDetails[selectedSurveyId]) {
       return;
     }
     if (detailsLoadingSurveyId === selectedSurveyId) {
       return;
     }
+    const cooldownUntil = detailAutoLoadCooldownUntilRef.current[selectedSurveyId] ?? 0;
+    if (cooldownUntil > Date.now()) {
+      return;
+    }
     void handleLoadCanonicalDetails(selectedSurveyId, { silent: true });
-  }, [selectedSurveyId, accessToken, surveyDetails, detailsLoadingSurveyId]);
+  }, [selectedSurveyId, accessToken, surveys, surveyDetails, detailsLoadingSurveyId]);
 
   useEffect(() => {
     if (!selectedSurveyId || !accessToken) {

@@ -2,9 +2,13 @@ import { normalizeVegetationStageForRegion } from './vegetation';
 import {
   buildAttachmentCountBySurvey,
   filterAndSortSurveys,
+  formatSurveySyncDisplayLabel,
   formatSurveyUiStatusLabel,
+  formatSurveyWorkflowStatusLabel,
   getSubmitBlockReason,
   resolveEffectiveSurveyStatus,
+  resolveSurveySyncDisplay,
+  resolveSurveyWorkflowStatus,
   resolveSurveyUiStatus
 } from './survey-logic';
 import { LocalAttachment, LocalSurvey } from '../storage';
@@ -144,18 +148,17 @@ describe('filterAndSortSurveys', () => {
     expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-b', 's-d', 's-c']);
   });
 
-  test('filters by status synced without overriding submitted status', () => {
+  test('filters by lifecycle status draft regardless of sync state', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
-    const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'synced' }, attachmentCounts);
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('s-d');
+    const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'draft' }, attachmentCounts);
+    expect(result.map((survey) => survey.id)).toEqual(['s-a', 's-c', 's-d']);
   });
 
-  test('filters by status error using failed sync_state', () => {
+  test('filters by lifecycle status submitted', () => {
     const attachmentCounts = buildAttachmentCountBySurvey(attachments);
-    const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'error' }, attachmentCounts);
+    const result = filterAndSortSurveys(surveys, { ...baseFilters, statusFilter: 'submitted' }, attachmentCounts);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('s-c');
+    expect(result[0].id).toBe('s-b');
   });
 
   test('filters by status expired from survey status', () => {
@@ -194,6 +197,24 @@ describe('filterAndSortSurveys', () => {
     expect(formatSurveyUiStatusLabel('submitted')).toBe('Submitted');
     expect(formatSurveyUiStatusLabel('sync_error')).toBe('Sync error');
     expect(formatSurveyUiStatusLabel('sync_pending')).toBe('Sync pending');
+  });
+
+  test('resolves workflow status for explicit badge display', () => {
+    expect(resolveSurveyWorkflowStatus(makeSurvey({ status: 'submitted', sync_state: 'synced' }))).toBe('submitted');
+    expect(resolveSurveyWorkflowStatus(makeSurvey({ status: 'draft', sync_state: 'pending' }))).toBe('pending');
+    expect(resolveSurveyWorkflowStatus(makeSurvey({ status: 'draft', sync_state: 'synced' }))).toBe('draft');
+    expect(resolveSurveyWorkflowStatus(makeSurvey({ status: 'expired', sync_state: 'failed' }))).toBe('expired');
+  });
+
+  test('resolves sync display for explicit badge display', () => {
+    expect(resolveSurveySyncDisplay(makeSurvey({ status: 'submitted', sync_state: 'synced' }))).toBe('sync');
+    expect(resolveSurveySyncDisplay(makeSurvey({ status: 'draft', sync_state: 'synced' }))).toBe('local');
+    expect(resolveSurveySyncDisplay(makeSurvey({ status: 'draft', sync_state: 'pending' }))).toBe('local');
+    expect(resolveSurveySyncDisplay(makeSurvey({ status: 'draft', sync_state: 'failed' }))).toBe('sync_error');
+    expect(resolveSurveySyncDisplay(makeSurvey({ status: 'draft', sync_state: 'failed', sync_blocked: 1 }))).toBe('sync_blocked');
+    expect(formatSurveySyncDisplayLabel('sync')).toBe('Sync');
+    expect(formatSurveySyncDisplayLabel('local')).toBe('Local');
+    expect(formatSurveyWorkflowStatusLabel('pending')).toBe('Pending');
   });
 });
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_SURVEY_FORM, defaultVegetationStageForRegion, normalizeVegetationStageForRegion } from '../app/constants';
 import { computeRetainedScoresFromRawFactors } from '../app/ibp-scoring';
+import { parseFiniteNumberInput } from '../app/number-utils';
 import {
   FactorField,
   FactorRetainedScore,
@@ -26,13 +27,8 @@ const toTextMaybe = (value: unknown): string => {
 const asObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
-const toFiniteNumber = (value: string): number | null => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
 const toFiniteNumberInRange = (value: string, options?: { min?: number; max?: number; integer?: boolean }): number | null => {
-  const parsed = toFiniteNumber(value);
+  const parsed = parseFiniteNumberInput(value);
   if (parsed === null) return null;
   if (options?.integer && !Number.isInteger(parsed)) return null;
   if (typeof options?.min === 'number' && parsed < options.min) return null;
@@ -193,9 +189,9 @@ export function useSurveyForm() {
       };
     }
 
-    const lat = toFiniteNumber(gpsLocation.lat);
-    const lng = toFiniteNumber(gpsLocation.lng);
-    const accuracy = toFiniteNumber(gpsLocation.accuracy_m);
+    const lat = parseFiniteNumberInput(gpsLocation.lat);
+    const lng = parseFiniteNumberInput(gpsLocation.lng);
+    const accuracy = parseFiniteNumberInput(gpsLocation.accuracy_m);
 
     if (lat !== null && lng !== null) {
       return {

@@ -96,6 +96,41 @@ export const formatSurveyUiStatusLabel = (uiStatus: SurveyUiStatus): string => {
   return 'Draft';
 };
 
+export type SurveyWorkflowStatus = 'draft' | 'pending' | 'submitted' | 'expired';
+
+export const resolveSurveyWorkflowStatus = (survey: LocalSurvey): SurveyWorkflowStatus => {
+  if (survey.status === 'submitted') return 'submitted';
+  if (survey.status === 'expired') return 'expired';
+  if (survey.sync_state === 'pending') return 'pending';
+  return 'draft';
+};
+
+export const formatSurveyWorkflowStatusLabel = (status: SurveyWorkflowStatus): string => {
+  if (status === 'submitted') return 'Submitted';
+  if (status === 'expired') return 'Expired';
+  if (status === 'pending') return 'Pending';
+  return 'Draft';
+};
+
+export type SurveySyncDisplay = 'local' | 'sync' | 'sync_error' | 'sync_blocked';
+
+export const resolveSurveySyncDisplay = (survey: LocalSurvey): SurveySyncDisplay => {
+  if (survey.sync_state === 'failed') {
+    return survey.sync_blocked === 1 ? 'sync_blocked' : 'sync_error';
+  }
+  if (survey.status === 'submitted' && survey.sync_state === 'synced') {
+    return 'sync';
+  }
+  return 'local';
+};
+
+export const formatSurveySyncDisplayLabel = (syncDisplay: SurveySyncDisplay): string => {
+  if (syncDisplay === 'sync') return 'Sync';
+  if (syncDisplay === 'sync_error') return 'Sync error';
+  if (syncDisplay === 'sync_blocked') return 'Sync blocked';
+  return 'Local';
+};
+
 export const filterAndSortSurveys = (
   surveys: LocalSurvey[],
   filters: SurveyListFilters,
@@ -106,12 +141,13 @@ export const filterAndSortSurveys = (
   const toBoundary = parseDateFilterBoundary(filters.surveyToDate, 'end');
 
   const filtered = surveys.filter((survey) => {
-    const effectiveStatus = resolveEffectiveSurveyStatus(survey);
+    const lifecycleStatus: 'draft' | 'submitted' | 'expired' =
+      survey.status === 'submitted' ? 'submitted' : survey.status === 'expired' ? 'expired' : 'draft';
     const updatedAtTs = parseDate(survey.updated_at);
     if (fromBoundary !== null && updatedAtTs < fromBoundary) return false;
     if (toBoundary !== null && updatedAtTs > toBoundary) return false;
 
-    if (filters.statusFilter !== 'all' && effectiveStatus !== filters.statusFilter) {
+    if (filters.statusFilter !== 'all' && lifecycleStatus !== filters.statusFilter) {
       return false;
     }
     if (filters.visibilityFilter !== 'all' && survey.visibility !== filters.visibilityFilter) return false;
