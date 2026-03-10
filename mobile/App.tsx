@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { DEFAULT_API_URL } from './src/app/constants';
+import { fetchPublicMapItems } from './src/api/ibp-api';
 import { styles } from './src/app/styles';
 import { FactorKey, PublicMapItem, SurveyDetailTab } from './src/app/types';
 import { verifyManualLocation } from './src/app/verify-manual-location';
@@ -234,32 +235,11 @@ export default function App() {
   const handleLoadPublicMap = async (): Promise<void> => {
     try {
       setPublicMapLoading(true);
-      const baseUrl = apiUrl.replace(/\/+$/, '');
-      const queryParts: string[] = [];
-      if (publicMapFromDate.trim()) {
-        queryParts.push(`from=${encodeURIComponent(publicMapFromDate.trim())}`);
-      }
-      if (publicMapToDate.trim()) {
-        queryParts.push(`to=${encodeURIComponent(publicMapToDate.trim())}`);
-      }
-      if (publicMapRegion.trim()) {
-        queryParts.push(`region=${encodeURIComponent(publicMapRegion.trim().toUpperCase())}`);
-      }
-
-      const suffix = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-      const response = await fetch(`${baseUrl}/public/map-items${suffix}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const payload = await fetchPublicMapItems(apiUrl, {
+        from: publicMapFromDate,
+        to: publicMapToDate,
+        region: publicMapRegion
       });
-
-      if (!response.ok) {
-        surveySync.setStatus(`Public map load failed: HTTP ${response.status}`);
-        return;
-      }
-
-      const payload = (await response.json()) as { items?: PublicMapItem[] };
       const items = Array.isArray(payload.items) ? payload.items : [];
       setPublicMapItems(items);
       surveySync.setStatus(`Public map loaded: ${items.length} item(s)`);

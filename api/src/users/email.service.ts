@@ -16,7 +16,8 @@ export class EmailService {
   private readonly fromAddress: string;
 
   constructor() {
-    this.smtpEnabled = (process.env.SMTP_ENABLED ?? 'false').toLowerCase() === 'true';
+    const isTestEnv = (process.env.NODE_ENV ?? '').toLowerCase() === 'test';
+    this.smtpEnabled = !isTestEnv && (process.env.SMTP_ENABLED ?? 'false').toLowerCase() === 'true';
     this.fromAddress = process.env.SMTP_FROM ?? 'noreply@ibp.local';
 
     if (!this.smtpEnabled) {

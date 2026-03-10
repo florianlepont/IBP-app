@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  HttpException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException
@@ -14,6 +13,8 @@ import { dirname, join } from 'path';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
 import { IbpRulesService } from './ibp-rules.service';
+import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from './public-map.utils';
+import { mapSyncError } from './sync-error.utils';
 import {
   AttachmentRow,
   CreateAttachmentBody,
@@ -757,13 +758,13 @@ export class SurveysService {
     ];
     const values: unknown[] = [];
 
-    const fromDate = this.normalizeDateInput(input?.from);
+    const fromDate = normalizeDateInput(input?.from);
     if (fromDate) {
       values.push(fromDate);
       filters.push(`submitted_at::date >= $${values.length}::date`);
     }
 
-    const toDate = this.normalizeDateInput(input?.to);
+    const toDate = normalizeDateInput(input?.to);
     if (toDate) {
       values.push(toDate);
       filters.push(`submitted_at::date <= $${values.length}::date`);
@@ -774,13 +775,7 @@ export class SurveysService {
       filters.push(`region_version = $${values.length}`);
     }
 
-    const result = await this.db.query<{
-      id: string;
-      region_version: string | null;
-      location: Record<string, unknown>;
-      scores: Record<string, unknown>;
-      submitted_at: string | null;
-    }>(
+    const result = await this.db.query<PublicMapDbRow>(
       `SELECT id, region_version, location, scores, submitted_at::text
        FROM surveys
        WHERE ${filters.join(' AND ')}
@@ -790,7 +785,7 @@ export class SurveysService {
     );
 
     const items = result.rows
-      .map((row) => this.toPublicMapItem(row))
+      .map((row) => toPublicMapItem(row))
       .filter(
         (
           item
@@ -929,7 +924,7 @@ export class SurveysService {
 
         throw new BadRequestException(`Unsupported sync operation: ${entity}.${action}`);
       } catch (error) {
-        const mapped = this.mapSyncError(error);
+        const mapped = mapSyncError(error);
         results.push({
           client_ref: clientRef,
           entity,
@@ -1171,86 +1166,6 @@ export class SurveysService {
     }
   }
 
-  private mapSyncError(error: unknown): {
-    status: 'retryable_error' | 'fatal_error';
-    error: { code: string; message: string; http_status?: number; details?: Record<string, unknown> };
-  } {
-    let httpStatus: number | undefined;
-    if (error instanceof HttpException) {
-      httpStatus = error.getStatus();
-    }
-
-    const extracted = this.extractSyncErrorPayload(error);
-    const retryable = typeof httpStatus === 'number' ? httpStatus >= 500 || httpStatus === 429 : true;
-    const code = extracted.code
-      ? extracted.code
-      : retryable
-        ? this.defaultRetryableSyncCode(httpStatus)
-        : typeof httpStatus === 'number'
-          ? `http_${httpStatus}`
-          : 'sync_fatal_error';
-
-    return {
-      status: retryable ? 'retryable_error' : 'fatal_error',
-      error: {
-        code,
-        message: extracted.message,
-        http_status: httpStatus,
-        details: extracted.details
-      }
-    };
-  }
-
-  private extractSyncErrorPayload(error: unknown): {
-    code?: string;
-    message: string;
-    details?: Record<string, unknown>;
-  } {
-    if (error instanceof HttpException) {
-      const response = error.getResponse();
-      if (typeof response === 'string' && response.trim().length > 0) {
-        return { message: response };
-      }
-      if (response && typeof response === 'object') {
-        const objectResponse = response as {
-          code?: unknown;
-          message?: unknown;
-          details?: unknown;
-          error?: unknown;
-        };
-        const message = Array.isArray(objectResponse.message)
-          ? objectResponse.message.map((value) => String(value)).join(' | ')
-          : typeof objectResponse.message === 'string'
-            ? objectResponse.message
-            : typeof objectResponse.error === 'string'
-              ? objectResponse.error
-              : 'Sync operation failed';
-        const code = typeof objectResponse.code === 'string' ? objectResponse.code : undefined;
-        const details =
-          objectResponse.details && typeof objectResponse.details === 'object' && !Array.isArray(objectResponse.details)
-            ? (objectResponse.details as Record<string, unknown>)
-            : undefined;
-        return { code, message, details };
-      }
-    }
-
-    if (error instanceof Error && error.message) {
-      return { message: error.message };
-    }
-
-    return { message: 'Unexpected sync failure' };
-  }
-
-  private defaultRetryableSyncCode(httpStatus?: number): string {
-    if (httpStatus === 429) {
-      return 'rate_limited';
-    }
-    if (httpStatus === 502 || httpStatus === 503 || httpStatus === 504 || typeof httpStatus !== 'number') {
-      return 'network_gateway_error';
-    }
-    return 'transient_upstream_error';
-  }
-
   private normalizeChangesLimit(limitRaw?: number): number {
     if (!Number.isFinite(limitRaw)) return 50;
     const integer = Math.trunc(limitRaw ?? 0);
@@ -1294,66 +1209,4 @@ export class SurveysService {
     return value;
   }
 
-  private normalizeDateInput(value: string | undefined): string | null {
-    if (!value || typeof value !== 'string') {
-      return null;
-    }
-    const trimmed = value.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      return null;
-    }
-    return trimmed;
-  }
-
-  private toPublicMapItem(row: {
-    id: string;
-    region_version: string | null;
-    location: Record<string, unknown>;
-    scores: Record<string, unknown>;
-    submitted_at: string | null;
-  }):
-    | {
-        survey_id: string;
-        display_location: { lat: number; lng: number };
-        survey_date: string;
-        region_code: string;
-        ibp_total: number;
-      }
-    | null {
-    const lat = this.asFiniteNumber(row.location?.lat);
-    const lng = this.asFiniteNumber(row.location?.lng);
-    if (lat === null || lng === null) {
-      return null;
-    }
-
-    const ibpTotal = this.asFiniteNumber(row.scores?.ibp_total) ?? 0;
-    const surveyDate =
-      typeof row.submitted_at === 'string' && row.submitted_at.length >= 10
-        ? row.submitted_at.slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
-
-    return {
-      survey_id: row.id,
-      display_location: {
-        lat: Number(lat.toFixed(2)),
-        lng: Number(lng.toFixed(2))
-      },
-      survey_date: surveyDate,
-      region_code: row.region_version ?? 'unknown',
-      ibp_total: ibpTotal
-    };
-  }
-
-  private asFiniteNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
-    }
-    return null;
-  }
 }

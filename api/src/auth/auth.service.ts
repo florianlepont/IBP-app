@@ -1,11 +1,18 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { DatabaseService } from '../database/database.service';
 import { AuthenticatedUser } from './auth.types';
 
 type UserRow = AuthenticatedUser & { password_hash: string | null };
+type RefreshSessionRow = {
+  id: string;
+  user_id: string;
+  refresh_token_hash: string;
+  expires_at: string;
+  revoked_at: string | null;
+};
 
 type TokenKind = 'access' | 'refresh';
 
@@ -19,33 +26,103 @@ export class AuthService {
       throw new UnauthorizedException('Email and password are required');
     }
 
-    const user = await this.findOrCreateUser(normalizedEmail, password);
+    let user = await this.findUserByEmail(normalizedEmail);
+    if (!user) {
+      if (!this.isLoginOrCreateEnabled()) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      user = await this.createUser(normalizedEmail, password);
+    }
+
     const passwordOk = await this.verifyOrBootstrapPassword(user, password);
 
     if (!passwordOk) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const refreshToken = await this.issueRefreshToken(user.id);
+
     return {
       access_token: this.signToken(user.id, 'access'),
-      refresh_token: this.signToken(user.id, 'refresh'),
+      refresh_token: refreshToken,
       user: this.toPublicUser(user)
     };
   }
 
   async refresh(refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {
-    const userId = this.verifyToken(refreshToken, 'refresh');
+    const { userId, sessionId } = this.verifyRefreshToken(refreshToken);
     await this.requireUserById(userId);
+
+    const existing = await this.getActiveRefreshSession(userId, sessionId);
+    if (!existing) {
+      throw new UnauthorizedException('Invalid refresh session');
+    }
+
+    if (existing.expires_at && Date.parse(existing.expires_at) <= Date.now()) {
+      await this.revokeSession(existing.id).catch(() => undefined);
+      throw new UnauthorizedException('Refresh session expired');
+    }
+
+    if (existing.refresh_token_hash !== this.hashToken(refreshToken)) {
+      await this.revokeSession(existing.id).catch(() => undefined);
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const nextSessionId = randomUUID();
+    const nextRefreshToken = this.signToken(userId, 'refresh', { sessionId: nextSessionId });
+    const nextRefreshExpiresAt = this.extractTokenExpiry(nextRefreshToken);
+
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      const revoked = await client.query(
+        `UPDATE auth_sessions
+         SET revoked_at = NOW(),
+             replaced_by_session_id = $2,
+             last_used_at = NOW()
+         WHERE id = $1
+           AND revoked_at IS NULL`,
+        [existing.id, nextSessionId]
+      );
+      if (!revoked.rowCount) {
+        throw new UnauthorizedException('Refresh session already used');
+      }
+
+      await client.query(
+        `INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [nextSessionId, userId, this.hashToken(nextRefreshToken), nextRefreshExpiresAt]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
 
     return {
       access_token: this.signToken(userId, 'access'),
-      refresh_token: this.signToken(userId, 'refresh')
+      refresh_token: nextRefreshToken
     };
   }
 
   async getUserFromAccessToken(accessToken: string): Promise<AuthenticatedUser> {
-    const userId = this.verifyToken(accessToken, 'access');
+    const userId = this.verifyAccessToken(accessToken);
     return this.requireUserById(userId);
+  }
+
+  async logout(userId: string): Promise<void> {
+    await this.db.query(
+      `UPDATE auth_sessions
+       SET revoked_at = COALESCE(revoked_at, NOW()),
+           last_used_at = NOW()
+       WHERE user_id = $1
+         AND revoked_at IS NULL`,
+      [userId]
+    );
   }
 
   private async requireUserById(userId: string): Promise<AuthenticatedUser> {
@@ -64,7 +141,7 @@ export class AuthService {
     return user;
   }
 
-  private async findOrCreateUser(email: string, password: string): Promise<UserRow> {
+  private async findUserByEmail(email: string): Promise<UserRow | null> {
     const existing = await this.db.query<UserRow>(
       `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url, password_hash
        FROM users
@@ -72,10 +149,10 @@ export class AuthService {
       [email]
     );
 
-    if (existing.rows[0]) {
-      return existing.rows[0];
-    }
+    return existing.rows[0] ?? null;
+  }
 
+  private async createUser(email: string, password: string): Promise<UserRow> {
     const id = randomUUID();
     const displayName = email.split('@')[0] || 'Contributor';
     const passwordHash = await bcrypt.hash(password, 10);
@@ -103,7 +180,7 @@ export class AuthService {
     return bcrypt.compare(password, user.password_hash);
   }
 
-  private signToken(userId: string, kind: TokenKind): string {
+  private signToken(userId: string, kind: TokenKind, options?: { sessionId?: string }): string {
     const secret = kind === 'access'
       ? process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret'
       : process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
@@ -112,23 +189,101 @@ export class AuthService {
       ? process.env.ACCESS_TOKEN_EXPIRES_IN ?? '15m'
       : process.env.REFRESH_TOKEN_EXPIRES_IN ?? '7d') as jwt.SignOptions['expiresIn'];
 
-    return jwt.sign({ sub: userId, typ: kind }, secret, { expiresIn });
+    const payload =
+      kind === 'refresh'
+        ? { sub: userId, typ: kind, sid: options?.sessionId }
+        : { sub: userId, typ: kind };
+
+    return jwt.sign(payload, secret, { expiresIn });
   }
 
-  private verifyToken(token: string, expectedKind: TokenKind): string {
-    const secret = expectedKind === 'access'
-      ? process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret'
-      : process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
+  private verifyAccessToken(token: string): string {
+    const secret = process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret';
 
     try {
       const payload = jwt.verify(token, secret) as { sub?: string; typ?: string };
-      if (!payload.sub || payload.typ !== expectedKind) {
+      if (!payload.sub || payload.typ !== 'access') {
         throw new UnauthorizedException('Invalid token payload');
       }
       return payload.sub;
     } catch (_error) {
       throw new UnauthorizedException('Invalid token');
     }
+  }
+
+  private verifyRefreshToken(token: string): { userId: string; sessionId: string } {
+    const secret = process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
+
+    try {
+      const payload = jwt.verify(token, secret) as { sub?: string; typ?: string; sid?: string };
+      if (!payload.sub || payload.typ !== 'refresh' || !payload.sid) {
+        throw new UnauthorizedException('Invalid token payload');
+      }
+
+      return { userId: payload.sub, sessionId: payload.sid };
+    } catch (_error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  private async issueRefreshToken(userId: string): Promise<string> {
+    const sessionId = randomUUID();
+    const refreshToken = this.signToken(userId, 'refresh', { sessionId });
+    const expiresAt = this.extractTokenExpiry(refreshToken);
+
+    await this.db.query(
+      `INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, userId, this.hashToken(refreshToken), expiresAt]
+    );
+
+    return refreshToken;
+  }
+
+  private async getActiveRefreshSession(userId: string, sessionId: string): Promise<RefreshSessionRow | null> {
+    const result = await this.db.query<RefreshSessionRow>(
+      `SELECT id, user_id, refresh_token_hash, expires_at::text, revoked_at::text
+       FROM auth_sessions
+       WHERE id = $1
+         AND user_id = $2
+         AND revoked_at IS NULL`,
+      [sessionId, userId]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  private async revokeSession(sessionId: string): Promise<void> {
+    await this.db.query(
+      `UPDATE auth_sessions
+       SET revoked_at = COALESCE(revoked_at, NOW()),
+           last_used_at = NOW()
+       WHERE id = $1`,
+      [sessionId]
+    );
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private extractTokenExpiry(token: string): string {
+    const decoded = jwt.decode(token) as { exp?: unknown } | null;
+    if (!decoded || typeof decoded.exp !== 'number') {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    return new Date(decoded.exp * 1000).toISOString();
+  }
+
+  private isLoginOrCreateEnabled(): boolean {
+    const explicit = process.env.AUTH_LOGIN_OR_CREATE_ENABLED;
+    if (typeof explicit === 'string' && explicit.trim().length > 0) {
+      return explicit.toLowerCase() === 'true';
+    }
+
+    const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
+    return nodeEnv !== 'production';
   }
 
   private toPublicUser(user: UserRow): AuthenticatedUser {

@@ -1,4 +1,7 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { CurrentUser } from './current-user.decorator';
+import { AuthenticatedUser } from './auth.types';
+import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -16,8 +19,9 @@ export class AuthController {
   }
 
   @Post('logout')
+  @UseGuards(AuthGuard)
   @HttpCode(204)
-  logout(): void {
-    // Dev mode token strategy has no server-side revocation state.
+  async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.authService.logout(user.id);
   }
 }
