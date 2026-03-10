@@ -451,6 +451,21 @@ export class SurveysService {
     });
 
     if (!validation.ok || !validation.scores) {
+      const isExpired = validation.issues.some((issue) => issue.code === 'survey_expired');
+      if (isExpired && existing.status !== 'expired') {
+        await this.db.query(
+          `UPDATE surveys
+           SET status = 'expired',
+               updated_at = NOW()
+           WHERE id = $1 AND user_id = $2`,
+          [surveyId, user.id]
+        );
+        await this.insertEvent(surveyId, user.id, 'expired', {
+          reason: 'submit_after_deadline',
+          expires_at: existing.expires_at
+        });
+      }
+
       throw new UnprocessableEntityException({
         message: 'Survey cannot be submitted',
         errors: validation.errors,

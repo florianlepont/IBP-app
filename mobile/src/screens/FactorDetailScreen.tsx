@@ -1,14 +1,15 @@
 import { Text, TextInput, View } from 'react-native';
 import { FACTOR_INPUT_HINTS_BY_FACTOR, HELP_BY_FACTOR } from '../app/constants';
 import { styles } from '../app/styles';
-import { FactorField, FactorKey } from '../app/types';
+import { FactorField, FactorKey, FactorRetainedScore } from '../app/types';
 
 type FactorDetailScreenProps = {
   factor: FactorKey;
   fields: FactorField[];
+  retainedScore: FactorRetainedScore | null;
 };
 
-export function FactorDetailScreen({ factor, fields }: FactorDetailScreenProps) {
+export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDetailScreenProps) {
   const hints = FACTOR_INPUT_HINTS_BY_FACTOR[factor];
   const total = fields.length;
   const filled = fields.filter((field) => field.value.trim().length > 0).length;
@@ -23,6 +24,16 @@ export function FactorDetailScreen({ factor, fields }: FactorDetailScreenProps) 
       </View>
 
       <Text style={styles.factorDetailTitle}>Factor {factor}</Text>
+
+      <View style={styles.factorRetainedScoreCard}>
+        <Text style={styles.factorRetainedScoreLabel}>Score retenu</Text>
+        <Text style={styles.factorRetainedScoreValue}>
+          {retainedScore ? `${retainedScore.score} pts` : 'En attente'}
+        </Text>
+        <Text style={styles.factorRetainedScoreClass}>
+          {retainedScore ? retainedScore.selected_class : 'Renseigne tous les champs requis'}
+        </Text>
+      </View>
 
       <View style={styles.factorExplainBanner}>
         <Text style={styles.factorExplainBannerTitle}>Guide terrain</Text>

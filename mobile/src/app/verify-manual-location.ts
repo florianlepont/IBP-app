@@ -36,9 +36,22 @@ export async function verifyManualLocation<T extends DraftWithLocation>(
   const postalCode = toTrimmedString(manualLocation.postal_code);
   const city = toTrimmedString(manualLocation.city);
   const country = toTrimmedString(manualLocation.country);
-  const addressQuery = [addressLine, postalCode, city, country].filter((value) => value.length > 0).join(', ');
+  const addressQuery = [addressLine, postalCode, city, country].join(', ');
+  const hasCompleteAddress = addressLine.length > 0 && postalCode.length > 0 && city.length > 0 && country.length > 0;
+  const normalizedManualLocation: Record<string, unknown> = {
+    ...manualLocation,
+    source: 'manual',
+    address_line: addressLine,
+    postal_code: postalCode,
+    city,
+    country
+  };
+  const draftWithManualLocation = {
+    ...draftInput,
+    location: normalizedManualLocation
+  } as T;
 
-  if (!addressQuery) {
+  if (!hasCompleteAddress) {
     params.setStatus('Address verification failed: incomplete manual address');
     return null;
   }
@@ -50,16 +63,15 @@ export async function verifyManualLocation<T extends DraftWithLocation>(
     const firstMatch = matches.find((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
 
     if (!firstMatch) {
-      params.setStatus('Address verification failed: no match found');
-      return null;
+      params.setStatus('Manual address saved without geocoding');
+      return draftWithManualLocation;
     }
 
     params.setStatus('Manual address verified');
     return {
       ...draftInput,
       location: {
-        ...manualLocation,
-        source: 'manual',
+        ...normalizedManualLocation,
         lat: firstMatch.latitude,
         lng: firstMatch.longitude,
         geocoded_at: new Date().toISOString(),
@@ -68,7 +80,7 @@ export async function verifyManualLocation<T extends DraftWithLocation>(
       }
     };
   } catch (error) {
-    params.setStatus(`Address verification error: ${(error as Error).message}`);
-    return null;
+    params.setStatus(`Address verification skipped: ${(error as Error).message}`);
+    return draftWithManualLocation;
   }
 }

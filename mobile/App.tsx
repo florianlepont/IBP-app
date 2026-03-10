@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { DEFAULT_API_URL } from './src/app/constants';
+import { DEFAULT_API_URL, DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from './src/app/constants';
 import { fetchPublicMapItems } from './src/api/ibp-api';
 import { styles } from './src/app/styles';
-import { FactorKey, PublicMapItem, SurveyDetailTab } from './src/app/types';
+import { FactorKey, PublicMapItem, RegionVersion, SurveyDetailTab, VegetationStage } from './src/app/types';
 import { verifyManualLocation } from './src/app/verify-manual-location';
 import { SurveyFormScreen } from './src/screens/SurveyFormScreen';
 import { SurveyListScreen } from './src/screens/SurveyListScreen';
@@ -22,6 +22,7 @@ import { AuthGateScreen } from './src/screens/AuthGateScreen';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { FactorDetailScreen } from './src/screens/FactorDetailScreen';
+import { SurveyLocationScreen } from './src/screens/SurveyLocationScreen';
 
 type RootTabParamList = {
   surveys: undefined;
@@ -39,6 +40,7 @@ type SurveysStackParamList = {
   surveyDetail: undefined;
   surveyForm: undefined;
   surveyFactorDetail: { factor: FactorKey };
+  surveyLocationDetail: { surveyId: string };
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -46,6 +48,9 @@ const AccountStack = createNativeStackNavigator<AccountStackParamList>();
 const SurveysStack = createNativeStackNavigator<SurveysStackParamList>();
 
 type FormMode = 'create' | 'edit';
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL);
@@ -62,9 +67,18 @@ export default function App() {
   const [publicMapRegion, setPublicMapRegion] = useState('');
 
   const navigationRef = useRef<NavigationContainerRef<RootTabParamList> | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveInFlightRef = useRef(false);
+  const autosaveSignatureRef = useRef('');
+  const createDraftBootstrappingRef = useRef(false);
 
   const surveyForm = useSurveyForm();
   const surveyList = useSurveyList();
+  const ownSurveyIds = useMemo(() => surveyList.surveys.map((survey) => survey.id), [surveyList.surveys]);
+  const editingSurveyVisibility = useMemo(
+    () => (editingSurveyId ? surveyList.surveys.find((survey) => survey.id === editingSurveyId)?.visibility ?? 'private' : 'private'),
+    [editingSurveyId, surveyList.surveys]
+  );
 
   const closeSurveyDetailSelection = (): void => {
     surveyList.closeSurvey();
@@ -100,11 +114,45 @@ export default function App() {
   }, []);
 
   const handleOpenCreateSurvey = (): void => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    autosaveSignatureRef.current = '';
     setEditingSurveyId(null);
     setFormMode('create');
     closeSurveyDetailSelection();
     surveyForm.resetSurveyForm();
-    surveySync.setStatus('Create survey view opened');
+    surveySync.setStatus('Create survey view opened. Initializing local draft...');
+
+    if (createDraftBootstrappingRef.current) {
+      return;
+    }
+    createDraftBootstrappingRef.current = true;
+
+    const initialDraftInput = {
+      site_name: 'Unnamed site',
+      region_version: DEFAULT_SURVEY_FORM.regionVersion,
+      vegetation_stage: DEFAULT_SURVEY_FORM.vegetationStage,
+      factors: {},
+      location: {}
+    } as const;
+
+    void (async () => {
+      try {
+        const created = await createLocalDraft(initialDraftInput);
+        await surveyList.refreshLocalSurveys();
+        await surveyList.refreshLocalAttachments();
+        autosaveSignatureRef.current = JSON.stringify(initialDraftInput);
+        setEditingSurveyId(created.id);
+        surveyList.setSelectedSurveyId(created.id);
+        surveySync.setStatus(`Draft ${created.id} initialized. Autosave is active.`);
+      } catch (error) {
+        surveySync.setStatus(`Draft bootstrap error: ${(error as Error).message}`);
+      } finally {
+        createDraftBootstrappingRef.current = false;
+      }
+    })();
   };
 
   const handleCreateDraft = async (): Promise<boolean> => {
@@ -138,6 +186,13 @@ export default function App() {
         surveySync.setStatus(`Survey not found locally: ${surveyId}`);
         return false;
       }
+      autosaveSignatureRef.current = JSON.stringify({
+        site_name: draft.site_name ?? '',
+        region_version: draft.region_version ?? 'ACA',
+        vegetation_stage: draft.vegetation_stage ?? '',
+        factors: draft.factors ?? {},
+        location: draft.location ?? {}
+      });
       surveyForm.applyDraftToForm(draft);
       setEditingSurveyId(surveyId);
       setFormMode('edit');
@@ -168,6 +223,7 @@ export default function App() {
 
       await surveyList.refreshLocalSurveys();
       await surveyList.refreshLocalAttachments();
+      autosaveSignatureRef.current = '';
       setEditingSurveyId(null);
       setFormMode('create');
       surveySync.setStatus(`Local survey ${editingSurveyId} updated and queued for sync`);
@@ -177,6 +233,116 @@ export default function App() {
       return false;
     }
   };
+
+  type DirectDraftPatchInput = {
+    site_name: string;
+    region_version: RegionVersion;
+    vegetation_stage: VegetationStage;
+    factors: Record<string, unknown>;
+    location: Record<string, unknown>;
+  };
+
+  const patchSurveyDraftDirectly = async (
+    surveyId: string,
+    mutator: (draft: DirectDraftPatchInput) => DirectDraftPatchInput,
+    successMessage: string
+  ): Promise<boolean> => {
+    const current = surveyList.surveys.find((survey) => survey.id === surveyId);
+    if (current?.status === 'submitted') {
+      surveySync.setStatus(`Survey ${surveyId} is submitted and read-only`);
+      return false;
+    }
+
+    try {
+      const draft = await getLocalSurveyDraft(surveyId);
+      if (!draft) {
+        surveySync.setStatus(`Survey not found locally: ${surveyId}`);
+        return false;
+      }
+
+      const baseRegion: RegionVersion = draft.region_version === 'M' ? 'M' : 'ACA';
+      const baseStage = normalizeVegetationStageForRegion(
+        baseRegion,
+        typeof draft.vegetation_stage === 'string' ? draft.vegetation_stage : DEFAULT_SURVEY_FORM.vegetationStage
+      );
+      const base: DirectDraftPatchInput = {
+        site_name: typeof draft.site_name === 'string' && draft.site_name.trim().length > 0 ? draft.site_name : 'Unnamed site',
+        region_version: baseRegion,
+        vegetation_stage: baseStage,
+        factors: asRecord(draft.factors),
+        location: asRecord(draft.location)
+      };
+      const next = mutator(base);
+
+      await updateLocalDraft({
+        survey_id: surveyId,
+        site_name: next.site_name,
+        region_version: next.region_version,
+        vegetation_stage: next.vegetation_stage,
+        factors: next.factors,
+        location: next.location,
+        visibility: current?.visibility ?? 'private'
+      });
+
+      await surveyList.refreshLocalSurveys();
+      await surveyList.refreshLocalAttachments();
+      surveySync.setStatus(successMessage);
+      return true;
+    } catch (error) {
+      surveySync.setStatus(`Direct update error: ${(error as Error).message}`);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (!editingSurveyId) {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      return;
+    }
+
+    const draftSignature = JSON.stringify(surveyForm.draftInput);
+    if (autosaveSignatureRef.current === draftSignature) {
+      return;
+    }
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    autosaveTimerRef.current = setTimeout(() => {
+      if (autosaveInFlightRef.current) {
+        return;
+      }
+      autosaveInFlightRef.current = true;
+
+      void (async () => {
+        try {
+          await updateLocalDraft({
+            survey_id: editingSurveyId,
+            ...surveyForm.draftInput,
+            visibility: editingSurveyVisibility
+          });
+          await surveyList.refreshLocalSurveys();
+          autosaveSignatureRef.current = draftSignature;
+        } catch (error) {
+          surveySync.setStatus(`Autosave error: ${(error as Error).message}`);
+        } finally {
+          autosaveInFlightRef.current = false;
+        }
+      })();
+    }, 900);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [editingSurveyId, editingSurveyVisibility, surveyForm.draftInput]);
 
   const handleOpenSurvey = (surveyId: string): void => {
     surveyList.openSurvey(surveyId);
@@ -335,19 +501,11 @@ export default function App() {
                 selectedSurveyAttachments={surveyList.selectedSurveyAttachments}
                 surveyDetailTab={surveyDetailTab}
                 setSurveyDetailTab={setSurveyDetailTab}
-                editingSurveyId={editingSurveyId}
                 surveyDetails={surveySync.surveyDetails}
                 detailsLoadingSurveyId={surveySync.detailsLoadingSurveyId}
                 surveyEvents={surveySync.surveyEvents}
                 eventsLoadingSurveyId={surveySync.eventsLoadingSurveyId}
-                onLoadCanonicalDetails={surveySync.handleLoadCanonicalDetails}
                 onLoadSurveyEvents={surveySync.handleLoadSurveyEvents}
-                onEditSurvey={async (surveyId) => {
-                  const loaded = await handleStartEditSurvey(surveyId);
-                  if (loaded) {
-                    navigation.navigate('surveyForm');
-                  }
-                }}
                 onTakePhoto={surveySync.handleQueueAttachmentFromCamera}
                 onPickPhoto={surveySync.handleQueueAttachmentFromLibrary}
                 onDeleteAttachment={surveySync.handleDeleteAttachment}
@@ -356,6 +514,49 @@ export default function App() {
                 onRetrySurvey={surveySync.handleRetrySurvey}
                 onDiscardSurvey={surveySync.handleDiscardSurvey}
                 onToggleVisibility={surveySync.handleToggleVisibility}
+                onOpenFactor={async (surveyId, factor) => {
+                  const loaded = await handleStartEditSurvey(surveyId);
+                  if (loaded) {
+                    navigation.navigate('surveyFactorDetail', { factor });
+                  }
+                }}
+                onRenameSurvey={async (surveyId, nextSiteName) => {
+                  await patchSurveyDraftDirectly(
+                    surveyId,
+                    (draft) => ({
+                      ...draft,
+                      site_name: nextSiteName.trim() || 'Unnamed site'
+                    }),
+                    `Survey name updated for ${surveyId}`
+                  );
+                }}
+                onUpdateRegionVersion={async (surveyId, region) => {
+                  await patchSurveyDraftDirectly(
+                    surveyId,
+                    (draft) => ({
+                      ...draft,
+                      region_version: region,
+                      vegetation_stage: normalizeVegetationStageForRegion(region, draft.vegetation_stage)
+                    }),
+                    `Region updated for ${surveyId}`
+                  );
+                }}
+                onUpdateVegetationStage={async (surveyId, stage) => {
+                  await patchSurveyDraftDirectly(
+                    surveyId,
+                    (draft) => ({
+                      ...draft,
+                      vegetation_stage: normalizeVegetationStageForRegion(draft.region_version, stage)
+                    }),
+                    `Vegetation stage updated for ${surveyId}`
+                  );
+                }}
+                onOpenLocation={async (surveyId) => {
+                  const loaded = await handleStartEditSurvey(surveyId);
+                  if (loaded) {
+                    navigation.navigate('surveyLocationDetail', { surveyId });
+                  }
+                }}
               />
             ) : null}
           </>
@@ -387,6 +588,7 @@ export default function App() {
               setManualLocationField={surveyForm.setManualLocationField}
               onCaptureGpsLocation={handleCaptureGpsLocation}
               factorSections={surveyForm.factorSections}
+              factorRetainedScores={surveyForm.factorRetainedScores}
               formErrors={surveyForm.formErrors}
               onOpenFactor={(factor) => navigation.navigate('surveyFactorDetail', { factor })}
               onSaveSurveyEdits={async () => {
@@ -415,7 +617,35 @@ export default function App() {
       >
         {({ route }) => (
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-            <FactorDetailScreen factor={route.params.factor} fields={surveyForm.factorSections[route.params.factor]} />
+            <FactorDetailScreen
+              factor={route.params.factor}
+              fields={surveyForm.factorSections[route.params.factor]}
+              retainedScore={surveyForm.factorRetainedScores[route.params.factor]}
+            />
+          </ScrollView>
+        )}
+      </SurveysStack.Screen>
+      <SurveysStack.Screen
+        name="surveyLocationDetail"
+        options={{
+          title: 'Location',
+          headerLargeTitle: false
+        }}
+      >
+        {({ route }) => (
+          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+            <SurveyLocationScreen
+              surveyId={route.params.surveyId}
+              locationSource={surveyForm.locationSource}
+              setLocationSource={surveyForm.setLocationSource}
+              gpsLocation={surveyForm.gpsLocation}
+              manualLocation={surveyForm.manualLocation}
+              setGpsLocationField={surveyForm.setGpsLocationField}
+              setManualLocationField={surveyForm.setManualLocationField}
+              onCaptureGpsLocation={handleCaptureGpsLocation}
+              formErrors={surveyForm.formErrors}
+              status={surveySync.status}
+            />
           </ScrollView>
         )}
       </SurveysStack.Screen>
@@ -426,6 +656,7 @@ export default function App() {
     <View style={styles.tabScreenContainer}>
       <PublicMapScreen
         items={publicMapItems}
+        ownSurveyIds={ownSurveyIds}
         loading={publicMapLoading}
         fromDate={publicMapFromDate}
         toDate={publicMapToDate}

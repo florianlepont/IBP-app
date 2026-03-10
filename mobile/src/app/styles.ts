@@ -185,6 +185,48 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center'
   },
+  detailRenameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1
+  },
+  detailRenameInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#b7cce3',
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 16,
+    color: '#12304f',
+    fontWeight: '600'
+  },
+  detailRenameSaveButton: {
+    borderRadius: 999,
+    backgroundColor: '#2f8057',
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  detailRenameSaveButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  detailRenameCancelButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c3d6ea',
+    backgroundColor: '#f1f7ff',
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  detailRenameCancelButtonText: {
+    color: '#2f5478',
+    fontSize: 12,
+    fontWeight: '700'
+  },
   detailTitle: {
     fontSize: 14,
     fontWeight: '700',
@@ -400,6 +442,31 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1b486f'
   },
+  formScoreHeroCard: {
+    borderWidth: 1,
+    borderColor: '#bad3ee',
+    borderRadius: 12,
+    backgroundColor: '#eaf4ff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+    marginBottom: 8
+  },
+  formScoreHeroLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    color: '#2e628f'
+  },
+  formScoreHeroValue: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#184d7a'
+  },
+  formScoreHeroMeta: {
+    fontSize: 12,
+    color: '#2b5a84'
+  },
   factorSectionCard: {
     borderWidth: 1,
     borderColor: '#dbe7f4',
@@ -448,6 +515,12 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     color: '#4e6b88'
   },
+  formFactorTileScore: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1f5d8e'
+  },
   factorDetailHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -462,6 +535,31 @@ export const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     color: '#12304f'
+  },
+  factorRetainedScoreCard: {
+    borderWidth: 1,
+    borderColor: '#b9d4f0',
+    borderRadius: 12,
+    backgroundColor: '#eaf4ff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2
+  },
+  factorRetainedScoreLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    color: '#2e628f'
+  },
+  factorRetainedScoreValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#184d7a'
+  },
+  factorRetainedScoreClass: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2b5a84'
   },
   factorExplainBanner: {
     borderRadius: 12,
@@ -544,6 +642,31 @@ export const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6
   },
+  scoreHeroCard: {
+    borderWidth: 1,
+    borderColor: '#b9d4f0',
+    borderRadius: 12,
+    backgroundColor: '#eaf4ff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2
+  },
+  scoreHeroLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    color: '#2e628f'
+  },
+  scoreHeroValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#184d7a',
+    lineHeight: 36
+  },
+  scoreHeroMeta: {
+    fontSize: 12,
+    color: '#2b5a84'
+  },
   factorTotalPill: {
     borderRadius: 999,
     backgroundColor: '#e9f2fd',
@@ -573,6 +696,10 @@ export const styles = StyleSheet.create({
     padding: 8,
     gap: 5
   },
+  factorTileEditable: {
+    borderColor: '#b7d3f0',
+    backgroundColor: '#f2f8ff'
+  },
   factorTileIconWrap: {
     width: 26,
     height: 26,
@@ -595,6 +722,34 @@ export const styles = StyleSheet.create({
     fontSize: 10,
     color: '#9a4e09',
     fontWeight: '700'
+  },
+  factorTileHint: {
+    fontSize: 10,
+    color: '#2a5b8d',
+    fontWeight: '700'
+  },
+  factorsProgressCard: {
+    borderWidth: 1,
+    borderColor: '#bed4ea',
+    borderRadius: 12,
+    backgroundColor: '#edf5ff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6
+  },
+  factorsProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  factorsProgressTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1f527e'
+  },
+  factorsProgressText: {
+    fontSize: 12,
+    color: '#2f628d'
   },
   deadlineCard: {
     borderWidth: 1,
@@ -1029,6 +1184,92 @@ export const styles = StyleSheet.create({
     color: '#234a6f',
     fontSize: 12,
     fontWeight: '600'
+  },
+  submitReadyBanner: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#9fd0b3',
+    borderRadius: 12,
+    backgroundColor: '#e9f7ef',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8
+  },
+  submitReadyBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  submitReadyBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1f5b42'
+  },
+  submitReadyBannerText: {
+    fontSize: 12,
+    color: '#2c664d'
+  },
+  submitReadyBannerCta: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: '#2f8057',
+    paddingHorizontal: 11,
+    paddingVertical: 7
+  },
+  submitReadyBannerCtaText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  submitProgressBanner: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e4cf9d',
+    borderRadius: 12,
+    backgroundColor: '#fff7e9',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6
+  },
+  submitProgressBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  submitProgressBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#7a5a19'
+  },
+  submitProgressBannerText: {
+    fontSize: 12,
+    color: '#8b6720'
+  },
+  submittedReadonlyBanner: {
+    borderWidth: 1,
+    borderColor: '#a8d8bf',
+    borderRadius: 12,
+    backgroundColor: '#eef9f3',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6
+  },
+  submittedReadonlyBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  submittedReadonlyBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1f5b42'
+  },
+  submittedReadonlyBannerText: {
+    fontSize: 12,
+    color: '#2f6b4f'
   },
   canonicalCard: {
     marginTop: 8,

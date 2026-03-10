@@ -62,6 +62,40 @@ export const computeSurveyStats = (surveys: LocalSurvey[]): SurveyStats => {
   };
 };
 
+export const resolveEffectiveSurveyStatus = (survey: LocalSurvey): LocalSurvey['status'] => {
+  if (survey.status === 'submitted' || survey.status === 'expired') {
+    return survey.status;
+  }
+  if (survey.sync_state === 'failed') {
+    return 'error';
+  }
+  if (survey.sync_state === 'synced') {
+    return 'synced';
+  }
+  return survey.status;
+};
+
+export type SurveyUiStatus = 'draft' | 'sync_pending' | 'sync_error' | 'sync_blocked' | 'submitted' | 'expired';
+
+export const resolveSurveyUiStatus = (survey: LocalSurvey): SurveyUiStatus => {
+  if (survey.status === 'submitted') return 'submitted';
+  if (survey.status === 'expired') return 'expired';
+  if (survey.sync_state === 'failed') {
+    return survey.sync_blocked === 1 ? 'sync_blocked' : 'sync_error';
+  }
+  if (survey.sync_state === 'pending') return 'sync_pending';
+  return 'draft';
+};
+
+export const formatSurveyUiStatusLabel = (uiStatus: SurveyUiStatus): string => {
+  if (uiStatus === 'submitted') return 'Submitted';
+  if (uiStatus === 'expired') return 'Expired';
+  if (uiStatus === 'sync_pending') return 'Sync pending';
+  if (uiStatus === 'sync_error') return 'Sync error';
+  if (uiStatus === 'sync_blocked') return 'Sync blocked';
+  return 'Draft';
+};
+
 export const filterAndSortSurveys = (
   surveys: LocalSurvey[],
   filters: SurveyListFilters,
@@ -72,18 +106,13 @@ export const filterAndSortSurveys = (
   const toBoundary = parseDateFilterBoundary(filters.surveyToDate, 'end');
 
   const filtered = surveys.filter((survey) => {
+    const effectiveStatus = resolveEffectiveSurveyStatus(survey);
     const updatedAtTs = parseDate(survey.updated_at);
     if (fromBoundary !== null && updatedAtTs < fromBoundary) return false;
     if (toBoundary !== null && updatedAtTs > toBoundary) return false;
 
-    if (filters.statusFilter !== 'all') {
-      if (filters.statusFilter === 'synced') {
-        if (!(survey.status === 'synced' || survey.sync_state === 'synced')) return false;
-      } else if (filters.statusFilter === 'error') {
-        if (!(survey.status === 'error' || survey.sync_state === 'failed')) return false;
-      } else if (survey.status !== filters.statusFilter) {
-        return false;
-      }
+    if (filters.statusFilter !== 'all' && effectiveStatus !== filters.statusFilter) {
+      return false;
     }
     if (filters.visibilityFilter !== 'all' && survey.visibility !== filters.visibilityFilter) return false;
     if (filters.syncFilter !== 'all' && survey.sync_state !== filters.syncFilter) return false;

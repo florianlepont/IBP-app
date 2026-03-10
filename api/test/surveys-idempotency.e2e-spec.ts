@@ -143,6 +143,52 @@ describe('Surveys idempotency (e2e)', () => {
     expect(submit.body.errors.join(' ')).toContain('location is required for submit');
   });
 
+  it('marks survey as expired when submit is attempted after deadline', async () => {
+    const email = `e2e-submit-expired-${Date.now()}@ibp.local`;
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'demo123' })
+      .expect(201);
+
+    const accessToken = login.body.access_token as string;
+    const surveyId = `e2e-submit-expired-${Date.now()}`;
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+
+    await request(app.getHttpServer())
+      .post('/v1/surveys')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        id: surveyId,
+        sync_version: 1,
+        site_name: 'Expired Forest',
+        status: 'draft',
+        visibility: 'private',
+        region_version: 'ACA',
+        vegetation_stage: 'collineen',
+        expires_at: expiredAt,
+        factors: {
+          A: 1, B: 1, C: 1, D: 1, E: 1, F: 1, G: 1, H: 2, I: 2, J: 2
+        },
+        location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      })
+      .expect(201);
+
+    const submit = await request(app.getHttpServer())
+      .post(`/v1/surveys/${surveyId}/submit`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(422);
+
+    expect(Array.isArray(submit.body.errors)).toBe(true);
+    expect(submit.body.errors.join(' ')).toContain('survey is expired');
+
+    const detail = await request(app.getHttpServer())
+      .get(`/v1/surveys/${surveyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(detail.body.status).toBe('expired');
+  });
+
   it('submits valid IBP survey and returns computed scores', async () => {
     const email = `e2e-submit-valid-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())

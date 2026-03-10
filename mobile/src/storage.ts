@@ -1097,6 +1097,10 @@ export async function retrySurveyNow(surveyId: string): Promise<{ queued: number
   await db.runAsync(
     `UPDATE local_surveys
      SET sync_state = 'pending',
+         status = CASE
+           WHEN status = 'error' THEN 'draft'
+           ELSE status
+         END,
          last_sync_error = NULL,
          last_sync_error_code = NULL,
          last_sync_error_at = NULL,
@@ -1130,6 +1134,10 @@ export async function discardSurveyLocalChanges(surveyId: string): Promise<{ rem
   await db.runAsync(
     `UPDATE local_surveys
      SET sync_state = 'synced',
+         status = CASE
+           WHEN status = 'error' THEN 'synced'
+           ELSE status
+         END,
          last_sync_error = NULL,
          last_sync_error_code = NULL,
          last_sync_error_at = NULL,
@@ -1155,6 +1163,10 @@ async function markSurveyQueueRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow
   await db.runAsync(
     `UPDATE local_surveys
      SET sync_state = 'synced',
+         status = CASE
+           WHEN status IN ('submitted', 'expired') THEN status
+           ELSE 'synced'
+         END,
          last_sync_error = NULL,
          last_sync_error_code = NULL,
          last_sync_error_at = NULL,
@@ -1622,6 +1634,10 @@ async function handleSurveySyncFailure(
   await db.runAsync(
     `UPDATE local_surveys
      SET sync_state = 'failed',
+         status = CASE
+           WHEN status IN ('submitted', 'expired') THEN status
+           ELSE 'error'
+         END,
          last_sync_error = ?,
          last_sync_error_code = ?,
          last_sync_error_at = ?,
@@ -1701,6 +1717,23 @@ async function handleAttachmentDeleteSyncFailure(
   );
 }
 
+export async function markSurveyExpiredLocally(surveyId: string): Promise<void> {
+  const db = await dbPromise;
+  const nowIso = new Date().toISOString();
+  await db.runAsync(
+    `UPDATE local_surveys
+     SET status = 'expired',
+         sync_state = 'synced',
+         last_sync_error = NULL,
+         last_sync_error_code = NULL,
+         last_sync_error_at = NULL,
+         sync_blocked = 0,
+         updated_at = ?
+     WHERE id = ?`,
+    [nowIso, surveyId]
+  );
+}
+
 export async function submitSurvey(apiUrl: string, accessToken: string, surveyId: string): Promise<{ ok: boolean; message: string }> {
   const db = await dbPromise;
 
@@ -1715,18 +1748,45 @@ export async function submitSurvey(apiUrl: string, accessToken: string, surveyId
   if (!response.ok) {
     const payload = (await safeJson(response)) as { errors?: string[]; message?: string };
     const message = payload.errors?.join(' | ') ?? payload.message ?? `HTTP ${response.status}`;
+    const nowIso = new Date().toISOString();
+    const isExpiredSubmit = /survey is expired|survey_expired|expired and cannot be submitted/i.test(message);
+    const isValidationSubmit = response.status === 422;
 
-    await db.runAsync(
-      `UPDATE local_surveys
-       SET sync_state = 'failed',
-           last_sync_error = ?,
-           last_sync_error_code = 'submit_failed',
-           last_sync_error_at = ?,
-           sync_blocked = 1,
-           updated_at = ?
-       WHERE id = ?`,
-      [message, new Date().toISOString(), new Date().toISOString(), surveyId]
-    );
+    if (isExpiredSubmit) {
+      await markSurveyExpiredLocally(surveyId);
+    } else if (isValidationSubmit) {
+      await db.runAsync(
+        `UPDATE local_surveys
+         SET status = CASE
+               WHEN status = 'expired' THEN 'expired'
+               ELSE 'draft'
+             END,
+             sync_state = 'synced',
+             last_sync_error = ?,
+             last_sync_error_code = 'submit_validation',
+             last_sync_error_at = ?,
+             sync_blocked = 0,
+             updated_at = ?
+         WHERE id = ?`,
+        [message, nowIso, nowIso, surveyId]
+      );
+    } else {
+      await db.runAsync(
+        `UPDATE local_surveys
+         SET status = CASE
+               WHEN status IN ('submitted', 'expired') THEN status
+               ELSE 'error'
+             END,
+             sync_state = 'failed',
+             last_sync_error = ?,
+             last_sync_error_code = 'submit_failed',
+             last_sync_error_at = ?,
+             sync_blocked = 1,
+             updated_at = ?
+         WHERE id = ?`,
+        [message, nowIso, nowIso, surveyId]
+      );
+    }
 
     return { ok: false, message };
   }

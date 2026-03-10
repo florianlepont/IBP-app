@@ -9,7 +9,7 @@ Access and manage personal surveys before data entry.
 As a contributor, I want to see my own surveys so I can track what I started and completed.
 
 Acceptance criteria:
-- The list displays at least: site, survey type, creation date, and status.
+- The list displays at least: site, creation date, and status.
 - The list displays a completion rate for in-progress surveys (for example as a percentage).
 - I can filter by status (draft, expired, submitted, synced, error).
 - In offline mode, locally stored surveys remain visible.
@@ -21,7 +21,7 @@ Acceptance criteria:
 - The detail view displays survey information (site, instructions, and basic history).
 - The detail view displays the submission deadline (creation date + 7 days) and remaining time.
 - The detail view displays the survey completion rate.
-- A "Start/Continue" button opens the survey form.
+- An "Update" button opens the survey form for editable surveys.
 
 ### US-B3 - Manage Published Survey
 As a contributor, I want to manage a submitted survey (delete it or change its visibility) so I stay in control of my data.

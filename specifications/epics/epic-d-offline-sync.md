@@ -17,5 +17,7 @@ As a contributor, I want my surveys to sync automatically when the network is ba
 
 Acceptance criteria:
 - Upon reconnection, pending surveys are sent automatically.
+- No manual synchronization action is required from the contributor.
+- Submitted surveys are also synchronized automatically after submission.
 - Status changes to "synced" when successful.
 - On failure, status changes to "error" with an actionable message.

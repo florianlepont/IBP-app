@@ -127,6 +127,11 @@ export type FactorField = {
   error?: string | null;
 };
 
+export type FactorRetainedScore = {
+  score: 0 | 1 | 2 | 5;
+  selected_class: FactorClass;
+};
+
 export type SurveyListFilters = {
   surveyQuery: string;
   surveyFromDate: string;

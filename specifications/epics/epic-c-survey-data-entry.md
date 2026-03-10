@@ -11,6 +11,7 @@ As a contributor, I want to complete a guided form so I do not miss any required
 
 Acceptance criteria:
 - Required fields are clearly identified.
+- The form includes all IBP factors (`A` to `J`) and each factor can be completed from the survey form flow.
 - Field types are appropriate (text, number, list, date, boolean).
 - Validation errors are displayed per field.
 
@@ -19,6 +20,7 @@ As a contributor, I want to save a draft so I can continue later.
 
 Acceptance criteria:
 - I can save at any time without submitting.
+- Draft changes are saved automatically locally while editing.
 - The draft is available offline on the device.
 - The last modified date is visible.
 - If less than 24 hours remain before expiration, a warning is displayed.
@@ -43,10 +45,13 @@ Acceptance criteria:
 As a contributor, I want to submit a completed survey to share my observation.
 
 Acceptance criteria:
-- Submission is blocked if required fields are missing.
-- Submission is blocked if the survey is older than 7 days, and status changes to "expired".
-- After submission, status changes to "submitted".
-- A local confirmation message is displayed.
+- Submission is blocked until all IBP factors (`A` to `J`) are completed and scoreable.
+- Submission is blocked if required non-factor data is missing (at least location data: GPS coordinates, or full manual address when GPS is unavailable).
+- When submission is blocked, the app displays an explicit reason and identifies missing items (missing factors and/or required fields).
+- Submission is blocked if the survey is older than 7 days; the survey transitions to status `expired`.
+- After a successful submission request, survey status transitions to `submitted` and the survey becomes read-only for data entry.
+- A local confirmation message is displayed after successful submission.
+- Synchronization is automatic after submission (no manual trigger required): the submitted survey enters sync flow and eventually reaches synced/error state according to Epic D rules.
 
 ### US-C6 - On-Demand Pedagogical Help During Entry
 As a contributor, I want contextual educational help while filling specific fields so I can complete IBP correctly even as a non-expert.
