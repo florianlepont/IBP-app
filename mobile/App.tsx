@@ -99,10 +99,6 @@ export default function App() {
     bootstrap().catch((error) => surveySync.setStatus(`Init error: ${(error as Error).message}`));
   }, []);
 
-  const navigateToTab = (tab: keyof RootTabParamList): void => {
-    navigationRef.current?.navigate(tab as never);
-  };
-
   const handleOpenCreateSurvey = (): void => {
     setEditingSurveyId(null);
     setFormMode('create');
@@ -273,7 +269,7 @@ export default function App() {
       <SurveysStack.Screen
         name="surveysHome"
         options={{
-          title: 'Surveys'
+          title: 'My Surveys'
         }}
       >
         {({ navigation }) => (
@@ -423,7 +419,7 @@ export default function App() {
   );
 
   const PublicMapTab = () => (
-    <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+    <View style={styles.tabScreenContainer}>
       <PublicMapScreen
         items={publicMapItems}
         loading={publicMapLoading}
@@ -434,9 +430,8 @@ export default function App() {
         onChangeToDate={setPublicMapToDate}
         onChangeRegion={setPublicMapRegion}
         onLoad={handleLoadPublicMap}
-        onBack={() => navigateToTab('surveys')}
       />
-    </ScrollView>
+    </View>
   );
 
   const AccountTab = () => (
@@ -534,7 +529,7 @@ export default function App() {
                   fontSize: 13,
                   fontWeight: '600'
                 },
-                tabBarLabel: route.name === 'publicMap' ? 'Map' : route.name === 'surveys' ? 'Surveys' : 'Account',
+                tabBarLabel: route.name === 'publicMap' ? 'Explore' : route.name === 'surveys' ? 'My Surveys' : 'Account',
                 tabBarIcon: ({ color, size }) => {
                   const iconName =
                     route.name === 'surveys'
@@ -549,8 +544,15 @@ export default function App() {
               <Tab.Screen
                 name="surveys"
                 options={{
-                  tabBarLabel: 'Surveys',
+                  tabBarLabel: 'My Surveys',
                   headerShown: false
+                }}
+                listeners={{
+                  tabPress: () => {
+                    if (surveySync.isAuthenticated) {
+                      void surveySync.handlePullChanges();
+                    }
+                  }
                 }}
               >
                 {() => SurveysTab()}
@@ -558,7 +560,8 @@ export default function App() {
               <Tab.Screen
                 name="publicMap"
                 options={{
-                  title: 'Map'
+                  title: 'Explore',
+                  headerShown: false
                 }}
                 listeners={{
                   tabPress: () => {
