@@ -47,6 +47,10 @@ Response `200`:
 }
 ```
 
+Notes:
+- V1 currently supports a `login-or-create` behavior: if the email does not exist yet, a contributor account is created on first successful login.
+- If an existing account has no password hash (bootstrap/legacy case), the first successful login stores the provided password hash.
+
 ### POST /auth/refresh
 Rotate tokens using refresh token.
 
@@ -437,6 +441,26 @@ Rules:
 - `confirm_url` must be called after upload to mark `uploaded_at`
 - In local mode, `upload_url` can be the same API upload endpoint as `confirm_url`
 
+### GET /surveys/{id}/attachments
+List non-deleted attachments for one survey.
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "storage_key": "surveys/2f3d8a59/photo-1.jpg",
+      "mime_type": "image/jpeg",
+      "size_bytes": 2450000,
+      "created_at": "2026-03-09T09:10:00Z",
+      "uploaded_at": "2026-03-09T09:12:00Z"
+    }
+  ]
+}
+```
+
 ### PUT /surveys/{id}/attachments/{attachment_id}/upload?token=
 Consume the upload target with a real file upload and mark attachment as uploaded.
 
@@ -562,6 +586,7 @@ Rules:
   - `survey.delete`
   - `survey.visibility_update`
   - `attachment.create`
+  - `attachment.delete`
 - `status` can be:
   - `synced`
   - `retryable_error` (typically `429` or `5xx`)
@@ -572,6 +597,10 @@ Rules:
   - `network_gateway_error`
   - `transient_upstream_error`
 - `client_ref` is echoed back for local queue reconciliation.
+- `attachment.delete` requires:
+  - `survey_id` in operation envelope
+  - `attachment_id` inside `payload`
+- For idempotency in sync path, deleting a missing attachment can still return `synced` with `missing=true`.
 
 ### GET /sync/changes?cursor=&limit=
 Fetch user-scoped incremental changes for downsync (server -> mobile).
@@ -674,6 +703,13 @@ Inclusion rules in V1:
 - `visibility = public`
 - survey is not deleted
 - survey is considered publishable (recommended policy: `status=submitted`)
+
+Query + formatting rules in V1:
+- `from` and `to` expect `YYYY-MM-DD`; invalid values are ignored (not rejected).
+- `region` filters by exact `region_version` match.
+- Results are ordered by `submitted_at DESC` and capped to `500` items.
+- `display_location` is rounded to 2 decimals.
+- Surveys missing valid numeric `location.lat` and `location.lng` are excluded.
 
 Response `200`:
 ```json

@@ -71,6 +71,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Epic D - Offline and Synchronization: `specifications/epics/epic-d-offline-sync.md`
 - Epic E - Data Quality and Trust: `specifications/epics/epic-e-data-quality-trust.md`
 - Epic F - Participatory Experience and Gamification: `specifications/epics/epic-f-participatory-gamification.md`
+- Epic G - IBP Information, Association Visibility and Donation: `specifications/epics/epic-g-ibp-information-association-and-donation.md`
 
 ## 7) Suggested Delivery Priority
 1. Epic A - Access and Security
@@ -79,6 +80,7 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 4. Epic B - Survey Preparation
 5. Epic E - Data Quality and Trust
 6. Epic F - Participatory Experience and Gamification
+7. Epic G - IBP Information, Association Visibility and Donation
 
 ## 9) Non-Functional Requirements
 - Platforms:
