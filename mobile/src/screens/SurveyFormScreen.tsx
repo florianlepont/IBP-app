@@ -222,43 +222,10 @@ export function SurveyFormScreen({
     <View style={styles.card}>
       {screen === 'edit' && editingSurveyId ? <Text style={styles.meta}>Survey id: {editingSurveyId}</Text> : null}
       <Text style={styles.rowMeta}>Fields marked with * are required for submit.</Text>
-      <View style={styles.formScoreHeroCard}>
-        <Text style={styles.formScoreHeroLabel}>IBP Total (en cours)</Text>
-        <Text style={styles.formScoreHeroValue}>{scoreTotals.ibp_total}</Text>
-        <Text style={styles.formScoreHeroMeta}>
-          P/G {scoreTotals.ibp_peuplement_gestion} · C {scoreTotals.ibp_contexte} ·
-          {' '}
-          {scoreTotals.completed_factors}/10 facteurs scoreables
-        </Text>
-      </View>
 
       <Text style={styles.label}>Site name *</Text>
       <TextInput style={styles.input} value={siteName} onChangeText={setSiteName} />
       {formErrors.siteName ? <Text style={styles.fieldError}>{formErrors.siteName}</Text> : null}
-
-      <Text style={styles.label}>Region version *</Text>
-      <View style={styles.filterChipsRow}>
-        {REGION_OPTIONS.map((option) => (
-          <FilterChip
-            key={option.value}
-            label={option.label}
-            active={regionVersion === option.value}
-            onPress={() => onRegionChange(option.value)}
-          />
-        ))}
-      </View>
-
-      <Text style={styles.label}>Vegetation stage *</Text>
-      <View style={styles.filterChipsRow}>
-        {VEGETATION_STAGE_OPTIONS_BY_REGION[regionVersion].map((option) => (
-          <FilterChip
-            key={option.value}
-            label={option.label}
-            active={vegetationStage === option.value}
-            onPress={() => setVegetationStage(option.value)}
-          />
-        ))}
-      </View>
 
       <View style={styles.formLocationSection}>
         <Text style={styles.label}>Location *</Text>
@@ -345,6 +312,40 @@ export function SurveyFormScreen({
             {formErrors.manual.country ? <Text style={styles.fieldError}>{formErrors.manual.country}</Text> : null}
           </View>
         )}
+      </View>
+
+      <Text style={styles.label}>Region version *</Text>
+      <View style={styles.filterChipsRow}>
+        {REGION_OPTIONS.map((option) => (
+          <FilterChip
+            key={option.value}
+            label={option.label}
+            active={regionVersion === option.value}
+            onPress={() => onRegionChange(option.value)}
+          />
+        ))}
+      </View>
+
+      <Text style={styles.label}>Vegetation stage *</Text>
+      <View style={styles.filterChipsRow}>
+        {VEGETATION_STAGE_OPTIONS_BY_REGION[regionVersion].map((option) => (
+          <FilterChip
+            key={option.value}
+            label={option.label}
+            active={vegetationStage === option.value}
+            onPress={() => setVegetationStage(option.value)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.formScoreHeroCard}>
+        <Text style={styles.formScoreHeroLabel}>IBP Total (en cours)</Text>
+        <Text style={styles.formScoreHeroValue}>{scoreTotals.ibp_total}</Text>
+        <Text style={styles.formScoreHeroMeta}>
+          P/G {scoreTotals.ibp_peuplement_gestion} · C {scoreTotals.ibp_contexte} ·
+          {' '}
+          {scoreTotals.completed_factors}/10 facteurs scoreables
+        </Text>
       </View>
 
       <View style={styles.factorSectionCard}>

@@ -401,21 +401,21 @@ export function useSurveySync({
       if (mode === 'manual') {
         setStatus('Sync in progress...');
       } else {
-        setStatus(`Back online. Auto-sync in progress${trigger ? ` (${trigger})` : ''}...`);
+        setStatus(`Back online. Sync in progress${trigger ? ` (${trigger})` : ''}...`);
       }
       const result = await withAuthRetry((token) => syncPending(apiUrl, token));
       await refreshLocalSurveys();
       await refreshLocalAttachments();
       setStatus(
-        `${mode === 'manual' ? 'Sync complete' : 'Auto-sync complete'}: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`
+        `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`
       );
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession();
-        setStatus(mode === 'manual' ? 'Login required before sync' : 'Auto-sync paused: login required');
+        setStatus(mode === 'manual' ? 'Login required before sync' : 'Sync paused: login required');
         return;
       }
-      setStatus(mode === 'manual' ? `Sync error: ${(error as Error).message}` : `Auto-sync error: ${(error as Error).message}`);
+      setStatus(`Sync error: ${(error as Error).message}`);
     } finally {
       syncInProgressRef.current = false;
     }
