@@ -18,7 +18,7 @@ Acceptance criteria:
 As a contributor, I want to open a survey to review parcel context and previous observations before entering data.
 
 Acceptance criteria:
-- The detail view displays survey information (site, parcel id, year, version, and basic history).
+- The detail view displays survey information (site, parcel ids, year, version, and basic history).
 - The detail view displays the submission deadline (creation date + 7 days) and remaining time.
 - The detail view displays the survey completion rate.
 - The detail view displays previous submitted surveys on the same parcel with year/version.

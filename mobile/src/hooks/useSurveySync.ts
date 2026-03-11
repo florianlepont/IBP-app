@@ -92,8 +92,8 @@ const formatSubmitReadinessError = (surveyId: string, readiness: ReturnType<type
   if (readiness.missing_fields.includes('vegetation_stage')) {
     parts.push('missing vegetation stage');
   }
-  if (readiness.missing_fields.includes('location')) {
-    parts.push('missing location (GPS or full manual address)');
+  if (readiness.missing_fields.includes('parcel_ids')) {
+    parts.push('missing parcel selection');
   }
 
   if (parts.length === 0) {

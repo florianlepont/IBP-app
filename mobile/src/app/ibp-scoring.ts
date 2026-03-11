@@ -24,16 +24,6 @@ const pickNumber = (obj: Record<string, unknown>, keys: string[]): number | null
   return null;
 };
 
-const pickNonEmptyString = (obj: Record<string, unknown>, keys: string[]): string | null => {
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return null;
-};
-
 const toClass = (score: 0 | 1 | 2 | 5): 'S0' | 'S1' | 'S2' | 'S5' => {
   if (score === 0) return 'S0';
   if (score === 1) return 'S1';
@@ -280,44 +270,41 @@ export const computeIbpTotalsFromRetainedScores = (scores: Record<FactorKey, Fac
   };
 };
 
-export const isValidSubmitLocation = (location: unknown): boolean => {
-  if (!isObject(location)) {
-    return false;
+export const resolveDraftParcelIds = (input: { parcel_ids?: unknown; location?: unknown }): string[] => {
+  const source = Array.isArray(input.parcel_ids)
+    ? input.parcel_ids
+    : isObject(input.location) && Array.isArray(input.location.selected_parcel_ids)
+      ? input.location.selected_parcel_ids
+      : [];
+
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of source) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const normalized = value.trim().toUpperCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    output.push(normalized);
   }
-
-  const sourceRaw = location.source;
-  const source = typeof sourceRaw === 'string' ? sourceRaw.trim().toLowerCase() : '';
-
-  const lat = pickNumber(location, ['lat']);
-  const lng = pickNumber(location, ['lng']);
-  const hasGps = lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-
-  const addressLine = pickNonEmptyString(location, ['address_line']);
-  const postalCode = pickNonEmptyString(location, ['postal_code']);
-  const city = pickNonEmptyString(location, ['city']);
-  const country = pickNonEmptyString(location, ['country']);
-  const hasManualAddress = Boolean(addressLine && postalCode && city && country);
-
-  if (source === 'gps') {
-    return hasGps;
-  }
-  if (source === 'manual') {
-    return hasManualAddress;
-  }
-  return hasGps || hasManualAddress;
+  return output;
 };
 
 export type SubmitReadiness = {
   ready: boolean;
   expired: boolean;
   missing_factors: FactorKey[];
-  missing_fields: Array<'region_version' | 'vegetation_stage' | 'location'>;
+  missing_fields: Array<'region_version' | 'vegetation_stage' | 'parcel_ids'>;
 };
 
 export const evaluateSubmitReadinessFromDraft = (draft: {
   region_version?: unknown;
   vegetation_stage?: unknown;
   factors?: unknown;
+  parcel_ids?: unknown;
   location?: unknown;
   expires_at?: unknown;
 }): SubmitReadiness => {
@@ -330,7 +317,7 @@ export const evaluateSubmitReadinessFromDraft = (draft: {
   );
 
   const missingFactors = FACTOR_ORDER.filter((factorKey) => !retainedScores[factorKey]);
-  const missingFields: Array<'region_version' | 'vegetation_stage' | 'location'> = [];
+  const missingFields: Array<'region_version' | 'vegetation_stage' | 'parcel_ids'> = [];
 
   if (regionVersion !== 'ACA' && regionVersion !== 'M') {
     missingFields.push('region_version');
@@ -338,8 +325,8 @@ export const evaluateSubmitReadinessFromDraft = (draft: {
   if (!vegetationStage.trim()) {
     missingFields.push('vegetation_stage');
   }
-  if (!isValidSubmitLocation(draft.location)) {
-    missingFields.push('location');
+  if (resolveDraftParcelIds(draft).length === 0) {
+    missingFields.push('parcel_ids');
   }
 
   const expiresAt = typeof draft.expires_at === 'string' ? Date.parse(draft.expires_at) : NaN;

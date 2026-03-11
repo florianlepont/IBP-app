@@ -5,12 +5,12 @@ import { NavigationContainer, NavigationContainerRef } from '@react-navigation/n
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { loadStoredApiUrl, saveStoredApiUrl } from './src/app/api-url-storage';
 import { DEFAULT_API_URL, DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from './src/app/constants';
-import { fetchPublicMapItems } from './src/api/ibp-api';
+import { fetchPublicMapItems, fetchPublicParcelStatuses } from './src/api/ibp-api';
 import { styles } from './src/app/styles';
-import { FactorKey, PublicMapItem, RegionVersion, SurveyDetailTab, VegetationStage } from './src/app/types';
-import { verifyManualLocation } from './src/app/verify-manual-location';
+import { FactorKey, PublicMapItem, PublicParcelStatusItem, RegionVersion, SurveyDetailTab, VegetationStage } from './src/app/types';
 import { SurveyFormScreen } from './src/screens/SurveyFormScreen';
 import { SurveyListScreen } from './src/screens/SurveyListScreen';
 import { initLocalDb, createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from './src/storage';
@@ -23,7 +23,7 @@ import { AuthGateScreen } from './src/screens/AuthGateScreen';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { FactorDetailScreen } from './src/screens/FactorDetailScreen';
-import { SurveyLocationScreen } from './src/screens/SurveyLocationScreen';
+import { SurveyParcelSelectionScreen } from './src/screens/SurveyParcelSelectionScreen';
 
 type RootTabParamList = {
   surveys: undefined;
@@ -41,7 +41,7 @@ type SurveysStackParamList = {
   surveyDetail: undefined;
   surveyForm: undefined;
   surveyFactorDetail: { factor: FactorKey };
-  surveyLocationDetail: { surveyId: string };
+  surveyParcels: { surveyId: string };
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -66,12 +66,15 @@ export default function App() {
   const [publicMapFromDate, setPublicMapFromDate] = useState('');
   const [publicMapToDate, setPublicMapToDate] = useState('');
   const [publicMapRegion, setPublicMapRegion] = useState('');
+  const [publicParcelStatuses, setPublicParcelStatuses] = useState<PublicParcelStatusItem[]>([]);
+  const [publicParcelsLoading, setPublicParcelsLoading] = useState(false);
 
   const navigationRef = useRef<NavigationContainerRef<RootTabParamList> | null>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveInFlightRef = useRef(false);
   const autosaveSignatureRef = useRef('');
   const createDraftBootstrappingRef = useRef(false);
+  const publicParcelsRequestRef = useRef(0);
 
   const surveyForm = useSurveyForm();
   const surveyList = useSurveyList();
@@ -154,9 +157,10 @@ export default function App() {
       site_name: 'Unnamed site',
       region_version: DEFAULT_SURVEY_FORM.regionVersion,
       vegetation_stage: DEFAULT_SURVEY_FORM.vegetationStage,
+      parcel_ids: [],
       factors: {},
       location: {}
-    } as const;
+    };
 
     void (async () => {
       try {
@@ -177,8 +181,7 @@ export default function App() {
 
   const handleCreateDraft = async (): Promise<boolean> => {
     try {
-      const draftInput = await verifyManualLocation(surveyForm.buildDraftInput(), { setStatus: surveySync.setStatus });
-      if (!draftInput) return false;
+      const draftInput = surveyForm.buildDraftInput();
       const created = await createLocalDraft(draftInput);
       await surveyList.refreshLocalSurveys();
       await surveyList.refreshLocalAttachments();
@@ -210,6 +213,7 @@ export default function App() {
         site_name: draft.site_name ?? '',
         region_version: draft.region_version ?? 'ACA',
         vegetation_stage: draft.vegetation_stage ?? '',
+        parcel_ids: Array.isArray(draft.parcel_ids) ? draft.parcel_ids : [],
         factors: draft.factors ?? {},
         location: draft.location ?? {}
       });
@@ -233,8 +237,7 @@ export default function App() {
 
     try {
       const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId);
-      const draftInput = await verifyManualLocation(surveyForm.buildDraftInput(), { setStatus: surveySync.setStatus });
-      if (!draftInput) return false;
+      const draftInput = surveyForm.buildDraftInput();
       await updateLocalDraft({
         survey_id: editingSurveyId,
         ...draftInput,
@@ -258,6 +261,7 @@ export default function App() {
     site_name: string;
     region_version: RegionVersion;
     vegetation_stage: VegetationStage;
+    parcel_ids: string[];
     factors: Record<string, unknown>;
     location: Record<string, unknown>;
   };
@@ -289,6 +293,9 @@ export default function App() {
         site_name: typeof draft.site_name === 'string' && draft.site_name.trim().length > 0 ? draft.site_name : 'Unnamed site',
         region_version: baseRegion,
         vegetation_stage: baseStage,
+        parcel_ids: Array.isArray(draft.parcel_ids)
+          ? draft.parcel_ids.filter((value): value is string => typeof value === 'string')
+          : [],
         factors: asRecord(draft.factors),
         location: asRecord(draft.location)
       };
@@ -299,6 +306,7 @@ export default function App() {
         site_name: next.site_name,
         region_version: next.region_version,
         vegetation_stage: next.vegetation_stage,
+        parcel_ids: next.parcel_ids,
         factors: next.factors,
         location: next.location,
         visibility: current?.visibility ?? 'private'
@@ -371,30 +379,12 @@ export default function App() {
   };
 
   const handleCaptureGpsLocation = async (): Promise<void> => {
-    const promptManualLocationFallback = (reason: string): void => {
-      Alert.alert('GPS unavailable', `${reason}\n\nSwitch to manual address entry?`, [
-        {
-          text: 'Keep GPS',
-          style: 'cancel'
-        },
-        {
-          text: 'Use manual address',
-          onPress: () => {
-            surveyForm.setLocationSource('manual');
-            surveySync.setStatus('GPS unavailable. Enter a manual address before submit.');
-          }
-        }
-      ]);
-    };
-
     try {
-      const Location = await import('expo-location');
-
       surveySync.setStatus('Requesting GPS permission...');
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
         surveySync.setStatus('Location permission denied');
-        promptManualLocationFallback('Location permission was denied.');
+        Alert.alert('Location disabled', 'Allow location access to center the map and find nearby parcels.');
         return;
       }
 
@@ -412,7 +402,7 @@ export default function App() {
       surveySync.setStatus('GPS location captured');
     } catch (error) {
       surveySync.setStatus(`GPS error: ${(error as Error).message}`);
-      promptManualLocationFallback('The device could not provide a GPS position.');
+      Alert.alert('GPS unavailable', 'The device could not provide a GPS position.');
     }
   };
 
@@ -431,6 +421,39 @@ export default function App() {
       surveySync.setStatus(`Public map load error: ${(error as Error).message}`);
     } finally {
       setPublicMapLoading(false);
+    }
+  };
+
+  const handleLoadPublicParcels = async (input: { bbox: string; zoom: number }): Promise<void> => {
+    if (!input.bbox || input.bbox.trim().length === 0) {
+      return;
+    }
+
+    const requestId = publicParcelsRequestRef.current + 1;
+    publicParcelsRequestRef.current = requestId;
+    setPublicParcelsLoading(true);
+
+    try {
+      const payload = await fetchPublicParcelStatuses(apiUrl, {
+        bbox: input.bbox,
+        zoom: input.zoom,
+        year: new Date().getFullYear()
+      });
+
+      if (publicParcelsRequestRef.current !== requestId) {
+        return;
+      }
+
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      setPublicParcelStatuses(items);
+    } catch (error) {
+      if (publicParcelsRequestRef.current === requestId) {
+        surveySync.setStatus(`Public parcel layer load error: ${(error as Error).message}`);
+      }
+    } finally {
+      if (publicParcelsRequestRef.current === requestId) {
+        setPublicParcelsLoading(false);
+      }
     }
   };
 
@@ -517,6 +540,7 @@ export default function App() {
           <>
             {surveyList.selectedSurvey ? (
               <SurveyDetailScreen
+                apiUrl={apiUrl}
                 selectedSurvey={surveyList.selectedSurvey}
                 selectedSurveyAttachments={surveyList.selectedSurveyAttachments}
                 surveyDetailTab={surveyDetailTab}
@@ -571,10 +595,10 @@ export default function App() {
                     `Vegetation stage updated for ${surveyId}`
                   );
                 }}
-                onOpenLocation={async (surveyId) => {
+                onOpenParcels={async (surveyId) => {
                   const loaded = await handleStartEditSurvey(surveyId);
                   if (loaded) {
-                    navigation.navigate('surveyLocationDetail', { surveyId });
+                    navigation.navigate('surveyParcels', { surveyId });
                   }
                 }}
               />
@@ -592,6 +616,7 @@ export default function App() {
         {({ navigation }) => (
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
             <SurveyFormScreen
+              apiUrl={apiUrl}
               screen={formMode === 'edit' ? 'edit' : 'create'}
               editingSurveyId={editingSurveyId}
               siteName={surveyForm.siteName}
@@ -600,12 +625,9 @@ export default function App() {
               vegetationStage={surveyForm.vegetationStage}
               setVegetationStage={surveyForm.setVegetationStage}
               onRegionChange={surveyForm.handleRegionChange}
-              locationSource={surveyForm.locationSource}
-              setLocationSource={surveyForm.setLocationSource}
               gpsLocation={surveyForm.gpsLocation}
-              manualLocation={surveyForm.manualLocation}
-              setGpsLocationField={surveyForm.setGpsLocationField}
-              setManualLocationField={surveyForm.setManualLocationField}
+              selectedParcelIds={surveyForm.selectedParcelIds}
+              onToggleParcelSelection={surveyForm.toggleParcelSelection}
               onCaptureGpsLocation={handleCaptureGpsLocation}
               factorSections={surveyForm.factorSections}
               factorRetainedScores={surveyForm.factorRetainedScores}
@@ -646,27 +668,29 @@ export default function App() {
         )}
       </SurveysStack.Screen>
       <SurveysStack.Screen
-        name="surveyLocationDetail"
+        name="surveyParcels"
         options={{
-          title: 'Location',
+          title: 'Edit parcels',
           headerLargeTitle: false
         }}
       >
-        {({ route }) => (
-          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-            <SurveyLocationScreen
-              surveyId={route.params.surveyId}
-              locationSource={surveyForm.locationSource}
-              setLocationSource={surveyForm.setLocationSource}
-              gpsLocation={surveyForm.gpsLocation}
-              manualLocation={surveyForm.manualLocation}
-              setGpsLocationField={surveyForm.setGpsLocationField}
-              setManualLocationField={surveyForm.setManualLocationField}
-              onCaptureGpsLocation={handleCaptureGpsLocation}
-              formErrors={surveyForm.formErrors}
-              status={surveySync.status}
-            />
-          </ScrollView>
+        {({ navigation, route }) => (
+          <SurveyParcelSelectionScreen
+            apiUrl={apiUrl}
+            surveyId={route.params.surveyId}
+            siteName={surveyForm.siteName}
+            gpsLocation={surveyForm.gpsLocation}
+            selectedParcelIds={surveyForm.selectedParcelIds}
+            onToggleParcelSelection={surveyForm.toggleParcelSelection}
+            onCaptureGpsLocation={handleCaptureGpsLocation}
+            onSave={async () => {
+              const saved = await handleSaveSurveyEdits();
+              if (saved) {
+                navigation.goBack();
+              }
+            }}
+            status={surveySync.status}
+          />
         )}
       </SurveysStack.Screen>
     </SurveysStack.Navigator>
@@ -676,8 +700,10 @@ export default function App() {
     <View style={styles.tabScreenContainer}>
       <PublicMapScreen
         items={publicMapItems}
+        parcelStatuses={publicParcelStatuses}
         ownSurveyIds={ownSurveyIds}
         loading={publicMapLoading}
+        parcelsLoading={publicParcelsLoading}
         fromDate={publicMapFromDate}
         toDate={publicMapToDate}
         region={publicMapRegion}
@@ -685,6 +711,7 @@ export default function App() {
         onChangeToDate={setPublicMapToDate}
         onChangeRegion={setPublicMapRegion}
         onLoad={handleLoadPublicMap}
+        onLoadParcels={handleLoadPublicParcels}
         onReportSurvey={surveySync.handleReportSurvey}
       />
     </View>

@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
 import { computeIbpTotalsFromRetainedScores, computeRetainedScoresFromRawFactors, evaluateSubmitReadinessFromDraft } from '../app/ibp-scoring';
+import { computeRegionZoom } from '../app/map-viewport';
 import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION, defaultVegetationStageForRegion, normalizeVegetationStageForRegion } from '../app/constants';
 import { formatDateTime, formatEventPayload, formatPoints, formatRemainingTime, isLessThan24HoursRemaining, resolveSubmissionDeadline } from '../app/formatters';
 import { styles } from '../app/styles';
 import { FactorKey, RegionVersion, SurveyDetailResponse, SurveyDetailTab, SurveyEventItem, VegetationStage } from '../app/types';
+import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
+import { ParcelOverlayPolygons } from '../components/ParcelOverlayPolygons';
 import { FilterChip } from '../components/FilterChip';
 import { SurveyBadges } from '../components/SurveyBadges';
+import { useParcelStatuses } from '../hooks/useParcelStatuses';
 import { getLocalSurveyDraft, LocalAttachment, LocalSurvey } from '../storage';
 
 type SurveyDetailScreenProps = {
+  apiUrl: string;
   selectedSurvey: LocalSurvey;
   selectedSurveyAttachments: LocalAttachment[];
   surveyDetailTab: SurveyDetailTab;
@@ -33,7 +38,7 @@ type SurveyDetailScreenProps = {
   onRenameSurvey: (surveyId: string, nextSiteName: string) => Promise<void> | void;
   onUpdateRegionVersion: (surveyId: string, region: RegionVersion) => Promise<void> | void;
   onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void> | void;
-  onOpenLocation: (surveyId: string) => Promise<void> | void;
+  onOpenParcels: (surveyId: string) => Promise<void> | void;
 };
 
 const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -137,6 +142,7 @@ function ActionButton({ label, icon, variant, onPress }: ActionButtonProps) {
 }
 
 export function SurveyDetailScreen({
+  apiUrl,
   selectedSurvey,
   selectedSurveyAttachments,
   surveyDetailTab,
@@ -158,7 +164,7 @@ export function SurveyDetailScreen({
   onRenameSurvey,
   onUpdateRegionVersion,
   onUpdateVegetationStage,
-  onOpenLocation
+  onOpenParcels
 }: SurveyDetailScreenProps) {
   const { width: viewportWidth } = useWindowDimensions();
   const detail = surveyDetails[selectedSurvey.id];
@@ -188,22 +194,38 @@ export function SurveyDetailScreen({
   const effectiveLocation = hasLocationContent(localLocation) ? localLocation : detail?.location;
   const gpsCoordinates = resolveGpsCoordinates(effectiveLocation);
   const hasMapPreview = gpsCoordinates !== null;
-  const mediaSlides = useMemo<Array<{ key: string; type: 'map' } | { key: string; type: 'photo'; attachment: LocalAttachment }>>(() => {
-    const slides: Array<{ key: string; type: 'map' } | { key: string; type: 'photo'; attachment: LocalAttachment }> = [];
-    if (hasMapPreview) {
-      slides.push({ key: `map-${selectedSurvey.id}`, type: 'map' });
-    }
-    for (const attachment of photoAttachments) {
-      slides.push({ key: `photo-${attachment.id}`, type: 'photo', attachment });
-    }
-    return slides;
-  }, [hasMapPreview, selectedSurvey.id, photoAttachments]);
-  const hasMediaSlides = mediaSlides.length > 0;
+  const mapPreviewRegion = useMemo<Region | null>(() => {
+    if (!gpsCoordinates) return null;
+    return {
+      latitude: gpsCoordinates.lat,
+      longitude: gpsCoordinates.lng,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01
+    };
+  }, [gpsCoordinates?.lat, gpsCoordinates?.lng]);
+  const mapPreviewZoom = useMemo(() => (mapPreviewRegion ? computeRegionZoom(mapPreviewRegion) : 0), [mapPreviewRegion]);
+  const { items: parcelStatuses, loading: parcelsLoading } = useParcelStatuses({
+    apiUrl,
+    region:
+      mapPreviewRegion ?? {
+        latitude: 46.603354,
+        longitude: 1.888334,
+        latitudeDelta: 3.8,
+        longitudeDelta: 3.8
+      },
+    enabled: hasMapPreview,
+    year: new Date().getFullYear()
+  });
+  const photoSlides = useMemo<Array<{ key: string; attachment: LocalAttachment }>>(
+    () => photoAttachments.map((attachment) => ({ key: `photo-${attachment.id}`, attachment })),
+    [photoAttachments]
+  );
+  const hasPhotoSlides = photoSlides.length > 0;
   const [mediaPageIndex, setMediaPageIndex] = useState(0);
 
   useEffect(() => {
     setMediaPageIndex(0);
-  }, [selectedSurvey.id, mediaSlides.length]);
+  }, [selectedSurvey.id, photoSlides.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,6 +260,7 @@ export function SurveyDetailScreen({
           region_version: draft.region_version,
           vegetation_stage: draft.vegetation_stage,
           factors: draft.factors,
+          parcel_ids: draft.parcel_ids,
           location: draft.location,
           expires_at: draft.expires_at
         });
@@ -394,18 +417,18 @@ export function SurveyDetailScreen({
     setIsRenamingSite(false);
   };
 
-  const handleOpenLocationEditor = (): void => {
+  const handleOpenParcels = (): void => {
     if (!canEditSurvey) {
       return;
     }
-    void onOpenLocation(selectedSurvey.id);
+    void onOpenParcels(selectedSurvey.id);
   };
 
   const handleMediaScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
-    if (mediaSlides.length <= 1) return;
+    if (photoSlides.length <= 1) return;
     const offsetX = event.nativeEvent.contentOffset.x;
     const nextIndex = Math.round(offsetX / mediaSlideWidth);
-    const safeIndex = Math.max(0, Math.min(mediaSlides.length - 1, nextIndex));
+    const safeIndex = Math.max(0, Math.min(photoSlides.length - 1, nextIndex));
     setMediaPageIndex(safeIndex);
   };
 
@@ -444,43 +467,44 @@ export function SurveyDetailScreen({
         <SurveyBadges survey={selectedSurvey} />
 
         {surveyDetailTab !== 'debug' ? (
-          hasMediaSlides ? (
-            <View style={styles.mediaHeroSection}>
-              <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                style={styles.mediaHeroCarousel}
-                decelerationRate="fast"
-                snapToInterval={mediaSlideWidth}
-                disableIntervalMomentum
-                onMomentumScrollEnd={handleMediaScrollEnd}
-              >
-                {mediaSlides.map((slide) =>
-                  slide.type === 'map' ? (
-                    <View key={slide.key} style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
-                      <MapView
-                        style={styles.mediaHeroMap}
-                        initialRegion={{
-                          latitude: gpsCoordinates?.lat ?? 0,
-                          longitude: gpsCoordinates?.lng ?? 0,
-                          latitudeDelta: 0.01,
-                          longitudeDelta: 0.01
-                        }}
-                        onPress={handleOpenLocationEditor}
-                        scrollEnabled={false}
-                        zoomEnabled={false}
-                        rotateEnabled={false}
-                        pitchEnabled={false}
-                      >
-                        {gpsCoordinates ? <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} /> : null}
-                      </MapView>
-                      <View style={styles.mediaHeroCaption}>
-                        <Ionicons name="map-outline" size={14} color="#254a6d" />
-                        <Text style={styles.mediaHeroCaptionText}>{canEditSurvey ? 'Map (tap to edit location)' : 'Map'}</Text>
-                      </View>
-                    </View>
-                  ) : (
+          <>
+            {hasMapPreview ? (
+              <Pressable style={styles.detailMapHeroShell} onPress={handleOpenParcels} disabled={!canEditSurvey}>
+                <MapView
+                  style={styles.detailMapHeroMap}
+                  initialRegion={mapPreviewRegion ?? undefined}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                >
+                  <IgnCadastreTileOverlay enabled={mapPreviewZoom >= 15} zIndex={0} />
+                  <ParcelOverlayPolygons items={parcelStatuses} />
+                  {gpsCoordinates ? <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} /> : null}
+                </MapView>
+                <View style={styles.detailMapHeroCaption}>
+                  <Ionicons name="map-outline" size={14} color="#254a6d" />
+                  <Text style={styles.detailMapHeroCaptionText}>
+                    {canEditSurvey ? 'Map • tap to edit parcels' : 'Map'}
+                    {parcelsLoading ? ' • loading parcel overlay...' : parcelStatuses.length > 0 ? ` • ${parcelStatuses.length} parcel(s)` : ''}
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+
+            {hasPhotoSlides ? (
+              <View style={styles.mediaHeroSection}>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.mediaHeroCarousel}
+                  decelerationRate="fast"
+                  snapToInterval={mediaSlideWidth}
+                  disableIntervalMomentum
+                  onMomentumScrollEnd={handleMediaScrollEnd}
+                >
+                  {photoSlides.map((slide) => (
                     <View key={slide.key} style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
                       <Image source={{ uri: slide.attachment.local_uri ?? undefined }} style={styles.mediaHeroImage} resizeMode="cover" />
                       <View style={styles.mediaHeroCaption}>
@@ -498,36 +522,36 @@ export function SurveyDetailScreen({
                         </Text>
                       </Pressable>
                     </View>
-                  )
-                )}
-              </ScrollView>
-              {mediaSlides.length > 1 ? (
-                <View style={styles.mediaPagerRow}>
-                  <View style={styles.mediaDotsRow}>
-                    {mediaSlides.map((slide, index) => (
-                      <View key={`dot-${slide.key}`} style={[styles.mediaDot, index === mediaPageIndex ? styles.mediaDotActive : null]} />
-                    ))}
+                  ))}
+                </ScrollView>
+                {photoSlides.length > 1 ? (
+                  <View style={styles.mediaPagerRow}>
+                    <View style={styles.mediaDotsRow}>
+                      {photoSlides.map((slide, index) => (
+                        <View key={`dot-${slide.key}`} style={[styles.mediaDot, index === mediaPageIndex ? styles.mediaDotActive : null]} />
+                      ))}
+                    </View>
+                    <Text style={styles.mediaPagerLabel}>
+                      {mediaPageIndex + 1}/{photoSlides.length}
+                    </Text>
                   </View>
-                  <Text style={styles.mediaPagerLabel}>
-                    {mediaPageIndex + 1}/{mediaSlides.length}
-                  </Text>
-                </View>
-              ) : null}
+                ) : null}
 
-              {selectedSurvey.status !== 'submitted' ? (
-                <Pressable style={styles.mediaAddPictureButton} onPress={handleAddPicture}>
-                  <Ionicons name="add-circle-outline" size={15} color="#255178" />
-                  <Text style={styles.mediaAddPictureButtonText}>Add picture</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : (
-            <Pressable style={styles.mediaPlaceholderCard} onPress={handleAddPicture}>
-              <Ionicons name="image-outline" size={28} color="#7d95ad" />
-              <Text style={styles.mediaPlaceholderTitle}>No map or picture yet</Text>
-              <Text style={styles.mediaPlaceholderMeta}>Tap to upload a photo</Text>
-            </Pressable>
-          )
+                {selectedSurvey.status !== 'submitted' ? (
+                  <Pressable style={styles.mediaAddPictureButton} onPress={handleAddPicture}>
+                    <Ionicons name="add-circle-outline" size={15} color="#255178" />
+                    <Text style={styles.mediaAddPictureButtonText}>Add picture</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <Pressable style={styles.mediaPlaceholderCard} onPress={handleAddPicture}>
+                <Ionicons name="image-outline" size={28} color="#7d95ad" />
+                <Text style={styles.mediaPlaceholderTitle}>No picture yet</Text>
+                <Text style={styles.mediaPlaceholderMeta}>Tap to upload a photo</Text>
+              </Pressable>
+            )}
+          </>
         ) : null}
 
         <View style={styles.filterChipsRow}>
@@ -587,6 +611,12 @@ export function SurveyDetailScreen({
           <View style={styles.locationCard}>
             <Text style={styles.detailTitle}>Region and vegetation</Text>
             {canEditSurvey ? <Text style={styles.rowMeta}>Tap to update directly from detail.</Text> : null}
+            {canEditSurvey ? (
+              <Pressable style={styles.detailParcelsEditButton} onPress={handleOpenParcels}>
+                <Ionicons name="map-outline" size={14} color="#1f4f79" />
+                <Text style={styles.detailParcelsEditButtonText}>Edit parcels on map</Text>
+              </Pressable>
+            ) : null}
             {canEditSurvey ? (
               <>
                 <View style={styles.filterChipsRow}>

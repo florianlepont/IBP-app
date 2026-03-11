@@ -20,6 +20,9 @@ export const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 20
   },
+  formScreen: {
+    gap: 12
+  },
   card: {
     backgroundColor: '#f6faf4',
     borderWidth: 1,
@@ -237,6 +240,30 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#12304f'
   },
+  detailMapHeroShell: {
+    marginHorizontal: -26,
+    marginTop: -10,
+    borderWidth: 0,
+    overflow: 'hidden',
+    backgroundColor: '#f2f7fd'
+  },
+  detailMapHeroMap: {
+    width: '100%',
+    height: 290,
+    backgroundColor: '#d7e2ee'
+  },
+  detailMapHeroCaption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  detailMapHeroCaptionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#254a6d'
+  },
   mediaHeroSection: {
     gap: 8
   },
@@ -372,8 +399,39 @@ export const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#fbfdff'
   },
+  detailParcelsEditButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c6d8ea',
+    backgroundColor: '#eef5ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  detailParcelsEditButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1f4f79'
+  },
   formLocationSection: {
     gap: 8
+  },
+  formMapHeroCard: {
+    marginHorizontal: -16,
+    borderWidth: 1,
+    borderColor: '#dbe7f4',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 8,
+    backgroundColor: '#f8fbff'
+  },
+  formMapHeroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
   },
   formMapCard: {
     borderWidth: 1,
@@ -1218,6 +1276,38 @@ export const styles = StyleSheet.create({
     color: '#234a6f',
     fontSize: 12,
     fontWeight: '600'
+  },
+  parcelEditorScreen: {
+    flex: 1,
+    gap: 10,
+    padding: 12,
+    backgroundColor: '#e8eee7'
+  },
+  parcelEditorMapCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d8e6f5',
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f2f7fd'
+  },
+  parcelEditorMap: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#d7e2ee'
+  },
+  parcelEditorInfoCard: {
+    borderWidth: 1,
+    borderColor: '#dce8f5',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#fbfdff'
+  },
+  parcelEditorHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
   submitReadyBanner: {
     marginTop: 8,

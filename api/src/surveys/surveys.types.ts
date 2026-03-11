@@ -18,6 +18,7 @@ export type SurveyUpsertBody = {
   status?: 'draft' | 'submitted' | 'synced' | 'error' | 'expired';
   visibility?: 'private' | 'public';
   parcel_id?: string;
+  parcel_ids?: string[];
   observation_year?: number;
   version_number?: number;
   previous_survey_id?: string;
@@ -33,6 +34,7 @@ export type SurveyPatchBody = {
   site_name?: string;
   visibility?: 'private' | 'public';
   parcel_id?: string;
+  parcel_ids?: string[];
   observation_year?: number;
   version_number?: number;
   previous_survey_id?: string;
@@ -83,6 +85,7 @@ export type SurveyRow = {
   status: 'draft' | 'submitted' | 'synced' | 'error' | 'expired';
   visibility: 'private' | 'public';
   parcel_id: string | null;
+  parcel_ids?: string[];
   observation_year: number | null;
   version_number: number | null;
   previous_survey_id: string | null;
@@ -149,6 +152,7 @@ export type SyncChangeSurvey = Pick<
   | 'status'
   | 'visibility'
   | 'parcel_id'
+  | 'parcel_ids'
   | 'observation_year'
   | 'version_number'
   | 'previous_survey_id'

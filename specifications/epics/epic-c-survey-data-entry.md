@@ -11,7 +11,7 @@ As a contributor, I want to complete a guided form so I do not miss any required
 
 Acceptance criteria:
 - Required fields are clearly identified.
-- The form captures mandatory parcel linkage metadata (`parcel_id`, observation year, version).
+- The form captures mandatory parcel linkage metadata (`parcel_ids[]`, observation year, version).
 - The form includes all IBP factors (`A` to `J`) and each factor can be completed from the survey form flow.
 - Field types are appropriate (text, number, list, date, boolean).
 - Validation errors are displayed per field.
@@ -34,14 +34,14 @@ Acceptance criteria:
 - I can remove a photo before submission.
 - Photos remain linked to the survey after synchronization.
 
-### US-C4 - Parcel Linkage From Location
-As a contributor, I want to position my survey and link it to a cadastral parcel to ensure traceability and longitudinal follow-up.
+### US-C4 - Parcel Linkage By Map Selection
+As a contributor, I want to select one or many cadastral parcels directly on the map to ensure traceability and longitudinal follow-up.
 
 Acceptance criteria:
-- During creation, location is captured if permission is granted.
-- If geolocation is unavailable, the app asks the user to enter the address manually.
-- Manual address entry is required before submission when GPS coordinates are missing.
-- The app resolves/selects a cadastral parcel from location (or manual parcel search fallback) and stores `parcel_id`.
+- During create/edit, user can tap parcel polygons to select or deselect them.
+- A survey can reference one or many parcels (`parcel_ids[]`).
+- The app can center the map on current location to help nearby selection.
+- Offline mode does not block draft creation/edit; parcel linkage can be completed once parcel layer is available online.
 - Submission is blocked if parcel linkage is missing or invalid.
 
 ### US-C5 - Submit Survey
@@ -49,8 +49,7 @@ As a contributor, I want to submit a completed survey to share my observation.
 
 Acceptance criteria:
 - Submission is blocked until all IBP factors (`A` to `J`) are completed and scoreable.
-- Submission is blocked if required non-factor data is missing (at least location data: GPS coordinates, or full manual address when GPS is unavailable).
-- Submission is blocked if cadastral parcel linkage metadata is missing (`parcel_id`, observation year, version).
+- Submission is blocked if cadastral parcel linkage metadata is missing (`parcel_ids[]`, observation year, version).
 - When submission is blocked, the app displays an explicit reason and identifies missing items (missing factors and/or required fields).
 - Submission is blocked if the survey is older than 7 days; the survey transitions to status `expired`.
 - After a successful submission request, survey status transitions to `submitted` and the survey becomes read-only for data entry.

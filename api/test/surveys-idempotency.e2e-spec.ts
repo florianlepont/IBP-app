@@ -106,15 +106,15 @@ describe('Surveys idempotency (e2e)', () => {
     expect(submit.body.errors.join(' ')).toContain('factor B is required');
   });
 
-  it('rejects submit when location is missing', async () => {
-    const email = `e2e-submit-no-location-${Date.now()}@ibp.local`;
+  it('rejects submit when parcel linkage is missing', async () => {
+    const email = `e2e-submit-no-parcel-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
       .send({ email, password: 'demo123' })
       .expect(201);
 
     const accessToken = login.body.access_token as string;
-    const surveyId = `e2e-submit-no-location-${Date.now()}`;
+    const surveyId = `e2e-submit-no-parcel-${Date.now()}`;
 
     await request(app.getHttpServer())
       .post('/v1/surveys')
@@ -140,7 +140,7 @@ describe('Surveys idempotency (e2e)', () => {
       .expect(422);
 
     expect(Array.isArray(submit.body.errors)).toBe(true);
-    expect(submit.body.errors.join(' ')).toContain('location is required for submit');
+    expect(submit.body.errors.join(' ')).toContain('parcel_ids is required for submit');
   });
 
   it('marks survey as expired when submit is attempted after deadline', async () => {
@@ -507,6 +507,9 @@ describe('Surveys idempotency (e2e)', () => {
   });
 
   it('resolves a parcel from coordinates and returns parcel history entries', async () => {
+    const runSeed = Date.now() % 900;
+    const baseLat = 48.703 + runSeed / 100000;
+    const baseLng = 2.191 + runSeed / 100000;
     const email = `e2e-parcel-history-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
@@ -521,7 +524,7 @@ describe('Surveys idempotency (e2e)', () => {
     const resolved = await request(app.getHttpServer())
       .get('/v1/parcels/resolve')
       .set('Authorization', `Bearer ${accessToken}`)
-      .query({ lat: '48.703', lng: '2.191' })
+      .query({ lat: String(baseLat), lng: String(baseLng) })
       .expect(200);
 
     const parcelId = resolved.body.parcel?.parcel_id as string;
@@ -546,7 +549,7 @@ describe('Surveys idempotency (e2e)', () => {
         region_version: 'ACA',
         vegetation_stage: 'collineen',
         factors: validFactors,
-        location: { source: 'gps', lat: 48.703, lng: 2.191 }
+        location: { source: 'gps', lat: baseLat, lng: baseLng }
       })
       .expect(201);
 
@@ -571,7 +574,7 @@ describe('Surveys idempotency (e2e)', () => {
         region_version: 'ACA',
         vegetation_stage: 'collineen',
         factors: validFactors,
-        location: { source: 'gps', lat: 48.7031, lng: 2.1911 }
+        location: { source: 'gps', lat: baseLat + 0.0001, lng: baseLng + 0.0001 }
       })
       .expect(201);
 
@@ -593,6 +596,9 @@ describe('Surveys idempotency (e2e)', () => {
   });
 
   it('exposes parcel study status on /v1/public/parcels/status', async () => {
+    const runSeed = Date.now() % 800;
+    const baseLat = 43.6045 + runSeed / 100000;
+    const baseLng = 1.444 + runSeed / 100000;
     const email = `e2e-parcel-status-${Date.now()}@ibp.local`;
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
@@ -619,7 +625,7 @@ describe('Surveys idempotency (e2e)', () => {
         region_version: 'ACA',
         vegetation_stage: 'collineen',
         factors: validFactors,
-        location: { source: 'gps', lat: 43.6045, lng: 1.444 }
+        location: { source: 'gps', lat: baseLat, lng: baseLng }
       })
       .expect(201);
 

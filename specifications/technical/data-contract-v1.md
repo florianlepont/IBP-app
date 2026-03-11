@@ -11,7 +11,7 @@ Define the shared data model between mobile app, backend API, and database for t
 - Timestamps are ISO-8601 UTC (`YYYY-MM-DDTHH:mm:ssZ`).
 - Backend is the source of truth for business validation.
 - Sync operations must be idempotent.
-- Cadastral parcel identifiers (`parcel_id`) are canonicalized server-side.
+- Cadastral parcel identifiers (`parcel_id`/`parcel_ids[]`) are canonicalized server-side.
 
 ## Entities
 
@@ -47,7 +47,8 @@ Required fields:
 - `id` (uuid) // generated on mobile
 - `user_id` (uuid)
 - `site_name` (string)
-- `parcel_id` (string, nullable in early draft, required for submit)
+- `parcel_id` (string, nullable compatibility field = primary parcel)
+- `parcel_ids` (string[], nullable in early draft, required for submit)
 - `status` (enum: `draft` | `submitted` | `synced` | `error` | `expired`)
 - `visibility` (enum: `private` | `public`)
 - `observation_year` (integer)
@@ -56,7 +57,7 @@ Required fields:
 - `vegetation_stage` (string enum, depends on `region_version`)
 - `factors` (jsonb) // IBP factor inputs A..J
 - `scores` (jsonb) // subscores + total
-- `location` (jsonb) // GPS or manual address
+- `location` (jsonb) // optional map helper metadata (for example current GPS used for viewport)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 - `submitted_at` (timestamp, nullable)
@@ -172,6 +173,19 @@ Required fields:
 - `latest_observation_year` (integer, nullable)
 - `latest_ibp_total` (integer, nullable)
 
+### 10.1) SurveyParcel Link (V1.2 Addendum)
+Association table enabling multi-parcel surveys.
+
+Required fields:
+- `survey_id` (uuid/text)
+- `parcel_id` (string)
+- `created_at` (timestamp)
+
+Rules:
+- (`survey_id`, `parcel_id`) is unique.
+- One survey can reference multiple parcels.
+- `surveys.parcel_id` remains as optional compatibility pointer to primary parcel.
+
 ### 11) Analytics Region Snapshot (V2 Addendum, Out of MVP)
 Aggregated IBP metrics by region and period for Explore insights.
 
@@ -200,15 +214,15 @@ Optional fields:
 ## Consistency Rules
 - `expires_at = created_at + 7 days`
 - `visibility` default is `private`
-- `parcel_id` is required for `submitted` surveys
+- at least one parcel is required for `submitted` surveys (`parcel_ids.length >= 1`)
 - `observation_year` and `version_number` are required for `submitted` surveys
-- `submitted` surveys are read-only for observation payload (`site_name`, region/stage, factors, location, scores)
+- `submitted` surveys are read-only for observation payload (`site_name`, parcel linkage, region/stage, factors, location metadata, scores)
 - `submitted` surveys may still change `visibility` (`private` <-> `public`)
 - Only `public` surveys are eligible for community surfaces
 - Switching `public -> private` must remove the survey from community surfaces
 - Deleted surveys must be excluded from user list and community surfaces
 - Server recomputes/validates scores before final accept
-- Server validates that `parcel_id` exists and is compatible with provided location context
+- Server validates that all selected parcels exist
 - For a given parcel history context, `version_number` must be strictly increasing
 
 ## Idempotency Rules

@@ -38,6 +38,8 @@ export type SurveyDetailResponse = {
   site_name?: string;
   status?: string;
   visibility?: 'private' | 'public';
+  parcel_id?: string | null;
+  parcel_ids?: string[];
   region_version?: string | null;
   vegetation_stage?: string | null;
   location?: Record<string, unknown>;
@@ -77,6 +79,20 @@ export type PublicMapItem = {
   ibp_total: number;
 };
 
+export type GeoJsonGeometry = {
+  type: 'Polygon' | 'MultiPolygon';
+  coordinates: unknown;
+};
+
+export type PublicParcelStatusItem = {
+  parcel_id: string;
+  study_status: 'studied' | 'not_studied';
+  latest_submitted_survey_id?: string | null;
+  latest_observation_year?: number | null;
+  latest_ibp_total?: number | null;
+  geometry?: GeoJsonGeometry;
+};
+
 export type SurveyStatusFilter = 'all' | 'draft' | 'submitted' | 'expired';
 export type SurveyVisibilityFilter = 'all' | 'private' | 'public';
 export type SurveySyncFilter = 'all' | 'pending' | 'synced' | 'failed';
@@ -93,31 +109,6 @@ export type VegetationStage =
   | 'thermo_mediterraneen'
   | 'meso_mediterraneen'
   | 'supra_mediterraneen';
-
-export type SurveyLocationSource = 'gps' | 'manual';
-
-export type SurveyGpsLocation = {
-  source: 'gps';
-  lat: number;
-  lng: number;
-  accuracy_m?: number;
-  collected_at: string;
-};
-
-export type SurveyManualLocation = {
-  source: 'manual';
-  address_line: string;
-  postal_code: string;
-  city: string;
-  country: string;
-  lat?: number;
-  lng?: number;
-  geocoded_at?: string;
-  geocode_query?: string;
-  geocode_provider?: string;
-};
-
-export type SurveyLocationPayload = SurveyGpsLocation | SurveyManualLocation | Record<string, unknown>;
 
 export type FactorField = {
   label: string;
