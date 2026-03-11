@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -60,6 +60,8 @@ type SurveyListScreenProps = {
   sortMode: SurveySort;
   setSortMode: (value: SurveySort) => void;
   resetFilters: () => void;
+  searchOpen: boolean;
+  onSearchOpenChange: (open: boolean) => void;
   onOpenSurvey: (surveyId: string) => void;
 };
 
@@ -207,10 +209,13 @@ export function SurveyListScreen({
   sortMode,
   setSortMode,
   resetFilters,
+  searchOpen,
+  onSearchOpenChange,
   onOpenSurvey
 }: SurveyListScreenProps) {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef<TextInput | null>(null);
   const { height: viewportHeight } = useWindowDimensions();
 
   const surveyStats = useMemo(() => computeSurveyStats(surveys), [surveys]);
@@ -229,6 +234,7 @@ export function SurveyListScreen({
     () => `${surveyStats.total} total • ${surveyStats.draft} drafts • ${surveyStats.pending} pending`,
     [surveyStats.draft, surveyStats.pending, surveyStats.total]
   );
+  const showSearchField = searchOpen || surveyQuery.trim().length > 0;
 
   const expandedHeroHeight = Math.max(324, Math.min(388, Math.round(viewportHeight * 0.39)));
   const collapsedHeroHeight = 84;
@@ -260,6 +266,18 @@ export function SurveyListScreen({
     extrapolate: 'clamp'
   });
   const stickyFilterOffset = collapsedHeroHeight + brandSpacing.sm;
+
+  useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 60);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchOpen]);
 
   return (
     <View style={screenStyles.container}>
@@ -339,88 +357,99 @@ export function SurveyListScreen({
           ]}
         >
           <View style={screenStyles.filtersCard}>
-          <View style={screenStyles.filtersHeaderRow}>
-            <View style={screenStyles.filtersHeadingBlock}>
-              <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
-              <Text style={screenStyles.filtersBody}>Use quick filters first, then refine only when needed.</Text>
-            </View>
-
-            <Pressable
-              style={screenStyles.advancedToggle}
-              onPress={() => setAdvancedFiltersOpen((current) => !current)}
-            >
-              <Ionicons name={advancedFiltersOpen ? 'close' : 'funnel-outline'} size={16} color={brandColors.forest} />
-              <Text style={screenStyles.advancedToggleText}>
-                {advancedFiltersOpen ? 'Hide' : advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Filters'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={screenStyles.searchField}>
-            <Ionicons name="search-outline" size={18} color={brandColors.textSecondary} />
-            <TextInput
-              style={screenStyles.searchInput}
-              value={surveyQuery}
-              onChangeText={setSurveyQuery}
-              placeholder="Search by site, id, or sync issue"
-              placeholderTextColor={brandColors.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <FilterSection label="Status" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
-          <FilterSection
-            label="Visibility"
-            options={VISIBILITY_OPTIONS}
-            value={visibilityFilter}
-            onChange={setVisibilityFilter}
-          />
-
-          {advancedFiltersOpen ? (
-            <View style={screenStyles.advancedPanel}>
-              <View style={screenStyles.dateInputsRow}>
-                <View style={screenStyles.dateInputBlock}>
-                  <Text style={screenStyles.filterSectionLabel}>From</Text>
-                  <TextInput
-                    style={screenStyles.compactInput}
-                    value={surveyFromDate}
-                    onChangeText={setSurveyFromDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={brandColors.textSecondary}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-                <View style={screenStyles.dateInputBlock}>
-                  <Text style={screenStyles.filterSectionLabel}>To</Text>
-                  <TextInput
-                    style={screenStyles.compactInput}
-                    value={surveyToDate}
-                    onChangeText={setSurveyToDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={brandColors.textSecondary}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
+            <View style={screenStyles.filtersHeaderRow}>
+              <View style={screenStyles.filtersHeadingBlock}>
+                <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
               </View>
 
-              <FilterSection label="Sync" options={SYNC_OPTIONS} value={syncFilter} onChange={setSyncFilter} />
-              <FilterSection label="Blocked" options={BLOCKED_OPTIONS} value={blockedFilter} onChange={setBlockedFilter} />
-              <FilterSection
-                label="Attachments"
-                options={ATTACHMENT_OPTIONS}
-                value={attachmentFilter}
-                onChange={setAttachmentFilter}
-              />
-              <FilterSection label="Sort" options={SORT_OPTIONS} value={sortMode} onChange={setSortMode} />
-
-              <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
-                <Text style={screenStyles.resetButtonText}>Reset filters</Text>
+              <Pressable
+                style={screenStyles.advancedToggle}
+                onPress={() => setAdvancedFiltersOpen((current) => !current)}
+              >
+                <Ionicons name={advancedFiltersOpen ? 'close' : 'funnel-outline'} size={16} color={brandColors.forest} />
+                <Text style={screenStyles.advancedToggleText}>
+                  {advancedFiltersOpen ? 'Hide' : advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Filters'}
+                </Text>
               </Pressable>
             </View>
-          ) : null}
+
+            {showSearchField ? (
+              <View style={screenStyles.searchField}>
+                <Ionicons name="search-outline" size={18} color={brandColors.textSecondary} />
+                <TextInput
+                  ref={searchInputRef}
+                  style={screenStyles.searchInput}
+                  value={surveyQuery}
+                  onChangeText={setSurveyQuery}
+                  placeholder="Search by site, id, or sync issue"
+                  placeholderTextColor={brandColors.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable
+                  hitSlop={8}
+                  onPress={() => {
+                    setSurveyQuery('');
+                    onSearchOpenChange(false);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={18} color={brandColors.textSecondary} />
+                </Pressable>
+              </View>
+            ) : null}
+
+            <FilterSection label="Status" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+            <FilterSection
+              label="Visibility"
+              options={VISIBILITY_OPTIONS}
+              value={visibilityFilter}
+              onChange={setVisibilityFilter}
+            />
+
+            {advancedFiltersOpen ? (
+              <View style={screenStyles.advancedPanel}>
+                <View style={screenStyles.dateInputsRow}>
+                  <View style={screenStyles.dateInputBlock}>
+                    <Text style={screenStyles.filterSectionLabel}>From</Text>
+                    <TextInput
+                      style={screenStyles.compactInput}
+                      value={surveyFromDate}
+                      onChangeText={setSurveyFromDate}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={brandColors.textSecondary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  <View style={screenStyles.dateInputBlock}>
+                    <Text style={screenStyles.filterSectionLabel}>To</Text>
+                    <TextInput
+                      style={screenStyles.compactInput}
+                      value={surveyToDate}
+                      onChangeText={setSurveyToDate}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={brandColors.textSecondary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
+
+                <FilterSection label="Sync" options={SYNC_OPTIONS} value={syncFilter} onChange={setSyncFilter} />
+                <FilterSection label="Blocked" options={BLOCKED_OPTIONS} value={blockedFilter} onChange={setBlockedFilter} />
+                <FilterSection
+                  label="Attachments"
+                  options={ATTACHMENT_OPTIONS}
+                  value={attachmentFilter}
+                  onChange={setAttachmentFilter}
+                />
+                <FilterSection label="Sort" options={SORT_OPTIONS} value={sortMode} onChange={setSortMode} />
+
+                <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
+                  <Text style={screenStyles.resetButtonText}>Reset filters</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -667,41 +696,40 @@ const screenStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panel,
-    padding: 16,
-    gap: 14
+    padding: 14,
+    gap: 10
   },
   filtersHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 12
+    gap: 10
   },
   filtersHeadingBlock: {
-    flex: 1,
-    gap: 4
+    flex: 1
   },
   filtersTitle: {
     ...brandTypography.sectionTitle,
-    fontSize: 22,
-    lineHeight: 24,
+    fontSize: 19,
+    lineHeight: 22,
     color: brandColors.forest
   },
   filtersBody: {
     ...brandTypography.sectionBody,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 12,
+    lineHeight: 16,
     color: brandColors.textSecondary
   },
   advancedToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 9
+    paddingHorizontal: 10,
+    paddingVertical: 8
   },
   advancedToggleText: {
     ...brandTypography.meta,
@@ -710,31 +738,36 @@ const screenStyles = StyleSheet.create({
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    minHeight: 50,
+    gap: 8,
+    minHeight: 44,
     borderRadius: brandRadius.field,
     borderWidth: 1,
     borderColor: brandColors.inputBorder,
     backgroundColor: brandColors.inputFill,
-    paddingHorizontal: 14
+    paddingHorizontal: 12
   },
   searchInput: {
     flex: 1,
-    ...brandTypography.input,
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '600',
     color: brandColors.textPrimary
   },
   filterSection: {
-    gap: 8
+    gap: 6
   },
   filterSectionLabel: {
-    ...brandTypography.label,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
     color: brandColors.forest,
     textTransform: 'uppercase'
   },
   filterChipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     paddingRight: 8
   },
   filterChip: {
@@ -742,50 +775,54 @@ const screenStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: brandColors.inputBorder,
     backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    paddingHorizontal: 10,
+    paddingVertical: 7
   },
   filterChipActive: {
     borderColor: brandColors.forest,
     backgroundColor: brandColors.forest
   },
   filterChipText: {
-    ...brandTypography.meta,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '600',
     color: brandColors.forest
   },
   filterChipTextActive: {
     color: brandColors.white
   },
   advancedPanel: {
-    gap: 12,
+    gap: 10,
     borderTopWidth: 1,
     borderTopColor: brandColors.divider,
-    paddingTop: 12
+    paddingTop: 10
   },
   dateInputsRow: {
     flexDirection: 'row',
-    gap: 10
+    gap: 8
   },
   dateInputBlock: {
     flex: 1,
-    gap: 6
+    gap: 4
   },
   compactInput: {
-    minHeight: 46,
+    minHeight: 40,
     borderRadius: brandRadius.field,
     borderWidth: 1,
     borderColor: brandColors.inputBorder,
     backgroundColor: brandColors.inputFill,
-    paddingHorizontal: 14,
-    ...brandTypography.input,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '600',
     color: brandColors.textPrimary
   },
   resetButton: {
     alignSelf: 'flex-start',
     borderRadius: brandRadius.pill,
     backgroundColor: brandColors.sage,
-    paddingHorizontal: 14,
-    paddingVertical: 10
+    paddingHorizontal: 12,
+    paddingVertical: 8
   },
   resetButtonText: {
     ...brandTypography.meta,
