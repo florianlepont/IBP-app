@@ -164,8 +164,7 @@ describe('IbpRulesService (unit)', () => {
       region_version: 'ACA',
       vegetation_stage: 'collineen',
       expires_at: new Date(Date.now() - 60_000).toISOString(),
-      factors: { A: 1 },
-      location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      factors: { A: 1 }
     });
 
     expect(result.ok).toBe(false);
@@ -189,8 +188,7 @@ describe('IbpRulesService (unit)', () => {
         H: 2,
         I: 2,
         J: 5
-      },
-      location: { source: 'gps', lat: 48.643, lng: 1.829 }
+      }
     });
 
     expect(result.ok).toBe(true);
@@ -202,10 +200,10 @@ describe('IbpRulesService (unit)', () => {
     });
   });
 
-  it('validateSubmit rejects missing location', () => {
+  it('validateSubmit rejects missing parcel-independent required fields', () => {
     const result = service.validateSubmit({
       region_version: 'ACA',
-      vegetation_stage: 'collineen',
+      vegetation_stage: '',
       expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       factors: {
         A: 1,
@@ -222,10 +220,10 @@ describe('IbpRulesService (unit)', () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors.join(' | ')).toContain('location is required for submit');
+    expect(result.errors.join(' | ')).toContain('vegetation_stage is required');
   });
 
-  it('validateSubmit accepts full manual address location', () => {
+  it('validateSubmit accepts payload without location metadata', () => {
     const result = service.validateSubmit({
       region_version: 'ACA',
       vegetation_stage: 'collineen',
@@ -241,13 +239,6 @@ describe('IbpRulesService (unit)', () => {
         H: 2,
         I: 2,
         J: 5
-      },
-      location: {
-        source: 'manual',
-        address_line: '12 rue des Chenes',
-        postal_code: '75001',
-        city: 'Paris',
-        country: 'FR'
       }
     });
 

@@ -42,7 +42,7 @@ export type SurveyDetailResponse = {
   parcel_ids?: string[];
   region_version?: string | null;
   vegetation_stage?: string | null;
-  location?: Record<string, unknown>;
+  display_location?: { lat: number; lng: number } | null;
   created_at?: string;
   updated_at?: string;
   submitted_at?: string | null;

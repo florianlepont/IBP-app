@@ -63,22 +63,12 @@ const asFiniteNumber = (value: unknown): number | null => {
   return null;
 };
 
-const resolveGpsCoordinates = (location?: Record<string, unknown>): { lat: number; lng: number } | null => {
-  if (!location || typeof location !== 'object') return null;
-  const lat = asFiniteNumber(location.lat);
-  const lng = asFiniteNumber(location.lng);
+const resolveDisplayCoordinates = (displayLocation?: { lat?: unknown; lng?: unknown } | null): { lat: number; lng: number } | null => {
+  if (!displayLocation) return null;
+  const lat = asFiniteNumber(displayLocation.lat);
+  const lng = asFiniteNumber(displayLocation.lng);
   if (lat === null || lng === null) return null;
   return { lat, lng };
-};
-
-const hasLocationContent = (location?: Record<string, unknown>): boolean => {
-  if (!location || typeof location !== 'object') return false;
-  return Object.values(location).some((value) => {
-    if (typeof value === 'string') return value.trim().length > 0;
-    if (typeof value === 'number') return Number.isFinite(value);
-    if (typeof value === 'boolean') return true;
-    return value !== null && value !== undefined;
-  });
 };
 
 type ActionButtonVariant = 'neutral' | 'primary' | 'danger' | 'success';
@@ -96,10 +86,17 @@ type LocalDraftMeta = {
   region_version: RegionVersion;
   vegetation_stage: VegetationStage;
 };
+type HeroMode = 'map' | 'photo';
 
 const FACTOR_ORDER: FactorKey[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER);
 const isFactorKey = (value: string): value is FactorKey => FACTOR_KEYS.has(value as FactorKey);
+const DEFAULT_FRANCE_REGION: Region = {
+  latitude: 46.603354,
+  longitude: 1.888334,
+  latitudeDelta: 3.8,
+  longitudeDelta: 3.8
+};
 
 type ActionButtonProps = {
   label: string;
@@ -189,13 +186,11 @@ export function SurveyDetailScreen({
   const [localDraftMeta, setLocalDraftMeta] = useState<LocalDraftMeta | null>(null);
   const [isRenamingSite, setIsRenamingSite] = useState(false);
   const [siteNameInput, setSiteNameInput] = useState('');
-  const mediaSlideWidth = Math.max(300, viewportWidth - 36);
-  const localLocation = selectedSurvey.location;
-  const effectiveLocation = hasLocationContent(localLocation) ? localLocation : detail?.location;
-  const gpsCoordinates = resolveGpsCoordinates(effectiveLocation);
+  const mediaSlideWidth = viewportWidth;
+  const gpsCoordinates = resolveDisplayCoordinates(detail?.display_location);
   const hasMapPreview = gpsCoordinates !== null;
-  const mapPreviewRegion = useMemo<Region | null>(() => {
-    if (!gpsCoordinates) return null;
+  const mapPreviewRegion = useMemo<Region>(() => {
+    if (!gpsCoordinates) return DEFAULT_FRANCE_REGION;
     return {
       latitude: gpsCoordinates.lat,
       longitude: gpsCoordinates.lng,
@@ -203,16 +198,10 @@ export function SurveyDetailScreen({
       longitudeDelta: 0.01
     };
   }, [gpsCoordinates?.lat, gpsCoordinates?.lng]);
-  const mapPreviewZoom = useMemo(() => (mapPreviewRegion ? computeRegionZoom(mapPreviewRegion) : 0), [mapPreviewRegion]);
-  const { items: parcelStatuses, loading: parcelsLoading } = useParcelStatuses({
+  const mapPreviewZoom = useMemo(() => computeRegionZoom(mapPreviewRegion), [mapPreviewRegion]);
+  const { items: parcelStatuses } = useParcelStatuses({
     apiUrl,
-    region:
-      mapPreviewRegion ?? {
-        latitude: 46.603354,
-        longitude: 1.888334,
-        latitudeDelta: 3.8,
-        longitudeDelta: 3.8
-      },
+    region: mapPreviewRegion,
     enabled: hasMapPreview,
     year: new Date().getFullYear()
   });
@@ -222,10 +211,21 @@ export function SurveyDetailScreen({
   );
   const hasPhotoSlides = photoSlides.length > 0;
   const [mediaPageIndex, setMediaPageIndex] = useState(0);
+  const [heroMode, setHeroMode] = useState<HeroMode>('map');
 
   useEffect(() => {
     setMediaPageIndex(0);
   }, [selectedSurvey.id, photoSlides.length]);
+
+  useEffect(() => {
+    if (hasMapPreview) {
+      setHeroMode('map');
+      return;
+    }
+    if (hasPhotoSlides) {
+      setHeroMode('photo');
+    }
+  }, [selectedSurvey.id, hasMapPreview, hasPhotoSlides]);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,7 +261,6 @@ export function SurveyDetailScreen({
           vegetation_stage: draft.vegetation_stage,
           factors: draft.factors,
           parcel_ids: draft.parcel_ids,
-          location: draft.location,
           expires_at: draft.expires_at
         });
         const entries = FACTOR_ORDER.map<[string, DisplayedFactorResult]>((factorCode) => {
@@ -431,6 +430,7 @@ export function SurveyDetailScreen({
     const safeIndex = Math.max(0, Math.min(photoSlides.length - 1, nextIndex));
     setMediaPageIndex(safeIndex);
   };
+  const currentPhotoAttachment = hasPhotoSlides ? photoSlides[Math.min(mediaPageIndex, photoSlides.length - 1)]?.attachment ?? null : null;
 
   return (
     <ScrollView style={styles.mainScroll} contentContainerStyle={styles.detailScreenContent}>
@@ -468,89 +468,90 @@ export function SurveyDetailScreen({
 
         {surveyDetailTab !== 'debug' ? (
           <>
-            {hasMapPreview ? (
-              <Pressable style={styles.detailMapHeroShell} onPress={handleOpenParcels} disabled={!canEditSurvey}>
-                <MapView
-                  style={styles.detailMapHeroMap}
-                  initialRegion={mapPreviewRegion ?? undefined}
-                  scrollEnabled={false}
-                  zoomEnabled={false}
-                  rotateEnabled={false}
-                  pitchEnabled={false}
-                >
-                  <IgnCadastreTileOverlay enabled={mapPreviewZoom >= 15} zIndex={0} />
-                  <ParcelOverlayPolygons items={parcelStatuses} />
-                  {gpsCoordinates ? <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} /> : null}
-                </MapView>
-                <View style={styles.detailMapHeroCaption}>
-                  <Ionicons name="map-outline" size={14} color="#254a6d" />
-                  <Text style={styles.detailMapHeroCaptionText}>
-                    {canEditSurvey ? 'Map • tap to edit parcels' : 'Map'}
-                    {parcelsLoading ? ' • loading parcel overlay...' : parcelStatuses.length > 0 ? ` • ${parcelStatuses.length} parcel(s)` : ''}
-                  </Text>
-                </View>
-              </Pressable>
-            ) : null}
-
-            {hasPhotoSlides ? (
-              <View style={styles.mediaHeroSection}>
-                <ScrollView
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.mediaHeroCarousel}
-                  decelerationRate="fast"
-                  snapToInterval={mediaSlideWidth}
-                  disableIntervalMomentum
-                  onMomentumScrollEnd={handleMediaScrollEnd}
-                >
-                  {photoSlides.map((slide) => (
-                    <View key={slide.key} style={[styles.mediaHeroSlide, { width: mediaSlideWidth }]}>
-                      <Image source={{ uri: slide.attachment.local_uri ?? undefined }} style={styles.mediaHeroImage} resizeMode="cover" />
-                      <View style={styles.mediaHeroCaption}>
-                        <Ionicons name="image-outline" size={14} color="#254a6d" />
-                        <Text style={styles.mediaHeroCaptionText}>Photo</Text>
-                      </View>
-                      <Pressable
-                        style={[styles.mediaDeletePictureButton, selectedSurvey.status === 'submitted' ? styles.mediaDeletePictureButtonDisabled : null]}
-                        onPress={() => handleDeletePicture(slide.attachment.id)}
-                        disabled={selectedSurvey.status === 'submitted'}
-                      >
-                        <Ionicons name="trash-outline" size={13} color={selectedSurvey.status === 'submitted' ? '#8a9caf' : '#8f3737'} />
-                        <Text style={[styles.mediaDeletePictureButtonText, selectedSurvey.status === 'submitted' ? styles.mediaDeletePictureButtonTextDisabled : null]}>
-                          Delete
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </ScrollView>
-                {photoSlides.length > 1 ? (
-                  <View style={styles.mediaPagerRow}>
-                    <View style={styles.mediaDotsRow}>
-                      {photoSlides.map((slide, index) => (
-                        <View key={`dot-${slide.key}`} style={[styles.mediaDot, index === mediaPageIndex ? styles.mediaDotActive : null]} />
+            {hasMapPreview || hasPhotoSlides || canEditSurvey ? (
+              <View style={styles.detailHeroShell}>
+                {heroMode === 'photo' && hasPhotoSlides ? (
+                  <View style={styles.detailHeroMain}>
+                    <ScrollView
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.detailHeroPhotoCarousel}
+                      decelerationRate="fast"
+                      snapToInterval={mediaSlideWidth}
+                      disableIntervalMomentum
+                      onMomentumScrollEnd={handleMediaScrollEnd}
+                    >
+                      {photoSlides.map((slide) => (
+                        <View key={slide.key} style={[styles.detailHeroPhotoSlide, { width: mediaSlideWidth }]}>
+                          <Image source={{ uri: slide.attachment.local_uri ?? undefined }} style={styles.detailHeroPhotoImage} resizeMode="cover" />
+                        </View>
                       ))}
+                    </ScrollView>
+                    <View style={styles.detailHeroOverlayBadge}>
+                      <Ionicons name="images-outline" size={13} color="#ffffff" />
+                      <Text style={styles.detailHeroOverlayBadgeText}>Photos {mediaPageIndex + 1}/{photoSlides.length}</Text>
                     </View>
-                    <Text style={styles.mediaPagerLabel}>
-                      {mediaPageIndex + 1}/{photoSlides.length}
-                    </Text>
                   </View>
+                ) : (
+                  <Pressable style={styles.detailHeroMain} onPress={handleOpenParcels} disabled={!canEditSurvey}>
+                    <MapView
+                      style={styles.detailHeroMap}
+                      initialRegion={mapPreviewRegion}
+                      scrollEnabled={false}
+                      zoomEnabled={false}
+                      rotateEnabled={false}
+                      pitchEnabled={false}
+                    >
+                      <IgnCadastreTileOverlay enabled={mapPreviewZoom >= 15} zIndex={0} />
+                      <ParcelOverlayPolygons items={parcelStatuses} />
+                      {gpsCoordinates ? <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} /> : null}
+                    </MapView>
+                    <View style={styles.detailHeroOverlayBadge}>
+                      <Ionicons name="map-outline" size={13} color="#ffffff" />
+                      <Text style={styles.detailHeroOverlayBadgeText}>
+                        {canEditSurvey ? 'Tap map to edit parcels' : 'Map preview'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+
+                {hasMapPreview && hasPhotoSlides ? (
+                  <Pressable style={styles.detailHeroSwitchThumb} onPress={() => setHeroMode(heroMode === 'map' ? 'photo' : 'map')}>
+                    {heroMode === 'map' ? (
+                      <Image source={{ uri: photoSlides[0]?.attachment.local_uri ?? undefined }} style={styles.detailHeroSwitchThumbImage} resizeMode="cover" />
+                    ) : (
+                      <MapView
+                        style={styles.detailHeroSwitchThumbMap}
+                        initialRegion={mapPreviewRegion}
+                        scrollEnabled={false}
+                        zoomEnabled={false}
+                        rotateEnabled={false}
+                        pitchEnabled={false}
+                      >
+                        {gpsCoordinates ? <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} /> : null}
+                      </MapView>
+                    )}
+                    <View style={styles.detailHeroSwitchThumbLabel}>
+                      <Text style={styles.detailHeroSwitchThumbLabelText}>{heroMode === 'map' ? 'Photos' : 'Map'}</Text>
+                    </View>
+                  </Pressable>
                 ) : null}
 
                 {selectedSurvey.status !== 'submitted' ? (
-                  <Pressable style={styles.mediaAddPictureButton} onPress={handleAddPicture}>
-                    <Ionicons name="add-circle-outline" size={15} color="#255178" />
-                    <Text style={styles.mediaAddPictureButtonText}>Add picture</Text>
-                  </Pressable>
+                  <View style={styles.detailHeroActions}>
+                    <Pressable style={styles.detailHeroActionButton} onPress={handleAddPicture}>
+                      <Ionicons name="camera-outline" size={16} color="#ffffff" />
+                    </Pressable>
+                    {heroMode === 'photo' && currentPhotoAttachment ? (
+                      <Pressable style={[styles.detailHeroActionButton, styles.detailHeroActionButtonDanger]} onPress={() => handleDeletePicture(currentPhotoAttachment.id)}>
+                        <Ionicons name="trash-outline" size={16} color="#ffffff" />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
-            ) : (
-              <Pressable style={styles.mediaPlaceholderCard} onPress={handleAddPicture}>
-                <Ionicons name="image-outline" size={28} color="#7d95ad" />
-                <Text style={styles.mediaPlaceholderTitle}>No picture yet</Text>
-                <Text style={styles.mediaPlaceholderMeta}>Tap to upload a photo</Text>
-              </Pressable>
-            )}
+            ) : null}
           </>
         ) : null}
 
@@ -608,7 +609,7 @@ export function SurveyDetailScreen({
             </View>
           ) : null}
 
-          <View style={styles.locationCard}>
+          <View style={styles.detailMetadataCard}>
             <Text style={styles.detailTitle}>Region and vegetation</Text>
             {canEditSurvey ? <Text style={styles.rowMeta}>Tap to update directly from detail.</Text> : null}
             {canEditSurvey ? (

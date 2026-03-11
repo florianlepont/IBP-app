@@ -93,7 +93,6 @@ export const DEFAULT_SURVEY_FORM = {
   gpsLocation: {
     lat: '',
     lng: '',
-    accuracy_m: '',
     collected_at: ''
   },
   factorA: { native_genus_count: '' },

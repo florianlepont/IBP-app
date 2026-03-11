@@ -177,7 +177,6 @@ export class SurveysService {
     };
 
     const existing = await this.getSurveyForUser(body.id, user.id, false);
-    const locationPayload = this.normalizeLocationPayload(body.location ?? existing?.location ?? {});
     const hasParcelIdsInput = Array.isArray(body.parcel_ids);
     const normalizedParcelIdsFromBody = this.normalizeParcelIds(body.parcel_ids);
     const normalizedLegacyParcelId = this.normalizeParcelId(body.parcel_id);
@@ -194,16 +193,8 @@ export class SurveysService {
       }
     }
 
-    if (!hasParcelIdsInput && !normalizedLegacyParcelId && selectedParcelIds.length === 0) {
-      const resolvedParcel = await this.resolveParcelFromLocation(locationPayload);
-      if (resolvedParcel?.parcel_id) {
-        selectedParcelIds = [resolvedParcel.parcel_id];
-      }
-    }
-
-    selectedParcelIds = await this.ensureParcelIds(selectedParcelIds, locationPayload);
+    selectedParcelIds = await this.ensureParcelIds(selectedParcelIds);
     const parcelId = selectedParcelIds[0] ?? null;
-    const normalizedLocationPayload = this.attachSelectedParcelIdsToLocation(locationPayload, selectedParcelIds);
     const observationYear = this.normalizeObservationYear(body.observation_year) ?? existing?.observation_year ?? (parcelId ? now.getUTCFullYear() : null);
     const versionNumberRaw = this.normalizeVersionNumber(body.version_number) ?? existing?.version_number ?? null;
     const versionNumber = versionNumberRaw ?? (parcelId ? await this.getDefaultVersionNumber(parcelId, body.id) : null);
@@ -235,7 +226,7 @@ export class SurveysService {
           JSON.stringify(body.factors ?? {}),
           JSON.stringify(draftValidation.factor_results ?? {}),
           JSON.stringify(computedScores),
-          JSON.stringify(normalizedLocationPayload),
+          JSON.stringify({}),
           createdAt,
           createdAt,
           null,
@@ -317,7 +308,7 @@ export class SurveysService {
         JSON.stringify(body.factors ?? existing.factors ?? {}),
         JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
         JSON.stringify(computedScores),
-        JSON.stringify(normalizedLocationPayload),
+        JSON.stringify({}),
         expiresAt,
         body.sync_version,
         now.toISOString()
@@ -374,7 +365,6 @@ export class SurveysService {
       }
     }
 
-    const normalizedLocation = body.location ? this.normalizeLocationPayload(body.location) : null;
     const hasParcelIdsPatch = Object.prototype.hasOwnProperty.call(body, 'parcel_ids');
     const hasLegacyParcelIdPatch = Object.prototype.hasOwnProperty.call(body, 'parcel_id');
     const normalizedParcelIdsFromPatch = this.normalizeParcelIds(body.parcel_ids);
@@ -386,19 +376,11 @@ export class SurveysService {
       targetParcelIds = normalizedParcelIdsFromPatch;
     } else if (hasLegacyParcelIdPatch) {
       targetParcelIds = normalizedLegacyParcelId ? [normalizedLegacyParcelId] : [];
-    } else if (normalizedLocation && targetParcelIds.length === 0) {
-      const resolvedParcel = await this.resolveParcelFromLocation(normalizedLocation);
-      targetParcelIds = resolvedParcel?.parcel_id ? [resolvedParcel.parcel_id] : [];
     }
 
-    const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch || (normalizedLocation !== null && currentParcelIds.length === 0);
-    targetParcelIds = await this.ensureParcelIds(targetParcelIds, normalizedLocation ?? existing.location);
+    const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch;
+    targetParcelIds = await this.ensureParcelIds(targetParcelIds);
     const parcelIdForPatch = targetParcelIds[0] ?? null;
-    const locationPayloadForPatch = shouldUpdateParcels
-      ? this.attachSelectedParcelIdsToLocation(normalizedLocation ?? existing.location, targetParcelIds)
-      : normalizedLocation
-        ? this.attachSelectedParcelIdsToLocation(normalizedLocation, currentParcelIds)
-        : null;
     const observationYearForPatch =
       this.normalizeObservationYear(body.observation_year) ??
       (parcelIdForPatch && !existing.observation_year ? new Date().getUTCFullYear() : null);
@@ -412,7 +394,7 @@ export class SurveysService {
       `UPDATE surveys
        SET site_name = COALESCE($3, site_name),
            visibility = COALESCE($4, visibility),
-           parcel_id = CASE WHEN $15::boolean THEN $5 ELSE parcel_id END,
+           parcel_id = CASE WHEN $14::boolean THEN $5 ELSE parcel_id END,
            observation_year = COALESCE($6, observation_year),
            version_number = COALESCE($7, version_number),
            previous_survey_id = COALESCE($8, previous_survey_id),
@@ -421,7 +403,7 @@ export class SurveysService {
            factors = COALESCE($11::jsonb, factors),
            factor_results = COALESCE($12::jsonb, factor_results),
            scores = COALESCE($13::jsonb, scores),
-           location = COALESCE($14::jsonb, location),
+           location = '{}'::jsonb,
            updated_at = NOW()
        WHERE id = $1 AND user_id = $2
        RETURNING id, updated_at::text`,
@@ -441,7 +423,6 @@ export class SurveysService {
           ? JSON.stringify((body as SurveyPatchBody & { factor_results?: SurveyRow['factor_results'] }).factor_results)
           : null,
         body.scores ? JSON.stringify(body.scores) : null,
-        locationPayloadForPatch ? JSON.stringify(locationPayloadForPatch) : null,
         shouldUpdateParcels
       ]
     );
@@ -528,16 +509,16 @@ export class SurveysService {
       | 'factors'
       | 'factor_results'
       | 'scores'
-      | 'location'
       | 'created_at'
       | 'updated_at'
       | 'submitted_at'
       | 'expires_at'
       | 'sync_version'
-    >
+    > & { display_location: { lat: number; lng: number } | null }
   > {
     const survey = await this.getSurveyForUserOrThrow(surveyId, user.id);
     const parcelIds = await this.getSurveyParcelIds(survey.id);
+    const displayLocation = await this.computeSurveyDisplayLocation(survey.id, survey.parcel_id);
 
     return {
       id: survey.id,
@@ -554,7 +535,7 @@ export class SurveysService {
       factors: survey.factors,
       factor_results: survey.factor_results,
       scores: survey.scores,
-      location: survey.location,
+      display_location: displayLocation,
       created_at: survey.created_at,
       updated_at: survey.updated_at,
       submitted_at: survey.submitted_at,
@@ -969,7 +950,6 @@ export class SurveysService {
       `SELECT
          s.id,
          s.region_version,
-         s.location,
          s.scores,
          s.submitted_at::text,
          AVG((p.centroid ->> 'lat')::double precision) AS parcel_centroid_lat,
@@ -980,7 +960,7 @@ export class SurveysService {
        LEFT JOIN parcels p
          ON p.parcel_id = sp.parcel_id
        WHERE ${filters.map((filter) => `s.${filter}`).join(' AND ')}
-       GROUP BY s.id, s.region_version, s.location, s.scores, s.submitted_at
+       GROUP BY s.id, s.region_version, s.scores, s.submitted_at
        ORDER BY s.submitted_at DESC
        LIMIT 500`,
       values
@@ -1109,57 +1089,6 @@ export class SurveysService {
         seenParcelIds.add(item.parcel_id);
         return true;
       });
-
-    if (bbox) {
-      const legacyResult = await this.db.query<{
-        id: string;
-        observation_year: number | null;
-        scores: Record<string, unknown> | null;
-        location: Record<string, unknown> | null;
-      }>(
-        `SELECT
-           s.id::text,
-           s.observation_year,
-           s.scores,
-           s.location
-         FROM surveys s
-         WHERE s.deleted_at IS NULL
-           AND s.status = 'submitted'
-           AND s.visibility = 'public'
-           AND s.parcel_id IS NULL
-           AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
-         ORDER BY s.submitted_at DESC NULLS LAST
-         LIMIT 500`,
-        [year]
-      );
-
-      for (const row of legacyResult.rows) {
-        const location = row.location ?? {};
-        const centroid = this.normalizeCentroid(location);
-        if (!centroid) {
-          continue;
-        }
-
-        if (
-          centroid.lng < bbox.minLng ||
-          centroid.lng > bbox.maxLng ||
-          centroid.lat < bbox.minLat ||
-          centroid.lat > bbox.maxLat
-        ) {
-          continue;
-        }
-
-        const ibpTotalRaw = this.toFiniteNumber((row.scores ?? {})['ibp_total']);
-        items.push({
-          parcel_id: `legacy-survey-${row.id}`,
-          study_status: 'studied',
-          latest_submitted_survey_id: row.id,
-          latest_observation_year: row.observation_year,
-          latest_ibp_total: ibpTotalRaw === null ? null : Math.trunc(ibpTotalRaw),
-          geometry: this.buildFallbackParcelGeometry(centroid)
-        });
-      }
-    }
 
     return {
       items
@@ -1346,7 +1275,7 @@ export class SurveysService {
       throw new BadRequestException('lat and lng query parameters are required');
     }
 
-    const parcel = await this.resolveParcelFromLocation({ source: 'gps', lat, lng });
+    const parcel = await this.resolveParcelFromCoordinates(lat, lng);
     if (!parcel) {
       throw new UnprocessableEntityException({
         code: 'parcel_invalid',
@@ -1647,7 +1576,6 @@ export class SurveysService {
          s.factors,
          s.factor_results,
          s.scores,
-         s.location,
          s.created_at::text,
          s.updated_at::text,
          s.submitted_at::text,
@@ -1736,7 +1664,6 @@ export class SurveysService {
          s.factors,
          s.factor_results,
          s.scores,
-         s.location,
          s.created_at::text,
          s.updated_at::text,
          s.submitted_at::text,
@@ -1825,7 +1752,6 @@ export class SurveysService {
          s.factors,
          s.factor_results,
          s.scores,
-         s.location,
          s.created_at::text,
          s.updated_at::text,
          s.submitted_at::text,
@@ -1877,8 +1803,7 @@ export class SurveysService {
       'region_version',
       'vegetation_stage',
       'factors',
-      'scores',
-      'location'
+      'scores'
     ];
 
     return readonlyFields.filter((field) => Object.prototype.hasOwnProperty.call(body, field));
@@ -1962,13 +1887,6 @@ export class SurveysService {
     }
   }
 
-  private normalizeLocationPayload(value?: SurveyRow['location']): SurveyRow['location'] {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return {};
-    }
-    return value;
-  }
-
   private normalizeParcelId(value: unknown): string | null {
     if (typeof value !== 'string') {
       return null;
@@ -1993,19 +1911,6 @@ export class SurveysService {
       normalized.push(parcelId);
     }
     return normalized;
-  }
-
-  private attachSelectedParcelIdsToLocation(location: SurveyRow['location'] | undefined, parcelIds: string[]): SurveyRow['location'] {
-    const base = this.normalizeLocationPayload(location ?? {});
-    if (parcelIds.length === 0) {
-      const cloned: SurveyRow['location'] = { ...base };
-      delete cloned.selected_parcel_ids;
-      return cloned;
-    }
-    return {
-      ...base,
-      selected_parcel_ids: parcelIds
-    };
   }
 
   private async getSurveyParcelIds(surveyId: string): Promise<string[]> {
@@ -2049,7 +1954,43 @@ export class SurveysService {
     }
   }
 
-  private async ensureParcelIds(parcelIds: string[], location?: SurveyRow['location']): Promise<string[]> {
+  private async computeSurveyDisplayLocation(surveyId: string, fallbackParcelId?: string | null): Promise<{ lat: number; lng: number } | null> {
+    const fromMany = await this.db.query<{ lat: number | null; lng: number | null }>(
+      `SELECT
+         AVG((p.centroid ->> 'lat')::double precision) AS lat,
+         AVG((p.centroid ->> 'lng')::double precision) AS lng
+       FROM survey_parcels sp
+       JOIN parcels p
+         ON p.parcel_id = sp.parcel_id
+       WHERE sp.survey_id = $1`,
+      [surveyId]
+    );
+    const centroidMany = this.normalizeCentroid({
+      lat: fromMany.rows[0]?.lat,
+      lng: fromMany.rows[0]?.lng
+    });
+    if (centroidMany) {
+      return centroidMany;
+    }
+
+    const parcelId = this.normalizeParcelId(fallbackParcelId);
+    if (!parcelId) {
+      return null;
+    }
+
+    const fallback = await this.db.query<{ centroid: Record<string, unknown> }>(
+      `SELECT centroid
+       FROM parcels
+       WHERE parcel_id = $1`,
+      [parcelId]
+    );
+    if (!fallback.rows[0]?.centroid) {
+      return null;
+    }
+    return this.normalizeCentroid(fallback.rows[0].centroid);
+  }
+
+  private async ensureParcelIds(parcelIds: string[]): Promise<string[]> {
     if (parcelIds.length === 0) {
       return [];
     }
@@ -2061,7 +2002,7 @@ export class SurveysService {
       if (!normalized || seen.has(normalized)) {
         continue;
       }
-      const ensured = await this.ensureParcelById(normalized, location);
+      const ensured = await this.ensureParcelById(normalized);
       if (!seen.has(ensured.parcel_id)) {
         seen.add(ensured.parcel_id);
         output.push(ensured.parcel_id);
@@ -2142,13 +2083,8 @@ export class SurveysService {
     };
   }
 
-  private async resolveParcelFromLocation(location: SurveyRow['location']): Promise<ParcelRow | null> {
-    const centroid = this.normalizeCentroid(location);
-    if (!centroid) {
-      return null;
-    }
-
-    const resolved = await this.cadastreProvider.resolveFromPoint(centroid.lat, centroid.lng);
+  private async resolveParcelFromCoordinates(lat: number, lng: number): Promise<ParcelRow | null> {
+    const resolved = await this.cadastreProvider.resolveFromPoint(lat, lng);
     if (!resolved) {
       return null;
     }
@@ -2188,7 +2124,7 @@ export class SurveysService {
     return result.rows[0] ?? null;
   }
 
-  private async ensureParcelById(parcelId: string, location?: SurveyRow['location']): Promise<ParcelRow> {
+  private async ensureParcelById(parcelId: string): Promise<ParcelRow> {
     const existing = await this.db.query<ParcelRow>(
       `SELECT
          id::text,
@@ -2211,7 +2147,6 @@ export class SurveysService {
     }
 
     const parsed = this.parseParcelIdentifier(parcelId);
-    const centroid = location ? this.normalizeCentroid(location) : null;
     const inserted = await this.db.query<ParcelRow>(
       `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
@@ -2236,7 +2171,7 @@ export class SurveysService {
         parsed.section,
         parsed.number,
         JSON.stringify({}),
-        JSON.stringify(centroid ?? {}),
+        JSON.stringify({}),
         'manual'
       ]
     );

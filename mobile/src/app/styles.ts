@@ -240,158 +240,114 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#12304f'
   },
-  detailMapHeroShell: {
+  detailHeroShell: {
     marginHorizontal: -26,
     marginTop: -10,
+    minHeight: 300,
     borderWidth: 0,
     overflow: 'hidden',
-    backgroundColor: '#f2f7fd'
+    backgroundColor: '#0f1d29',
+    position: 'relative'
   },
-  detailMapHeroMap: {
+  detailHeroMain: {
     width: '100%',
-    height: 290,
-    backgroundColor: '#d7e2ee'
+    height: 320,
+    backgroundColor: '#0f1d29'
   },
-  detailMapHeroCaption: {
+  detailHeroMap: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#132434'
+  },
+  detailHeroPhotoCarousel: {
+    width: '100%',
+    height: '100%'
+  },
+  detailHeroPhotoSlide: {
+    height: '100%'
+  },
+  detailHeroPhotoImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#132434'
+  },
+  detailHeroOverlayBadge: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(8, 13, 19, 0.72)'
   },
-  detailMapHeroCaptionText: {
+  detailHeroOverlayBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#254a6d'
+    color: '#ffffff'
   },
-  mediaHeroSection: {
-    gap: 8
-  },
-  mediaHeroCarousel: {
-    width: '100%'
-  },
-  mediaHeroSlide: {
-    width: 320,
+  detailHeroSwitchThumb: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
+    width: 74,
+    height: 74,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#dbe7f4',
-    backgroundColor: '#f3f8fe'
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: '#132434'
   },
-  mediaHeroImage: {
+  detailHeroSwitchThumbImage: {
     width: '100%',
-    height: 250,
-    backgroundColor: '#d7e2ee'
+    height: '100%'
   },
-  mediaHeroMap: {
+  detailHeroSwitchThumbMap: {
     width: '100%',
-    height: 250,
-    backgroundColor: '#d7e2ee'
+    height: '100%'
   },
-  mediaPagerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 2
-  },
-  mediaDotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  mediaDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    backgroundColor: '#ccdae8'
-  },
-  mediaDotActive: {
-    width: 18,
-    backgroundColor: '#2d6fb5'
-  },
-  mediaPagerLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#3a5f83'
-  },
-  mediaHeroCaption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8
-  },
-  mediaHeroCaptionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#254a6d'
-  },
-  mediaDeletePictureButton: {
+  detailHeroSwitchThumbLabel: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    left: 5,
+    right: 5,
+    bottom: 5,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#e6b3b3',
-    backgroundColor: 'rgba(255, 237, 237, 0.95)',
-    paddingHorizontal: 8,
-    paddingVertical: 5
+    backgroundColor: 'rgba(8, 13, 19, 0.72)',
+    paddingVertical: 3
   },
-  mediaDeletePictureButtonDisabled: {
-    borderColor: '#cdd9e5',
-    backgroundColor: 'rgba(236, 241, 246, 0.95)'
+  detailHeroSwitchThumbLabelText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+    textAlign: 'center'
   },
-  mediaDeletePictureButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8f3737'
-  },
-  mediaDeletePictureButtonTextDisabled: {
-    color: '#7f92a5'
-  },
-  mediaAddPictureButton: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
+  detailHeroActions: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
     alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#c6d8ea',
-    backgroundColor: '#eef5ff',
-    paddingHorizontal: 10,
-    paddingVertical: 6
+    gap: 8
   },
-  mediaAddPictureButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#255178'
-  },
-  mediaPlaceholderCard: {
+  detailHeroActionButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#d6e1ee',
-    backgroundColor: '#eef2f6',
-    paddingVertical: 34,
-    gap: 6
+    borderColor: 'rgba(255,255,255,0.34)',
+    backgroundColor: 'rgba(8, 13, 19, 0.72)'
   },
-  mediaPlaceholderTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#4a6480'
-  },
-  mediaPlaceholderMeta: {
-    fontSize: 12,
-    color: '#627c97'
+  detailHeroActionButtonDanger: {
+    backgroundColor: 'rgba(129, 31, 31, 0.84)',
+    borderColor: 'rgba(255, 210, 210, 0.4)'
   },
   detailSection: {
     gap: 6
   },
-  locationCard: {
+  detailMetadataCard: {
     borderWidth: 1,
     borderColor: '#dce8f5',
     borderRadius: 10,
@@ -415,9 +371,6 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#1f4f79'
-  },
-  formLocationSection: {
-    gap: 8
   },
   formMapHeroCard: {
     marginHorizontal: -16,
@@ -1282,6 +1235,78 @@ export const styles = StyleSheet.create({
     gap: 10,
     padding: 12,
     backgroundColor: '#e8eee7'
+  },
+  parcelEditorFullscreen: {
+    flex: 1,
+    backgroundColor: '#132434'
+  },
+  parcelEditorFullscreenMap: {
+    flex: 1,
+    backgroundColor: '#132434'
+  },
+  parcelEditorOverlayLayer: {
+    ...StyleSheet.absoluteFillObject,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 18,
+    justifyContent: 'space-between'
+  },
+  parcelEditorTopPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(8, 13, 19, 0.72)'
+  },
+  parcelEditorTopPillText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  parcelEditorFloatingButtons: {
+    position: 'absolute',
+    right: 12,
+    top: 72,
+    gap: 10
+  },
+  parcelEditorFloatingButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.34)',
+    backgroundColor: 'rgba(8, 13, 19, 0.72)'
+  },
+  parcelEditorFloatingButtonSave: {
+    backgroundColor: 'rgba(39, 123, 85, 0.92)',
+    borderColor: 'rgba(200, 255, 229, 0.45)'
+  },
+  parcelEditorFloatingButtonDisabled: {
+    opacity: 0.6
+  },
+  parcelEditorBottomSheet: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d6e5f5',
+    backgroundColor: 'rgba(247, 251, 255, 0.96)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6
+  },
+  parcelEditorBottomTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#163f65'
+  },
+  parcelEditorBottomMeta: {
+    fontSize: 12,
+    color: '#4c6783',
+    fontWeight: '600'
   },
   parcelEditorMapCard: {
     flex: 1,

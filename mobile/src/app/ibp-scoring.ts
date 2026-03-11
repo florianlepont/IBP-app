@@ -270,12 +270,8 @@ export const computeIbpTotalsFromRetainedScores = (scores: Record<FactorKey, Fac
   };
 };
 
-export const resolveDraftParcelIds = (input: { parcel_ids?: unknown; location?: unknown }): string[] => {
-  const source = Array.isArray(input.parcel_ids)
-    ? input.parcel_ids
-    : isObject(input.location) && Array.isArray(input.location.selected_parcel_ids)
-      ? input.location.selected_parcel_ids
-      : [];
+export const resolveDraftParcelIds = (input: { parcel_ids?: unknown }): string[] => {
+  const source = Array.isArray(input.parcel_ids) ? input.parcel_ids : [];
 
   const seen = new Set<string>();
   const output: string[] = [];
@@ -305,7 +301,6 @@ export const evaluateSubmitReadinessFromDraft = (draft: {
   vegetation_stage?: unknown;
   factors?: unknown;
   parcel_ids?: unknown;
-  location?: unknown;
   expires_at?: unknown;
 }): SubmitReadiness => {
   const regionVersion = draft.region_version;

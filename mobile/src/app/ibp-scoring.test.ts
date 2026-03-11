@@ -43,13 +43,7 @@ describe('ibp-scoring', () => {
       })
     ).toEqual(['75056000AB0001', '75056000AB0002']);
 
-    expect(
-      resolveDraftParcelIds({
-        location: {
-          selected_parcel_ids: ['33063000A0003']
-        }
-      })
-    ).toEqual(['33063000A0003']);
+    expect(resolveDraftParcelIds({})).toEqual([]);
   });
 
   test('reports missing factors and fields for submit readiness', () => {

@@ -16,7 +16,7 @@ Make survey publication operational without reopening scientific observations af
 1. Default visibility is `private`.
 2. `draft` surveys may edit observation fields and visibility.
 3. `submitted` surveys are observation read-only:
-   - not editable: `site_name`, `region_version`, `vegetation_stage`, `factors`, `scores`, `location`.
+   - not editable: `site_name`, `parcel_ids`, `region_version`, `vegetation_stage`, `factors`, `scores`.
    - editable: `visibility` only.
 4. Any visibility change must produce a `visibility_changed` event with `{ from, to }`.
 5. Public surfaces must never expose:
@@ -56,7 +56,7 @@ Make survey publication operational without reopening scientific observations af
 ### Mobile (functional)
 1. Draft survey detail shows visibility control and applies immediately.
 2. Submitted survey detail still shows visibility control.
-3. Submitted survey detail keeps observation actions disabled (edit factors/location).
+3. Submitted survey detail keeps observation actions disabled (edit factors/parcels).
 4. Visibility state survives sync round-trip (local -> server -> local pull).
 
 ## Implementation Notes

@@ -243,21 +243,12 @@ Request:
     "ibp_contexte": 8,
     "ibp_total": 28
   },
-  "location": {
-    "source": "gps",
-    "lat": 48.643,
-    "lng": 1.829,
-    "accuracy_m": 12,
-    "collected_at": "2026-03-09T09:10:00Z"
-  },
   "expires_at": "2026-03-15T10:00:00Z"
 }
 ```
 
-`location` accepted shapes in V1:
-- GPS: `{ "source": "gps", "lat": number, "lng": number, "accuracy_m"?: number, "collected_at"?: string }`
-- Manual fallback: `{ "source": "manual", "address_line": string, "postal_code": string, "city": string, "country": string }`
-- Location payload is optional metadata (map helper); submit validation is now driven by parcel selection.
+`location` is no longer part of survey write payloads in V1.2.
+Map centering metadata stays client-local. Server map display is derived from linked parcel centroids (`display_location`).
 
 V1.1 addendum fields:
 - `parcel_ids`: French cadastral parcel identifiers (at least one required at submit).
@@ -323,13 +314,7 @@ Response `200`:
     "ibp_contexte": 8,
     "ibp_total": 28
   },
-  "location": {
-    "source": "gps",
-    "lat": 48.643,
-    "lng": 1.829,
-    "accuracy_m": 12,
-    "collected_at": "2026-03-09T09:10:00Z"
-  },
+  "display_location": { "lat": 48.643, "lng": 1.829 },
   "created_at": "2026-03-08T11:00:00Z",
   "updated_at": "2026-03-08T12:00:00Z",
   "submitted_at": null,
@@ -342,7 +327,7 @@ Response `200`:
 Partially update survey fields.
 
 Lifecycle rule in V1:
-- While `status=draft`, business fields are editable (`site_name`, region/stage, factors, location, visibility).
+- While `status=draft`, business fields are editable (`site_name`, parcel linkage, region/stage, factors, visibility).
 - While `status=submitted`, observation payload is read-only.
 - For `submitted`, only publication visibility changes are allowed (use dedicated endpoint below).
 
@@ -358,13 +343,6 @@ Request:
     "ibp_peuplement_gestion": 20,
     "ibp_contexte": 8,
     "ibp_total": 28
-  },
-  "location": {
-    "source": "manual",
-    "address_line": "12 Rue de la Foret",
-    "postal_code": "75001",
-    "city": "Paris",
-    "country": "France"
   }
 }
 ```
@@ -757,7 +735,7 @@ Query + formatting rules in V1:
 - `region` filters by exact `region_version` match.
 - Results are ordered by `submitted_at DESC` and capped to `500` items.
 - `display_location` is rounded to 2 decimals.
-- Surveys missing valid numeric `location.lat` and `location.lng` are excluded.
+- Surveys missing parcel-centroid coordinates are excluded.
 
 Response `200`:
 ```json

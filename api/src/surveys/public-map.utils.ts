@@ -1,7 +1,6 @@
 export type PublicMapDbRow = {
   id: string;
   region_version: string | null;
-  location: Record<string, unknown>;
   scores: Record<string, unknown>;
   submitted_at: string | null;
   parcel_centroid_lat?: number | null;
@@ -28,8 +27,8 @@ export function normalizeDateInput(value: string | undefined): string | null {
 }
 
 export function toPublicMapItem(row: PublicMapDbRow): PublicMapItem | null {
-  const lat = asFiniteNumber(row.parcel_centroid_lat) ?? asFiniteNumber(row.location?.lat);
-  const lng = asFiniteNumber(row.parcel_centroid_lng) ?? asFiniteNumber(row.location?.lng);
+  const lat = asFiniteNumber(row.parcel_centroid_lat);
+  const lng = asFiniteNumber(row.parcel_centroid_lng);
   if (lat === null || lng === null) {
     return null;
   }

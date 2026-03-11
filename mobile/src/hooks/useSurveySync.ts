@@ -607,7 +607,7 @@ export function useSurveySync({
         region_version: draft.region_version,
         vegetation_stage: draft.vegetation_stage,
         factors: draft.factors,
-        location: draft.location,
+        parcel_ids: draft.parcel_ids,
         expires_at: draft.expires_at
       });
 

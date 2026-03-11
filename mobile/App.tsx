@@ -158,8 +158,7 @@ export default function App() {
       region_version: DEFAULT_SURVEY_FORM.regionVersion,
       vegetation_stage: DEFAULT_SURVEY_FORM.vegetationStage,
       parcel_ids: [],
-      factors: {},
-      location: {}
+      factors: {}
     };
 
     void (async () => {
@@ -214,8 +213,7 @@ export default function App() {
         region_version: draft.region_version ?? 'ACA',
         vegetation_stage: draft.vegetation_stage ?? '',
         parcel_ids: Array.isArray(draft.parcel_ids) ? draft.parcel_ids : [],
-        factors: draft.factors ?? {},
-        location: draft.location ?? {}
+        factors: draft.factors ?? {}
       });
       surveyForm.applyDraftToForm(draft);
       setEditingSurveyId(surveyId);
@@ -263,7 +261,6 @@ export default function App() {
     vegetation_stage: VegetationStage;
     parcel_ids: string[];
     factors: Record<string, unknown>;
-    location: Record<string, unknown>;
   };
 
   const patchSurveyDraftDirectly = async (
@@ -296,8 +293,7 @@ export default function App() {
         parcel_ids: Array.isArray(draft.parcel_ids)
           ? draft.parcel_ids.filter((value): value is string => typeof value === 'string')
           : [],
-        factors: asRecord(draft.factors),
-        location: asRecord(draft.location)
+        factors: asRecord(draft.factors)
       };
       const next = mutator(base);
 
@@ -308,7 +304,6 @@ export default function App() {
         vegetation_stage: next.vegetation_stage,
         parcel_ids: next.parcel_ids,
         factors: next.factors,
-        location: next.location,
         visibility: current?.visibility ?? 'private'
       });
 
@@ -396,7 +391,6 @@ export default function App() {
       surveyForm.applyGpsLocation({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
-        accuracy_m: position.coords.accuracy ?? undefined,
         collected_at: new Date(position.timestamp).toISOString()
       });
       surveySync.setStatus('GPS location captured');
@@ -674,10 +668,9 @@ export default function App() {
           headerLargeTitle: false
         }}
       >
-        {({ navigation, route }) => (
+        {({ navigation }) => (
           <SurveyParcelSelectionScreen
             apiUrl={apiUrl}
-            surveyId={route.params.surveyId}
             siteName={surveyForm.siteName}
             gpsLocation={surveyForm.gpsLocation}
             selectedParcelIds={surveyForm.selectedParcelIds}
@@ -689,7 +682,6 @@ export default function App() {
                 navigation.goBack();
               }
             }}
-            status={surveySync.status}
           />
         )}
       </SurveysStack.Screen>

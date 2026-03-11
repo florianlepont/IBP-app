@@ -57,7 +57,6 @@ Required fields:
 - `vegetation_stage` (string enum, depends on `region_version`)
 - `factors` (jsonb) // IBP factor inputs A..J
 - `scores` (jsonb) // subscores + total
-- `location` (jsonb) // optional map helper metadata (for example current GPS used for viewport)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 - `submitted_at` (timestamp, nullable)
@@ -216,7 +215,7 @@ Optional fields:
 - `visibility` default is `private`
 - at least one parcel is required for `submitted` surveys (`parcel_ids.length >= 1`)
 - `observation_year` and `version_number` are required for `submitted` surveys
-- `submitted` surveys are read-only for observation payload (`site_name`, parcel linkage, region/stage, factors, location metadata, scores)
+- `submitted` surveys are read-only for observation payload (`site_name`, parcel linkage, region/stage, factors, scores)
 - `submitted` surveys may still change `visibility` (`private` <-> `public`)
 - Only `public` surveys are eligible for community surfaces
 - Switching `public -> private` must remove the survey from community surfaces

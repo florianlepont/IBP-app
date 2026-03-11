@@ -26,7 +26,6 @@ type SurveyFormScreenProps = {
   gpsLocation: {
     lat: string;
     lng: string;
-    accuracy_m: string;
     collected_at: string;
   };
   selectedParcelIds: string[];
