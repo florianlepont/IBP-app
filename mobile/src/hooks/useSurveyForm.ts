@@ -101,11 +101,10 @@ export function useSurveyForm() {
     setVegetationStage((current) => normalizeVegetationStageForRegion(nextRegion, current));
   };
 
-  const applyGpsLocation = (location: { lat: number; lng: number; accuracy_m?: number | null; collected_at?: string }): void => {
+  const applyGpsLocation = (location: { lat: number; lng: number; collected_at?: string }): void => {
     setGpsLocation({
       lat: String(location.lat),
       lng: String(location.lng),
-      accuracy_m: typeof location.accuracy_m === 'number' && Number.isFinite(location.accuracy_m) ? String(location.accuracy_m) : '',
       collected_at: location.collected_at ?? new Date().toISOString()
     });
   };
@@ -161,24 +160,6 @@ export function useSurveyForm() {
     return payload;
   };
 
-  const buildLocationPayload = (): Record<string, unknown> => {
-    const lat = parseFiniteNumberInput(gpsLocation.lat);
-    const lng = parseFiniteNumberInput(gpsLocation.lng);
-    const accuracy = parseFiniteNumberInput(gpsLocation.accuracy_m);
-
-    if (lat !== null && lng !== null) {
-      return {
-        source: 'gps',
-        lat,
-        lng,
-        accuracy_m: accuracy ?? undefined,
-        collected_at: gpsLocation.collected_at || new Date().toISOString()
-      };
-    }
-
-    return {};
-  };
-
   const applyDraftToForm = (draftValue: unknown): void => {
     const draft = asObject(draftValue);
     setSiteName(typeof draft.site_name === 'string' ? draft.site_name : DEFAULT_SURVEY_FORM.siteName);
@@ -197,9 +178,7 @@ export function useSurveyForm() {
     const factorHObj = asObject(factors.H);
     const factorIObj = asObject(factors.I);
     const factorJObj = asObject(factors.J);
-    const location = asObject(draft.location);
     const parsedParcelIds = normalizeParcelIds(draft.parcel_ids);
-    const fallbackParcelIds = normalizeParcelIds(location.selected_parcel_ids);
 
     setFactorA({ native_genus_count: toTextNum(factorAObj.native_genus_count) });
     setFactorB({
@@ -227,13 +206,8 @@ export function useSurveyForm() {
     setFactorI({ type_count: toTextNum(factorIObj.type_count) });
     setFactorJ({ type_count: toTextNum(factorJObj.type_count) });
 
-    setGpsLocation({
-      lat: toTextNum(location.lat),
-      lng: toTextNum(location.lng),
-      accuracy_m: toTextNum(location.accuracy_m),
-      collected_at: typeof location.collected_at === 'string' ? location.collected_at : ''
-    });
-    setSelectedParcelIds(parsedParcelIds.length > 0 ? parsedParcelIds : fallbackParcelIds);
+    setGpsLocation(DEFAULT_SURVEY_FORM.gpsLocation);
+    setSelectedParcelIds(parsedParcelIds);
   };
 
   const factorRetainedScores = useMemo<Record<FactorKey, FactorRetainedScore | null>>(
@@ -448,10 +422,9 @@ export function useSurveyForm() {
       region_version: regionVersion,
       vegetation_stage: vegetationStage,
       factors: buildFactorsPayload(),
-      parcel_ids: selectedParcelIds,
-      location: buildLocationPayload()
+      parcel_ids: selectedParcelIds
     }),
-    [siteName, regionVersion, vegetationStage, factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ, selectedParcelIds, gpsLocation]
+    [siteName, regionVersion, vegetationStage, factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ, selectedParcelIds]
   );
 
   const buildDraftInput = () => draftInput;

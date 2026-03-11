@@ -23,7 +23,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow IBP App to access your location for survey georeferencing."
+          "locationWhenInUsePermission": "Allow IBP App to access your location to center the map and help parcel selection."
         }
       ],
       "expo-secure-store"

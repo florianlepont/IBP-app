@@ -1,16 +1,3 @@
-export type SurveyLocationPayload = {
-  source?: 'gps' | 'manual';
-  lat?: number;
-  lng?: number;
-  accuracy_m?: number;
-  collected_at?: string;
-  address_line?: string;
-  postal_code?: string;
-  city?: string;
-  country?: string;
-  [key: string]: unknown;
-};
-
 export type SurveyUpsertBody = {
   id?: string;
   sync_version?: number;
@@ -26,7 +13,6 @@ export type SurveyUpsertBody = {
   vegetation_stage?: string;
   factors?: Record<string, unknown>;
   scores?: Record<string, unknown>;
-  location?: SurveyLocationPayload;
   expires_at?: string;
 };
 
@@ -42,7 +28,6 @@ export type SurveyPatchBody = {
   vegetation_stage?: string;
   factors?: Record<string, unknown>;
   scores?: Record<string, unknown>;
-  location?: SurveyLocationPayload;
 };
 
 export type SurveyVisibilityPatchBody = {
@@ -94,7 +79,6 @@ export type SurveyRow = {
   factors: JsonObject;
   factor_results: Record<string, FactorCanonical>;
   scores: JsonObject;
-  location: SurveyLocationPayload;
   created_at: string;
   updated_at: string;
   submitted_at: string | null;
@@ -161,7 +145,6 @@ export type SyncChangeSurvey = Pick<
   | 'factors'
   | 'factor_results'
   | 'scores'
-  | 'location'
   | 'created_at'
   | 'updated_at'
   | 'submitted_at'

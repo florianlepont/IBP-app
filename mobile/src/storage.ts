@@ -14,7 +14,6 @@ export type LocalSurvey = {
   created_at: string;
   updated_at: string;
   completion_rate: number;
-  location?: Record<string, unknown>;
 };
 
 export type LocalAttachment = {
@@ -71,7 +70,6 @@ type SurveyQueuePayload = {
   vegetation_stage?: string;
   factors?: Record<string, unknown>;
   scores?: Record<string, unknown>;
-  location?: Record<string, unknown>;
   expires_at?: string;
 };
 
@@ -130,7 +128,6 @@ type RemoteSurvey = {
   vegetation_stage?: string | null;
   factors?: Record<string, unknown>;
   scores?: Record<string, unknown>;
-  location?: Record<string, unknown>;
   created_at?: string | null;
   expires_at?: string | null;
   sync_version: number;
@@ -161,7 +158,6 @@ export type DraftInput = {
   vegetation_stage: string;
   parcel_ids: string[];
   factors: Record<string, unknown>;
-  location?: Record<string, unknown>;
 };
 
 export type UpdateDraftInput = {
@@ -172,7 +168,6 @@ export type UpdateDraftInput = {
   parcel_ids: string[];
   factors: Record<string, unknown>;
   visibility?: 'private' | 'public';
-  location?: Record<string, unknown>;
 };
 
 export type LocalAttachmentInput = {
@@ -213,25 +208,6 @@ const isFilledValue = (value: unknown): boolean => {
   return false;
 };
 
-const hasValidGpsLocation = (location: Record<string, unknown>): boolean => {
-  if (location.source !== 'gps') return false;
-  return typeof location.lat === 'number' && Number.isFinite(location.lat) && typeof location.lng === 'number' && Number.isFinite(location.lng);
-};
-
-const hasValidManualLocation = (location: Record<string, unknown>): boolean => {
-  if (location.source !== 'manual') return false;
-  return (
-    typeof location.address_line === 'string' &&
-    location.address_line.trim().length > 0 &&
-    typeof location.postal_code === 'string' &&
-    location.postal_code.trim().length > 0 &&
-    typeof location.city === 'string' &&
-    location.city.trim().length > 0 &&
-    typeof location.country === 'string' &&
-    location.country.trim().length > 0
-  );
-};
-
 const normalizeParcelIds = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -253,15 +229,7 @@ const normalizeParcelIds = (value: unknown): string[] => {
 };
 
 const resolvePayloadParcelIds = (payload: SurveyQueuePayload): string[] => {
-  const direct = normalizeParcelIds(payload.parcel_ids);
-  if (direct.length > 0) {
-    return direct;
-  }
-  const location = payload.location;
-  if (location && typeof location === 'object' && !Array.isArray(location)) {
-    return normalizeParcelIds((location as Record<string, unknown>).selected_parcel_ids);
-  }
-  return [];
+  return normalizeParcelIds(payload.parcel_ids);
 };
 
 const isLegacyDefaultFactorValue = (factorKey: string, rawValue: unknown): boolean => {
@@ -289,16 +257,7 @@ const computeCompletionRate = (status: string, payload: SurveyQueuePayload | nul
   if (typeof payload.vegetation_stage === 'string' && payload.vegetation_stage.trim().length > 0) completed += 1;
 
   const parcelIds = resolvePayloadParcelIds(payload);
-  if (parcelIds.length > 0) {
-    completed += 1;
-  } else {
-    const location = payload.location;
-    if (location && typeof location === 'object' && !Array.isArray(location)) {
-      if (hasValidGpsLocation(location as Record<string, unknown>) || hasValidManualLocation(location as Record<string, unknown>)) {
-        completed += 1;
-      }
-    }
-  }
+  if (parcelIds.length > 0) completed += 1;
 
   const factors = payload.factors;
   if (factors && typeof factors === 'object' && !Array.isArray(factors)) {
@@ -415,8 +374,7 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     parcel_ids: normalizeParcelIds(input.parcel_ids),
     region_version: input.region_version,
     vegetation_stage: input.vegetation_stage,
-    factors: input.factors,
-    location: input.location ?? {}
+    factors: input.factors
   };
 
   await db.runAsync(
@@ -444,8 +402,7 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     sync_blocked: 0,
     created_at: now,
     updated_at: now,
-    completion_rate: computeCompletionRate('draft', payload),
-    location: (payload.location as Record<string, unknown> | undefined) ?? {}
+    completion_rate: computeCompletionRate('draft', payload)
   };
 }
 
@@ -634,8 +591,7 @@ export async function getLocalSurveyDraft(surveyId: string): Promise<SurveyQueue
     status: 'draft',
     visibility: row.visibility === 'public' ? 'public' : 'private',
     parcel_ids: [],
-    factors: {},
-    location: {}
+    factors: {}
   };
 }
 
@@ -672,8 +628,7 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
         status: existing.status || 'draft',
         visibility: existing.visibility === 'public' ? 'public' : 'private',
         parcel_ids: [],
-        factors: {},
-        location: {}
+        factors: {}
       };
 
   const nextSyncVersion = Math.max(1, Number(basePayload.sync_version ?? existing.sync_version ?? 0) + 1);
@@ -687,8 +642,7 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
     parcel_ids: normalizeParcelIds(input.parcel_ids),
     region_version: input.region_version,
     vegetation_stage: input.vegetation_stage,
-    factors: input.factors,
-    location: input.location ?? (basePayload.location as Record<string, unknown> | undefined) ?? {}
+    factors: input.factors
   };
 
   await deleteQueuedSurveyUpserts(db, input.survey_id);
@@ -736,15 +690,14 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
     sync_blocked: 0,
     created_at: existing.created_at ?? now,
     updated_at: now,
-    completion_rate: computeCompletionRate('draft', nextPayload),
-    location: (nextPayload.location as Record<string, unknown> | undefined) ?? {}
+    completion_rate: computeCompletionRate('draft', nextPayload)
   };
 }
 
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
   const db = await dbPromise;
   const rows = await db.getAllAsync<
-    Omit<LocalSurvey, 'completion_rate' | 'location'> & {
+    Omit<LocalSurvey, 'completion_rate'> & {
       payload_json: string | null;
     }
   >(
@@ -757,8 +710,7 @@ export async function listLocalSurveys(): Promise<LocalSurvey[]> {
     const { payload_json: _payloadJson, ...rest } = row;
     return {
       ...rest,
-      completion_rate: computeCompletionRate(row.status, payload),
-      location: (payload?.location as Record<string, unknown> | undefined) ?? {}
+      completion_rate: computeCompletionRate(row.status, payload)
     };
   });
 }
@@ -1580,7 +1532,6 @@ function buildSurveyPayloadFromRemote(survey: RemoteSurvey): SurveyQueuePayload 
     vegetation_stage: survey.vegetation_stage ?? undefined,
     factors: survey.factors ?? {},
     scores: survey.scores ?? {},
-    location: survey.location ?? {},
     expires_at: survey.expires_at ?? undefined
   };
 }
