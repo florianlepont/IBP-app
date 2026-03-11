@@ -2,12 +2,14 @@ import { useState } from 'react';
 import {
   Image,
   ImageSourcePropType,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TextInputProps,
+  TouchableWithoutFeedback,
   View,
   useWindowDimensions
 } from 'react-native';
@@ -148,6 +150,8 @@ type AuthFormCardProps = {
   onConfirmPasswordChange: (value: string) => void;
   submitting: boolean;
   onSubmit: () => void;
+  feedbackMessage?: string;
+  feedbackTone?: 'error' | 'status';
 };
 
 function AuthFormCard({
@@ -162,7 +166,9 @@ function AuthFormCard({
   confirmPassword,
   onConfirmPasswordChange,
   submitting,
-  onSubmit
+  onSubmit,
+  feedbackMessage,
+  feedbackTone = 'status'
 }: AuthFormCardProps) {
   const isRegister = authMode === 'register';
 
@@ -219,6 +225,10 @@ function AuthFormCard({
       >
         <Text style={authStyles.primaryButtonText}>{submitting ? 'Processing...' : activeCopy.submitLabel}</Text>
       </Pressable>
+
+      {feedbackMessage ? (
+        <Text style={feedbackTone === 'error' ? authStyles.errorText : authStyles.statusText}>{feedbackMessage}</Text>
+      ) : null}
     </View>
   );
 }
@@ -228,20 +238,9 @@ type AuthPanelFooterProps = {
   onToggleAdvanced: () => void;
   apiUrl: string;
   onApiUrlChange: (value: string) => void;
-  localError: string;
-  shouldShowStatus: boolean;
-  status: string;
 };
 
-function AuthPanelFooter({
-  showAdvanced,
-  onToggleAdvanced,
-  apiUrl,
-  onApiUrlChange,
-  localError,
-  shouldShowStatus,
-  status
-}: AuthPanelFooterProps) {
+function AuthPanelFooter({ showAdvanced, onToggleAdvanced, apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
   return (
     <View style={authStyles.panelFooter}>
       <Pressable onPress={onToggleAdvanced} style={authStyles.advancedToggle} testID="auth-advanced-toggle">
@@ -263,9 +262,6 @@ function AuthPanelFooter({
           </Text>
         </View>
       ) : null}
-
-      {localError ? <Text style={authStyles.errorText}>{localError}</Text> : null}
-      {shouldShowStatus ? <Text style={authStyles.statusText}>{status}</Text> : null}
     </View>
   );
 }
@@ -295,7 +291,16 @@ export function AuthGateScreen({
 
   const isRegister = authMode === 'register';
   const activeCopy = AUTH_COPY[authMode];
-  const shouldShowStatus = status.trim().toLowerCase().includes('restoring session');
+  const normalizedStatus = status.trim().toLowerCase();
+  const remoteFeedbackMessage =
+    normalizedStatus &&
+    !normalizedStatus.includes('logged in') &&
+    !normalizedStatus.includes('account created and logged in')
+      ? status
+      : '';
+  const feedbackMessage = localError || remoteFeedbackMessage;
+  const feedbackTone: 'error' | 'status' =
+    localError || normalizedStatus.includes('error') || normalizedStatus.includes('failed') ? 'error' : 'status';
 
   const validate = (): string | null => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -328,6 +333,7 @@ export function AuthGateScreen({
     }
 
     try {
+      Keyboard.dismiss();
       setLocalError('');
       setSubmitting(true);
       await runWithTimeout(isRegister ? onRegister() : onLogin(), AUTH_REQUEST_TIMEOUT_MS, apiUrl);
@@ -375,6 +381,8 @@ export function AuthGateScreen({
           onConfirmPasswordChange={setConfirmPassword}
           submitting={submitting}
           onSubmit={() => void handleSubmit()}
+          feedbackMessage={feedbackMessage}
+          feedbackTone={feedbackTone}
         />
       </View>
 
@@ -383,32 +391,32 @@ export function AuthGateScreen({
         onToggleAdvanced={() => setShowAdvanced((current) => !current)}
         apiUrl={apiUrl}
         onApiUrlChange={onApiUrlChange}
-        localError={localError}
-        shouldShowStatus={shouldShowStatus}
-        status={status}
       />
     </>
   );
 
   return (
-    <View style={authStyles.screen}>
-      <HeroSection height={heroHeight} topInset={insets.top} logoSource={logoSource} heroMartenSource={heroMartenSource} />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={authStyles.screen}>
+        <HeroSection height={heroHeight} topInset={insets.top} logoSource={logoSource} heroMartenSource={heroMartenSource} />
 
-      <View style={authStyles.panelWrap}>
-        {useScrollablePanel ? (
-          <ScrollView
-            style={authStyles.panelScroll}
-            contentContainerStyle={[authStyles.panelContent, authStyles.panelContentScrollable]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {panelBody}
-          </ScrollView>
-        ) : (
-          <View style={[authStyles.panelContent, authStyles.panelContentFixed]}>{panelBody}</View>
-        )}
+        <View style={authStyles.panelWrap}>
+          {useScrollablePanel ? (
+            <ScrollView
+              style={authStyles.panelScroll}
+              contentContainerStyle={[authStyles.panelContent, authStyles.panelContentScrollable]}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+            >
+              {panelBody}
+            </ScrollView>
+          ) : (
+            <View style={[authStyles.panelContent, authStyles.panelContentFixed]}>{panelBody}</View>
+          )}
+        </View>
       </View>
-    </View>
+    </TouchableWithoutFeedback>
   );
 }
 

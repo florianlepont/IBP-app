@@ -34,7 +34,11 @@ jest.mock('react-native', () => {
     Image: mockComponent('Image'),
     ImageBackground: mockComponent('ImageBackground'),
     ScrollView: mockComponent('ScrollView'),
+    TouchableWithoutFeedback: mockComponent('TouchableWithoutFeedback'),
     View: mockComponent('View'),
+    Keyboard: {
+      dismiss: jest.fn()
+    },
     useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }),
     StyleSheet: {
       create: <T extends object>(value: T): T => value
