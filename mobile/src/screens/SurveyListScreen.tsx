@@ -169,11 +169,7 @@ function FilterSection<T extends string>({
   return (
     <View style={screenStyles.filterSection}>
       <Text style={screenStyles.filterSectionLabel}>{label}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={screenStyles.filterChipRow}
-      >
+      <View style={screenStyles.filterChipRow}>
         {options.map((option) => (
           <SurveyFilterChip
             key={option.value}
@@ -182,7 +178,7 @@ function FilterSection<T extends string>({
             onPress={() => onChange(option.value)}
           />
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -263,6 +259,7 @@ export function SurveyListScreen({
     outputRange: [8, 0],
     extrapolate: 'clamp'
   });
+  const stickyFilterOffset = collapsedHeroHeight + brandSpacing.sm;
 
   return (
     <View style={screenStyles.container}>
@@ -322,14 +319,26 @@ export function SurveyListScreen({
 
       <Animated.ScrollView
         style={screenStyles.pageScroll}
-        contentContainerStyle={[screenStyles.pageContent, { paddingTop: expandedHeroHeight + brandSpacing.md }]}
+        contentContainerStyle={screenStyles.pageContent}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
+        stickyHeaderIndices={[1]}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: false
         })}
       >
-        <View style={screenStyles.filtersCard}>
+        <View style={{ height: expandedHeroHeight + brandSpacing.md }} />
+
+        <View
+          style={[
+            screenStyles.filtersStickyHost,
+            {
+              paddingTop: stickyFilterOffset,
+              marginTop: -stickyFilterOffset
+            }
+          ]}
+        >
+          <View style={screenStyles.filtersCard}>
           <View style={screenStyles.filtersHeaderRow}>
             <View style={screenStyles.filtersHeadingBlock}>
               <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
@@ -412,6 +421,7 @@ export function SurveyListScreen({
               </Pressable>
             </View>
           ) : null}
+          </View>
         </View>
 
         <Text style={screenStyles.listHeaderMeta}>
@@ -643,9 +653,14 @@ const screenStyles = StyleSheet.create({
   },
   pageContent: {
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 0,
     paddingBottom: 120,
     gap: 14
+  },
+  filtersStickyHost: {
+    backgroundColor: brandColors.canvas,
+    zIndex: 1,
+    paddingBottom: 14
   },
   filtersCard: {
     borderRadius: 28,
@@ -718,6 +733,7 @@ const screenStyles = StyleSheet.create({
   },
   filterChipRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingRight: 8
   },
