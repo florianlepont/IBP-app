@@ -140,6 +140,24 @@ export default function App() {
   const handleCreateDraft = async (): Promise<boolean> => {
     try {
       const draftInput = surveyForm.buildDraftInput();
+      if (editingSurveyId) {
+        const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId);
+        await updateLocalDraft({
+          survey_id: editingSurveyId,
+          ...draftInput,
+          visibility: current?.visibility ?? 'private'
+        });
+
+        await surveyList.refreshLocalSurveys();
+        await surveyList.refreshLocalAttachments();
+        autosaveSignatureRef.current = '';
+        setEditingSurveyId(null);
+        setFormMode('create');
+        surveyList.setSelectedSurveyId(editingSurveyId);
+        surveySync.setStatus(`Local IBP draft ${editingSurveyId} saved`);
+        return true;
+      }
+
       const created = await createLocalDraft(draftInput);
       await surveyList.refreshLocalSurveys();
       await surveyList.refreshLocalAttachments();

@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { SearchBarCommands } from 'react-native-screens';
+import { brandColors } from './brand-tokens';
 import { styles } from './styles';
 import { FactorKey, RegionVersion, SurveyDetailTab, VegetationStage } from './types';
 import { SurveyFormScreen } from '../screens/SurveyFormScreen';
@@ -79,18 +80,18 @@ const tabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList } }
   headerTitleAlign: 'left' as const,
   headerTitleStyle: {
     fontSize: 30,
-    fontWeight: '800' as const,
-    color: '#1d4f3a'
+    fontWeight: '900' as const,
+    color: brandColors.forest
   },
   headerStyle: {
-    backgroundColor: '#e8eee7'
+    backgroundColor: brandColors.canvas
   },
   headerShadowVisible: false,
-  tabBarActiveTintColor: '#1f6b49',
-  tabBarInactiveTintColor: '#6d8576',
+  tabBarActiveTintColor: brandColors.forest,
+  tabBarInactiveTintColor: brandColors.textSecondary,
   tabBarStyle: {
-    backgroundColor: '#f7faf5',
-    borderTopColor: '#d1ddcf',
+    backgroundColor: brandColors.panel,
+    borderTopColor: brandColors.divider,
     borderTopWidth: 1,
     height: Platform.select({ ios: 84, default: 68 }),
     paddingBottom: Platform.select({ ios: 22, default: 10 }),
@@ -182,14 +183,14 @@ function SurveysTabNavigator({
         headerTitleAlign: 'left',
         headerTitleStyle: {
           fontSize: 30,
-          fontWeight: '800',
-          color: '#1d4f3a'
+          fontWeight: '900',
+          color: brandColors.forest
         },
         headerStyle: {
-          backgroundColor: '#e8eee7'
+          backgroundColor: brandColors.canvas
         },
         headerShadowVisible: false,
-        headerTintColor: '#1d4f3a'
+        headerTintColor: brandColors.forest
       }}
     >
       <SurveysStack.Screen
@@ -200,7 +201,7 @@ function SurveysTabNavigator({
           headerShadowVisible: false,
           headerTransparent: false,
           headerStyle: {
-            backgroundColor: '#eef1e8'
+            backgroundColor: brandColors.canvas
           },
           headerSearchBarOptions: isSurveySearchActive
             ? {
@@ -323,7 +324,7 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveyForm"
         options={{
-          title: formMode === 'edit' ? 'Edit survey' : 'Create a new survey',
+          title: formMode === 'edit' ? 'Edit survey' : 'New survey',
           headerLargeTitle: false
         }}
       >
