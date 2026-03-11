@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import type { SearchBarCommands } from 'react-native-screens';
 import { styles } from './styles';
 import { FactorKey, RegionVersion, SurveyDetailTab, VegetationStage } from './types';
 import { SurveyFormScreen } from '../screens/SurveyFormScreen';
@@ -158,6 +159,20 @@ function SurveysTabNavigator({
   'publicMapExplorer' | 'ownSurveyIds' | 'onApiUrlChange'
 >) {
   const [isSurveySearchOpen, setIsSurveySearchOpen] = useState(false);
+  const searchBarRef = useRef<SearchBarCommands>(null!);
+  const isSurveySearchActive = isSurveySearchOpen || surveyList.surveyQuery.trim().length > 0;
+
+  useEffect(() => {
+    if (!isSurveySearchOpen) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      searchBarRef.current?.focus();
+    }, 80);
+
+    return () => clearTimeout(timeoutId);
+  }, [isSurveySearchOpen]);
 
   return (
     <SurveysStack.Navigator
@@ -180,7 +195,34 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveysHome"
         options={{
-          headerShown: false
+          headerShown: isSurveySearchActive,
+          headerTitle: '',
+          headerShadowVisible: false,
+          headerTransparent: false,
+          headerStyle: {
+            backgroundColor: '#eef1e8'
+          },
+          headerSearchBarOptions: isSurveySearchActive
+            ? {
+                ref: searchBarRef,
+                placeholder: 'Search surveys',
+                autoCapitalize: 'none',
+                hideWhenScrolling: false,
+                hideNavigationBar: false,
+                obscureBackground: false,
+                onChangeText: (event) => {
+                  surveyList.setSurveyQuery(event.nativeEvent.text);
+                },
+                onCancelButtonPress: () => {
+                  surveyList.setSurveyQuery('');
+                  setIsSurveySearchOpen(false);
+                },
+                onClose: () => {
+                  surveyList.setSurveyQuery('');
+                  setIsSurveySearchOpen(false);
+                }
+              }
+            : undefined
         }}
       >
         {({ navigation }) => (
@@ -190,8 +232,6 @@ function SurveysTabNavigator({
               visibleSurveys={surveyList.visibleSurveys}
               selectedSurveyId={surveyList.selectedSurveyId}
               attachmentsBySurvey={surveyList.attachmentsBySurvey}
-              surveyQuery={surveyList.surveyQuery}
-              setSurveyQuery={surveyList.setSurveyQuery}
               surveyFromDate={surveyList.surveyFromDate}
               setSurveyFromDate={surveyList.setSurveyFromDate}
               surveyToDate={surveyList.surveyToDate}
@@ -209,8 +249,7 @@ function SurveysTabNavigator({
               sortMode={surveyList.sortMode}
               setSortMode={surveyList.setSortMode}
               resetFilters={surveyList.resetFilters}
-              searchOpen={isSurveySearchOpen}
-              onSearchOpenChange={setIsSurveySearchOpen}
+              searchActive={isSurveySearchActive}
               onOpenSurvey={(surveyId) => {
                 onOpenSurvey(surveyId);
                 navigation.navigate('surveyDetail');

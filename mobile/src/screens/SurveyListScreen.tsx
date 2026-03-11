@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -41,8 +41,6 @@ type SurveyListScreenProps = {
   visibleSurveys: LocalSurvey[];
   selectedSurveyId: string | null;
   attachmentsBySurvey: Record<string, LocalAttachment[]>;
-  surveyQuery: string;
-  setSurveyQuery: (value: string) => void;
   surveyFromDate: string;
   setSurveyFromDate: (value: string) => void;
   surveyToDate: string;
@@ -60,8 +58,7 @@ type SurveyListScreenProps = {
   sortMode: SurveySort;
   setSortMode: (value: SurveySort) => void;
   resetFilters: () => void;
-  searchOpen: boolean;
-  onSearchOpenChange: (open: boolean) => void;
+  searchActive: boolean;
   onOpenSurvey: (surveyId: string) => void;
 };
 
@@ -190,8 +187,6 @@ export function SurveyListScreen({
   visibleSurveys,
   selectedSurveyId,
   attachmentsBySurvey,
-  surveyQuery,
-  setSurveyQuery,
   surveyFromDate,
   setSurveyFromDate,
   surveyToDate,
@@ -209,13 +204,11 @@ export function SurveyListScreen({
   sortMode,
   setSortMode,
   resetFilters,
-  searchOpen,
-  onSearchOpenChange,
+  searchActive,
   onOpenSurvey
 }: SurveyListScreenProps) {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
-  const searchInputRef = useRef<TextInput | null>(null);
   const { height: viewportHeight } = useWindowDimensions();
 
   const surveyStats = useMemo(() => computeSurveyStats(surveys), [surveys]);
@@ -234,7 +227,6 @@ export function SurveyListScreen({
     () => `${surveyStats.total} total • ${surveyStats.draft} drafts • ${surveyStats.pending} pending`,
     [surveyStats.draft, surveyStats.pending, surveyStats.total]
   );
-  const showSearchField = searchOpen || surveyQuery.trim().length > 0;
 
   const expandedHeroHeight = Math.max(324, Math.min(388, Math.round(viewportHeight * 0.39)));
   const collapsedHeroHeight = 84;
@@ -266,192 +258,161 @@ export function SurveyListScreen({
     extrapolate: 'clamp'
   });
   const stickyFilterOffset = collapsedHeroHeight + brandSpacing.sm;
-
-  useEffect(() => {
-    if (!searchOpen) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 60);
-
-    return () => clearTimeout(timeoutId);
-  }, [searchOpen]);
+  const topSpacerHeight = searchActive ? brandSpacing.sm : expandedHeroHeight + brandSpacing.md;
 
   return (
     <View style={screenStyles.container}>
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          screenStyles.heroShell,
-          {
-            height: heroHeight
-          }
-        ]}
-      >
-        <View style={screenStyles.heroCard}>
-          <View style={screenStyles.heroAccentOrb} />
-          <Animated.View
-            style={[
-              screenStyles.heroExpandedLayer,
-              {
-                opacity: expandedOpacity,
-                transform: [{ translateY: expandedTranslateY }]
-              }
-            ]}
-          >
-            <View style={screenStyles.heroExpandedHeader}>
-              <Text style={screenStyles.heroTitleExpanded}>Your field notebook</Text>
-              <Text style={screenStyles.heroBody}>
-                Browse drafts, review sync state, and reopen surveys with less friction.
+      {searchActive ? null : (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            screenStyles.heroShell,
+            {
+              height: heroHeight
+            }
+          ]}
+        >
+          <View style={screenStyles.heroCard}>
+            <View style={screenStyles.heroAccentOrb} />
+            <Animated.View
+              style={[
+                screenStyles.heroExpandedLayer,
+                {
+                  opacity: expandedOpacity,
+                  transform: [{ translateY: expandedTranslateY }]
+                }
+              ]}
+            >
+              <View style={screenStyles.heroExpandedHeader}>
+                <Text style={screenStyles.heroTitleExpanded}>Your field notebook</Text>
+                <Text style={screenStyles.heroBody}>
+                  Browse drafts, review sync state, and reopen surveys with less friction.
+                </Text>
+              </View>
+
+              <View style={screenStyles.heroStatsGrid}>
+                <SurveyStatTile label="TOTAL" value={surveyStats.total} />
+                <SurveyStatTile label="DRAFTS" value={surveyStats.draft} />
+                <SurveyStatTile label="SUBMITTED" value={surveyStats.submitted} />
+                <SurveyStatTile label="PENDING" value={surveyStats.pending} />
+              </View>
+            </Animated.View>
+
+            <Animated.View
+              style={[
+                screenStyles.heroCompactLayer,
+                {
+                  opacity: compactOpacity,
+                  transform: [{ translateY: compactTranslateY }]
+                }
+              ]}
+            >
+              <Text numberOfLines={1} style={screenStyles.heroTitleCompact}>
+                Your field notebook
               </Text>
-            </View>
-
-            <View style={screenStyles.heroStatsGrid}>
-              <SurveyStatTile label="TOTAL" value={surveyStats.total} />
-              <SurveyStatTile label="DRAFTS" value={surveyStats.draft} />
-              <SurveyStatTile label="SUBMITTED" value={surveyStats.submitted} />
-              <SurveyStatTile label="PENDING" value={surveyStats.pending} />
-            </View>
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              screenStyles.heroCompactLayer,
-              {
-                opacity: compactOpacity,
-                transform: [{ translateY: compactTranslateY }]
-              }
-            ]}
-          >
-            <Text numberOfLines={1} style={screenStyles.heroTitleCompact}>
-              Your field notebook
-            </Text>
-            <Text numberOfLines={1} style={screenStyles.heroCompactSummary}>
-              {compactSummary}
-            </Text>
-          </Animated.View>
-        </View>
-      </Animated.View>
+              <Text numberOfLines={1} style={screenStyles.heroCompactSummary}>
+                {compactSummary}
+              </Text>
+            </Animated.View>
+          </View>
+        </Animated.View>
+      )}
 
       <Animated.ScrollView
         style={screenStyles.pageScroll}
         contentContainerStyle={screenStyles.pageContent}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
-        stickyHeaderIndices={[1]}
+        stickyHeaderIndices={searchActive ? undefined : [1]}
+        contentInsetAdjustmentBehavior="automatic"
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: false
         })}
       >
-        <View style={{ height: expandedHeroHeight + brandSpacing.md }} />
+        <View style={{ height: topSpacerHeight }} />
 
-        <View
-          style={[
-            screenStyles.filtersStickyHost,
-            {
-              paddingTop: stickyFilterOffset,
-              marginTop: -stickyFilterOffset
-            }
-          ]}
-        >
-          <View style={screenStyles.filtersCard}>
-            <View style={screenStyles.filtersHeaderRow}>
-              <View style={screenStyles.filtersHeadingBlock}>
-                <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
-              </View>
-
-              <Pressable
-                style={screenStyles.advancedToggle}
-                onPress={() => setAdvancedFiltersOpen((current) => !current)}
-              >
-                <Ionicons name={advancedFiltersOpen ? 'close' : 'funnel-outline'} size={16} color={brandColors.forest} />
-                <Text style={screenStyles.advancedToggleText}>
-                  {advancedFiltersOpen ? 'Hide' : advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Filters'}
-                </Text>
-              </Pressable>
-            </View>
-
-            {showSearchField ? (
-              <View style={screenStyles.searchField}>
-                <Ionicons name="search-outline" size={18} color={brandColors.textSecondary} />
-                <TextInput
-                  ref={searchInputRef}
-                  style={screenStyles.searchInput}
-                  value={surveyQuery}
-                  onChangeText={setSurveyQuery}
-                  placeholder="Search by site, id, or sync issue"
-                  placeholderTextColor={brandColors.textSecondary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <Pressable
-                  hitSlop={8}
-                  onPress={() => {
-                    setSurveyQuery('');
-                    onSearchOpenChange(false);
-                  }}
-                >
-                  <Ionicons name="close-circle" size={18} color={brandColors.textSecondary} />
-                </Pressable>
-              </View>
-            ) : null}
-
-            <FilterSection label="Status" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
-            <FilterSection
-              label="Visibility"
-              options={VISIBILITY_OPTIONS}
-              value={visibilityFilter}
-              onChange={setVisibilityFilter}
-            />
-
-            {advancedFiltersOpen ? (
-              <View style={screenStyles.advancedPanel}>
-                <View style={screenStyles.dateInputsRow}>
-                  <View style={screenStyles.dateInputBlock}>
-                    <Text style={screenStyles.filterSectionLabel}>From</Text>
-                    <TextInput
-                      style={screenStyles.compactInput}
-                      value={surveyFromDate}
-                      onChangeText={setSurveyFromDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={brandColors.textSecondary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                  <View style={screenStyles.dateInputBlock}>
-                    <Text style={screenStyles.filterSectionLabel}>To</Text>
-                    <TextInput
-                      style={screenStyles.compactInput}
-                      value={surveyToDate}
-                      onChangeText={setSurveyToDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={brandColors.textSecondary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
+        {searchActive ? null : (
+          <View
+            style={[
+              screenStyles.filtersStickyHost,
+              {
+                paddingTop: stickyFilterOffset,
+                marginTop: -stickyFilterOffset
+              }
+            ]}
+          >
+            <View style={screenStyles.filtersCard}>
+              <View style={screenStyles.filtersHeaderRow}>
+                <View style={screenStyles.filtersHeadingBlock}>
+                  <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
                 </View>
 
-                <FilterSection label="Sync" options={SYNC_OPTIONS} value={syncFilter} onChange={setSyncFilter} />
-                <FilterSection label="Blocked" options={BLOCKED_OPTIONS} value={blockedFilter} onChange={setBlockedFilter} />
-                <FilterSection
-                  label="Attachments"
-                  options={ATTACHMENT_OPTIONS}
-                  value={attachmentFilter}
-                  onChange={setAttachmentFilter}
-                />
-                <FilterSection label="Sort" options={SORT_OPTIONS} value={sortMode} onChange={setSortMode} />
-
-                <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
-                  <Text style={screenStyles.resetButtonText}>Reset filters</Text>
+                <Pressable
+                  style={screenStyles.advancedToggle}
+                  onPress={() => setAdvancedFiltersOpen((current) => !current)}
+                >
+                  <Ionicons name={advancedFiltersOpen ? 'close' : 'funnel-outline'} size={16} color={brandColors.forest} />
+                  <Text style={screenStyles.advancedToggleText}>
+                    {advancedFiltersOpen ? 'Hide' : advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Filters'}
+                  </Text>
                 </Pressable>
               </View>
-            ) : null}
+
+              <FilterSection label="Status" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+              <FilterSection
+                label="Visibility"
+                options={VISIBILITY_OPTIONS}
+                value={visibilityFilter}
+                onChange={setVisibilityFilter}
+              />
+
+              {advancedFiltersOpen ? (
+                <View style={screenStyles.advancedPanel}>
+                  <View style={screenStyles.dateInputsRow}>
+                    <View style={screenStyles.dateInputBlock}>
+                      <Text style={screenStyles.filterSectionLabel}>From</Text>
+                      <TextInput
+                        style={screenStyles.compactInput}
+                        value={surveyFromDate}
+                        onChangeText={setSurveyFromDate}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={brandColors.textSecondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+                    <View style={screenStyles.dateInputBlock}>
+                      <Text style={screenStyles.filterSectionLabel}>To</Text>
+                      <TextInput
+                        style={screenStyles.compactInput}
+                        value={surveyToDate}
+                        onChangeText={setSurveyToDate}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={brandColors.textSecondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+                  </View>
+
+                  <FilterSection label="Sync" options={SYNC_OPTIONS} value={syncFilter} onChange={setSyncFilter} />
+                  <FilterSection label="Blocked" options={BLOCKED_OPTIONS} value={blockedFilter} onChange={setBlockedFilter} />
+                  <FilterSection
+                    label="Attachments"
+                    options={ATTACHMENT_OPTIONS}
+                    value={attachmentFilter}
+                    onChange={setAttachmentFilter}
+                  />
+                  <FilterSection label="Sort" options={SORT_OPTIONS} value={sortMode} onChange={setSortMode} />
+
+                  <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
+                    <Text style={screenStyles.resetButtonText}>Reset filters</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
           </View>
-        </View>
+        )}
 
         <Text style={screenStyles.listHeaderMeta}>
           {visibleSurveys.length} {visibleSurveys.length > 1 ? 'surveys' : 'survey'}
@@ -734,24 +695,6 @@ const screenStyles = StyleSheet.create({
   advancedToggleText: {
     ...brandTypography.meta,
     color: brandColors.forest
-  },
-  searchField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 44,
-    borderRadius: brandRadius.field,
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    backgroundColor: brandColors.inputFill,
-    paddingHorizontal: 12
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: '600',
-    color: brandColors.textPrimary
   },
   filterSection: {
     gap: 6
