@@ -1484,20 +1484,48 @@ export const styles = StyleSheet.create({
   tabButtonTextActive: {
     color: '#1d4f84'
   },
-  fabButton: {
+  fabDockShell: {
     position: 'absolute',
     right: 18,
-    bottom: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    bottom: 20
+  },
+  fabDock: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2a764f',
+    gap: 8,
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: '#f7faf5',
+    borderWidth: 1,
+    borderColor: '#d4ddd0',
     shadowColor: '#18432e',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
     elevation: 6
+  },
+  fabDockSecondaryButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#edf2e9'
+  },
+  fabDockSecondaryButtonActive: {
+    backgroundColor: '#2a764f'
+  },
+  fabDockDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#d4ddd0'
+  },
+  fabDockPrimaryButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2a764f'
   }
 });

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -106,6 +107,33 @@ const tabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList } }
   }
 });
 
+function FloatingSurveyActions({
+  searchOpen,
+  onOpenSearch,
+  onCreateSurvey
+}: {
+  searchOpen: boolean;
+  onOpenSearch: () => void;
+  onCreateSurvey: () => void;
+}) {
+  return (
+    <View pointerEvents="box-none" style={styles.fabDockShell}>
+      <View style={styles.fabDock}>
+        <Pressable
+          style={[styles.fabDockSecondaryButton, searchOpen ? styles.fabDockSecondaryButtonActive : null]}
+          onPress={onOpenSearch}
+        >
+          <Ionicons name="search-outline" size={20} color={searchOpen ? '#ffffff' : '#2a764f'} />
+        </Pressable>
+        <View style={styles.fabDockDivider} />
+        <Pressable style={styles.fabDockPrimaryButton} onPress={onCreateSurvey}>
+          <Ionicons name="add" size={28} color="#ffffff" />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function SurveysTabNavigator({
   apiUrl,
   formMode,
@@ -129,6 +157,8 @@ function SurveysTabNavigator({
   AuthenticatedAppNavigationProps,
   'publicMapExplorer' | 'ownSurveyIds' | 'onApiUrlChange'
 >) {
+  const [isSurveySearchOpen, setIsSurveySearchOpen] = useState(false);
+
   return (
     <SurveysStack.Navigator
       screenOptions={{
@@ -179,20 +209,21 @@ function SurveysTabNavigator({
               sortMode={surveyList.sortMode}
               setSortMode={surveyList.setSortMode}
               resetFilters={surveyList.resetFilters}
+              searchOpen={isSurveySearchOpen}
+              onSearchOpenChange={setIsSurveySearchOpen}
               onOpenSurvey={(surveyId) => {
                 onOpenSurvey(surveyId);
                 navigation.navigate('surveyDetail');
               }}
             />
-            <Pressable
-              style={styles.fabButton}
-              onPress={() => {
+            <FloatingSurveyActions
+              searchOpen={isSurveySearchOpen}
+              onOpenSearch={() => setIsSurveySearchOpen(true)}
+              onCreateSurvey={() => {
                 onOpenCreateSurvey();
                 navigation.navigate('surveyForm');
               }}
-            >
-              <Ionicons name="add" size={30} color="#ffffff" />
-            </Pressable>
+            />
           </View>
         )}
       </SurveysStack.Screen>
