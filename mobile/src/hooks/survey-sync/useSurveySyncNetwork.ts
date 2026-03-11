@@ -29,6 +29,7 @@ export function useSurveySyncNetwork({
   setStatus
 }: UseSurveySyncNetworkParams) {
   const syncInProgressRef = useRef(false);
+  const pullInProgressRef = useRef(false);
   const lastOnlineStateRef = useRef<boolean | null>(null);
   const lastAutoSyncAtRef = useRef<number>(0);
 
@@ -84,14 +85,37 @@ export function useSurveySyncNetwork({
       }
 
       const hasWork = await hasPendingSyncWork();
-      if (!hasWork) {
+      lastAutoSyncAtRef.current = now;
+
+      if (hasWork) {
+        await runSync('auto', trigger);
         return;
       }
 
-      lastAutoSyncAtRef.current = now;
-      await runSync('auto', trigger);
+      const shouldPullServerChanges = trigger === 'startup' || trigger === 'auth-ready' || trigger === 'reconnected';
+      if (!shouldPullServerChanges || pullInProgressRef.current || syncInProgressRef.current) {
+        return;
+      }
+
+      pullInProgressRef.current = true;
+      try {
+        const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token));
+        if (result.surveys > 0 || result.attachments > 0) {
+          await refreshLocalSurveys();
+          await refreshLocalAttachments();
+          setStatus(`Server changes pulled: ${result.surveys} surveys, ${result.attachments} attachments`);
+        }
+      } catch (error) {
+        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+          await clearSession();
+          setStatus('Sync paused: login required');
+          return;
+        }
+      } finally {
+        pullInProgressRef.current = false;
+      }
     },
-    [accessToken, refreshToken, runSync]
+    [accessToken, apiUrl, clearSession, refreshLocalAttachments, refreshLocalSurveys, refreshToken, runSync, setStatus, withAuthRetry]
   );
 
   const handleSync = useCallback(async (): Promise<void> => {
