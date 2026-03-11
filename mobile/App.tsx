@@ -384,30 +384,61 @@ export default function App() {
     );
   };
 
-  const handleCaptureGpsLocation = async (): Promise<void> => {
+  const handleCaptureGpsLocation = async (): Promise<boolean> => {
     try {
+      const locationServicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!locationServicesEnabled) {
+        surveySync.setStatus('Location services disabled');
+        Alert.alert('Location disabled', 'Enable location services to center the map and find nearby parcels.');
+        return false;
+      }
+
       surveySync.setStatus('Requesting GPS permission...');
-      const permission = await Location.requestForegroundPermissionsAsync();
+      const existingPermission = await Location.getForegroundPermissionsAsync();
+      const permission = existingPermission.granted ? existingPermission : await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
         surveySync.setStatus('Location permission denied');
         Alert.alert('Location disabled', 'Allow location access to center the map and find nearby parcels.');
-        return;
+        return false;
       }
 
-      surveySync.setStatus('Capturing GPS location...');
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced
-      });
+      let appliedFallbackLocation = false;
+      const lastKnownPosition = await Location.getLastKnownPositionAsync();
+      if (lastKnownPosition) {
+        surveyForm.applyGpsLocation({
+          lat: lastKnownPosition.coords.latitude,
+          lng: lastKnownPosition.coords.longitude,
+          collected_at: new Date(lastKnownPosition.timestamp).toISOString()
+        });
+        appliedFallbackLocation = true;
+        surveySync.setStatus('Approximate location captured. Refining GPS...');
+      } else {
+        surveySync.setStatus('Capturing GPS location...');
+      }
 
-      surveyForm.applyGpsLocation({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        collected_at: new Date(position.timestamp).toISOString()
-      });
-      surveySync.setStatus('GPS location captured');
+      try {
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced
+        });
+
+        surveyForm.applyGpsLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          collected_at: new Date(position.timestamp).toISOString()
+        });
+        surveySync.setStatus('GPS location captured');
+        return true;
+      } catch (error) {
+        if (appliedFallbackLocation) {
+          surveySync.setStatus('Approximate location captured');
+          return true;
+        }
+        throw error;
+      }
     } catch (error) {
       surveySync.setStatus(`GPS error: ${(error as Error).message}`);
       Alert.alert('GPS unavailable', 'The device could not provide a GPS position.');
+      return false;
     }
   };
 

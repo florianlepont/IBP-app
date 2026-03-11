@@ -18,7 +18,7 @@ type SurveyParcelSelectionScreenProps = {
   };
   selectedParcelIds: string[];
   onToggleParcelSelection: (parcelId: string) => void;
-  onCaptureGpsLocation: () => Promise<void>;
+  onCaptureGpsLocation: () => Promise<boolean>;
   onSave: () => Promise<void>;
 };
 
