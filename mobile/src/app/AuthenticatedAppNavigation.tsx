@@ -150,7 +150,7 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveysHome"
         options={{
-          title: 'My Surveys'
+          headerShown: false
         }}
       >
         {({ navigation }) => (

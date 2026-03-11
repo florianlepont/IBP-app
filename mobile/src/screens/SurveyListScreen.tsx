@@ -1,9 +1,26 @@
-import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { styles } from '../app/styles';
+import {
+  brandColors,
+  brandRadius,
+  brandShadow,
+  brandSpacing,
+  brandTypography
+} from '../app/brand-tokens';
 import { formatDateTime } from '../app/formatters';
 import {
+  computeSurveyStats,
   formatSurveySyncDisplayLabel,
   formatSurveyWorkflowStatusLabel,
   resolveSurveySyncDisplay,
@@ -17,7 +34,6 @@ import {
   SurveyVisibilityFilter,
   SurveySyncFilter
 } from '../app/types';
-import { FilterChip } from '../components/FilterChip';
 import { LocalAttachment, LocalSurvey } from '../storage';
 
 type SurveyListScreenProps = {
@@ -47,6 +63,130 @@ type SurveyListScreenProps = {
   onOpenSurvey: (surveyId: string) => void;
 };
 
+type SurveyFilterChipProps = {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+type SurveyStatTileProps = {
+  label: string;
+  value: number;
+};
+
+type SurveyBadgeTone = 'neutral' | 'success' | 'warning' | 'danger';
+
+type SurveyBadgeProps = {
+  label: string;
+  tone?: SurveyBadgeTone;
+};
+
+const STATUS_OPTIONS: Array<{ label: string; value: SurveyStatusFilter }> = [
+  { label: 'All', value: 'all' },
+  { label: 'Draft', value: 'draft' },
+  { label: 'Submitted', value: 'submitted' },
+  { label: 'Expired', value: 'expired' }
+];
+
+const VISIBILITY_OPTIONS: Array<{ label: string; value: SurveyVisibilityFilter }> = [
+  { label: 'All', value: 'all' },
+  { label: 'Private', value: 'private' },
+  { label: 'Public', value: 'public' }
+];
+
+const SYNC_OPTIONS: Array<{ label: string; value: SurveySyncFilter }> = [
+  { label: 'All', value: 'all' },
+  { label: 'Pending', value: 'pending' },
+  { label: 'Synced', value: 'synced' },
+  { label: 'Failed', value: 'failed' }
+];
+
+const BLOCKED_OPTIONS: Array<{ label: string; value: SurveyBlockedFilter }> = [
+  { label: 'All', value: 'all' },
+  { label: 'Blocked only', value: 'blocked' },
+  { label: 'Unblocked', value: 'unblocked' }
+];
+
+const ATTACHMENT_OPTIONS: Array<{ label: string; value: SurveyAttachmentFilter }> = [
+  { label: 'All', value: 'all' },
+  { label: 'With photo', value: 'with' },
+  { label: 'Without photo', value: 'without' }
+];
+
+const SORT_OPTIONS: Array<{ label: string; value: SurveySort }> = [
+  { label: 'Updated (newest)', value: 'updated_desc' },
+  { label: 'Updated (oldest)', value: 'updated_asc' },
+  { label: 'Site A-Z', value: 'site_asc' }
+];
+
+function SurveyFilterChip({ label, active, onPress }: SurveyFilterChipProps) {
+  return (
+    <Pressable onPress={onPress} style={[screenStyles.filterChip, active ? screenStyles.filterChipActive : null]}>
+      <Text style={[screenStyles.filterChipText, active ? screenStyles.filterChipTextActive : null]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function SurveyStatTile({ label, value }: SurveyStatTileProps) {
+  return (
+    <View style={screenStyles.heroStatTile}>
+      <Text style={screenStyles.heroStatLabel}>{label}</Text>
+      <Text style={screenStyles.heroStatValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SurveyBadge({ label, tone = 'neutral' }: SurveyBadgeProps) {
+  return (
+    <View
+      style={[
+        screenStyles.badge,
+        tone === 'success'
+          ? screenStyles.badgeSuccess
+          : tone === 'warning'
+            ? screenStyles.badgeWarning
+            : tone === 'danger'
+              ? screenStyles.badgeDanger
+              : screenStyles.badgeNeutral
+      ]}
+    >
+      <Text style={[screenStyles.badgeText, tone === 'danger' ? screenStyles.badgeTextDanger : null]}>{label}</Text>
+    </View>
+  );
+}
+
+function FilterSection<T extends string>({
+  label,
+  options,
+  value,
+  onChange
+}: {
+  label: string;
+  options: Array<{ label: string; value: T }>;
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <View style={screenStyles.filterSection}>
+      <Text style={screenStyles.filterSectionLabel}>{label}</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={screenStyles.filterChipRow}
+      >
+        {options.map((option) => (
+          <SurveyFilterChip
+            key={option.value}
+            label={option.label}
+            active={value === option.value}
+            onPress={() => onChange(option.value)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 export function SurveyListScreen({
   surveys,
   visibleSurveys,
@@ -74,181 +214,710 @@ export function SurveyListScreen({
   onOpenSurvey
 }: SurveyListScreenProps) {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const { height: viewportHeight } = useWindowDimensions();
+
+  const surveyStats = useMemo(() => computeSurveyStats(surveys), [surveys]);
+  const advancedFilterCount = useMemo(() => {
+    let count = 0;
+    if (surveyFromDate.trim()) count += 1;
+    if (surveyToDate.trim()) count += 1;
+    if (syncFilter !== 'all') count += 1;
+    if (blockedFilter !== 'all') count += 1;
+    if (attachmentFilter !== 'all') count += 1;
+    if (sortMode !== 'updated_desc') count += 1;
+    return count;
+  }, [attachmentFilter, blockedFilter, sortMode, surveyFromDate, surveyToDate, syncFilter]);
+
+  const compactSummary = useMemo(
+    () => `${surveyStats.total} total • ${surveyStats.draft} drafts • ${surveyStats.pending} pending`,
+    [surveyStats.draft, surveyStats.pending, surveyStats.total]
+  );
+
+  const collapseDistance = 150;
+  const expandedHeroHeight = Math.max(318, Math.min(382, Math.round(viewportHeight * 0.37)));
+  const collapsedHeroHeight = 82;
+
+  const heroHeight = scrollY.interpolate({
+    inputRange: [0, collapseDistance],
+    outputRange: [expandedHeroHeight, collapsedHeroHeight],
+    extrapolate: 'clamp'
+  });
+  const expandedOpacity = scrollY.interpolate({
+    inputRange: [0, 55, 95],
+    outputRange: [1, 0.35, 0],
+    extrapolate: 'clamp'
+  });
+  const expandedTranslateY = scrollY.interpolate({
+    inputRange: [0, 95],
+    outputRange: [0, -16],
+    extrapolate: 'clamp'
+  });
+  const compactOpacity = scrollY.interpolate({
+    inputRange: [55, 105, collapseDistance],
+    outputRange: [0, 0.7, 1],
+    extrapolate: 'clamp'
+  });
+  const compactTranslateY = scrollY.interpolate({
+    inputRange: [55, collapseDistance],
+    outputRange: [8, 0],
+    extrapolate: 'clamp'
+  });
+  const compactScale = scrollY.interpolate({
+    inputRange: [55, collapseDistance],
+    outputRange: [0.985, 1],
+    extrapolate: 'clamp'
+  });
 
   return (
-    <View style={styles.surveyListContainer}>
-      <View style={styles.card}>
-        <Text style={styles.label}>Search surveys</Text>
-        <TextInput
-          style={styles.input}
-          value={surveyQuery}
-          onChangeText={setSurveyQuery}
-          placeholder="Search by site, id, or last error"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+    <View style={screenStyles.container}>
+      <Animated.View style={[screenStyles.heroShell, { height: heroHeight }]}>
+        <View style={screenStyles.heroCard}>
+          <View style={screenStyles.heroAccentOrb} />
 
-        <View style={styles.filterGroupCompact}>
-          <Text style={styles.filterLabelCompact}>Submit</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
-            <FilterChip label="All" active={statusFilter === 'all'} onPress={() => setStatusFilter('all')} />
-            <FilterChip label="Draft" active={statusFilter === 'draft'} onPress={() => setStatusFilter('draft')} />
-            <FilterChip label="Submitted" active={statusFilter === 'submitted'} onPress={() => setStatusFilter('submitted')} />
-            <FilterChip label="Expired" active={statusFilter === 'expired'} onPress={() => setStatusFilter('expired')} />
-          </ScrollView>
+          <Animated.View
+            style={[
+              screenStyles.heroExpandedLayer,
+              {
+                opacity: expandedOpacity,
+                transform: [{ translateY: expandedTranslateY }]
+              }
+            ]}
+          >
+            <View style={screenStyles.heroExpandedHeader}>
+              <Text style={screenStyles.heroTitleExpanded}>Your field notebook</Text>
+              <Text style={screenStyles.heroBody}>
+                Browse drafts, review sync state, and reopen surveys with less friction.
+              </Text>
+            </View>
+
+            <View style={screenStyles.heroStatsGrid}>
+              <SurveyStatTile label="TOTAL" value={surveyStats.total} />
+              <SurveyStatTile label="DRAFTS" value={surveyStats.draft} />
+              <SurveyStatTile label="SUBMITTED" value={surveyStats.submitted} />
+              <SurveyStatTile label="PENDING" value={surveyStats.pending} />
+            </View>
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              screenStyles.heroCompactLayer,
+              {
+                opacity: compactOpacity,
+                transform: [{ translateY: compactTranslateY }, { scale: compactScale }]
+              }
+            ]}
+          >
+            <Text numberOfLines={1} style={screenStyles.heroTitleCompact}>
+              Your field notebook
+            </Text>
+            <Text numberOfLines={1} style={screenStyles.heroCompactSummary}>
+              {compactSummary}
+            </Text>
+          </Animated.View>
         </View>
+      </Animated.View>
 
-        <View style={styles.filterGroupCompact}>
-          <Text style={styles.filterLabelCompact}>Visibility</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
-            <FilterChip label="All" active={visibilityFilter === 'all'} onPress={() => setVisibilityFilter('all')} />
-            <FilterChip label="Private" active={visibilityFilter === 'private'} onPress={() => setVisibilityFilter('private')} />
-            <FilterChip label="Public" active={visibilityFilter === 'public'} onPress={() => setVisibilityFilter('public')} />
-          </ScrollView>
-        </View>
-        <View style={styles.filterToolbarRow}>
-          <Pressable style={styles.filterIconButton} onPress={() => setAdvancedFiltersOpen((value) => !value)}>
-            <Ionicons name="funnel-outline" size={18} color="#2a5b43" />
-          </Pressable>
-          <Pressable style={styles.filterAdvancedToggle} onPress={() => setAdvancedFiltersOpen((value) => !value)}>
-            <Text style={styles.filterAdvancedToggleText}>{advancedFiltersOpen ? 'Hide advanced filters' : 'Advanced filters'}</Text>
-          </Pressable>
-        </View>
-
-        {advancedFiltersOpen ? (
-          <View style={styles.filterAdvancedPanel}>
-            <View style={styles.filterGroupCompact}>
-              <Text style={styles.filterLabelCompact}>Updated date range</Text>
-              <TextInput
-                style={styles.input}
-                value={surveyFromDate}
-                onChangeText={setSurveyFromDate}
-                placeholder="From (YYYY-MM-DD)"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TextInput
-                style={styles.input}
-                value={surveyToDate}
-                onChangeText={setSurveyToDate}
-                placeholder="To (YYYY-MM-DD)"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+      <Animated.ScrollView
+        style={screenStyles.pageScroll}
+        contentContainerStyle={screenStyles.pageContent}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: false
+        })}
+      >
+        <View style={screenStyles.filtersCard}>
+          <View style={screenStyles.filtersHeaderRow}>
+            <View style={screenStyles.filtersHeadingBlock}>
+              <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
+              <Text style={screenStyles.filtersBody}>Use quick filters first, then refine only when needed.</Text>
             </View>
 
-            <View style={styles.filterGroupCompact}>
-              <Text style={styles.filterLabelCompact}>Sync</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
-                <FilterChip label="All" active={syncFilter === 'all'} onPress={() => setSyncFilter('all')} />
-                <FilterChip label="Pending" active={syncFilter === 'pending'} onPress={() => setSyncFilter('pending')} />
-                <FilterChip label="Synced" active={syncFilter === 'synced'} onPress={() => setSyncFilter('synced')} />
-                <FilterChip label="Failed" active={syncFilter === 'failed'} onPress={() => setSyncFilter('failed')} />
-              </ScrollView>
-            </View>
-
-            <View style={styles.filterGroupCompact}>
-              <Text style={styles.filterLabelCompact}>Blocked</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
-                <FilterChip label="All" active={blockedFilter === 'all'} onPress={() => setBlockedFilter('all')} />
-                <FilterChip label="Blocked only" active={blockedFilter === 'blocked'} onPress={() => setBlockedFilter('blocked')} />
-                <FilterChip label="Unblocked" active={blockedFilter === 'unblocked'} onPress={() => setBlockedFilter('unblocked')} />
-              </ScrollView>
-            </View>
-
-            <View style={styles.filterGroupCompact}>
-              <Text style={styles.filterLabelCompact}>Attachments</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
-                <FilterChip label="All" active={attachmentFilter === 'all'} onPress={() => setAttachmentFilter('all')} />
-                <FilterChip label="With photo" active={attachmentFilter === 'with'} onPress={() => setAttachmentFilter('with')} />
-                <FilterChip label="Without photo" active={attachmentFilter === 'without'} onPress={() => setAttachmentFilter('without')} />
-              </ScrollView>
-            </View>
-
-            <View style={styles.filterGroupCompact}>
-              <Text style={styles.filterLabelCompact}>Sort</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsInlineRow}>
-                <FilterChip label="Updated (newest)" active={sortMode === 'updated_desc'} onPress={() => setSortMode('updated_desc')} />
-                <FilterChip label="Updated (oldest)" active={sortMode === 'updated_asc'} onPress={() => setSortMode('updated_asc')} />
-                <FilterChip label="Site A-Z" active={sortMode === 'site_asc'} onPress={() => setSortMode('site_asc')} />
-              </ScrollView>
-            </View>
-
-            <Pressable onPress={resetFilters} style={styles.filterReset}>
-              <Text style={styles.filterResetText}>Reset filters</Text>
+            <Pressable
+              style={screenStyles.advancedToggle}
+              onPress={() => setAdvancedFiltersOpen((current) => !current)}
+            >
+              <Ionicons name={advancedFiltersOpen ? 'close' : 'funnel-outline'} size={16} color={brandColors.forest} />
+              <Text style={screenStyles.advancedToggleText}>
+                {advancedFiltersOpen ? 'Hide' : advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Filters'}
+              </Text>
             </Pressable>
           </View>
-        ) : null}
-      </View>
 
-      <ScrollView style={styles.surveyListScroll} contentContainerStyle={styles.surveyListScrollContent}>
+          <View style={screenStyles.searchField}>
+            <Ionicons name="search-outline" size={18} color={brandColors.textSecondary} />
+            <TextInput
+              style={screenStyles.searchInput}
+              value={surveyQuery}
+              onChangeText={setSurveyQuery}
+              placeholder="Search by site, id, or sync issue"
+              placeholderTextColor={brandColors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <FilterSection label="Status" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+          <FilterSection
+            label="Visibility"
+            options={VISIBILITY_OPTIONS}
+            value={visibilityFilter}
+            onChange={setVisibilityFilter}
+          />
+
+          {advancedFiltersOpen ? (
+            <View style={screenStyles.advancedPanel}>
+              <View style={screenStyles.dateInputsRow}>
+                <View style={screenStyles.dateInputBlock}>
+                  <Text style={screenStyles.filterSectionLabel}>From</Text>
+                  <TextInput
+                    style={screenStyles.compactInput}
+                    value={surveyFromDate}
+                    onChangeText={setSurveyFromDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={brandColors.textSecondary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+                <View style={screenStyles.dateInputBlock}>
+                  <Text style={screenStyles.filterSectionLabel}>To</Text>
+                  <TextInput
+                    style={screenStyles.compactInput}
+                    value={surveyToDate}
+                    onChangeText={setSurveyToDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={brandColors.textSecondary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+
+              <FilterSection label="Sync" options={SYNC_OPTIONS} value={syncFilter} onChange={setSyncFilter} />
+              <FilterSection label="Blocked" options={BLOCKED_OPTIONS} value={blockedFilter} onChange={setBlockedFilter} />
+              <FilterSection
+                label="Attachments"
+                options={ATTACHMENT_OPTIONS}
+                value={attachmentFilter}
+                onChange={setAttachmentFilter}
+              />
+              <FilterSection label="Sort" options={SORT_OPTIONS} value={sortMode} onChange={setSortMode} />
+
+              <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
+                <Text style={screenStyles.resetButtonText}>Reset filters</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
+        <Text style={screenStyles.listHeaderMeta}>
+          {visibleSurveys.length} {visibleSurveys.length > 1 ? 'surveys' : 'survey'}
+          {surveys.length === visibleSurveys.length ? ' • All local records' : ` • Filtered from ${surveys.length}`}
+        </Text>
+
         {visibleSurveys.map((survey) => {
-          const firstAttachmentWithPreview = (attachmentsBySurvey[survey.id] ?? []).find((attachment) =>
-            Boolean(attachment.local_uri?.trim())
-          );
+          const attachments = attachmentsBySurvey[survey.id] ?? [];
+          const firstAttachmentWithPreview = attachments.find((attachment) => Boolean(attachment.local_uri?.trim()));
+          const attachmentCount = attachments.length;
           const completionRate = Math.max(0, Math.min(100, survey.completion_rate));
           const workflowStatus = resolveSurveyWorkflowStatus(survey);
           const syncDisplay = resolveSurveySyncDisplay(survey);
-          const workflowBadgeStyle =
+          const supportText = survey.last_sync_error?.trim()
+            ? survey.last_sync_error
+            : `Created ${formatDateTime(survey.created_at)}`;
+          const workflowTone =
             workflowStatus === 'submitted'
-              ? styles.badgeStatusSubmitted
+              ? 'success'
               : workflowStatus === 'expired'
-                ? styles.badgeBlocked
+                ? 'danger'
                 : workflowStatus === 'pending'
-                  ? styles.badgeSyncPending
-                  : styles.badgeStatusDraft;
-          const syncBadgeStyle =
+                  ? 'warning'
+                  : 'neutral';
+          const syncTone =
             syncDisplay === 'sync'
-              ? styles.badgeSyncSynced
-              : syncDisplay === 'sync_error'
-                ? styles.badgeSyncFailed
-                : syncDisplay === 'sync_blocked'
-                  ? styles.badgeBlocked
-                  : styles.badgeNeutral;
+              ? 'success'
+              : syncDisplay === 'sync_error' || syncDisplay === 'sync_blocked'
+                ? 'danger'
+                : 'neutral';
 
           return (
             <Pressable
               key={survey.id}
-              style={[styles.surveyListItemCard, selectedSurveyId === survey.id ? styles.surveyListItemCardSelected : null]}
+              style={[
+                screenStyles.surveyCard,
+                selectedSurveyId === survey.id ? screenStyles.surveyCardSelected : null
+              ]}
               onPress={() => onOpenSurvey(survey.id)}
             >
-              <View style={styles.surveyListItemMedia}>
+              <View style={screenStyles.surveyCardMedia}>
                 {firstAttachmentWithPreview?.local_uri ? (
-                  <Image source={{ uri: firstAttachmentWithPreview.local_uri }} style={styles.surveyListItemPreview} />
+                  <Image source={{ uri: firstAttachmentWithPreview.local_uri }} style={screenStyles.surveyCardPreview} />
                 ) : (
-                  <View style={styles.surveyListItemPreviewPlaceholder}>
-                    <Ionicons name="image-outline" size={20} color="#7a8f82" />
+                  <View style={screenStyles.surveyCardPreviewPlaceholder}>
+                    <Ionicons name="image-outline" size={22} color={brandColors.textSecondary} />
                   </View>
                 )}
               </View>
-              <View style={styles.surveyListItemContent}>
-                <Text style={styles.surveyListItemTitle}>{survey.site_name}</Text>
-                <Text style={styles.surveyListItemMeta}>Created: {formatDateTime(survey.created_at)}</Text>
-                <View style={styles.surveyCompletionRow}>
-                  <Text style={styles.surveyCompletionLabel}>{completionRate}% complete</Text>
-                  <View style={styles.surveyCompletionTrack}>
-                    <View style={[styles.surveyCompletionFill, { width: `${completionRate}%` }]} />
+
+              <View style={screenStyles.surveyCardContent}>
+                <View style={screenStyles.surveyCardHeader}>
+                  <Text style={screenStyles.surveyCardTitle}>{survey.site_name}</Text>
+                  <Text style={screenStyles.surveyCardDate}>{formatDateTime(survey.updated_at)}</Text>
+                </View>
+
+                <View style={screenStyles.surveyCardMetaRow}>
+                  <View style={screenStyles.inlineMeta}>
+                    <Ionicons name="images-outline" size={14} color={brandColors.textSecondary} />
+                    <Text style={screenStyles.inlineMetaText}>
+                      {attachmentCount} {attachmentCount > 1 ? 'photos' : 'photo'}
+                    </Text>
+                  </View>
+                  <View style={screenStyles.inlineMeta}>
+                    <Ionicons name="document-text-outline" size={14} color={brandColors.textSecondary} />
+                    <Text style={screenStyles.inlineMetaText}>{survey.id}</Text>
                   </View>
                 </View>
-                <View style={styles.badgeRow}>
-                  <View style={[styles.badge, workflowBadgeStyle]}>
-                    <Text style={styles.badgeText}>{formatSurveyWorkflowStatusLabel(workflowStatus)}</Text>
+
+                <Text
+                  numberOfLines={2}
+                  style={[
+                    screenStyles.surveyCardSupport,
+                    survey.last_sync_error?.trim() ? screenStyles.surveyCardSupportWarning : null
+                  ]}
+                >
+                  {supportText}
+                </Text>
+
+                <View style={screenStyles.progressBlock}>
+                  <View style={screenStyles.progressHeader}>
+                    <Text style={screenStyles.progressLabel}>Completion</Text>
+                    <Text style={screenStyles.progressValue}>{completionRate}%</Text>
                   </View>
-                  <View style={[styles.badge, syncBadgeStyle]}>
-                    <Text style={styles.badgeText}>{formatSurveySyncDisplayLabel(syncDisplay)}</Text>
+                  <View style={screenStyles.progressTrack}>
+                    <View style={[screenStyles.progressFill, { width: `${completionRate}%` }]} />
                   </View>
-                  <View style={[styles.badge, styles.badgeNeutral]}>
-                    <Text style={styles.badgeText}>{survey.visibility}</Text>
-                  </View>
+                </View>
+
+                <View style={screenStyles.badgeRow}>
+                  <SurveyBadge label={formatSurveyWorkflowStatusLabel(workflowStatus)} tone={workflowTone} />
+                  <SurveyBadge label={formatSurveySyncDisplayLabel(syncDisplay)} tone={syncTone} />
+                  <SurveyBadge label={survey.visibility === 'public' ? 'Public' : 'Private'} />
                 </View>
               </View>
             </Pressable>
           );
         })}
 
-        {surveys.length === 0 ? <Text style={styles.meta}>No local survey yet.</Text> : null}
-        {surveys.length > 0 && visibleSurveys.length === 0 ? <Text style={styles.meta}>No survey matches current filters.</Text> : null}
-      </ScrollView>
+        {surveys.length === 0 ? (
+          <View style={screenStyles.emptyState}>
+            <Ionicons name="leaf-outline" size={22} color={brandColors.forest} />
+            <Text style={screenStyles.emptyStateTitle}>No survey yet</Text>
+            <Text style={screenStyles.emptyStateBody}>
+              Start a new IBP record to build your field notebook.
+            </Text>
+          </View>
+        ) : null}
+
+        {surveys.length > 0 && visibleSurveys.length === 0 ? (
+          <View style={screenStyles.emptyState}>
+            <Ionicons name="funnel-outline" size={22} color={brandColors.forest} />
+            <Text style={screenStyles.emptyStateTitle}>No result with these filters</Text>
+            <Text style={screenStyles.emptyStateBody}>
+              Broaden the criteria or reset the advanced filters to see more surveys.
+            </Text>
+            <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
+              <Text style={screenStyles.resetButtonText}>Reset filters</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </Animated.ScrollView>
     </View>
   );
 }
+
+const screenStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: brandColors.canvas
+  },
+  heroShell: {
+    paddingTop: 10,
+    paddingHorizontal: 16
+  },
+  heroCard: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 34,
+    backgroundColor: brandColors.forest,
+    ...brandShadow.card
+  },
+  heroAccentOrb: {
+    position: 'absolute',
+    top: -18,
+    right: -26,
+    width: 132,
+    height: 132,
+    borderRadius: 999,
+    backgroundColor: 'rgba(137, 163, 58, 0.22)'
+  },
+  heroExpandedLayer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    paddingTop: 24,
+    paddingBottom: 18,
+    paddingHorizontal: 20
+  },
+  heroExpandedHeader: {
+    gap: 10,
+    paddingRight: 54
+  },
+  heroTitleExpanded: {
+    ...brandTypography.heroTitle,
+    fontSize: 33,
+    lineHeight: 37,
+    color: brandColors.white
+  },
+  heroBody: {
+    ...brandTypography.heroBody,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#E4ECD8'
+  },
+  heroStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  heroStatTile: {
+    minWidth: '47%',
+    flex: 1,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 2
+  },
+  heroStatLabel: {
+    ...brandTypography.heroEyebrow,
+    fontSize: 11,
+    lineHeight: 13,
+    color: '#D9E3C6'
+  },
+  heroStatValue: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '900',
+    color: brandColors.white
+  },
+  heroCompactLayer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingRight: 84,
+    gap: 4
+  },
+  heroTitleCompact: {
+    ...brandTypography.heroTitle,
+    fontSize: 20,
+    lineHeight: 22,
+    color: brandColors.white
+  },
+  heroCompactSummary: {
+    ...brandTypography.meta,
+    color: '#D9E3C6'
+  },
+  pageScroll: {
+    flex: 1
+  },
+  pageContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 120,
+    gap: 14
+  },
+  filtersCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.panel,
+    padding: 16,
+    gap: 14
+  },
+  filtersHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12
+  },
+  filtersHeadingBlock: {
+    flex: 1,
+    gap: 4
+  },
+  filtersTitle: {
+    ...brandTypography.sectionTitle,
+    fontSize: 22,
+    lineHeight: 24,
+    color: brandColors.forest
+  },
+  filtersBody: {
+    ...brandTypography.sectionBody,
+    fontSize: 13,
+    lineHeight: 19,
+    color: brandColors.textSecondary
+  },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: brandRadius.pill,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.panelMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 9
+  },
+  advancedToggleText: {
+    ...brandTypography.meta,
+    color: brandColors.forest
+  },
+  searchField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 50,
+    borderRadius: brandRadius.field,
+    borderWidth: 1,
+    borderColor: brandColors.inputBorder,
+    backgroundColor: brandColors.inputFill,
+    paddingHorizontal: 14
+  },
+  searchInput: {
+    flex: 1,
+    ...brandTypography.input,
+    color: brandColors.textPrimary
+  },
+  filterSection: {
+    gap: 8
+  },
+  filterSectionLabel: {
+    ...brandTypography.label,
+    color: brandColors.forest,
+    textTransform: 'uppercase'
+  },
+  filterChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 8
+  },
+  filterChip: {
+    borderRadius: brandRadius.pill,
+    borderWidth: 1,
+    borderColor: brandColors.inputBorder,
+    backgroundColor: brandColors.panelMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  filterChipActive: {
+    borderColor: brandColors.forest,
+    backgroundColor: brandColors.forest
+  },
+  filterChipText: {
+    ...brandTypography.meta,
+    color: brandColors.forest
+  },
+  filterChipTextActive: {
+    color: brandColors.white
+  },
+  advancedPanel: {
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: brandColors.divider,
+    paddingTop: 12
+  },
+  dateInputsRow: {
+    flexDirection: 'row',
+    gap: 10
+  },
+  dateInputBlock: {
+    flex: 1,
+    gap: 6
+  },
+  compactInput: {
+    minHeight: 46,
+    borderRadius: brandRadius.field,
+    borderWidth: 1,
+    borderColor: brandColors.inputBorder,
+    backgroundColor: brandColors.inputFill,
+    paddingHorizontal: 14,
+    ...brandTypography.input,
+    color: brandColors.textPrimary
+  },
+  resetButton: {
+    alignSelf: 'flex-start',
+    borderRadius: brandRadius.pill,
+    backgroundColor: brandColors.sage,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  resetButtonText: {
+    ...brandTypography.meta,
+    color: brandColors.forest
+  },
+  listHeaderMeta: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary,
+    paddingHorizontal: 2
+  },
+  surveyCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    borderRadius: brandRadius.card,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.white,
+    padding: 14,
+    ...brandShadow.card
+  },
+  surveyCardSelected: {
+    borderColor: brandColors.forest,
+    backgroundColor: '#F9FBF4'
+  },
+  surveyCardMedia: {
+    width: 86,
+    height: 104
+  },
+  surveyCardPreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+    backgroundColor: brandColors.panelMuted
+  },
+  surveyCardPreviewPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: brandColors.panelMuted
+  },
+  surveyCardContent: {
+    flex: 1,
+    gap: 8
+  },
+  surveyCardHeader: {
+    gap: 2
+  },
+  surveyCardTitle: {
+    ...brandTypography.input,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '800',
+    color: brandColors.textPrimary
+  },
+  surveyCardDate: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
+  },
+  surveyCardMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  inlineMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  inlineMetaText: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
+  },
+  surveyCardSupport: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
+  },
+  surveyCardSupportWarning: {
+    color: brandColors.terracotta
+  },
+  progressBlock: {
+    gap: 6
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  progressLabel: {
+    ...brandTypography.label,
+    color: brandColors.forest
+  },
+  progressValue: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
+  },
+  progressTrack: {
+    height: 10,
+    borderRadius: brandRadius.pill,
+    backgroundColor: '#DFE5D7',
+    overflow: 'hidden'
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: brandRadius.pill,
+    backgroundColor: brandColors.moss
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6
+  },
+  badge: {
+    borderRadius: brandRadius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  badgeText: {
+    ...brandTypography.meta,
+    color: brandColors.forest
+  },
+  badgeTextDanger: {
+    color: '#6B2E1C'
+  },
+  badgeNeutral: {
+    backgroundColor: brandColors.panelMuted
+  },
+  badgeSuccess: {
+    backgroundColor: brandColors.successSoft
+  },
+  badgeWarning: {
+    backgroundColor: 'rgba(204, 112, 31, 0.18)'
+  },
+  badgeDanger: {
+    backgroundColor: brandColors.errorSoft
+  },
+  emptyState: {
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: brandRadius.card,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.panel,
+    paddingHorizontal: 18,
+    paddingVertical: 22
+  },
+  emptyStateTitle: {
+    ...brandTypography.input,
+    color: brandColors.forest
+  },
+  emptyStateBody: {
+    ...brandTypography.sectionBody,
+    textAlign: 'center',
+    color: brandColors.textSecondary
+  }
+});
