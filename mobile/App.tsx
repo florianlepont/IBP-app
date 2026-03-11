@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -754,117 +754,118 @@ export default function App() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.appLayout}>
-        {!surveySync.isAuthenticated ? (
-          <AuthGateScreen
-            apiUrl={apiUrl}
-            onApiUrlChange={handleApiUrlChange}
-            email={email}
-            onEmailChange={setEmail}
-            password={password}
-            onPasswordChange={setPassword}
-            displayName={displayName}
-            onDisplayNameChange={setDisplayName}
-            onLogin={surveySync.handleLogin}
-            onRegister={surveySync.handleRegister}
-            logoSource={require('./assets/logo-etats-sauvages.png')}
-            heroForegroundLeftSource={require('./assets/auth/fern.png')}
-            heroForegroundRightSource={require('./assets/auth/marten.png')}
-            status={surveySync.sessionRestoring ? 'Restoring session...' : surveySync.status}
-          />
-        ) : (
-          <NavigationContainer ref={navigationRef}>
-            <Tab.Navigator
-              screenOptions={({ route }) => ({
-                headerShown: true,
-                headerTitleAlign: 'left',
-                headerTitleStyle: {
-                  fontSize: 30,
-                  fontWeight: '800',
-                  color: '#1d4f3a'
-                },
-                headerStyle: {
-                  backgroundColor: '#e8eee7'
-                },
-                headerShadowVisible: false,
-                tabBarActiveTintColor: '#1f6b49',
-                tabBarInactiveTintColor: '#6d8576',
-                tabBarStyle: {
-                  backgroundColor: '#f7faf5',
-                  borderTopColor: '#d1ddcf',
-                  borderTopWidth: 1,
-                  height: Platform.select({ ios: 84, default: 68 }),
-                  paddingBottom: Platform.select({ ios: 22, default: 10 }),
-                  paddingTop: Platform.select({ ios: 8, default: 6 })
-                },
-                tabBarLabelStyle: {
-                  fontSize: 13,
-                  fontWeight: '600'
-                },
-                tabBarLabel: route.name === 'publicMap' ? 'Explore' : route.name === 'surveys' ? 'My Surveys' : 'Account',
-                tabBarIcon: ({ color, size }) => {
-                  const iconName =
-                    route.name === 'surveys'
-                      ? 'list-outline'
-                      : route.name === 'publicMap'
-                        ? 'map-outline'
-                        : 'person-outline';
-                  return <Ionicons name={iconName as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
-                }
-              })}
-            >
-              <Tab.Screen
-                name="surveys"
-                options={{
-                  tabBarLabel: 'My Surveys',
-                  headerShown: false
-                }}
-                listeners={{
-                  tabPress: () => {
-                    if (surveySync.isAuthenticated) {
-                      void surveySync.handlePullChanges();
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container} edges={surveySync.isAuthenticated ? ['top', 'left', 'right'] : ['left', 'right']}>
+        <View style={styles.appLayout}>
+          {!surveySync.isAuthenticated ? (
+            <AuthGateScreen
+              apiUrl={apiUrl}
+              onApiUrlChange={handleApiUrlChange}
+              email={email}
+              onEmailChange={setEmail}
+              password={password}
+              onPasswordChange={setPassword}
+              displayName={displayName}
+              onDisplayNameChange={setDisplayName}
+              onLogin={surveySync.handleLogin}
+              onRegister={surveySync.handleRegister}
+              logoSource={require('./assets/logo-etats-sauvages-cropped.png')}
+              heroMartenSource={require('./assets/auth/marten.png')}
+              status={surveySync.sessionRestoring ? 'Restoring session...' : surveySync.status}
+            />
+          ) : (
+            <NavigationContainer ref={navigationRef}>
+              <Tab.Navigator
+                screenOptions={({ route }) => ({
+                  headerShown: true,
+                  headerTitleAlign: 'left',
+                  headerTitleStyle: {
+                    fontSize: 30,
+                    fontWeight: '800',
+                    color: '#1d4f3a'
+                  },
+                  headerStyle: {
+                    backgroundColor: '#e8eee7'
+                  },
+                  headerShadowVisible: false,
+                  tabBarActiveTintColor: '#1f6b49',
+                  tabBarInactiveTintColor: '#6d8576',
+                  tabBarStyle: {
+                    backgroundColor: '#f7faf5',
+                    borderTopColor: '#d1ddcf',
+                    borderTopWidth: 1,
+                    height: Platform.select({ ios: 84, default: 68 }),
+                    paddingBottom: Platform.select({ ios: 22, default: 10 }),
+                    paddingTop: Platform.select({ ios: 8, default: 6 })
+                  },
+                  tabBarLabelStyle: {
+                    fontSize: 13,
+                    fontWeight: '600'
+                  },
+                  tabBarLabel: route.name === 'publicMap' ? 'Explore' : route.name === 'surveys' ? 'My Surveys' : 'Account',
+                  tabBarIcon: ({ color, size }) => {
+                    const iconName =
+                      route.name === 'surveys'
+                        ? 'list-outline'
+                        : route.name === 'publicMap'
+                          ? 'map-outline'
+                          : 'person-outline';
+                    return <Ionicons name={iconName as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
+                  }
+                })}
+              >
+                <Tab.Screen
+                  name="surveys"
+                  options={{
+                    tabBarLabel: 'My Surveys',
+                    headerShown: false
+                  }}
+                  listeners={{
+                    tabPress: () => {
+                      if (surveySync.isAuthenticated) {
+                        void surveySync.handlePullChanges();
+                      }
                     }
-                  }
-                }}
-              >
-                {() => SurveysTab()}
-              </Tab.Screen>
-              <Tab.Screen
-                name="publicMap"
-                options={{
-                  title: 'Explore',
-                  headerShown: false
-                }}
-                listeners={{
-                  tabPress: () => {
-                    closeSurveyDetailSelection();
-                    void handleLoadPublicMap();
-                  }
-                }}
-              >
-                {() => PublicMapTab()}
-              </Tab.Screen>
-              <Tab.Screen
-                name="account"
-                options={{
-                  title: 'Account'
-                }}
-                listeners={{
-                  tabPress: () => {
-                    closeSurveyDetailSelection();
-                    if (surveySync.isAuthenticated) {
-                      void surveySync.handleLoadMyProfile({ silent: true });
+                  }}
+                >
+                  {() => SurveysTab()}
+                </Tab.Screen>
+                <Tab.Screen
+                  name="publicMap"
+                  options={{
+                    title: 'Explore',
+                    headerShown: false
+                  }}
+                  listeners={{
+                    tabPress: () => {
+                      closeSurveyDetailSelection();
+                      void handleLoadPublicMap();
                     }
-                  }
-                }}
-              >
-                {() => AccountTab()}
-              </Tab.Screen>
-            </Tab.Navigator>
-          </NavigationContainer>
-        )}
-      </View>
-    </SafeAreaView>
+                  }}
+                >
+                  {() => PublicMapTab()}
+                </Tab.Screen>
+                <Tab.Screen
+                  name="account"
+                  options={{
+                    title: 'Account'
+                  }}
+                  listeners={{
+                    tabPress: () => {
+                      closeSurveyDetailSelection();
+                      if (surveySync.isAuthenticated) {
+                        void surveySync.handleLoadMyProfile({ silent: true });
+                      }
+                    }
+                  }}
+                >
+                  {() => AccountTab()}
+                </Tab.Screen>
+              </Tab.Navigator>
+            </NavigationContainer>
+          )}
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
