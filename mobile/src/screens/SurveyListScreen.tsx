@@ -234,47 +234,55 @@ export function SurveyListScreen({
     [surveyStats.draft, surveyStats.pending, surveyStats.total]
   );
 
-  const collapseDistance = 150;
-  const expandedHeroHeight = Math.max(318, Math.min(382, Math.round(viewportHeight * 0.37)));
-  const collapsedHeroHeight = 82;
+  const expandedHeroHeight = Math.max(324, Math.min(388, Math.round(viewportHeight * 0.39)));
+  const collapsedHeroHeight = 84;
+  const collapseDistance = expandedHeroHeight - collapsedHeroHeight;
 
   const heroHeight = scrollY.interpolate({
     inputRange: [0, collapseDistance],
     outputRange: [expandedHeroHeight, collapsedHeroHeight],
     extrapolate: 'clamp'
   });
+  const heroHorizontalInset = scrollY.interpolate({
+    inputRange: [0, collapseDistance],
+    outputRange: [16, 28],
+    extrapolate: 'clamp'
+  });
   const expandedOpacity = scrollY.interpolate({
-    inputRange: [0, 55, 95],
-    outputRange: [1, 0.35, 0],
+    inputRange: [0, collapseDistance * 0.34, collapseDistance * 0.56],
+    outputRange: [1, 0.22, 0],
     extrapolate: 'clamp'
   });
   const expandedTranslateY = scrollY.interpolate({
-    inputRange: [0, 95],
-    outputRange: [0, -16],
+    inputRange: [0, collapseDistance * 0.56],
+    outputRange: [0, -10],
     extrapolate: 'clamp'
   });
   const compactOpacity = scrollY.interpolate({
-    inputRange: [55, 105, collapseDistance],
-    outputRange: [0, 0.7, 1],
+    inputRange: [collapseDistance * 0.4, collapseDistance * 0.68, collapseDistance],
+    outputRange: [0, 0.6, 1],
     extrapolate: 'clamp'
   });
   const compactTranslateY = scrollY.interpolate({
-    inputRange: [55, collapseDistance],
+    inputRange: [collapseDistance * 0.4, collapseDistance],
     outputRange: [8, 0],
-    extrapolate: 'clamp'
-  });
-  const compactScale = scrollY.interpolate({
-    inputRange: [55, collapseDistance],
-    outputRange: [0.985, 1],
     extrapolate: 'clamp'
   });
 
   return (
     <View style={screenStyles.container}>
-      <Animated.View style={[screenStyles.heroShell, { height: heroHeight }]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          screenStyles.heroShell,
+          {
+            height: heroHeight,
+            paddingHorizontal: heroHorizontalInset
+          }
+        ]}
+      >
         <View style={screenStyles.heroCard}>
           <View style={screenStyles.heroAccentOrb} />
-
           <Animated.View
             style={[
               screenStyles.heroExpandedLayer,
@@ -304,7 +312,7 @@ export function SurveyListScreen({
               screenStyles.heroCompactLayer,
               {
                 opacity: compactOpacity,
-                transform: [{ translateY: compactTranslateY }, { scale: compactScale }]
+                transform: [{ translateY: compactTranslateY }]
               }
             ]}
           >
@@ -320,7 +328,7 @@ export function SurveyListScreen({
 
       <Animated.ScrollView
         style={screenStyles.pageScroll}
-        contentContainerStyle={screenStyles.pageContent}
+        contentContainerStyle={[screenStyles.pageContent, { paddingTop: expandedHeroHeight + brandSpacing.md }]}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
@@ -543,6 +551,11 @@ const screenStyles = StyleSheet.create({
     backgroundColor: brandColors.canvas
   },
   heroShell: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
     paddingTop: 10,
     paddingHorizontal: 16
   },
