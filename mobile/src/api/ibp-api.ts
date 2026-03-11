@@ -1,4 +1,4 @@
-import { AuthUser, LoginResponse, PublicMapItem, RefreshResponse, SurveyDetailResponse, SurveyEventsResponse } from '../app/types';
+import { AuthUser, LoginResponse, PublicMapItem, PublicParcelStatusItem, RefreshResponse, SurveyDetailResponse, SurveyEventsResponse } from '../app/types';
 import { apiRequest } from './client';
 
 type PatchProfilePayload = {
@@ -190,6 +190,22 @@ export async function fetchPublicMapItems(
   return apiRequest<{ items: PublicMapItem[] }>({
     baseUrl: apiUrl,
     path: `/public/map-items${suffix}`,
+    method: 'GET'
+  });
+}
+
+export async function fetchPublicParcelStatuses(
+  apiUrl: string,
+  input: { bbox: string; zoom: number; year?: number }
+): Promise<{ items: PublicParcelStatusItem[] }> {
+  const queryParts = [`bbox=${encodeURIComponent(input.bbox)}`, `zoom=${encodeURIComponent(String(Math.round(input.zoom)))}`];
+  if (typeof input.year === 'number' && Number.isFinite(input.year)) {
+    queryParts.push(`year=${encodeURIComponent(String(Math.trunc(input.year)))}`);
+  }
+
+  return apiRequest<{ items: PublicParcelStatusItem[] }>({
+    baseUrl: apiUrl,
+    path: `/public/parcels/status?${queryParts.join('&')}`,
     method: 'GET'
   });
 }

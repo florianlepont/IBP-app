@@ -2,7 +2,7 @@ import {
   computeIbpTotalsFromRetainedScores,
   computeRetainedScoresFromRawFactors,
   evaluateSubmitReadinessFromDraft,
-  isValidSubmitLocation
+  resolveDraftParcelIds
 } from './ibp-scoring';
 
 describe('ibp-scoring', () => {
@@ -36,34 +36,20 @@ describe('ibp-scoring', () => {
     expect(totals.ibp_total).toBe(37);
   });
 
-  test('accepts gps and manual submit locations', () => {
+  test('normalizes selected parcel ids from draft payload', () => {
     expect(
-      isValidSubmitLocation({
-        source: 'gps',
-        lat: 43.6,
-        lng: 3.8
+      resolveDraftParcelIds({
+        parcel_ids: ['75056000AB0001', ' 75056000ab0001 ', '75056000AB0002']
       })
-    ).toBe(true);
+    ).toEqual(['75056000AB0001', '75056000AB0002']);
 
     expect(
-      isValidSubmitLocation({
-        source: 'manual',
-        address_line: '12 Rue de la Foret',
-        postal_code: '75001',
-        city: 'Paris',
-        country: 'France'
+      resolveDraftParcelIds({
+        location: {
+          selected_parcel_ids: ['33063000A0003']
+        }
       })
-    ).toBe(true);
-
-    expect(
-      isValidSubmitLocation({
-        source: 'manual',
-        address_line: '12 Rue de la Foret',
-        postal_code: '',
-        city: 'Paris',
-        country: 'France'
-      })
-    ).toBe(false);
+    ).toEqual(['33063000A0003']);
   });
 
   test('reports missing factors and fields for submit readiness', () => {
@@ -74,12 +60,12 @@ describe('ibp-scoring', () => {
         A: { native_genus_count: 2 },
         B: { strata_count: 2, covered_autochthonous_percent: 80 }
       },
-      location: {}
+      parcel_ids: []
     });
 
     expect(readiness.ready).toBe(false);
     expect(readiness.expired).toBe(false);
-    expect(readiness.missing_fields).toEqual(['location']);
+    expect(readiness.missing_fields).toEqual(['parcel_ids']);
     expect(readiness.missing_factors).toEqual(['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']);
   });
 
@@ -99,11 +85,7 @@ describe('ibp-scoring', () => {
         I: { type_count: 1 },
         J: { type_count: 1 }
       },
-      location: {
-        source: 'gps',
-        lat: 43.6,
-        lng: 3.8
-      },
+      parcel_ids: ['75056000AB0001'],
       expires_at: '2020-01-01T00:00:00.000Z'
     });
 

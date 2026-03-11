@@ -228,6 +228,7 @@ Request:
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
   "sync_version": 3,
   "site_name": "Foret de Rambouillet",
+  "parcel_ids": ["75101AB0123", "75101AB0456"],
   "parcel_id": "75101AB0123",
   "observation_year": 2026,
   "version_number": 2,
@@ -256,10 +257,11 @@ Request:
 `location` accepted shapes in V1:
 - GPS: `{ "source": "gps", "lat": number, "lng": number, "accuracy_m"?: number, "collected_at"?: string }`
 - Manual fallback: `{ "source": "manual", "address_line": string, "postal_code": string, "city": string, "country": string }`
-- Submit validation requires either valid GPS coordinates or a complete manual fallback address.
+- Location payload is optional metadata (map helper); submit validation is now driven by parcel selection.
 
 V1.1 addendum fields:
-- `parcel_id`: French cadastral parcel identifier (required at submit).
+- `parcel_ids`: French cadastral parcel identifiers (at least one required at submit).
+- `parcel_id`: compatibility primary parcel pointer.
 - `observation_year`: integer year used for longitudinal history.
 - `version_number`: integer (`>=1`) for parcel-level survey versioning.
 - `previous_survey_id`: optional link to previous survey version on same parcel.
@@ -305,6 +307,7 @@ Response `200`:
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
   "site_name": "Foret de Rambouillet",
+  "parcel_ids": ["75101AB0123", "75101AB0456"],
   "parcel_id": "75101AB0123",
   "observation_year": 2026,
   "version_number": 2,
@@ -408,8 +411,7 @@ Attempt submission transition (`draft` -> `submitted`) with server-side checks.
 Blocking checks include:
 - all required IBP factors complete and valid
 - survey not expired
-- location present with either GPS (`lat`,`lng`) or complete manual address fallback
-- parcel linkage complete and valid (`parcel_id`, `observation_year`, `version_number`)
+- parcel linkage complete and valid (`parcel_ids[]`, `observation_year`, `version_number`)
 
 Response `200`:
 ```json
@@ -426,7 +428,7 @@ Response `200`:
 }
 ```
 
-If location is missing/invalid, API returns `422` with error code `location_required`.
+If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 
 ### DELETE /surveys/{id}
@@ -788,7 +790,8 @@ Response `200`:
       "parcel_id": "75101AB0123",
       "study_status": "studied",
       "latest_observation_year": 2026,
-      "latest_ibp_total": 28
+      "latest_ibp_total": 28,
+      "geometry": { "type": "MultiPolygon", "coordinates": [] }
     }
   ]
 }
@@ -913,7 +916,6 @@ Response `200`:
 - `500` internal server error
 
 Common business error codes (non-exhaustive):
-- `location_required`
 - `parcel_required`
 - `parcel_invalid`
 - `parcel_version_conflict`

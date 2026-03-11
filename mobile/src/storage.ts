@@ -66,6 +66,7 @@ type SurveyQueuePayload = {
   site_name?: string;
   status?: string;
   visibility?: string;
+  parcel_ids?: string[];
   region_version?: string;
   vegetation_stage?: string;
   factors?: Record<string, unknown>;
@@ -124,6 +125,7 @@ type RemoteSurvey = {
   site_name: string;
   status: string;
   visibility?: string;
+  parcel_ids?: string[];
   region_version?: string | null;
   vegetation_stage?: string | null;
   factors?: Record<string, unknown>;
@@ -157,6 +159,7 @@ export type DraftInput = {
   site_name: string;
   region_version: 'ACA' | 'M';
   vegetation_stage: string;
+  parcel_ids: string[];
   factors: Record<string, unknown>;
   location?: Record<string, unknown>;
 };
@@ -166,6 +169,7 @@ export type UpdateDraftInput = {
   site_name: string;
   region_version: 'ACA' | 'M';
   vegetation_stage: string;
+  parcel_ids: string[];
   factors: Record<string, unknown>;
   visibility?: 'private' | 'public';
   location?: Record<string, unknown>;
@@ -228,6 +232,38 @@ const hasValidManualLocation = (location: Record<string, unknown>): boolean => {
   );
 };
 
+const normalizeParcelIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const candidate of value) {
+    if (typeof candidate !== 'string') {
+      continue;
+    }
+    const normalized = candidate.trim().toUpperCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    output.push(normalized);
+  }
+  return output;
+};
+
+const resolvePayloadParcelIds = (payload: SurveyQueuePayload): string[] => {
+  const direct = normalizeParcelIds(payload.parcel_ids);
+  if (direct.length > 0) {
+    return direct;
+  }
+  const location = payload.location;
+  if (location && typeof location === 'object' && !Array.isArray(location)) {
+    return normalizeParcelIds((location as Record<string, unknown>).selected_parcel_ids);
+  }
+  return [];
+};
+
 const isLegacyDefaultFactorValue = (factorKey: string, rawValue: unknown): boolean => {
   const expected = LEGACY_DEFAULT_FACTOR_VALUES[factorKey];
   if (!expected || !rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
@@ -252,10 +288,15 @@ const computeCompletionRate = (status: string, payload: SurveyQueuePayload | nul
   if (payload.region_version === 'ACA' || payload.region_version === 'M') completed += 1;
   if (typeof payload.vegetation_stage === 'string' && payload.vegetation_stage.trim().length > 0) completed += 1;
 
-  const location = payload.location;
-  if (location && typeof location === 'object' && !Array.isArray(location)) {
-    if (hasValidGpsLocation(location as Record<string, unknown>) || hasValidManualLocation(location as Record<string, unknown>)) {
-      completed += 1;
+  const parcelIds = resolvePayloadParcelIds(payload);
+  if (parcelIds.length > 0) {
+    completed += 1;
+  } else {
+    const location = payload.location;
+    if (location && typeof location === 'object' && !Array.isArray(location)) {
+      if (hasValidGpsLocation(location as Record<string, unknown>) || hasValidManualLocation(location as Record<string, unknown>)) {
+        completed += 1;
+      }
     }
   }
 
@@ -371,6 +412,7 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
     site_name: input.site_name,
     status: 'draft',
     visibility: 'private',
+    parcel_ids: normalizeParcelIds(input.parcel_ids),
     region_version: input.region_version,
     vegetation_stage: input.vegetation_stage,
     factors: input.factors,
@@ -591,6 +633,7 @@ export async function getLocalSurveyDraft(surveyId: string): Promise<SurveyQueue
     site_name: row.site_name,
     status: 'draft',
     visibility: row.visibility === 'public' ? 'public' : 'private',
+    parcel_ids: [],
     factors: {},
     location: {}
   };
@@ -628,6 +671,7 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
         site_name: existing.site_name,
         status: existing.status || 'draft',
         visibility: existing.visibility === 'public' ? 'public' : 'private',
+        parcel_ids: [],
         factors: {},
         location: {}
       };
@@ -640,6 +684,7 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
     site_name: input.site_name,
     status: 'draft',
     visibility: input.visibility ?? (basePayload.visibility as 'private' | 'public' | undefined) ?? 'private',
+    parcel_ids: normalizeParcelIds(input.parcel_ids),
     region_version: input.region_version,
     vegetation_stage: input.vegetation_stage,
     factors: input.factors,
@@ -1530,6 +1575,7 @@ function buildSurveyPayloadFromRemote(survey: RemoteSurvey): SurveyQueuePayload 
     site_name: survey.site_name ?? 'Remote survey',
     status: survey.status ?? 'draft',
     visibility: (survey.visibility as 'private' | 'public' | undefined) ?? 'private',
+    parcel_ids: normalizeParcelIds(survey.parcel_ids),
     region_version: survey.region_version ?? undefined,
     vegetation_stage: survey.vegetation_stage ?? undefined,
     factors: survey.factors ?? {},

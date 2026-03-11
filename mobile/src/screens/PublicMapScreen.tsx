@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PublicMapItem } from '../app/types';
+import { PublicMapItem, PublicParcelStatusItem } from '../app/types';
+import { computeRegionBbox, computeRegionZoom } from '../app/map-viewport';
+import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
+import { ParcelOverlayPolygons } from '../components/ParcelOverlayPolygons';
 
 type PublicMapScreenProps = {
   items: PublicMapItem[];
+  parcelStatuses: PublicParcelStatusItem[];
   ownSurveyIds: string[];
   loading: boolean;
+  parcelsLoading: boolean;
   fromDate: string;
   toDate: string;
   region: string;
@@ -16,6 +22,7 @@ type PublicMapScreenProps = {
   onChangeToDate: (value: string) => void;
   onChangeRegion: (value: string) => void;
   onLoad: () => Promise<void>;
+  onLoadParcels: (input: { bbox: string; zoom: number }) => Promise<void>;
   onReportSurvey: (surveyId: string, reason: string) => Promise<{ ok: boolean; message: string }>;
 };
 
@@ -67,8 +74,10 @@ function computeRegionFromItems(items: PublicMapItem[]): Region {
 
 export function PublicMapScreen({
   items,
+  parcelStatuses,
   ownSurveyIds,
   loading,
+  parcelsLoading,
   fromDate,
   toDate,
   region,
@@ -76,27 +85,107 @@ export function PublicMapScreen({
   onChangeToDate,
   onChangeRegion,
   onLoad,
+  onLoadParcels,
   onReportSurvey
 }: PublicMapScreenProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [showParcelLayer, setShowParcelLayer] = useState(true);
   const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
   const [selectedItem, setSelectedItem] = useState<PublicMapItem | null>(null);
   const [reportPanelOpen, setReportPanelOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportSending, setReportSending] = useState(false);
   const [reportMessage, setReportMessage] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [currentLocationMarker, setCurrentLocationMarker] = useState<{ lat: number; lng: number } | null>(null);
+  const mapRef = useRef<MapView | null>(null);
+  const onLoadParcelsRef = useRef(onLoadParcels);
+  const lastParcelsRequestKeyRef = useRef('');
   const insets = useSafeAreaInsets();
   const ownSurveyIdSet = useMemo(() => new Set(ownSurveyIds), [ownSurveyIds]);
   const targetRegion = useMemo(() => computeRegionFromItems(items), [items]);
   const selectedItemIsOwnSurvey = selectedItem ? ownSurveyIdSet.has(selectedItem.survey_id) : false;
+  const mapZoom = useMemo(() => computeRegionZoom(mapRegion), [mapRegion]);
+  const parcelLayerRenderable = showParcelLayer && mapZoom >= 15;
 
   useEffect(() => {
     setMapRegion(targetRegion);
-  }, [targetRegion]);
+    mapRef.current?.animateToRegion(targetRegion, 520);
+  }, [targetRegion.latitude, targetRegion.longitude, targetRegion.latitudeDelta, targetRegion.longitudeDelta]);
+
+  useEffect(() => {
+    onLoadParcelsRef.current = onLoadParcels;
+  }, [onLoadParcels]);
+
+  useEffect(() => {
+    if (!parcelLayerRenderable) {
+      lastParcelsRequestKeyRef.current = '';
+      return;
+    }
+    const timer = setTimeout(() => {
+      const bbox = computeRegionBbox(mapRegion);
+      const key = `${mapZoom.toFixed(2)}:${bbox}`;
+      if (lastParcelsRequestKeyRef.current === key) {
+        return;
+      }
+      lastParcelsRequestKeyRef.current = key;
+      void onLoadParcelsRef.current({ bbox, zoom: mapZoom });
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [parcelLayerRenderable, mapRegion, mapZoom]);
+
+  const handleCenterOnCurrentLocation = async (): Promise<void> => {
+    if (locating) {
+      return;
+    }
+
+    try {
+      setLocating(true);
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Location disabled', 'Allow location access to center the map on your position.');
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+      const nextRegion: Region = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012
+      };
+      setCurrentLocationMarker({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      });
+      setMapRegion(nextRegion);
+      mapRef.current?.animateToRegion(nextRegion, 450);
+    } catch (_error) {
+      Alert.alert('Location unavailable', 'Unable to retrieve your current position.');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   return (
     <View style={screenStyles.container}>
-      <MapView style={screenStyles.map} region={mapRegion} onRegionChangeComplete={setMapRegion}>
+      <MapView ref={mapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={setMapRegion}>
+        <IgnCadastreTileOverlay enabled={parcelLayerRenderable} zIndex={0} />
+        <ParcelOverlayPolygons items={parcelLayerRenderable ? parcelStatuses : []} />
+        {currentLocationMarker ? (
+          <Marker
+            coordinate={{
+              latitude: currentLocationMarker.lat,
+              longitude: currentLocationMarker.lng
+            }}
+            pinColor="#245f96"
+            title="Your position"
+            zIndex={3}
+          />
+        ) : null}
         {items.map((item) => (
           <Marker
             key={item.survey_id}
@@ -113,6 +202,7 @@ export function PublicMapScreen({
             pinColor="#2a7a52"
             title={`IBP ${item.ibp_total}`}
             description={`${item.region_code} - ${item.survey_date}`}
+            zIndex={2}
           />
         ))}
       </MapView>
@@ -123,9 +213,6 @@ export function PublicMapScreen({
             <Ionicons name="leaf-outline" size={18} color="#1f6a49" />
             <Text style={screenStyles.title}>Explore public tags</Text>
           </View>
-          <View style={screenStyles.countBadge}>
-            <Text style={screenStyles.countBadgeText}>{items.length}</Text>
-          </View>
         </View>
 
         <View style={screenStyles.actionsRow}>
@@ -133,10 +220,31 @@ export function PublicMapScreen({
             <Ionicons name="options-outline" size={16} color="#2e5e46" />
             <Text style={screenStyles.actionButtonText}>{showFilters ? 'Hide filters' : 'Show filters'}</Text>
           </Pressable>
-          <Pressable style={screenStyles.actionButtonPrimary} onPress={() => void onLoad()} disabled={loading}>
+          <Pressable
+            style={screenStyles.actionButtonPrimary}
+            onPress={() => {
+              void onLoad();
+              if (parcelLayerRenderable) {
+                void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom });
+              }
+            }}
+            disabled={loading}
+          >
             {loading ? <ActivityIndicator size="small" color="#f3fff7" /> : <Ionicons name="refresh" size={16} color="#f3fff7" />}
             <Text style={screenStyles.actionButtonPrimaryText}>{loading ? 'Loading' : 'Refresh'}</Text>
           </Pressable>
+        </View>
+
+        <View style={screenStyles.layerStatusRow}>
+          <Pressable
+            style={[screenStyles.layerToggleIconButton, showParcelLayer ? screenStyles.layerToggleIconButtonOn : screenStyles.layerToggleIconButtonOff]}
+            onPress={() => setShowParcelLayer((current) => !current)}
+          >
+            <Ionicons name={showParcelLayer ? 'layers' : 'layers-outline'} size={16} color={showParcelLayer ? '#eef8f0' : '#355e48'} />
+          </Pressable>
+          <Text style={screenStyles.layerStatusText}>
+            {!showParcelLayer ? 'Parcel layer hidden' : mapZoom >= 15 ? 'Cadastre layer active' : 'Zoom in >=15 to display cadastre parcels'}
+          </Text>
         </View>
 
         {showFilters ? (
@@ -184,6 +292,14 @@ export function PublicMapScreen({
           </View>
         ) : null}
       </View>
+
+      <Pressable
+        style={[screenStyles.locateButton, { bottom: Math.max(8, insets.bottom + 4) }]}
+        onPress={() => void handleCenterOnCurrentLocation()}
+        disabled={locating}
+      >
+        {locating ? <ActivityIndicator size="small" color="#eef8f0" /> : <Ionicons name="locate" size={18} color="#eef8f0" />}
+      </Pressable>
 
       {selectedItem ? (
         <View style={[screenStyles.reportCard, { bottom: Math.max(84, insets.bottom + 62) }]}>
@@ -292,7 +408,7 @@ const screenStyles = StyleSheet.create({
   },
   topPanelHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center'
   },
   titleWrap: {
@@ -305,24 +421,61 @@ const screenStyles = StyleSheet.create({
     fontWeight: '800',
     color: '#1f6445'
   },
-  countBadge: {
-    minWidth: 28,
-    borderRadius: 999,
-    backgroundColor: '#ddefde',
-    borderWidth: 1,
-    borderColor: '#b8cfbb',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignItems: 'center'
-  },
-  countBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2b5b44'
-  },
   actionsRow: {
     flexDirection: 'row',
     gap: 8
+  },
+  layerStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  layerToggleIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  layerToggleIconButtonOn: {
+    borderColor: '#2b7c53',
+    backgroundColor: '#2f8258'
+  },
+  layerToggleIconButtonOff: {
+    borderColor: '#c5d7c7',
+    backgroundColor: '#edf5ee'
+  },
+  layerStatusText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#355e48'
+  },
+  layerToggleButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  layerToggleButtonOn: {
+    borderColor: '#2b7c53',
+    backgroundColor: '#2f8258'
+  },
+  layerToggleButtonOff: {
+    borderColor: '#c5d7c7',
+    backgroundColor: '#edf5ee'
+  },
+  layerToggleButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2f5f46'
+  },
+  layerToggleButtonTextOn: {
+    color: '#eef8f0'
   },
   actionButton: {
     flex: 1,
@@ -516,5 +669,17 @@ const screenStyles = StyleSheet.create({
   emptyStateText: {
     fontSize: 12,
     color: '#395d49'
+  },
+  locateButton: {
+    position: 'absolute',
+    right: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#2b7c53',
+    backgroundColor: '#2f8258',
+    alignItems: 'center',
+    justifyContent: 'center'
   }
 });
