@@ -66,7 +66,7 @@ type AuthenticatedAppNavigationProps = {
   onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void>;
   onSaveSurveyEdits: () => Promise<boolean>;
   onCreateDraft: () => Promise<boolean>;
-  onCaptureGpsLocation: () => Promise<void>;
+  onCaptureGpsLocation: () => Promise<boolean>;
   onApiUrlChange: (value: string) => void;
   onCloseSurveyDetailSelection: () => void;
 };
@@ -324,45 +324,43 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveyForm"
         options={{
-          title: formMode === 'edit' ? 'Edit survey' : 'New survey',
+          title: '',
           headerLargeTitle: false
         }}
       >
         {({ navigation }) => (
-          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-            <SurveyFormScreen
-              apiUrl={apiUrl}
-              screen={formMode === 'edit' ? 'edit' : 'create'}
-              editingSurveyId={editingSurveyId}
-              siteName={surveyForm.siteName}
-              setSiteName={surveyForm.setSiteName}
-              regionVersion={surveyForm.regionVersion}
-              vegetationStage={surveyForm.vegetationStage}
-              setVegetationStage={surveyForm.setVegetationStage}
-              onRegionChange={surveyForm.handleRegionChange}
-              gpsLocation={surveyForm.gpsLocation}
-              selectedParcelIds={surveyForm.selectedParcelIds}
-              onToggleParcelSelection={surveyForm.toggleParcelSelection}
-              onCaptureGpsLocation={onCaptureGpsLocation}
-              factorSections={surveyForm.factorSections}
-              factorRetainedScores={surveyForm.factorRetainedScores}
-              formErrors={surveyForm.formErrors}
-              onOpenFactor={(factor) => navigation.navigate('surveyFactorDetail', { factor })}
-              onSaveSurveyEdits={async () => {
-                const saved = await onSaveSurveyEdits();
-                if (saved) {
-                  navigation.goBack();
-                }
-              }}
-              onCreateDraft={async () => {
-                const created = await onCreateDraft();
-                if (created) {
-                  navigation.goBack();
-                }
-              }}
-              status={surveySync.status}
-            />
-          </ScrollView>
+          <SurveyFormScreen
+            apiUrl={apiUrl}
+            screen={formMode === 'edit' ? 'edit' : 'create'}
+            editingSurveyId={editingSurveyId}
+            siteName={surveyForm.siteName}
+            setSiteName={surveyForm.setSiteName}
+            regionVersion={surveyForm.regionVersion}
+            vegetationStage={surveyForm.vegetationStage}
+            setVegetationStage={surveyForm.setVegetationStage}
+            onRegionChange={surveyForm.handleRegionChange}
+            gpsLocation={surveyForm.gpsLocation}
+            selectedParcelIds={surveyForm.selectedParcelIds}
+            onToggleParcelSelection={surveyForm.toggleParcelSelection}
+            onCaptureGpsLocation={onCaptureGpsLocation}
+            factorSections={surveyForm.factorSections}
+            factorRetainedScores={surveyForm.factorRetainedScores}
+            formErrors={surveyForm.formErrors}
+            onOpenFactor={(factor) => navigation.navigate('surveyFactorDetail', { factor })}
+            onSaveSurveyEdits={async () => {
+              const saved = await onSaveSurveyEdits();
+              if (saved) {
+                navigation.goBack();
+              }
+            }}
+            onCreateDraft={async () => {
+              const created = await onCreateDraft();
+              if (created) {
+                navigation.goBack();
+              }
+            }}
+            status={surveySync.status}
+          />
         )}
       </SurveysStack.Screen>
       <SurveysStack.Screen
