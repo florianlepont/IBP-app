@@ -1502,7 +1502,8 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius: 12,
-    elevation: 6
+    elevation: 6,
+    overflow: 'hidden'
   },
   fabDockSecondaryButton: {
     width: 42,
