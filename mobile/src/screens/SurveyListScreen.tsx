@@ -243,11 +243,6 @@ export function SurveyListScreen({
     outputRange: [expandedHeroHeight, collapsedHeroHeight],
     extrapolate: 'clamp'
   });
-  const heroHorizontalInset = scrollY.interpolate({
-    inputRange: [0, collapseDistance],
-    outputRange: [16, 28],
-    extrapolate: 'clamp'
-  });
   const expandedOpacity = scrollY.interpolate({
     inputRange: [0, collapseDistance * 0.34, collapseDistance * 0.56],
     outputRange: [1, 0.22, 0],
@@ -276,8 +271,7 @@ export function SurveyListScreen({
         style={[
           screenStyles.heroShell,
           {
-            height: heroHeight,
-            paddingHorizontal: heroHorizontalInset
+            height: heroHeight
           }
         ]}
       >
