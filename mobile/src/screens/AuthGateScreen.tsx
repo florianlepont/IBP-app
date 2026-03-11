@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import {
   Image,
-  ImageBackground,
   ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TextInputProps,
   View,
   useWindowDimensions
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { brandColors, brandRadius, brandShadow, brandSpacing, brandTypography } from '../app/brand-tokens';
 
 type AuthGateScreenProps = {
   apiUrl: string;
@@ -25,13 +27,26 @@ type AuthGateScreenProps = {
   onRegister: () => Promise<void>;
   status: string;
   logoSource?: ImageSourcePropType;
-  heroBackgroundSource?: ImageSourcePropType;
-  heroForegroundLeftSource?: ImageSourcePropType;
-  heroForegroundRightSource?: ImageSourcePropType;
+  heroMartenSource?: ImageSourcePropType;
 };
 
 type AuthMode = 'login' | 'register';
 const AUTH_REQUEST_TIMEOUT_MS = 15000;
+const HERO_MIN_HEIGHT_RATIO = 0.35;
+const HERO_MIN_HEIGHT_PX = 280;
+
+const AUTH_COPY: Record<AuthMode, { title: string; subtitle: string; submitLabel: string }> = {
+  login: {
+    title: 'Sign in',
+    subtitle: 'Access your surveys, public map, and account settings.',
+    submitLabel: 'Sign in'
+  },
+  register: {
+    title: 'Create account',
+    subtitle: 'Create your profile to save drafts, sync observations, and keep your IBP work across devices.',
+    submitLabel: 'Create account'
+  }
+};
 
 async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number, apiUrl: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -51,6 +66,210 @@ async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number, apiUrl:
   }
 }
 
+type AuthFieldProps = {
+  label: string;
+  testID?: string;
+} & TextInputProps;
+
+function AuthField({ label, testID, ...inputProps }: AuthFieldProps) {
+  return (
+    <>
+      <Text style={authStyles.label}>{label}</Text>
+      <TextInput
+        style={authStyles.input}
+        placeholderTextColor={brandColors.textSecondary}
+        testID={testID}
+        {...inputProps}
+      />
+    </>
+  );
+}
+
+type HeroSectionProps = {
+  height: number;
+  topInset: number;
+  logoSource?: ImageSourcePropType;
+  heroMartenSource?: ImageSourcePropType;
+};
+
+function HeroSection({ height, topInset, logoSource, heroMartenSource }: HeroSectionProps) {
+  return (
+    <View style={[authStyles.hero, { height }]}>
+      <View style={[authStyles.heroBackground, { paddingTop: Math.max(topInset, 12) + 18 }]}>
+        {heroMartenSource ? <Image source={heroMartenSource} style={authStyles.heroMarten} resizeMode="contain" /> : null}
+        <View style={authStyles.heroContent}>
+          {logoSource ? <Image source={logoSource} style={authStyles.heroLogo} resizeMode="contain" /> : null}
+          <Text style={authStyles.heroTitle}>Welcome to the IBP app</Text>
+          <Text style={authStyles.heroBody}>Sign in or create an account to sync and manage your field surveys.</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+type AuthModeSwitchProps = {
+  authMode: AuthMode;
+  onSwitchMode: (nextMode: AuthMode) => void;
+};
+
+function AuthModeSwitch({ authMode, onSwitchMode }: AuthModeSwitchProps) {
+  const isRegister = authMode === 'register';
+
+  return (
+    <View style={authStyles.modeRow}>
+      <Pressable
+        style={[authStyles.modeButton, !isRegister ? authStyles.modeButtonActive : null]}
+        onPress={() => onSwitchMode('login')}
+        testID="auth-mode-login"
+      >
+        <Text style={[authStyles.modeButtonText, !isRegister ? authStyles.modeButtonTextActive : null]}>Sign in</Text>
+      </Pressable>
+      <Pressable
+        style={[authStyles.modeButton, isRegister ? authStyles.modeButtonActive : null]}
+        onPress={() => onSwitchMode('register')}
+        testID="auth-mode-register"
+      >
+        <Text style={[authStyles.modeButtonText, isRegister ? authStyles.modeButtonTextActive : null]}>Create account</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+type AuthFormCardProps = {
+  authMode: AuthMode;
+  activeCopy: (typeof AUTH_COPY)[AuthMode];
+  displayName: string;
+  onDisplayNameChange: (value: string) => void;
+  email: string;
+  onEmailChange: (value: string) => void;
+  password: string;
+  onPasswordChange: (value: string) => void;
+  confirmPassword: string;
+  onConfirmPasswordChange: (value: string) => void;
+  submitting: boolean;
+  onSubmit: () => void;
+};
+
+function AuthFormCard({
+  authMode,
+  activeCopy,
+  displayName,
+  onDisplayNameChange,
+  email,
+  onEmailChange,
+  password,
+  onPasswordChange,
+  confirmPassword,
+  onConfirmPasswordChange,
+  submitting,
+  onSubmit
+}: AuthFormCardProps) {
+  const isRegister = authMode === 'register';
+
+  return (
+    <View style={authStyles.formCard}>
+      {isRegister ? (
+        <AuthField
+          label="Display name"
+          value={displayName}
+          onChangeText={onDisplayNameChange}
+          autoCorrect={false}
+          placeholder="Your public name"
+        />
+      ) : null}
+
+      <AuthField
+        label="Email address"
+        value={email}
+        onChangeText={onEmailChange}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        placeholder="you@example.com"
+      />
+
+      <AuthField
+        label="Password"
+        value={password}
+        onChangeText={onPasswordChange}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="Password"
+      />
+
+      {isRegister ? (
+        <AuthField
+          label="Confirm password"
+          value={confirmPassword}
+          onChangeText={onConfirmPasswordChange}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="Confirm your password"
+          testID="auth-confirm-password"
+        />
+      ) : null}
+
+      <Pressable
+        style={[authStyles.primaryButton, submitting ? authStyles.primaryButtonDisabled : null]}
+        onPress={onSubmit}
+        disabled={submitting}
+        testID="auth-submit"
+      >
+        <Text style={authStyles.primaryButtonText}>{submitting ? 'Processing...' : activeCopy.submitLabel}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+type AuthPanelFooterProps = {
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
+  apiUrl: string;
+  onApiUrlChange: (value: string) => void;
+  localError: string;
+  shouldShowStatus: boolean;
+  status: string;
+};
+
+function AuthPanelFooter({
+  showAdvanced,
+  onToggleAdvanced,
+  apiUrl,
+  onApiUrlChange,
+  localError,
+  shouldShowStatus,
+  status
+}: AuthPanelFooterProps) {
+  return (
+    <View style={authStyles.panelFooter}>
+      <Pressable onPress={onToggleAdvanced} style={authStyles.advancedToggle} testID="auth-advanced-toggle">
+        <Text style={authStyles.advancedToggleText}>{showAdvanced ? 'Hide API options' : 'Show API options'}</Text>
+      </Pressable>
+
+      {showAdvanced ? (
+        <View style={authStyles.advancedPanel}>
+          <AuthField
+            label="API URL"
+            value={apiUrl}
+            onChangeText={onApiUrlChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="http://192.168.x.x:3000/v1"
+          />
+          <Text style={authStyles.hint}>
+            iOS Simulator: localhost. Physical phone: your Mac local IP on the same Wi-Fi.
+          </Text>
+        </View>
+      ) : null}
+
+      {localError ? <Text style={authStyles.errorText}>{localError}</Text> : null}
+      {shouldShowStatus ? <Text style={authStyles.statusText}>{status}</Text> : null}
+    </View>
+  );
+}
+
 export function AuthGateScreen({
   apiUrl,
   onApiUrlChange,
@@ -63,12 +282,11 @@ export function AuthGateScreen({
   onLogin,
   onRegister,
   logoSource,
-  heroBackgroundSource,
-  heroForegroundLeftSource,
-  heroForegroundRightSource,
+  heroMartenSource,
   status
 }: AuthGateScreenProps) {
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -76,6 +294,7 @@ export function AuthGateScreen({
   const [submitting, setSubmitting] = useState(false);
 
   const isRegister = authMode === 'register';
+  const activeCopy = AUTH_COPY[authMode];
   const shouldShowStatus = status.trim().toLowerCase().includes('restoring session');
 
   const validate = (): string | null => {
@@ -120,6 +339,9 @@ export function AuthGateScreen({
   };
 
   const switchMode = (nextMode: AuthMode): void => {
+    if (nextMode === authMode) {
+      return;
+    }
     setAuthMode(nextMode);
     setLocalError('');
     if (nextMode === 'login') {
@@ -127,165 +349,64 @@ export function AuthGateScreen({
     }
   };
 
-  const heroHeight = Math.round(height * 0.3);
+  const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX);
+  const useScrollablePanel = isRegister;
+
+  const panelBody = (
+    <>
+      <View style={authStyles.panelMain}>
+        <AuthModeSwitch authMode={authMode} onSwitchMode={switchMode} />
+
+        <View style={authStyles.panelHeader}>
+          <Text style={authStyles.panelTitle}>{activeCopy.title}</Text>
+          <Text style={authStyles.panelSubtitle}>{activeCopy.subtitle}</Text>
+        </View>
+
+        <AuthFormCard
+          authMode={authMode}
+          activeCopy={activeCopy}
+          displayName={displayName}
+          onDisplayNameChange={onDisplayNameChange}
+          email={email}
+          onEmailChange={onEmailChange}
+          password={password}
+          onPasswordChange={onPasswordChange}
+          confirmPassword={confirmPassword}
+          onConfirmPasswordChange={setConfirmPassword}
+          submitting={submitting}
+          onSubmit={() => void handleSubmit()}
+        />
+      </View>
+
+      <AuthPanelFooter
+        showAdvanced={showAdvanced}
+        onToggleAdvanced={() => setShowAdvanced((current) => !current)}
+        apiUrl={apiUrl}
+        onApiUrlChange={onApiUrlChange}
+        localError={localError}
+        shouldShowStatus={shouldShowStatus}
+        status={status}
+      />
+    </>
+  );
 
   return (
     <View style={authStyles.screen}>
-      <View style={[authStyles.hero, { height: heroHeight }]}>
-        {heroBackgroundSource ? (
-          <ImageBackground source={heroBackgroundSource} style={authStyles.heroBackground} resizeMode="cover">
-            <View style={authStyles.heroOverlay} />
-            {heroForegroundLeftSource ? (
-              <Image source={heroForegroundLeftSource} style={authStyles.heroLeftDecoration} resizeMode="contain" />
-            ) : null}
-            {heroForegroundRightSource ? (
-              <Image source={heroForegroundRightSource} style={authStyles.heroRightDecoration} resizeMode="contain" />
-            ) : null}
-
-            <View style={authStyles.brandCard}>
-              {logoSource ? <Image source={logoSource} style={authStyles.logo} resizeMode="contain" /> : null}
-              <View style={authStyles.brandTextCol}>
-                <Text style={authStyles.brandTitle}>IBP</Text>
-                <Text style={authStyles.brandSubtitle}>Etats Sauvages</Text>
-              </View>
-            </View>
-          </ImageBackground>
-        ) : (
-          <View style={[authStyles.heroBackground, authStyles.heroPlainBackground]}>
-            {heroForegroundLeftSource ? (
-              <Image source={heroForegroundLeftSource} style={authStyles.heroLeftDecoration} resizeMode="contain" />
-            ) : null}
-            {heroForegroundRightSource ? (
-              <Image source={heroForegroundRightSource} style={authStyles.heroRightDecoration} resizeMode="contain" />
-            ) : null}
-
-            <View style={authStyles.brandCard}>
-              {logoSource ? <Image source={logoSource} style={authStyles.logo} resizeMode="contain" /> : null}
-              <View style={authStyles.brandTextCol}>
-                <Text style={authStyles.brandTitle}>IBP</Text>
-                <Text style={authStyles.brandSubtitle}>Etats Sauvages</Text>
-              </View>
-            </View>
-          </View>
-        )}
-      </View>
+      <HeroSection height={heroHeight} topInset={insets.top} logoSource={logoSource} heroMartenSource={heroMartenSource} />
 
       <View style={authStyles.panelWrap}>
-        <ScrollView
-          style={authStyles.panelScroll}
-          contentContainerStyle={authStyles.panelContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={authStyles.modeRow}>
-            <Pressable
-              style={[authStyles.modeButton, !isRegister ? authStyles.modeButtonActive : null]}
-              onPress={() => switchMode('login')}
-              testID="auth-mode-login"
-            >
-              <Text style={[authStyles.modeButtonText, !isRegister ? authStyles.modeButtonTextActive : null]}>Sign in</Text>
-            </Pressable>
-            <Pressable
-              style={[authStyles.modeButton, isRegister ? authStyles.modeButtonActive : null]}
-              onPress={() => switchMode('register')}
-              testID="auth-mode-register"
-            >
-              <Text style={[authStyles.modeButtonText, isRegister ? authStyles.modeButtonTextActive : null]}>Sign up</Text>
-            </Pressable>
-          </View>
-
-          {isRegister ? (
-            <>
-              <Text style={authStyles.label}>Display name</Text>
-              <TextInput
-                style={authStyles.input}
-                value={displayName}
-                onChangeText={onDisplayNameChange}
-                autoCorrect={false}
-                placeholder="Display name"
-              />
-            </>
-          ) : null}
-
-          <Text style={authStyles.label}>Email address</Text>
-          <TextInput
-            style={authStyles.input}
-            value={email}
-            onChangeText={onEmailChange}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="you@example.com"
-          />
-
-          <Text style={authStyles.label}>Password</Text>
-          <TextInput
-            style={authStyles.input}
-            value={password}
-            onChangeText={onPasswordChange}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="Password"
-          />
-
-          {isRegister ? (
-            <>
-              <Text style={authStyles.label}>Confirm password</Text>
-              <TextInput
-                style={authStyles.input}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="Confirm your password"
-                testID="auth-confirm-password"
-              />
-            </>
-          ) : null}
-
-          <Pressable
-            style={[authStyles.primaryButton, submitting ? authStyles.primaryButtonDisabled : null]}
-            onPress={() => void handleSubmit()}
-            disabled={submitting}
-            testID="auth-submit"
+        {useScrollablePanel ? (
+          <ScrollView
+            style={authStyles.panelScroll}
+            contentContainerStyle={[authStyles.panelContent, authStyles.panelContentScrollable]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={authStyles.primaryButtonText}>
-              {submitting ? 'Processing...' : isRegister ? 'Create account' : 'Sign in'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setShowAdvanced((current) => !current)}
-            style={authStyles.advancedToggle}
-            testID="auth-advanced-toggle"
-          >
-            <Text style={authStyles.advancedToggleText}>
-              {showAdvanced ? 'Hide API options' : 'Show API options'}
-            </Text>
-          </Pressable>
-
-          {showAdvanced ? (
-            <View style={authStyles.advancedPanel}>
-              <Text style={authStyles.label}>API URL</Text>
-              <TextInput
-                style={authStyles.input}
-                value={apiUrl}
-                onChangeText={onApiUrlChange}
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="http://192.168.x.x:3000/v1"
-              />
-              <Text style={authStyles.hint}>
-                iOS Simulator: localhost. Physical phone: your Mac local IP (same Wi-Fi).
-              </Text>
-            </View>
-          ) : null}
-
-          {localError ? <Text style={authStyles.errorText}>{localError}</Text> : null}
-          {shouldShowStatus ? <Text style={authStyles.statusText}>{status}</Text> : null}
-        </ScrollView>
+            {panelBody}
+          </ScrollView>
+        ) : (
+          <View style={[authStyles.panelContent, authStyles.panelContentFixed]}>{panelBody}</View>
+        )}
       </View>
     </View>
   );
@@ -294,181 +415,204 @@ export function AuthGateScreen({
 const authStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#e8ece7'
+    backgroundColor: brandColors.canvas
   },
   hero: {
     width: '100%'
   },
   heroBackground: {
     flex: 1,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 22,
-    paddingBottom: 42,
-    overflow: 'hidden'
+    backgroundColor: brandColors.forest,
+    overflow: 'hidden',
+    paddingHorizontal: brandSpacing.lg,
+    paddingBottom: 30,
+    justifyContent: 'flex-end'
   },
-  heroOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(13, 70, 46, 0.78)'
-  },
-  heroPlainBackground: {
-    backgroundColor: '#155736'
-  },
-  heroLeftDecoration: {
-    position: 'absolute',
-    left: -16,
-    bottom: -12,
-    width: 166,
-    height: 184,
-    opacity: 0.75
-  },
-  heroRightDecoration: {
-    position: 'absolute',
-    right: -18,
-    bottom: -8,
-    width: 152,
-    height: 188,
-    opacity: 0.88
-  },
-  brandCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  heroContent: {
     zIndex: 1,
+    width: '62%',
+    alignItems: 'flex-start',
+    gap: 8
+  },
+  heroLogo: {
+    width: 154,
+    height: 50,
     alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(240, 255, 244, 0.36)',
-    backgroundColor: 'rgba(10, 43, 29, 0.42)'
+    marginLeft: -22,
+    marginBottom: 6
   },
-  logo: {
-    width: 54,
-    height: 54,
-    borderRadius: 12
+  heroTitle: {
+    ...brandTypography.heroTitle,
+    color: brandColors.white
   },
-  brandTextCol: {
-    gap: 0
+  heroBody: {
+    ...brandTypography.sectionBody,
+    color: '#E8ECD9',
+    maxWidth: 260
   },
-  brandTitle: {
-    fontSize: 42,
-    lineHeight: 42,
-    color: '#f2fbf4',
-    fontWeight: '900'
-  },
-  brandSubtitle: {
-    marginTop: 2,
-    fontSize: 16,
-    color: '#d7efdc',
-    fontWeight: '700'
+  heroMarten: {
+    position: 'absolute',
+    right: 12,
+    bottom: -14,
+    width: 168,
+    height: 216,
+    zIndex: 0
   },
   panelWrap: {
     flex: 1,
     marginTop: -24,
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
-    backgroundColor: '#f5f7f4',
-    borderTopWidth: 1,
-    borderColor: '#d7e0d8'
+    position: 'relative',
+    overflow: 'visible',
+    borderTopLeftRadius: brandRadius.panel,
+    borderTopRightRadius: brandRadius.panel,
+    backgroundColor: brandColors.panel,
+    zIndex: 2
   },
   panelScroll: {
     flex: 1
   },
   panelContent: {
-    paddingHorizontal: 20,
+    flexGrow: 1,
+    paddingHorizontal: 22,
     paddingTop: 18,
-    paddingBottom: 32,
-    gap: 10
+    paddingBottom: 20
+  },
+  panelContentScrollable: {
+    gap: 18
+  },
+  panelContentFixed: {
+    flex: 1,
+    justifyContent: 'space-between'
+  },
+  panelMain: {
+    gap: 14
+  },
+  panelFooter: {
+    gap: 10,
+    paddingTop: 10
+  },
+  panelHeader: {
+    minHeight: 88,
+    paddingTop: 6,
+    paddingRight: 0,
+    justifyContent: 'center',
+    gap: 4
+  },
+  panelTitle: {
+    ...brandTypography.sectionTitle,
+    color: brandColors.textPrimary
+  },
+  panelSubtitle: {
+    ...brandTypography.sectionBody,
+    color: brandColors.textSecondary
   },
   modeRow: {
     flexDirection: 'row',
-    borderRadius: 999,
+    borderRadius: brandRadius.pill,
     borderWidth: 1,
-    borderColor: '#c9d8ca',
-    padding: 3,
-    backgroundColor: '#e7eee7',
-    marginBottom: 6
+    borderColor: brandColors.divider,
+    padding: 4,
+    backgroundColor: '#ECE9DE'
   },
   modeButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 999,
-    alignItems: 'center'
+    minHeight: 42,
+    borderRadius: brandRadius.pill,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   modeButtonActive: {
-    backgroundColor: '#1f6e4b'
+    backgroundColor: brandColors.textPrimary
   },
   modeButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3e6050'
+    ...brandTypography.label,
+    color: brandColors.textSecondary,
+    textAlign: 'center'
   },
   modeButtonTextActive: {
-    color: '#ecfff2'
+    color: brandColors.white
+  },
+  formCard: {
+    borderRadius: brandRadius.card,
+    backgroundColor: brandColors.white,
+    borderWidth: 1,
+    borderColor: brandColors.panelMuted,
+    padding: 14,
+    gap: 8,
+    ...brandShadow.card
   },
   label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#204f39'
+    ...brandTypography.label,
+    color: brandColors.textPrimary,
+    marginTop: 2
   },
   input: {
     borderWidth: 1,
-    borderColor: '#c7d8cb',
-    borderRadius: 20,
+    borderColor: brandColors.inputBorder,
+    borderRadius: brandRadius.field,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#eff4ef',
-    fontSize: 15
+    minHeight: 48,
+    paddingVertical: 10,
+    backgroundColor: brandColors.inputFill,
+    color: brandColors.textPrimary,
+    ...brandTypography.input,
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '500'
   },
   primaryButton: {
-    marginTop: 10,
-    borderRadius: 999,
-    backgroundColor: '#2e8559',
-    paddingVertical: 12,
-    alignItems: 'center'
+    marginTop: 8,
+    borderRadius: brandRadius.pill,
+    backgroundColor: brandColors.textPrimary,
+    minHeight: 46,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   primaryButtonDisabled: {
     opacity: 0.7
   },
   primaryButtonText: {
-    color: '#f1fff4',
-    fontSize: 17,
-    fontWeight: '800'
+    ...brandTypography.button,
+    color: brandColors.white,
+    textAlign: 'center'
   },
   advancedToggle: {
     alignSelf: 'center',
-    paddingVertical: 2
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 12
   },
   advancedToggleText: {
-    fontSize: 13,
-    color: '#4a785f',
-    fontWeight: '700'
+    ...brandTypography.meta,
+    color: brandColors.forest
   },
   advancedPanel: {
     borderWidth: 1,
-    borderColor: '#d2ddd4',
-    borderRadius: 14,
-    backgroundColor: '#edf2ed',
-    padding: 12,
+    borderColor: brandColors.panelMuted,
+    borderRadius: brandRadius.card,
+    backgroundColor: '#F0EEE4',
+    padding: 14,
     gap: 6
   },
   hint: {
-    fontSize: 12,
-    color: '#4d6959'
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
   },
   errorText: {
-    marginTop: 6,
-    color: '#8d2f2f',
-    fontSize: 13,
-    fontWeight: '600'
+    borderRadius: 16,
+    backgroundColor: brandColors.errorSoft,
+    color: '#6B2E1C',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    ...brandTypography.sectionBody
   },
   statusText: {
-    marginTop: 4,
-    color: '#2a533f',
-    fontSize: 13
+    borderRadius: 16,
+    backgroundColor: brandColors.successSoft,
+    color: brandColors.forest,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    ...brandTypography.sectionBody
   }
 });
