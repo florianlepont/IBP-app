@@ -769,10 +769,8 @@ export default function App() {
             onLogin={surveySync.handleLogin}
             onRegister={surveySync.handleRegister}
             logoSource={require('./assets/logo-etats-sauvages.png')}
-            heroBackgroundSource={require('./assets/auth/hero-canopy.png')}
             heroForegroundLeftSource={require('./assets/auth/fern.png')}
             heroForegroundRightSource={require('./assets/auth/marten.png')}
-            heroBirdSource={require('./assets/auth/woodpecker.png')}
             status={surveySync.sessionRestoring ? 'Restoring session...' : surveySync.status}
           />
         ) : (

@@ -28,7 +28,6 @@ type AuthGateScreenProps = {
   heroBackgroundSource?: ImageSourcePropType;
   heroForegroundLeftSource?: ImageSourcePropType;
   heroForegroundRightSource?: ImageSourcePropType;
-  heroBirdSource?: ImageSourcePropType;
 };
 
 type AuthMode = 'login' | 'register';
@@ -41,7 +40,7 @@ async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number, apiUrl:
       promise,
       new Promise<T>((_resolve, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error(`Le serveur ne repond pas (${apiUrl}). Verifie l'URL API et la connexion reseau.`));
+          reject(new Error(`Server not responding (${apiUrl}). Check API URL and network connection.`));
         }, timeoutMs);
       })
     ]);
@@ -67,7 +66,6 @@ export function AuthGateScreen({
   heroBackgroundSource,
   heroForegroundLeftSource,
   heroForegroundRightSource,
-  heroBirdSource,
   status
 }: AuthGateScreenProps) {
   const { height } = useWindowDimensions();
@@ -78,26 +76,27 @@ export function AuthGateScreen({
   const [submitting, setSubmitting] = useState(false);
 
   const isRegister = authMode === 'register';
+  const shouldShowStatus = status.trim().toLowerCase().includes('restoring session');
 
   const validate = (): string | null => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !normalizedEmail.includes('@')) {
-      return 'Saisis une adresse e-mail valide.';
+      return 'Enter a valid email address.';
     }
     if (!password || !password.trim()) {
-      return 'Saisis ton mot de passe.';
+      return 'Enter your password.';
     }
     if (!isRegister) {
       return null;
     }
     if (!displayName.trim()) {
-      return "Saisis un nom d'utilisateur.";
+      return 'Enter a display name.';
     }
     if (password.length < 6) {
-      return 'Le mot de passe doit contenir au moins 6 caracteres.';
+      return 'Password must contain at least 6 characters.';
     }
     if (password !== confirmPassword) {
-      return 'Les mots de passe ne correspondent pas.';
+      return 'Passwords do not match.';
     }
     return null;
   };
@@ -133,26 +132,42 @@ export function AuthGateScreen({
   return (
     <View style={authStyles.screen}>
       <View style={[authStyles.hero, { height: heroHeight }]}>
-        <ImageBackground source={heroBackgroundSource} style={authStyles.heroBackground} resizeMode="cover">
-          <View style={authStyles.heroOverlay} />
-          {heroForegroundLeftSource ? (
-            <Image source={heroForegroundLeftSource} style={authStyles.heroLeftDecoration} resizeMode="contain" />
-          ) : null}
-          {heroForegroundRightSource ? (
-            <Image source={heroForegroundRightSource} style={authStyles.heroRightDecoration} resizeMode="contain" />
-          ) : null}
-          {heroBirdSource ? (
-            <Image source={heroBirdSource} style={authStyles.heroBirdDecoration} resizeMode="contain" />
-          ) : null}
+        {heroBackgroundSource ? (
+          <ImageBackground source={heroBackgroundSource} style={authStyles.heroBackground} resizeMode="cover">
+            <View style={authStyles.heroOverlay} />
+            {heroForegroundLeftSource ? (
+              <Image source={heroForegroundLeftSource} style={authStyles.heroLeftDecoration} resizeMode="contain" />
+            ) : null}
+            {heroForegroundRightSource ? (
+              <Image source={heroForegroundRightSource} style={authStyles.heroRightDecoration} resizeMode="contain" />
+            ) : null}
 
-          <View style={authStyles.brandRow}>
-            {logoSource ? <Image source={logoSource} style={authStyles.logo} resizeMode="contain" /> : null}
-            <View style={authStyles.brandTextCol}>
-              <Text style={authStyles.brandTitle}>IBP</Text>
-              <Text style={authStyles.brandSubtitle}>Etats-sauvages</Text>
+            <View style={authStyles.brandCard}>
+              {logoSource ? <Image source={logoSource} style={authStyles.logo} resizeMode="contain" /> : null}
+              <View style={authStyles.brandTextCol}>
+                <Text style={authStyles.brandTitle}>IBP</Text>
+                <Text style={authStyles.brandSubtitle}>Etats Sauvages</Text>
+              </View>
+            </View>
+          </ImageBackground>
+        ) : (
+          <View style={[authStyles.heroBackground, authStyles.heroPlainBackground]}>
+            {heroForegroundLeftSource ? (
+              <Image source={heroForegroundLeftSource} style={authStyles.heroLeftDecoration} resizeMode="contain" />
+            ) : null}
+            {heroForegroundRightSource ? (
+              <Image source={heroForegroundRightSource} style={authStyles.heroRightDecoration} resizeMode="contain" />
+            ) : null}
+
+            <View style={authStyles.brandCard}>
+              {logoSource ? <Image source={logoSource} style={authStyles.logo} resizeMode="contain" /> : null}
+              <View style={authStyles.brandTextCol}>
+                <Text style={authStyles.brandTitle}>IBP</Text>
+                <Text style={authStyles.brandSubtitle}>Etats Sauvages</Text>
+              </View>
             </View>
           </View>
-        </ImageBackground>
+        )}
       </View>
 
       <View style={authStyles.panelWrap}>
@@ -168,31 +183,31 @@ export function AuthGateScreen({
               onPress={() => switchMode('login')}
               testID="auth-mode-login"
             >
-              <Text style={[authStyles.modeButtonText, !isRegister ? authStyles.modeButtonTextActive : null]}>Connexion</Text>
+              <Text style={[authStyles.modeButtonText, !isRegister ? authStyles.modeButtonTextActive : null]}>Sign in</Text>
             </Pressable>
             <Pressable
               style={[authStyles.modeButton, isRegister ? authStyles.modeButtonActive : null]}
               onPress={() => switchMode('register')}
               testID="auth-mode-register"
             >
-              <Text style={[authStyles.modeButtonText, isRegister ? authStyles.modeButtonTextActive : null]}>Creation</Text>
+              <Text style={[authStyles.modeButtonText, isRegister ? authStyles.modeButtonTextActive : null]}>Sign up</Text>
             </Pressable>
           </View>
 
           {isRegister ? (
             <>
-              <Text style={authStyles.label}>Nom d'utilisateur</Text>
+              <Text style={authStyles.label}>Display name</Text>
               <TextInput
                 style={authStyles.input}
                 value={displayName}
                 onChangeText={onDisplayNameChange}
                 autoCorrect={false}
-                placeholder="Nom d'utilisateur"
+                placeholder="Display name"
               />
             </>
           ) : null}
 
-          <Text style={authStyles.label}>Adresse e-mail</Text>
+          <Text style={authStyles.label}>Email address</Text>
           <TextInput
             style={authStyles.input}
             value={email}
@@ -203,7 +218,7 @@ export function AuthGateScreen({
             placeholder="you@example.com"
           />
 
-          <Text style={authStyles.label}>Mot de passe</Text>
+          <Text style={authStyles.label}>Password</Text>
           <TextInput
             style={authStyles.input}
             value={password}
@@ -211,12 +226,12 @@ export function AuthGateScreen({
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="Mot de passe"
+            placeholder="Password"
           />
 
           {isRegister ? (
             <>
-              <Text style={authStyles.label}>Confirmation du mot de passe</Text>
+              <Text style={authStyles.label}>Confirm password</Text>
               <TextInput
                 style={authStyles.input}
                 value={confirmPassword}
@@ -224,7 +239,7 @@ export function AuthGateScreen({
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder="Confirme ton mot de passe"
+                placeholder="Confirm your password"
                 testID="auth-confirm-password"
               />
             </>
@@ -237,17 +252,7 @@ export function AuthGateScreen({
             testID="auth-submit"
           >
             <Text style={authStyles.primaryButtonText}>
-              {submitting ? 'Traitement...' : isRegister ? 'Creer un compte' : 'Se connecter'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => switchMode(isRegister ? 'login' : 'register')}
-            style={authStyles.switchModeLink}
-            testID="auth-switch-mode-link"
-          >
-            <Text style={authStyles.switchModeLinkText}>
-              {isRegister ? 'Deja un compte ? Se connecter' : 'Pas encore de compte ? Creer un compte'}
+              {submitting ? 'Processing...' : isRegister ? 'Create account' : 'Sign in'}
             </Text>
           </Pressable>
 
@@ -257,7 +262,7 @@ export function AuthGateScreen({
             testID="auth-advanced-toggle"
           >
             <Text style={authStyles.advancedToggleText}>
-              {showAdvanced ? 'Masquer options API' : 'Afficher options API'}
+              {showAdvanced ? 'Hide API options' : 'Show API options'}
             </Text>
           </Pressable>
 
@@ -273,13 +278,13 @@ export function AuthGateScreen({
                 placeholder="http://192.168.x.x:3000/v1"
               />
               <Text style={authStyles.hint}>
-                Simulateur iOS: localhost. Telephone physique: IP locale du Mac (meme Wi-Fi).
+                iOS Simulator: localhost. Physical phone: your Mac local IP (same Wi-Fi).
               </Text>
             </View>
           ) : null}
 
           {localError ? <Text style={authStyles.errorText}>{localError}</Text> : null}
-          <Text style={authStyles.statusText}>{status}</Text>
+          {shouldShowStatus ? <Text style={authStyles.statusText}>{status}</Text> : null}
         </ScrollView>
       </View>
     </View>
@@ -309,53 +314,55 @@ const authStyles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(13, 70, 46, 0.78)'
   },
+  heroPlainBackground: {
+    backgroundColor: '#155736'
+  },
   heroLeftDecoration: {
     position: 'absolute',
-    left: -20,
-    bottom: -34,
-    width: 170,
-    height: 200,
-    opacity: 0.66
+    left: -16,
+    bottom: -12,
+    width: 166,
+    height: 184,
+    opacity: 0.75
   },
   heroRightDecoration: {
     position: 'absolute',
-    right: -24,
-    bottom: -24,
-    width: 160,
-    height: 200,
-    opacity: 0.86
+    right: -18,
+    bottom: -8,
+    width: 152,
+    height: 188,
+    opacity: 0.88
   },
-  heroBirdDecoration: {
-    position: 'absolute',
-    right: 26,
-    top: 30,
-    width: 54,
-    height: 72,
-    opacity: 0.9
-  },
-  brandRow: {
+  brandCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    zIndex: 1
+    gap: 12,
+    zIndex: 1,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(240, 255, 244, 0.36)',
+    backgroundColor: 'rgba(10, 43, 29, 0.42)'
   },
   logo: {
-    width: 64,
-    height: 64,
-    borderRadius: 8
+    width: 54,
+    height: 54,
+    borderRadius: 12
   },
   brandTextCol: {
     gap: 0
   },
   brandTitle: {
-    fontSize: 52,
-    lineHeight: 50,
+    fontSize: 42,
+    lineHeight: 42,
     color: '#f2fbf4',
     fontWeight: '900'
   },
   brandSubtitle: {
-    marginTop: 4,
-    fontSize: 20,
+    marginTop: 2,
+    fontSize: 16,
     color: '#d7efdc',
     fontWeight: '700'
   },
@@ -379,22 +386,24 @@ const authStyles = StyleSheet.create({
   },
   modeRow: {
     flexDirection: 'row',
-    borderRadius: 14,
-    padding: 4,
-    backgroundColor: '#e3ebe3',
-    marginBottom: 4
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c9d8ca',
+    padding: 3,
+    backgroundColor: '#e7eee7',
+    marginBottom: 6
   },
   modeButton: {
     flex: 1,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
     alignItems: 'center'
   },
   modeButtonActive: {
     backgroundColor: '#1f6e4b'
   },
   modeButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#3e6050'
   },
@@ -419,7 +428,7 @@ const authStyles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 999,
     backgroundColor: '#2e8559',
-    paddingVertical: 15,
+    paddingVertical: 12,
     alignItems: 'center'
   },
   primaryButtonDisabled: {
@@ -427,17 +436,8 @@ const authStyles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#f1fff4',
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '800'
-  },
-  switchModeLink: {
-    alignItems: 'center',
-    paddingTop: 8
-  },
-  switchModeLinkText: {
-    color: '#236647',
-    fontWeight: '700',
-    fontSize: 16
   },
   advancedToggle: {
     alignSelf: 'center',
