@@ -1,6 +1,8 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { brandColors, brandRadius, brandShadow, brandSpacing, brandTypography } from '../app/brand-tokens';
-import { FACTOR_INPUT_HINTS_BY_FACTOR, HELP_BY_FACTOR } from '../app/constants';
+import { FACTOR_INPUT_HINTS_BY_FACTOR, FACTOR_TITLES, HELP_BY_FACTOR } from '../app/constants';
 import { FactorField, FactorKey, FactorRetainedScore } from '../app/types';
 
 type FactorDetailScreenProps = {
@@ -10,6 +12,7 @@ type FactorDetailScreenProps = {
 };
 
 export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDetailScreenProps) {
+  const [captureHelpExpanded, setCaptureHelpExpanded] = useState(false);
   const hints = FACTOR_INPUT_HINTS_BY_FACTOR[factor];
   const total = fields.length;
   const filled = fields.filter((field) => field.value.trim().length > 0).length;
@@ -26,32 +29,16 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
             {filled}/{total} fields
           </Text>
         </View>
-        <Text style={detailStyles.heroTitle}>Factor {factor}</Text>
+        <Text style={detailStyles.heroTitle}>{FACTOR_TITLES[factor]}</Text>
         <Text style={detailStyles.heroBody}>{HELP_BY_FACTOR[factor]}</Text>
-      </View>
-
-      <View style={detailStyles.scoreCard}>
-        <Text style={detailStyles.scoreLabel}>Retained score</Text>
-        <Text style={detailStyles.scoreValue}>{retainedScore ? `${retainedScore.score} pts` : 'Pending'}</Text>
-        <Text style={detailStyles.scoreMeta}>
-          {retainedScore ? retainedScore.selected_class : 'Complete every required field to compute the score'}
-        </Text>
-      </View>
-
-      <View style={detailStyles.panel}>
-        <Text style={detailStyles.panelTitle}>Field guide</Text>
-        <Text style={detailStyles.panelBody}>{HELP_BY_FACTOR[factor]}</Text>
-      </View>
-
-      <View style={detailStyles.panel}>
-        <Text style={detailStyles.panelTitle}>What to capture</Text>
-        <View style={detailStyles.hintsList}>
-          {hints.map((hint) => (
-            <View key={`hint-${factor}-${hint}`} style={detailStyles.hintRow}>
-              <View style={detailStyles.hintDot} />
-              <Text style={detailStyles.hintText}>{hint}</Text>
-            </View>
-          ))}
+        <View style={detailStyles.heroScoreRow}>
+          <View style={detailStyles.heroScoreCard}>
+            <Text style={detailStyles.heroScoreLabel}>Retained score</Text>
+            <Text style={detailStyles.heroScoreValue}>{retainedScore ? `${retainedScore.score} pts` : 'Pending'}</Text>
+          </View>
+          <Text style={detailStyles.heroScoreMeta}>
+            {retainedScore ? retainedScore.selected_class : 'Complete every required field to compute the score'}
+          </Text>
         </View>
       </View>
 
@@ -77,6 +64,32 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
             </View>
           ))}
         </View>
+      </View>
+
+      <View style={detailStyles.panel}>
+        <Pressable style={detailStyles.panelToggle} onPress={() => setCaptureHelpExpanded((current) => !current)}>
+          <View style={detailStyles.panelToggleCopy}>
+            <Text style={detailStyles.panelTitle}>What to capture</Text>
+            <Text style={detailStyles.panelToggleMeta}>
+              Open only if you need a quick reminder while scoring this factor.
+            </Text>
+          </View>
+          <Ionicons
+            name={captureHelpExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={20}
+            color={brandColors.forest}
+          />
+        </Pressable>
+        {captureHelpExpanded ? (
+          <View style={detailStyles.hintsList}>
+            {hints.map((hint) => (
+              <View key={`hint-${factor}-${hint}`} style={detailStyles.hintRow}>
+                <View style={detailStyles.hintDot} />
+                <Text style={detailStyles.hintText}>{hint}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -158,34 +171,40 @@ const detailStyles = StyleSheet.create({
     color: '#D7E3C0'
   },
   heroTitle: {
-    ...brandTypography.heroTitle,
+    ...brandTypography.sectionTitle,
+    fontSize: 26,
+    lineHeight: 30,
     color: brandColors.white
   },
   heroBody: {
     ...brandTypography.sectionBody,
     color: '#E4ECD8'
   },
-  scoreCard: {
-    borderRadius: 26,
-    backgroundColor: brandColors.white,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    gap: 4,
-    ...brandShadow.card
+  heroScoreRow: {
+    marginTop: 2,
+    gap: 6
   },
-  scoreLabel: {
+  heroScoreCard: {
+    alignSelf: 'flex-start',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 2
+  },
+  heroScoreLabel: {
     ...brandTypography.heroEyebrow,
-    color: brandColors.textSecondary
+    color: '#D7E3C0'
   },
-  scoreValue: {
-    fontSize: 44,
-    lineHeight: 48,
+  heroScoreValue: {
+    fontSize: 32,
+    lineHeight: 36,
     fontWeight: '900',
-    color: brandColors.forest
+    color: brandColors.white
   },
-  scoreMeta: {
-    ...brandTypography.sectionBody,
-    color: brandColors.textSecondary
+  heroScoreMeta: {
+    ...brandTypography.meta,
+    color: '#D7E3C0'
   },
   panel: {
     borderRadius: 28,
@@ -204,6 +223,20 @@ const detailStyles = StyleSheet.create({
   },
   panelBody: {
     ...brandTypography.sectionBody,
+    color: brandColors.textSecondary
+  },
+  panelToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  panelToggleCopy: {
+    flex: 1,
+    gap: 4
+  },
+  panelToggleMeta: {
+    ...brandTypography.meta,
     color: brandColors.textSecondary
   },
   hintsList: {

@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Button, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brandColors, brandRadius, brandShadow, brandSpacing, brandTypography } from '../app/brand-tokens';
-import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from '../app/constants';
+import { FACTOR_TITLES, REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from '../app/constants';
 import { computeIbpTotalsFromRetainedScores } from '../app/ibp-scoring';
-import { areRegionsNearlyEqual, computeRegionZoom } from '../app/map-viewport';
+import { DEFAULT_FRANCE_CENTER, areRegionsNearlyEqual, buildFocusedMapRegion, computeRegionZoom } from '../app/map-viewport';
 import { AppScreen, FactorField, FactorKey, FactorRetainedScore, GpsCaptureResult, RegionVersion, VegetationStage } from '../app/types';
 import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
 import { ParcelOverlayPolygons } from '../components/ParcelOverlayPolygons';
@@ -36,6 +37,7 @@ type SurveyFormScreenProps = {
   factorRetainedScores: Record<FactorKey, FactorRetainedScore | null>;
   formErrors: { siteName: string | null };
   onOpenFactor: (factor: FactorKey) => void;
+  onOpenParcelFullscreen: () => void;
   onSaveSurveyEdits: () => Promise<void>;
   onCreateDraft: () => Promise<void>;
   status: string;
@@ -44,18 +46,17 @@ type SurveyFormScreenProps = {
 type WizardStep = 'identity' | 'parcels' | 'factors';
 
 const FACTOR_ORDER: FactorKey[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-const DEFAULT_FRANCE_CENTER = { lat: 46.603354, lng: 1.888334 };
-const FACTOR_TITLES: Record<FactorKey, string> = {
-  A: 'Essences autochtones',
-  B: 'Structure verticale',
-  C: 'Bois morts sur pied',
-  D: 'Bois morts au sol',
-  E: 'Tres gros bois vivants',
-  F: 'Dendromicrohabitats',
-  G: 'Milieux ouverts floriferes',
-  H: 'Continuite boisee',
-  I: 'Milieux aquatiques',
-  J: 'Milieux rocheux'
+const FACTOR_ICONS: Record<FactorKey, keyof typeof Ionicons.glyphMap> = {
+  A: 'leaf-outline',
+  B: 'layers-outline',
+  C: 'git-branch-outline',
+  D: 'reorder-three-outline',
+  E: 'resize-outline',
+  F: 'sparkles-outline',
+  G: 'flower-outline',
+  H: 'git-network-outline',
+  I: 'water-outline',
+  J: 'triangle-outline'
 };
 
 function StepButton({
@@ -120,12 +121,14 @@ function WizardChip({ label, active, onPress }: { label: string; active: boolean
 
 function FactorTile({
   factor,
+  factorIcon,
   title,
   progress,
   retainedScore,
   onPress
 }: {
   factor: FactorKey;
+  factorIcon: keyof typeof Ionicons.glyphMap;
   title: string;
   progress: { complete: boolean; filled: number; total: number; invalid: number };
   retainedScore: FactorRetainedScore | null;
@@ -142,23 +145,25 @@ function FactorTile({
   return (
     <Pressable onPress={onPress} style={[screenStyles.factorTile, toneStyle]}>
       <View style={screenStyles.factorTileTopRow}>
-        <View style={screenStyles.factorBadge}>
-          <Text style={screenStyles.factorBadgeText}>{factor}</Text>
+        <View style={screenStyles.factorTileIdentity}>
+          <View style={screenStyles.factorBadge}>
+            <Text style={screenStyles.factorBadgeText}>{factor}</Text>
+          </View>
+          <View style={screenStyles.factorIconWrap}>
+            <Ionicons name={factorIcon} size={16} color={brandColors.forest} />
+          </View>
         </View>
-        <Ionicons name={iconName} size={18} color={iconColor} />
+        <Ionicons name={iconName} size={16} color={iconColor} />
       </View>
-      <Text style={screenStyles.factorTileTitle}>{title}</Text>
+      <Text numberOfLines={2} style={screenStyles.factorTileTitle}>
+        {title}
+      </Text>
       <Text style={screenStyles.factorTileMeta}>
         {progress.filled}/{progress.total} fields
-        {progress.invalid > 0 ? ` · ${progress.invalid} invalid` : ''}
       </Text>
       <Text style={screenStyles.factorTileState}>
-        {retainedScore ? `${retainedScore.selected_class} · ${retainedScore.score} pts` : progress.complete ? 'Ready to score' : 'Open factor'}
+        {retainedScore ? `${retainedScore.selected_class} · ${retainedScore.score} pts` : progress.complete ? 'Ready' : 'Pending'}
       </Text>
-      <View style={screenStyles.factorTileFooter}>
-        <Text style={screenStyles.factorTileFooterText}>Open factor</Text>
-        <Ionicons name="chevron-forward" size={16} color={brandColors.forest} />
-      </View>
     </Pressable>
   );
 }
@@ -176,13 +181,6 @@ const toAddressLabel = (item: Record<string, unknown>): string => {
   const line3 = [region, country].filter((part) => part.length > 0).join(', ');
   return [line1, line2, line3].filter((part) => part.length > 0).join(' - ');
 };
-
-const buildFocusedMapRegion = (location: Pick<GpsCaptureResult, 'lat' | 'lng'>): Region => ({
-  latitude: location.lat,
-  longitude: location.lng,
-  latitudeDelta: 0.015,
-  longitudeDelta: 0.015
-});
 
 export function SurveyFormScreen({
   apiUrl,
@@ -202,6 +200,7 @@ export function SurveyFormScreen({
   factorRetainedScores,
   formErrors,
   onOpenFactor,
+  onOpenParcelFullscreen,
   onSaveSurveyEdits,
   onCreateDraft,
   status: _status
@@ -217,6 +216,7 @@ export function SurveyFormScreen({
   const scrollY = useRef(new Animated.Value(0)).current;
   const { height: viewportHeight } = useWindowDimensions();
   const tabBarHeight = useBottomTabBarHeight();
+  const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const [activeStep, setActiveStep] = useState<WizardStep>('identity');
   const [autoLocateRequested, setAutoLocateRequested] = useState(false);
@@ -333,10 +333,12 @@ export function SurveyFormScreen({
   }, [activeStep, completedFactorCount, regionLabel, screen, scoreTotals.ibp_total, selectedParcelIds.length, siteName, vegetationLabel]);
 
   const compactSummary = heroCopy.pills.join(' • ');
+  const heroTopOffset = Math.max(headerHeight - insets.top, 0) + 42;
+  const heroContentTopInset = 18;
   const expandedHeroHeight = Math.max(248, Math.min(292, Math.round(viewportHeight * 0.27)));
   const collapsedHeroHeight = 84;
   const collapseDistance = expandedHeroHeight - collapsedHeroHeight;
-  const topSpacerHeight = expandedHeroHeight + brandSpacing.xs;
+  const topSpacerHeight = heroTopOffset + expandedHeroHeight + brandSpacing.xs;
   const minimumTabBarHeight = Platform.select({ ios: 84, default: 68 }) ?? 68;
   const bottomActionClearance = Math.max(tabBarHeight, minimumTabBarHeight) + brandSpacing.xs;
   const scrollContentBottomPadding = keyboardHeight > 0 ? keyboardHeight + 72 : bottomActionClearance;
@@ -546,7 +548,8 @@ export function SurveyFormScreen({
       activeStep === 'identity' && (keyboardHeight > 0 || isIdentityInputFocused)
         ? identityScrollBeforeFocusRef.current
         : scrollOffsetRef.current;
-    const targetOffset = nextStep === 'identity' ? 0 : Math.max(baseOffset, collapseDistance);
+    const targetOffset =
+      nextStep === 'identity' || (activeStep === 'parcels' && nextStep === 'factors') ? 0 : Math.max(baseOffset, collapseDistance);
 
     setIsIdentityInputFocused(false);
     Keyboard.dismiss();
@@ -618,7 +621,7 @@ export function SurveyFormScreen({
   };
 
   const scrollIdentitySectionAboveKeyboard = (keyboardFrameHeight = keyboardHeight): void => {
-    const visibleTop = collapsedHeroHeight + brandSpacing.md;
+    const visibleTop = heroTopOffset + collapsedHeroHeight + brandSpacing.md;
     const visibleBottom = viewportHeight - keyboardFrameHeight - brandSpacing.lg;
     const { y, height } = identitySectionLayoutRef.current;
     const targetY = Math.max(y - visibleTop, y + height - visibleBottom, 0);
@@ -676,6 +679,7 @@ export function SurveyFormScreen({
         style={[
           screenStyles.heroShell,
           {
+            top: heroTopOffset,
             height: heroHeight
           }
         ]}
@@ -686,6 +690,7 @@ export function SurveyFormScreen({
             style={[
               screenStyles.heroExpandedLayer,
               {
+                paddingTop: heroContentTopInset,
                 opacity: expandedOpacity,
                 transform: [{ translateY: expandedTranslateY }]
               }
@@ -752,7 +757,7 @@ export function SurveyFormScreen({
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentInsetAdjustmentBehavior="automatic"
+        contentInsetAdjustmentBehavior="never"
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: false,
           listener: (event: any) => {
@@ -877,7 +882,7 @@ export function SurveyFormScreen({
                   {hasGpsCoordinates ? <Marker coordinate={{ latitude: parsedLat, longitude: parsedLng }} /> : null}
                 </MapView>
                 <View pointerEvents="box-none" style={screenStyles.mapOverlayActions}>
-                  <Pressable style={screenStyles.mapOverlayButton} onPress={() => setIsParcelMapFullscreenVisible(true)}>
+                  <Pressable style={screenStyles.mapOverlayButton} onPress={onOpenParcelFullscreen}>
                     <Ionicons name="expand-outline" size={15} color={brandColors.white} />
                     <Text style={screenStyles.mapOverlayButtonText}>Full screen</Text>
                   </Pressable>
@@ -1052,31 +1057,6 @@ export function SurveyFormScreen({
 
         {activeStep === 'factors' ? (
           <>
-            <View style={screenStyles.panel}>
-              <View style={screenStyles.panelHeader}>
-                <Text style={screenStyles.panelTitle}>Survey snapshot</Text>
-                <Text style={screenStyles.panelBody}>Keep the current context visible while you score the factors.</Text>
-              </View>
-              <View style={screenStyles.snapshotGrid}>
-                <View style={screenStyles.snapshotTile}>
-                  <Text style={screenStyles.snapshotLabel}>Site</Text>
-                  <Text style={screenStyles.snapshotValue}>{siteName.trim() || 'Name required'}</Text>
-                </View>
-                <View style={screenStyles.snapshotTile}>
-                  <Text style={screenStyles.snapshotLabel}>Region</Text>
-                  <Text style={screenStyles.snapshotValue}>{regionLabel}</Text>
-                </View>
-                <View style={screenStyles.snapshotTile}>
-                  <Text style={screenStyles.snapshotLabel}>Vegetation</Text>
-                  <Text style={screenStyles.snapshotValue}>{vegetationLabel}</Text>
-                </View>
-                <View style={screenStyles.snapshotTile}>
-                  <Text style={screenStyles.snapshotLabel}>Parcels</Text>
-                  <Text style={screenStyles.snapshotValue}>{selectedParcelIds.length}</Text>
-                </View>
-              </View>
-            </View>
-
             <View style={screenStyles.scoreHeroCard}>
               <Text style={screenStyles.scoreHeroLabel}>IBP total in progress</Text>
               <Text style={screenStyles.scoreHeroValue}>{scoreTotals.ibp_total}</Text>
@@ -1087,17 +1067,9 @@ export function SurveyFormScreen({
             </View>
 
             <View style={screenStyles.panel}>
-              <View style={screenStyles.factorsHeaderRow}>
-                <View style={screenStyles.panelHeaderCompact}>
-                  <Text style={screenStyles.panelTitle}>Factor scoring</Text>
-                  <Text style={screenStyles.panelBody}>
-                    Each factor opens on its dedicated screen. Inputs remain live in the draft while you edit.
-                  </Text>
-                </View>
-                <Pressable style={screenStyles.secondaryPillButton} onPress={() => setActiveStep('parcels')}>
-                  <Ionicons name="arrow-back" size={14} color={brandColors.forest} />
-                  <Text style={screenStyles.secondaryPillButtonText}>Back to parcels</Text>
-                </Pressable>
+              <View style={screenStyles.panelHeader}>
+                <Text style={screenStyles.panelTitle}>Factor scoring</Text>
+                <Text style={screenStyles.panelBody}>Open each factor to enter observations and update the score live.</Text>
               </View>
 
               <View style={screenStyles.factorGrid}>
@@ -1105,6 +1077,7 @@ export function SurveyFormScreen({
                   <FactorTile
                     key={factor}
                     factor={factor}
+                    factorIcon={FACTOR_ICONS[factor]}
                     title={FACTOR_TITLES[factor]}
                     progress={factorProgress[factor]}
                     retainedScore={factorRetainedScores[factor]}
@@ -1670,29 +1643,6 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.button,
     color: brandColors.white
   },
-  snapshotGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  snapshotTile: {
-    width: '47%',
-    minWidth: 132,
-    flexGrow: 1,
-    borderRadius: 22,
-    backgroundColor: brandColors.white,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 4
-  },
-  snapshotLabel: {
-    ...brandTypography.heroEyebrow,
-    color: brandColors.textSecondary
-  },
-  snapshotValue: {
-    ...brandTypography.input,
-    color: brandColors.textPrimary
-  },
   scoreHeroCard: {
     borderRadius: 28,
     backgroundColor: brandColors.white,
@@ -1715,24 +1665,19 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.sectionBody,
     color: brandColors.textSecondary
   },
-  factorsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12
-  },
   factorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10
+    gap: 6
   },
   factorTile: {
-    width: '47%',
-    minWidth: 148,
+    width: '30.5%',
+    minWidth: 92,
     flexGrow: 1,
-    borderRadius: 24,
-    padding: 14,
-    gap: 8,
+    borderRadius: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 4,
     borderWidth: 1
   },
   factorTilePending: {
@@ -1749,41 +1694,53 @@ const screenStyles = StyleSheet.create({
   },
   factorTileTopRow: {
     flexDirection: 'row',
+    gap: 6,
     justifyContent: 'space-between',
     alignItems: 'center'
   },
+  factorTileIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5
+  },
   factorBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: brandColors.forest
   },
   factorBadgeText: {
     ...brandTypography.label,
+    fontSize: 11,
+    lineHeight: 12,
     color: brandColors.white
+  },
+  factorIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: brandColors.panelMuted
   },
   factorTileTitle: {
     ...brandTypography.label,
+    fontSize: 11,
+    lineHeight: 13,
     color: brandColors.textPrimary
   },
   factorTileMeta: {
     ...brandTypography.meta,
+    fontSize: 10,
+    lineHeight: 12,
     color: brandColors.textSecondary
   },
   factorTileState: {
-    ...brandTypography.input,
-    color: brandColors.forest
-  },
-  factorTileFooter: {
-    marginTop: 'auto',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  factorTileFooterText: {
     ...brandTypography.meta,
+    fontSize: 10,
+    lineHeight: 12,
     color: brandColors.forest
   },
 });
