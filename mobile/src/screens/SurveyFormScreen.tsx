@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Animated, Button, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brandColors, brandRadius, brandShadow, brandSpacing, brandTypography } from '../app/brand-tokens';
 import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from '../app/constants';
 import { computeIbpTotalsFromRetainedScores } from '../app/ibp-scoring';
-import { computeRegionZoom } from '../app/map-viewport';
-import { AppScreen, FactorField, FactorKey, FactorRetainedScore, RegionVersion, VegetationStage } from '../app/types';
+import { areRegionsNearlyEqual, computeRegionZoom } from '../app/map-viewport';
+import { AppScreen, FactorField, FactorKey, FactorRetainedScore, GpsCaptureResult, RegionVersion, VegetationStage } from '../app/types';
 import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
 import { ParcelOverlayPolygons } from '../components/ParcelOverlayPolygons';
 import { useParcelStatuses } from '../hooks/useParcelStatuses';
@@ -29,7 +31,7 @@ type SurveyFormScreenProps = {
   };
   selectedParcelIds: string[];
   onToggleParcelSelection: (parcelId: string) => void;
-  onCaptureGpsLocation: () => Promise<boolean>;
+  onCaptureGpsLocation: () => Promise<GpsCaptureResult | null>;
   factorSections: Record<FactorKey, FactorField[]>;
   factorRetainedScores: Record<FactorKey, FactorRetainedScore | null>;
   formErrors: { siteName: string | null };
@@ -62,6 +64,7 @@ function StepButton({
   meta,
   active,
   complete,
+  disabled = false,
   onPress
 }: {
   index: string;
@@ -69,16 +72,19 @@ function StepButton({
   meta: string;
   active: boolean;
   complete: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={disabled}
       onPress={onPress}
       style={[
         screenStyles.stepButton,
         active ? screenStyles.stepButtonActive : null,
-        complete && !active ? screenStyles.stepButtonComplete : null
+        complete && !active ? screenStyles.stepButtonComplete : null,
+        disabled ? screenStyles.stepButtonDisabled : null
       ]}
     >
       <View style={screenStyles.stepButtonTopRow}>
@@ -98,7 +104,7 @@ function StepButton({
         {meta}
       </Text>
       <Text numberOfLines={1} style={[screenStyles.stepButtonHint, active ? screenStyles.stepButtonHintActive : null]}>
-        {active ? 'Current step' : 'Tap to open'}
+        {active ? 'Current step' : disabled ? 'Name required' : 'Tap to open'}
       </Text>
     </Pressable>
   );
@@ -171,6 +177,13 @@ const toAddressLabel = (item: Record<string, unknown>): string => {
   return [line1, line2, line3].filter((part) => part.length > 0).join(' - ');
 };
 
+const buildFocusedMapRegion = (location: Pick<GpsCaptureResult, 'lat' | 'lng'>): Region => ({
+  latitude: location.lat,
+  longitude: location.lng,
+  latitudeDelta: 0.015,
+  longitudeDelta: 0.015
+});
+
 export function SurveyFormScreen({
   apiUrl,
   screen,
@@ -191,16 +204,20 @@ export function SurveyFormScreen({
   onOpenFactor,
   onSaveSurveyEdits,
   onCreateDraft,
-  status
+  status: _status
 }: SurveyFormScreenProps) {
   const inlineMapRef = useRef<MapView | null>(null);
   const fullscreenMapRef = useRef<MapView | null>(null);
   const scrollRef = useRef<any>(null);
+  const scrollOffsetRef = useRef(0);
+  const identityScrollBeforeFocusRef = useRef(0);
   const onCaptureGpsLocationRef = useRef(onCaptureGpsLocation);
   const parcelLocateRequestIdRef = useRef(0);
   const identitySectionLayoutRef = useRef({ y: 0, height: 0 });
   const scrollY = useRef(new Animated.Value(0)).current;
   const { height: viewportHeight } = useWindowDimensions();
+  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const [activeStep, setActiveStep] = useState<WizardStep>('identity');
   const [autoLocateRequested, setAutoLocateRequested] = useState(false);
   const [isAutoLocatingParcels, setIsAutoLocatingParcels] = useState(false);
@@ -216,12 +233,14 @@ export function SurveyFormScreen({
   const parsedLng = Number(gpsLocation.lng);
   const hasGpsCoordinates = Number.isFinite(parsedLat) && Number.isFinite(parsedLng);
   const mapCenter = hasGpsCoordinates ? { lat: parsedLat, lng: parsedLng } : DEFAULT_FRANCE_CENTER;
-  const computedMapRegion: Region = {
-    latitude: mapCenter.lat,
-    longitude: mapCenter.lng,
-    latitudeDelta: hasGpsCoordinates ? 0.02 : 3.8,
-    longitudeDelta: hasGpsCoordinates ? 0.02 : 3.8
-  };
+  const computedMapRegion: Region = hasGpsCoordinates
+    ? buildFocusedMapRegion(mapCenter)
+    : {
+        latitude: mapCenter.lat,
+        longitude: mapCenter.lng,
+        latitudeDelta: 3.8,
+        longitudeDelta: 3.8
+      };
   const [mapRegion, setMapRegion] = useState<Region>(computedMapRegion);
   const mapZoom = useMemo(() => computeRegionZoom(mapRegion), [mapRegion]);
   const { items: parcelStatuses, loading: parcelsLoading } = useParcelStatuses({
@@ -239,13 +258,8 @@ export function SurveyFormScreen({
     if (!hasGpsCoordinates) {
       return;
     }
-    const nextRegion: Region = {
-      latitude: parsedLat,
-      longitude: parsedLng,
-      latitudeDelta: 0.015,
-      longitudeDelta: 0.015
-    };
-    setMapRegion(nextRegion);
+    const nextRegion = buildFocusedMapRegion({ lat: parsedLat, lng: parsedLng });
+    setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
     inlineMapRef.current?.animateToRegion(nextRegion, 420);
     fullscreenMapRef.current?.animateToRegion(nextRegion, 420);
   }, [hasGpsCoordinates, parsedLat, parsedLng, gpsLocation.collected_at]);
@@ -288,10 +302,10 @@ export function SurveyFormScreen({
   const stepMeta = useMemo(
     () => ({
       identity: siteName.trim() ? 'Name locked' : 'Name your site',
-      parcels: selectedParcelIds.length > 0 ? `${selectedParcelIds.length} selected` : 'Map + context',
-      factors: completedFactorCount > 0 ? `${completedFactorCount}/10 scored` : 'Start scoring'
+      parcels: !identityReady ? 'Name required first' : selectedParcelIds.length > 0 ? `${selectedParcelIds.length} selected` : 'Map + context',
+      factors: !identityReady ? 'Name required first' : completedFactorCount > 0 ? `${completedFactorCount}/10 scored` : 'Start scoring'
     }),
-    [siteName, selectedParcelIds.length, completedFactorCount]
+    [completedFactorCount, identityReady, selectedParcelIds.length, siteName]
   );
 
   const heroCopy = useMemo(() => {
@@ -299,7 +313,7 @@ export function SurveyFormScreen({
       return {
         title: screen === 'edit' ? 'Refine survey identity' : 'Start a new survey',
         body: 'Give the survey a clear name before you anchor it on the cadastre and score the field observations.',
-        pills: [siteName.trim() || 'Unnamed site', selectedParcelIds.length ? `${selectedParcelIds.length} parcel(s)` : 'No parcel yet']
+        pills: [siteName.trim() || 'Name required', selectedParcelIds.length ? `${selectedParcelIds.length} parcel(s)` : 'No parcel yet']
       };
     }
 
@@ -322,7 +336,10 @@ export function SurveyFormScreen({
   const expandedHeroHeight = Math.max(248, Math.min(292, Math.round(viewportHeight * 0.27)));
   const collapsedHeroHeight = 84;
   const collapseDistance = expandedHeroHeight - collapsedHeroHeight;
-  const topSpacerHeight = expandedHeroHeight + brandSpacing.sm;
+  const topSpacerHeight = expandedHeroHeight + brandSpacing.xs;
+  const minimumTabBarHeight = Platform.select({ ios: 84, default: 68 }) ?? 68;
+  const bottomActionClearance = Math.max(tabBarHeight, minimumTabBarHeight) + brandSpacing.xs;
+  const scrollContentBottomPadding = keyboardHeight > 0 ? keyboardHeight + 72 : bottomActionClearance;
 
   const heroHeight = scrollY.interpolate({
     inputRange: [0, collapseDistance],
@@ -364,6 +381,11 @@ export function SurveyFormScreen({
     outputRange: [0, -18],
     extrapolate: 'clamp'
   });
+  const stepRailHeight = scrollY.interpolate({
+    inputRange: [0, 88],
+    outputRange: [114, 0],
+    extrapolate: 'clamp'
+  });
   const compactProgressOpacity = scrollY.interpolate({
     inputRange: [collapseDistance * 0.38, collapseDistance * 0.68, collapseDistance],
     outputRange: [0, 0.55, 1],
@@ -371,6 +393,7 @@ export function SurveyFormScreen({
   });
 
   const activeStepIndex = activeStep === 'identity' ? 0 : activeStep === 'parcels' ? 1 : 2;
+  const preserveIdentityRailSpace = activeStep === 'identity' && (isIdentityInputFocused || keyboardHeight > 0);
   useEffect(() => {
     if (activeStep !== 'parcels') {
       parcelLocateRequestIdRef.current += 1;
@@ -397,14 +420,16 @@ export function SurveyFormScreen({
     setParcelAutoLocateError('');
 
     void onCaptureGpsLocationRef.current()
-      .then((captured) => {
+      .then((capturedLocation) => {
         if (parcelLocateRequestIdRef.current !== requestId) {
           return;
         }
         setIsAutoLocatingParcels(false);
-        if (!captured) {
+        if (!capturedLocation) {
           setParcelAutoLocateError('Current position unavailable. Open the full-screen map to retry or browse manually.');
+          return;
         }
+        centerParcelMapsOnLocation(capturedLocation);
       })
       .catch(() => {
         if (parcelLocateRequestIdRef.current !== requestId) {
@@ -500,6 +525,63 @@ export function SurveyFormScreen({
     void onCreateDraft();
   };
 
+  const scrollWizardTo = (y: number, animated = true): void => {
+    const scrollable = scrollRef.current as
+      | {
+          scrollTo?: (options: { y: number; animated?: boolean }) => void;
+          getNode?: () => { scrollTo?: (options: { y: number; animated?: boolean }) => void };
+        }
+      | null;
+
+    if (!scrollable) {
+      return;
+    }
+
+    scrollable.scrollTo?.({ y, animated });
+    scrollable.getNode?.().scrollTo?.({ y, animated });
+  };
+
+  const openWizardStep = (nextStep: WizardStep): void => {
+    const baseOffset =
+      activeStep === 'identity' && (keyboardHeight > 0 || isIdentityInputFocused)
+        ? identityScrollBeforeFocusRef.current
+        : scrollOffsetRef.current;
+    const targetOffset = nextStep === 'identity' ? 0 : Math.max(baseOffset, collapseDistance);
+
+    setIsIdentityInputFocused(false);
+    Keyboard.dismiss();
+    setActiveStep(nextStep);
+    setTimeout(() => {
+      scrollY.setValue(targetOffset);
+      scrollWizardTo(targetOffset, false);
+    }, 0);
+  };
+
+  const handleOpenIdentityStep = (): void => {
+    openWizardStep('identity');
+  };
+
+  const handleOpenParcelsStep = (): void => {
+    if (!identityReady) {
+      return;
+    }
+    openWizardStep('parcels');
+  };
+
+  const handleOpenFactorsStep = (): void => {
+    if (!identityReady) {
+      return;
+    }
+    openWizardStep('factors');
+  };
+
+  const centerParcelMapsOnLocation = (location: GpsCaptureResult): void => {
+    const nextRegion = buildFocusedMapRegion(location);
+    setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
+    inlineMapRef.current?.animateToRegion(nextRegion, 420);
+    fullscreenMapRef.current?.animateToRegion(nextRegion, 420);
+  };
+
   const handleLocateParcelsMap = (): void => {
     if (isAutoLocatingParcels) {
       return;
@@ -511,14 +593,16 @@ export function SurveyFormScreen({
     setParcelAutoLocateError('');
 
     void onCaptureGpsLocationRef.current()
-      .then((captured) => {
+      .then((capturedLocation) => {
         if (parcelLocateRequestIdRef.current !== requestId) {
           return;
         }
         setIsAutoLocatingParcels(false);
-        if (!captured) {
+        if (!capturedLocation) {
           setParcelAutoLocateError('Current position unavailable. Browse the map manually or try again.');
+          return;
         }
+        centerParcelMapsOnLocation(capturedLocation);
       })
       .catch(() => {
         if (parcelLocateRequestIdRef.current !== requestId) {
@@ -529,23 +613,16 @@ export function SurveyFormScreen({
       });
   };
 
+  const handleMapRegionChange = (nextRegion: Region): void => {
+    setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
+  };
+
   const scrollIdentitySectionAboveKeyboard = (keyboardFrameHeight = keyboardHeight): void => {
     const visibleTop = collapsedHeroHeight + brandSpacing.md;
     const visibleBottom = viewportHeight - keyboardFrameHeight - brandSpacing.lg;
     const { y, height } = identitySectionLayoutRef.current;
     const targetY = Math.max(y - visibleTop, y + height - visibleBottom, 0);
-    const scrollable = scrollRef.current as
-      | {
-          scrollTo?: (options: { y: number; animated?: boolean }) => void;
-          getNode?: () => { scrollTo?: (options: { y: number; animated?: boolean }) => void };
-        }
-      | null;
-
-    if (!scrollable) {
-      return;
-    }
-    scrollable.scrollTo?.({ y: targetY, animated: true });
-    scrollable.getNode?.().scrollTo?.({ y: targetY, animated: true });
+    scrollWizardTo(targetY);
   };
 
   const parcelMapHelperText = useMemo(() => {
@@ -560,8 +637,37 @@ export function SurveyFormScreen({
         ? 'Loading parcel overlay...'
         : `${parcelStatuses.length} visible parcel(s) · tap polygons to select or deselect`;
     }
-    return 'Zoom in to level 15+ to unlock parcel selection';
+    return 'Zoom in to unlock parcel selection';
   }, [isAutoLocatingParcels, mapZoom, parcelAutoLocateError, parcelStatuses.length, parcelsLoading]);
+  const hasParcelSelection = selectedParcelIds.length > 0;
+  const parcelSelectionLabel = `${selectedParcelIds.length} parcel${selectedParcelIds.length > 1 ? 's' : ''} selected`;
+  const fullscreenParcelSelectionTitle = hasParcelSelection ? parcelSelectionLabel : 'No parcel selected yet';
+
+  useEffect(() => {
+    if (activeStep === 'identity' && keyboardHeight === 0 && !isIdentityInputFocused) {
+      scrollWizardTo(0);
+    }
+  }, [activeStep, keyboardHeight, isIdentityInputFocused]);
+
+  useEffect(() => {
+    if (hasGpsCoordinates) {
+      return;
+    }
+    const fallbackRegion: Region = {
+      latitude: DEFAULT_FRANCE_CENTER.lat,
+      longitude: DEFAULT_FRANCE_CENTER.lng,
+      latitudeDelta: 3.8,
+      longitudeDelta: 3.8
+    };
+    setMapRegion((current) => (areRegionsNearlyEqual(current, fallbackRegion) ? current : fallbackRegion));
+  }, [hasGpsCoordinates, screen, editingSurveyId]);
+
+  useEffect(() => {
+    if (isParcelMapFullscreenVisible) {
+      return;
+    }
+    inlineMapRef.current?.animateToRegion(mapRegion, 0);
+  }, [isParcelMapFullscreenVisible, mapRegion]);
 
   return (
     <View style={screenStyles.container}>
@@ -639,14 +745,19 @@ export function SurveyFormScreen({
       <Animated.ScrollView
         ref={scrollRef}
         style={screenStyles.pageScroll}
-        contentContainerStyle={[screenStyles.pageContent, keyboardHeight > 0 ? { paddingBottom: keyboardHeight + 108 } : null]}
+        contentContainerStyle={[screenStyles.pageContent, { paddingBottom: scrollContentBottomPadding }]}
+        scrollEnabled={activeStep !== 'identity' || isIdentityInputFocused || keyboardHeight > 0}
+        bounces={activeStep !== 'identity' || isIdentityInputFocused || keyboardHeight > 0}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentInsetAdjustmentBehavior="automatic"
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: false
+          useNativeDriver: false,
+          listener: (event: any) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          }
         })}
       >
         <View style={{ height: topSpacerHeight }} />
@@ -655,7 +766,8 @@ export function SurveyFormScreen({
           style={[
             screenStyles.stepRailWrap,
             {
-              marginTop: -brandSpacing.sm,
+              height: preserveIdentityRailSpace ? 114 : stepRailHeight,
+              marginTop: -brandSpacing.xs,
               opacity: stepRailOpacity,
               transform: [{ translateY: stepRailTranslateY }, { scale: stepRailScale }]
             }
@@ -669,7 +781,7 @@ export function SurveyFormScreen({
                 meta={stepMeta.identity}
                 active={activeStep === 'identity'}
                 complete={identityReady}
-                onPress={() => setActiveStep('identity')}
+                onPress={handleOpenIdentityStep}
               />
               <StepButton
                 index="02"
@@ -677,7 +789,8 @@ export function SurveyFormScreen({
                 meta={stepMeta.parcels}
                 active={activeStep === 'parcels'}
                 complete={parcelsReady}
-                onPress={() => setActiveStep('parcels')}
+                disabled={!identityReady}
+                onPress={handleOpenParcelsStep}
               />
               <StepButton
                 index="03"
@@ -685,7 +798,8 @@ export function SurveyFormScreen({
                 meta={stepMeta.factors}
                 active={activeStep === 'factors'}
                 complete={factorsReady}
-                onPress={() => setActiveStep('factors')}
+                disabled={!identityReady}
+                onPress={handleOpenFactorsStep}
               />
             </View>
           </View>
@@ -712,6 +826,7 @@ export function SurveyFormScreen({
                 value={siteName}
                 onChangeText={setSiteName}
                 onFocus={() => {
+                  identityScrollBeforeFocusRef.current = scrollOffsetRef.current;
                   setIsIdentityInputFocused(true);
                   setTimeout(() => {
                     scrollIdentitySectionAboveKeyboard();
@@ -726,7 +841,11 @@ export function SurveyFormScreen({
               {formErrors.siteName ? <Text style={screenStyles.errorText}>{formErrors.siteName}</Text> : null}
             </View>
 
-            <Pressable style={screenStyles.primaryButton} onPress={() => setActiveStep('parcels')}>
+            <Pressable
+              disabled={!identityReady}
+              style={[screenStyles.primaryButton, !identityReady ? screenStyles.primaryButtonDisabled : null]}
+              onPress={handleOpenParcelsStep}
+            >
               <Text style={screenStyles.primaryButtonText}>Continue to parcels</Text>
             </Pressable>
           </View>
@@ -738,9 +857,7 @@ export function SurveyFormScreen({
               <View style={screenStyles.parcelHeaderRow}>
                 <View style={screenStyles.panelHeaderCompact}>
                   <Text style={screenStyles.panelTitle}>Parcel selection</Text>
-                  <Text style={screenStyles.panelBody}>
-                    The map starts from your current position when available. Zoom in on the cadastre, then tap polygons to attach them to the survey.
-                  </Text>
+                  <Text style={screenStyles.panelBody}>Centered on your position when available. Zoom in, then tap parcels.</Text>
                 </View>
                 <View style={screenStyles.selectionCountPill}>
                   <Text style={screenStyles.selectionCountPillText}>
@@ -750,7 +867,7 @@ export function SurveyFormScreen({
               </View>
 
               <View style={screenStyles.mapFrame}>
-                <MapView ref={inlineMapRef} style={screenStyles.map} initialRegion={computedMapRegion} onRegionChangeComplete={setMapRegion}>
+                <MapView ref={inlineMapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={handleMapRegionChange}>
                   <IgnCadastreTileOverlay enabled={mapZoom >= 15} zIndex={0} />
                   <ParcelOverlayPolygons
                     items={parcelStatuses}
@@ -858,7 +975,7 @@ export function SurveyFormScreen({
                   ref={fullscreenMapRef}
                   style={screenStyles.fullscreenMap}
                   initialRegion={mapRegion}
-                  onRegionChangeComplete={setMapRegion}
+                  onRegionChangeComplete={handleMapRegionChange}
                 >
                   <IgnCadastreTileOverlay enabled={mapZoom >= 15} zIndex={0} />
                   <ParcelOverlayPolygons
@@ -869,33 +986,63 @@ export function SurveyFormScreen({
                   {hasGpsCoordinates ? <Marker coordinate={{ latitude: parsedLat, longitude: parsedLng }} /> : null}
                 </MapView>
 
-                <View pointerEvents="box-none" style={screenStyles.fullscreenMapOverlay}>
+                <View
+                  pointerEvents="box-none"
+                  style={[
+                    screenStyles.fullscreenMapOverlay,
+                    {
+                      paddingTop: insets.top + 8,
+                      paddingBottom: Math.max(insets.bottom, 12) + 12
+                    }
+                  ]}
+                >
                   <View style={screenStyles.fullscreenMapTopBar}>
-                    <Pressable style={screenStyles.fullscreenMapCloseButton} onPress={() => setIsParcelMapFullscreenVisible(false)}>
-                      <Ionicons name="arrow-back" size={18} color={brandColors.white} />
-                      <Text style={screenStyles.fullscreenMapCloseText}>Done</Text>
-                    </Pressable>
-                    <View style={screenStyles.fullscreenMapCountPill}>
-                      <Text style={screenStyles.fullscreenMapCountText}>{selectedParcelIds.length} selected</Text>
+                    {Platform.OS === 'ios' ? (
+                      <>
+                        <Button title="Back" color={brandColors.forest} onPress={() => setIsParcelMapFullscreenVisible(false)} />
+                        <Text numberOfLines={1} style={screenStyles.fullscreenMapTopTitle}>
+                          {siteName.trim() || 'Parcel selection'}
+                        </Text>
+                        <Button title="Done" color={brandColors.forest} onPress={() => setIsParcelMapFullscreenVisible(false)} />
+                      </>
+                    ) : (
+                      <>
+                        <Pressable style={screenStyles.fullscreenMapCloseButton} onPress={() => setIsParcelMapFullscreenVisible(false)}>
+                          <Ionicons name="arrow-back" size={18} color={brandColors.white} />
+                          <Text style={screenStyles.fullscreenMapCloseText}>Back</Text>
+                        </Pressable>
+                        <Pressable style={screenStyles.fullscreenMapCloseButton} onPress={() => setIsParcelMapFullscreenVisible(false)}>
+                          <Text style={screenStyles.fullscreenMapCloseText}>Done</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+
+                  <View style={screenStyles.fullscreenMapBottomArea}>
+                    <View style={screenStyles.fullscreenMapFloatingActions}>
+                      <Pressable style={screenStyles.fullscreenMapActionButton} onPress={handleLocateParcelsMap}>
+                        <Ionicons
+                          name={isAutoLocatingParcels ? 'hourglass-outline' : 'locate-outline'}
+                          size={18}
+                          color={brandColors.white}
+                        />
+                        <Text style={screenStyles.fullscreenMapActionButtonText}>Current position</Text>
+                      </Pressable>
                     </View>
-                  </View>
 
-                  <View style={screenStyles.fullscreenMapFloatingActions}>
-                    <Pressable style={screenStyles.fullscreenMapActionButton} onPress={handleLocateParcelsMap}>
-                      <Ionicons
-                        name={isAutoLocatingParcels ? 'hourglass-outline' : 'locate-outline'}
-                        size={18}
-                        color={brandColors.white}
-                      />
-                    </Pressable>
-                  </View>
-
-                  <View style={screenStyles.fullscreenMapBottomSheet}>
-                    <Text style={screenStyles.fullscreenMapBottomTitle}>Parcel selection</Text>
-                    <Text style={screenStyles.fullscreenMapBottomMeta}>{parcelMapHelperText}</Text>
-                    <Text style={screenStyles.fullscreenMapBottomHint}>
-                      Tap polygons to add or remove parcels without leaving the wizard.
-                    </Text>
+                    <View style={screenStyles.fullscreenMapBottomSheet}>
+                      <Text style={screenStyles.fullscreenMapBottomTitle}>{fullscreenParcelSelectionTitle}</Text>
+                      <Text style={screenStyles.fullscreenMapBottomMeta}>{parcelMapHelperText}</Text>
+                      {!hasParcelSelection ? (
+                        <View style={screenStyles.fullscreenMapWarningCard}>
+                          <Ionicons name="alert-circle-outline" size={18} color={brandColors.terracotta} />
+                          <Text style={screenStyles.fullscreenMapWarningText}>Select at least one parcel to continue.</Text>
+                        </View>
+                      ) : null}
+                      <Text style={screenStyles.fullscreenMapBottomHint}>
+                        Tap polygons to add or remove parcels without leaving the wizard.
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -913,7 +1060,7 @@ export function SurveyFormScreen({
               <View style={screenStyles.snapshotGrid}>
                 <View style={screenStyles.snapshotTile}>
                   <Text style={screenStyles.snapshotLabel}>Site</Text>
-                  <Text style={screenStyles.snapshotValue}>{siteName.trim() || 'Unnamed site'}</Text>
+                  <Text style={screenStyles.snapshotValue}>{siteName.trim() || 'Name required'}</Text>
                 </View>
                 <View style={screenStyles.snapshotTile}>
                   <Text style={screenStyles.snapshotLabel}>Region</Text>
@@ -978,11 +1125,6 @@ export function SurveyFormScreen({
           </>
         ) : null}
 
-        {status.trim() ? (
-          <View style={screenStyles.statusCard}>
-            <Text style={screenStyles.statusCardText}>{status}</Text>
-          </View>
-        ) : null}
       </Animated.ScrollView>
     </View>
   );
@@ -1106,18 +1248,19 @@ const screenStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 108,
-    gap: 12
+    gap: 10
   },
   stepRailWrap: {
     zIndex: 1,
-    paddingBottom: 10
+    overflow: 'hidden',
+    paddingBottom: 0
   },
   stepRailCard: {
     borderRadius: 28,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panel,
-    padding: 8,
+    padding: 6,
     ...brandShadow.card
   },
   stepRow: {
@@ -1126,13 +1269,13 @@ const screenStyles = StyleSheet.create({
   },
   stepButton: {
     flex: 1,
-    minHeight: 78,
-    borderRadius: 20,
+    minHeight: 72,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.white,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
     gap: 2
   },
   stepButtonActive: {
@@ -1142,6 +1285,9 @@ const screenStyles = StyleSheet.create({
   stepButtonComplete: {
     borderColor: brandColors.moss,
     backgroundColor: brandColors.successSoft
+  },
+  stepButtonDisabled: {
+    opacity: 0.52
   },
   stepButtonTopRow: {
     flexDirection: 'row',
@@ -1198,7 +1344,7 @@ const screenStyles = StyleSheet.create({
     ...brandShadow.card
   },
   identityStepContent: {
-    gap: 12
+    gap: 10
   },
   panelHeader: {
     gap: 3
@@ -1209,14 +1355,14 @@ const screenStyles = StyleSheet.create({
   },
   panelTitle: {
     ...brandTypography.sectionTitle,
-    fontSize: 20,
-    lineHeight: 23,
+    fontSize: 19,
+    lineHeight: 22,
     color: brandColors.forest
   },
   panelBody: {
     ...brandTypography.sectionBody,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     color: brandColors.textSecondary
   },
   label: {
@@ -1325,7 +1471,7 @@ const screenStyles = StyleSheet.create({
   },
   map: {
     width: '100%',
-    height: 360
+    height: 408
   },
   mapHelperText: {
     ...brandTypography.meta,
@@ -1377,15 +1523,27 @@ const screenStyles = StyleSheet.create({
   fullscreenMapOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between',
-    paddingTop: Platform.select({ ios: 64, default: 24 }),
     paddingHorizontal: 16,
-    paddingBottom: 22
+    paddingTop: 24,
+    paddingBottom: 24
   },
   fullscreenMapTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12
+    gap: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.96)',
+    paddingHorizontal: 12,
+    paddingVertical: Platform.select({ ios: 6, default: 10 })
+  },
+  fullscreenMapTopTitle: {
+    flex: 1,
+    textAlign: 'center',
+    ...brandTypography.label,
+    color: brandColors.forest
   },
   fullscreenMapCloseButton: {
     flexDirection: 'row',
@@ -1402,53 +1560,70 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.meta,
     color: brandColors.white
   },
-  fullscreenMapCountPill: {
-    borderRadius: brandRadius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
-    backgroundColor: 'rgba(8, 13, 19, 0.72)',
-    paddingHorizontal: 14,
-    paddingVertical: 10
+  fullscreenMapFloatingActions: {
+    alignSelf: 'flex-end'
   },
-  fullscreenMapCountText: {
+  fullscreenMapActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#8EA97C',
+    backgroundColor: brandColors.forest,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: brandRadius.pill,
+    ...brandShadow.card
+  },
+  fullscreenMapActionButtonText: {
     ...brandTypography.meta,
     color: brandColors.white
   },
-  fullscreenMapFloatingActions: {
-    position: 'absolute',
-    top: Platform.select({ ios: 126, default: 86 }),
-    right: 16
-  },
-  fullscreenMapActionButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
-    backgroundColor: 'rgba(8, 13, 19, 0.72)'
+  fullscreenMapBottomArea: {
+    gap: 12
   },
   fullscreenMapBottomSheet: {
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#d6e5f5',
-    backgroundColor: 'rgba(247, 251, 255, 0.96)',
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.97)',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 6
+    paddingVertical: 16,
+    gap: 8,
+    ...brandShadow.card
   },
   fullscreenMapBottomTitle: {
-    ...brandTypography.label,
-    color: '#163f65'
+    ...brandTypography.sectionTitle,
+    fontSize: 20,
+    lineHeight: 24,
+    color: brandColors.forest
   },
   fullscreenMapBottomMeta: {
-    ...brandTypography.meta,
-    color: '#4c6783'
+    ...brandTypography.sectionBody,
+    fontSize: 13,
+    lineHeight: 18,
+    color: brandColors.textSecondary
   },
   fullscreenMapBottomHint: {
     ...brandTypography.meta,
-    color: '#3f5c79'
+    color: brandColors.textSecondary
+  },
+  fullscreenMapWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E7B8AA',
+    backgroundColor: '#F6E1DA',
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  fullscreenMapWarningText: {
+    flex: 1,
+    ...brandTypography.meta,
+    color: brandColors.terracotta
   },
   actionRow: {
     flexDirection: 'row',
@@ -1475,8 +1650,11 @@ const screenStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 15,
+    paddingVertical: 13,
     ...brandShadow.card
+  },
+  primaryButtonDisabled: {
+    opacity: 0.48
   },
   primaryButtonWide: {
     flex: 1,
@@ -1608,14 +1786,4 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.meta,
     color: brandColors.forest
   },
-  statusCard: {
-    borderRadius: 20,
-    backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 14,
-    paddingVertical: 12
-  },
-  statusCardText: {
-    ...brandTypography.meta,
-    color: brandColors.textPrimary
-  }
 });

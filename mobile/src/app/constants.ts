@@ -87,7 +87,7 @@ export {
 };
 
 export const DEFAULT_SURVEY_FORM = {
-  siteName: 'Foret de Rambouillet',
+  siteName: '',
   regionVersion: 'ACA' as RegionVersion,
   vegetationStage: 'collineen' as VegetationStage,
   gpsLocation: {

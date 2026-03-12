@@ -10,7 +10,9 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:unit": "jest --runInBand --config jest.unit.config.js",
-    "test:unit:coverage": "jest --runInBand --config jest.unit.config.js --coverage"
+    "test:unit:coverage": "jest --runInBand --config jest.unit.config.js --coverage",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"App.tsx\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"App.tsx\" --fix"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.15.5",
@@ -23,15 +25,25 @@
     "expo-network": "~8.0.8",
     "expo-secure-store": "~15.0.8",
     "expo-sqlite": "~16.0.10",
-    "react": "^19.1.0",
-    "react-native": "^0.81.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-maps": "1.20.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0"
   },
   "devDependencies": {
+    "@types/jest": "29.5.14",
     "@types/react-test-renderer": "^19.1.0",
-    "react-test-renderer": "^19.1.0"
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "react-test-renderer": "^19.1.0",
+    "ts-jest": "^29.4.6"
   }
 }

@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { SearchBarCommands } from 'react-native-screens';
 import { brandColors } from './brand-tokens';
 import { styles } from './styles';
-import { FactorKey, RegionVersion, SurveyDetailTab, VegetationStage } from './types';
+import { FactorKey, GpsCaptureResult, RegionVersion, SurveyDetailTab, VegetationStage } from './types';
 import { SurveyFormScreen } from '../screens/SurveyFormScreen';
 import { SurveyListScreen } from '../screens/SurveyListScreen';
 import { SurveyDetailScreen } from '../screens/SurveyDetailScreen';
@@ -66,7 +66,7 @@ type AuthenticatedAppNavigationProps = {
   onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void>;
   onSaveSurveyEdits: () => Promise<boolean>;
   onCreateDraft: () => Promise<boolean>;
-  onCaptureGpsLocation: () => Promise<boolean>;
+  onCaptureGpsLocation: () => Promise<GpsCaptureResult | null>;
   onApiUrlChange: (value: string) => void;
   onCloseSurveyDetailSelection: () => void;
 };

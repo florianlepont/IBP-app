@@ -1,0 +1,227 @@
+import { useEffect, useRef } from 'react'
+import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from '../storage'
+import { DEFAULT_SURVEY_FORM } from '../app/constants'
+import { FormMode } from '../app/AuthenticatedAppNavigation'
+import { useSurveyForm } from './useSurveyForm'
+import { useSurveyList } from './useSurveyList'
+
+type UseEditingDraftParams = {
+  editingSurveyId: string | null
+  setEditingSurveyId: (id: string | null) => void
+  editingSurveyVisibility: 'private' | 'public'
+  setFormMode: (mode: FormMode) => void
+  surveyForm: ReturnType<typeof useSurveyForm>
+  surveyList: ReturnType<typeof useSurveyList>
+  onStatusChange: (msg: string) => void
+  onCloseSurveyDetail: () => void
+}
+
+export function useEditingDraft({
+  editingSurveyId,
+  setEditingSurveyId,
+  editingSurveyVisibility,
+  setFormMode,
+  surveyForm,
+  surveyList,
+  onStatusChange,
+  onCloseSurveyDetail,
+}: UseEditingDraftParams) {
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autosaveInFlightRef = useRef(false)
+  const autosaveSignatureRef = useRef('')
+  const createDraftBootstrappingRef = useRef(false)
+
+  useEffect(() => {
+    if (!editingSurveyId) {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current)
+        autosaveTimerRef.current = null
+      }
+      return
+    }
+
+    const draftSignature = JSON.stringify(surveyForm.draftInput)
+    if (autosaveSignatureRef.current === draftSignature) {
+      return
+    }
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+
+    autosaveTimerRef.current = setTimeout(() => {
+      if (autosaveInFlightRef.current) {
+        return
+      }
+      autosaveInFlightRef.current = true
+
+      void (async () => {
+        try {
+          await updateLocalDraft({
+            survey_id: editingSurveyId,
+            ...surveyForm.draftInput,
+            visibility: editingSurveyVisibility,
+          })
+          await surveyList.refreshLocalSurveys()
+          autosaveSignatureRef.current = draftSignature
+        } catch (error) {
+          onStatusChange(`Autosave error: ${(error as Error).message}`)
+        } finally {
+          autosaveInFlightRef.current = false
+        }
+      })()
+    }, 900)
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current)
+        autosaveTimerRef.current = null
+      }
+    }
+  }, [editingSurveyId, editingSurveyVisibility, surveyForm.draftInput])
+
+  const handleOpenCreateSurvey = (): void => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+    autosaveSignatureRef.current = ''
+    setEditingSurveyId(null)
+    setFormMode('create')
+    onCloseSurveyDetail()
+    surveyForm.resetSurveyForm()
+    onStatusChange('Create survey view opened. Initializing local draft...')
+
+    if (createDraftBootstrappingRef.current) {
+      return
+    }
+    createDraftBootstrappingRef.current = true
+
+    const initialDraftInput = {
+      site_name: '',
+      region_version: DEFAULT_SURVEY_FORM.regionVersion,
+      vegetation_stage: DEFAULT_SURVEY_FORM.vegetationStage,
+      parcel_ids: [],
+      factors: {},
+    }
+
+    void (async () => {
+      try {
+        const created = await createLocalDraft(initialDraftInput)
+        await surveyList.refreshLocalSurveys()
+        await surveyList.refreshLocalAttachments()
+        autosaveSignatureRef.current = JSON.stringify(initialDraftInput)
+        setEditingSurveyId(created.id)
+        surveyList.setSelectedSurveyId(created.id)
+        onStatusChange(`Draft ${created.id} initialized.`)
+      } catch (error) {
+        onStatusChange(`Draft bootstrap error: ${(error as Error).message}`)
+      } finally {
+        createDraftBootstrappingRef.current = false
+      }
+    })()
+  }
+
+  const handleCreateDraft = async (): Promise<boolean> => {
+    try {
+      const draftInput = surveyForm.buildDraftInput()
+      if (editingSurveyId) {
+        const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId)
+        await updateLocalDraft({
+          survey_id: editingSurveyId,
+          ...draftInput,
+          visibility: current?.visibility ?? 'private',
+        })
+
+        await surveyList.refreshLocalSurveys()
+        await surveyList.refreshLocalAttachments()
+        autosaveSignatureRef.current = ''
+        setEditingSurveyId(null)
+        setFormMode('create')
+        surveyList.setSelectedSurveyId(editingSurveyId)
+        onStatusChange(`Local IBP draft ${editingSurveyId} saved`)
+        return true
+      }
+
+      const created = await createLocalDraft(draftInput)
+      await surveyList.refreshLocalSurveys()
+      await surveyList.refreshLocalAttachments()
+      setEditingSurveyId(null)
+      setFormMode('create')
+      surveyList.setSelectedSurveyId(created.id)
+      onStatusChange('Local IBP draft created with raw observations')
+      return true
+    } catch (error) {
+      onStatusChange(`Draft error: ${(error as Error).message}`)
+      return false
+    }
+  }
+
+  const handleStartEditSurvey = async (surveyId: string): Promise<boolean> => {
+    const current = surveyList.surveys.find((survey) => survey.id === surveyId)
+    if (current?.status === 'submitted') {
+      onStatusChange(`Survey ${surveyId} is submitted and read-only`)
+      return false
+    }
+
+    try {
+      const draft = await getLocalSurveyDraft(surveyId)
+      if (!draft) {
+        onStatusChange(`Survey not found locally: ${surveyId}`)
+        return false
+      }
+      autosaveSignatureRef.current = JSON.stringify({
+        site_name: draft.site_name ?? '',
+        region_version: draft.region_version ?? 'ACA',
+        vegetation_stage: draft.vegetation_stage ?? '',
+        parcel_ids: Array.isArray(draft.parcel_ids) ? draft.parcel_ids : [],
+        factors: draft.factors ?? {},
+      })
+      surveyForm.applyDraftToForm(draft)
+      setEditingSurveyId(surveyId)
+      setFormMode('edit')
+      surveyList.setSelectedSurveyId(surveyId)
+      onStatusChange(`Editing survey ${surveyId}`)
+      return true
+    } catch (error) {
+      onStatusChange(`Edit load error: ${(error as Error).message}`)
+      return false
+    }
+  }
+
+  const handleSaveSurveyEdits = async (): Promise<boolean> => {
+    if (!editingSurveyId) {
+      onStatusChange('No survey selected for editing')
+      return false
+    }
+
+    try {
+      const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId)
+      const draftInput = surveyForm.buildDraftInput()
+      await updateLocalDraft({
+        survey_id: editingSurveyId,
+        ...draftInput,
+        visibility: current?.visibility ?? 'private',
+      })
+
+      await surveyList.refreshLocalSurveys()
+      await surveyList.refreshLocalAttachments()
+      autosaveSignatureRef.current = ''
+      setEditingSurveyId(null)
+      setFormMode('create')
+      onStatusChange(`Local survey ${editingSurveyId} updated and queued for sync`)
+      return true
+    } catch (error) {
+      onStatusChange(`Edit save error: ${(error as Error).message}`)
+      return false
+    }
+  }
+
+  return {
+    handleOpenCreateSurvey,
+    handleCreateDraft,
+    handleStartEditSurvey,
+    handleSaveSurveyEdits,
+  }
+}
