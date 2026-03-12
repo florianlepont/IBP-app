@@ -77,7 +77,7 @@ export function PublicMapScreen({
   parcelStatuses,
   ownSurveyIds,
   loading,
-  parcelsLoading,
+  parcelsLoading: _parcelsLoading,
   fromDate,
   toDate,
   region,

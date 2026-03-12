@@ -79,6 +79,12 @@ export type PublicMapItem = {
   ibp_total: number;
 };
 
+export type GpsCaptureResult = {
+  lat: number;
+  lng: number;
+  collected_at: string;
+};
+
 export type GeoJsonGeometry = {
   type: 'Polygon' | 'MultiPolygon';
   coordinates: unknown;

@@ -10,9 +10,16 @@
     "test:unit": "jest --runInBand --config jest.unit.config.js",
     "test:e2e": "npm run migrate && jest --runInBand --config jest.config.js",
     "test:unit:coverage": "jest --runInBand --config jest.unit.config.js --coverage",
-    "test:e2e:coverage": "npm run migrate && jest --runInBand --config jest.config.js --coverage"
+    "test:e2e:coverage": "npm run migrate && jest --runInBand --config jest.config.js --coverage",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "lint:fix": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --fix"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.5.3",
     "@nestjs/testing": "^11.1.16",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",

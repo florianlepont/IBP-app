@@ -6,6 +6,7 @@ import {
   FactorField,
   FactorRetainedScore,
   FactorKey,
+  GpsCaptureResult,
   RegionVersion,
   VegetationStage
 } from '../app/types';
@@ -101,11 +102,11 @@ export function useSurveyForm() {
     setVegetationStage((current) => normalizeVegetationStageForRegion(nextRegion, current));
   };
 
-  const applyGpsLocation = (location: { lat: number; lng: number; collected_at?: string }): void => {
+  const applyGpsLocation = (location: GpsCaptureResult): void => {
     setGpsLocation({
       lat: String(location.lat),
       lng: String(location.lng),
-      collected_at: location.collected_at ?? new Date().toISOString()
+      collected_at: location.collected_at
     });
   };
 
@@ -418,7 +419,7 @@ export function useSurveyForm() {
 
   const draftInput = useMemo(
     () => ({
-      site_name: siteName.trim() || 'Unnamed site',
+      site_name: siteName.trim(),
       region_version: regionVersion,
       vegetation_stage: vegetationStage,
       factors: buildFactorsPayload(),

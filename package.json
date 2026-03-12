@@ -8,13 +8,30 @@
   ],
   "scripts": {
     "migrate:api": "npm --workspace api run migrate",
-    "dev:mobile": "npm --workspace mobile run start",
+    "dev:mobile": "npm --prefix mobile run start",
     "dev:api": "npm --workspace api run start:dev",
     "dev:api:migrated": "npm run migrate:api && npm run dev:api",
     "dev": "echo \"Run dev:api and dev:mobile in separate terminals\"",
-    "lint": "echo \"Lint not configured yet\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,json}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json}\" --ignore-path .prettierignore",
     "test": "echo \"Tests not configured yet\"",
     "test:coverage:api": "npm --workspace api run test:unit:coverage && npm --workspace api run test:e2e:coverage",
     "test:coverage:mobile": "npm --workspace mobile run test:unit:coverage"
+  },
+  "dependencies": {
+    "expo": "54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
+  "devDependencies": {
+    "react-test-renderer": "19.1.0"
+  },
+  "overrides": {
+    "expo": "54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-test-renderer": "19.1.0"
   }
 }
