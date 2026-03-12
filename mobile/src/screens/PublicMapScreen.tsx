@@ -4,6 +4,7 @@ import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { brandColors, brandRadius, brandShadow, brandTypography } from '../app/brand-tokens';
 import { PublicMapItem, PublicParcelStatusItem } from '../app/types';
 import { computeRegionBbox, computeRegionZoom } from '../app/map-viewport';
 import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
@@ -77,7 +78,7 @@ export function PublicMapScreen({
   parcelStatuses,
   ownSurveyIds,
   loading,
-  parcelsLoading: _parcelsLoading,
+  parcelsLoading,
   fromDate,
   toDate,
   region,
@@ -107,6 +108,14 @@ export function PublicMapScreen({
   const selectedItemIsOwnSurvey = selectedItem ? ownSurveyIdSet.has(selectedItem.survey_id) : false;
   const mapZoom = useMemo(() => computeRegionZoom(mapRegion), [mapRegion]);
   const parcelLayerRenderable = showParcelLayer && mapZoom >= 15;
+  const visibleCountLabel = `${items.length} public survey${items.length === 1 ? '' : 's'}`;
+  const layerStatusLabel = !showParcelLayer
+    ? 'Parcels hidden'
+    : parcelsLoading
+      ? 'Loading cadastre'
+      : mapZoom >= 15
+        ? 'Cadastre active'
+        : 'Zoom in to unlock parcels';
 
   useEffect(() => {
     setMapRegion(targetRegion);
@@ -170,6 +179,8 @@ export function PublicMapScreen({
     }
   };
 
+  const showEmptyDock = !loading && items.length === 0;
+
   return (
     <View style={screenStyles.container}>
       <MapView ref={mapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={setMapRegion}>
@@ -207,51 +218,58 @@ export function PublicMapScreen({
         ))}
       </MapView>
 
-      <View style={[screenStyles.topPanel, { top: insets.top + 8 }]}>
-        <View style={screenStyles.topPanelHeader}>
-          <View style={screenStyles.titleWrap}>
-            <Ionicons name="leaf-outline" size={18} color="#1f6a49" />
-            <Text style={screenStyles.title}>Explore public tags</Text>
+      <View pointerEvents="box-none" style={[screenStyles.overlayShell, { top: insets.top + 40 }]}>
+        <View style={screenStyles.topDock}>
+          <View style={screenStyles.topDockLeft}>
+            <View style={screenStyles.exploreBadge}>
+              <Ionicons name="globe-outline" size={15} color={brandColors.forest} />
+              <Text style={screenStyles.exploreBadgeText}>Explore</Text>
+            </View>
+            <View style={screenStyles.countBadge}>
+              <Text style={screenStyles.countBadgeText}>{visibleCountLabel}</Text>
+            </View>
           </View>
-        </View>
 
-        <View style={screenStyles.actionsRow}>
-          <Pressable style={screenStyles.actionButton} onPress={() => setShowFilters((current) => !current)}>
-            <Ionicons name="options-outline" size={16} color="#2e5e46" />
-            <Text style={screenStyles.actionButtonText}>{showFilters ? 'Hide filters' : 'Show filters'}</Text>
-          </Pressable>
-          <Pressable
-            style={screenStyles.actionButtonPrimary}
-            onPress={() => {
-              void onLoad();
-              if (parcelLayerRenderable) {
-                void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom });
-              }
-            }}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator size="small" color="#f3fff7" /> : <Ionicons name="refresh" size={16} color="#f3fff7" />}
-            <Text style={screenStyles.actionButtonPrimaryText}>{loading ? 'Loading' : 'Refresh'}</Text>
-          </Pressable>
-        </View>
-
-        <View style={screenStyles.layerStatusRow}>
-          <Pressable
-            style={[screenStyles.layerToggleIconButton, showParcelLayer ? screenStyles.layerToggleIconButtonOn : screenStyles.layerToggleIconButtonOff]}
-            onPress={() => setShowParcelLayer((current) => !current)}
-          >
-            <Ionicons name={showParcelLayer ? 'layers' : 'layers-outline'} size={16} color={showParcelLayer ? '#eef8f0' : '#355e48'} />
-          </Pressable>
-          <Text style={screenStyles.layerStatusText}>
-            {!showParcelLayer ? 'Parcel layer hidden' : mapZoom >= 15 ? 'Cadastre layer active' : 'Zoom in >=15 to display cadastre parcels'}
-          </Text>
+          <View style={screenStyles.topDockActions}>
+            <Pressable style={screenStyles.iconButton} onPress={() => setShowFilters((current) => !current)}>
+              <Ionicons name={showFilters ? 'close-outline' : 'options-outline'} size={18} color={brandColors.forest} />
+            </Pressable>
+            <Pressable
+              style={loading ? screenStyles.iconButtonDisabled : screenStyles.iconButtonPrimary}
+              onPress={() => {
+                void onLoad();
+                if (parcelLayerRenderable) {
+                  void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom });
+                }
+              }}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator size="small" color={brandColors.white} /> : <Ionicons name="refresh" size={18} color={brandColors.white} />}
+            </Pressable>
+          </View>
         </View>
 
         {showFilters ? (
           <View style={screenStyles.filtersPanel}>
+            <View style={screenStyles.filtersHeader}>
+              <View style={screenStyles.filtersHeaderCopy}>
+                <Text style={screenStyles.filtersTitle}>Filters</Text>
+                <Text style={screenStyles.filtersMeta}>Tune the published survey slice without leaving the map.</Text>
+              </View>
+              <Pressable
+                style={[screenStyles.layerTogglePill, showParcelLayer ? screenStyles.layerTogglePillOn : screenStyles.layerTogglePillOff]}
+                onPress={() => setShowParcelLayer((current) => !current)}
+              >
+                <Ionicons name={showParcelLayer ? 'layers' : 'layers-outline'} size={14} color={showParcelLayer ? brandColors.white : brandColors.forest} />
+                <Text style={[screenStyles.layerTogglePillText, showParcelLayer ? screenStyles.layerTogglePillTextOn : null]}>
+                  {layerStatusLabel}
+                </Text>
+              </Pressable>
+            </View>
+
             <View style={screenStyles.filtersGrid}>
               <View style={screenStyles.filterFieldHalf}>
-                <Text style={screenStyles.inputLabel}>From (YYYY-MM-DD)</Text>
+                <Text style={screenStyles.inputLabel}>From</Text>
                 <TextInput
                   style={screenStyles.input}
                   value={fromDate}
@@ -259,12 +277,12 @@ export function PublicMapScreen({
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder="2026-03-01"
-                  placeholderTextColor="#809683"
+                  placeholderTextColor={brandColors.textSecondary}
                 />
               </View>
 
               <View style={screenStyles.filterFieldHalf}>
-                <Text style={screenStyles.inputLabel}>To (YYYY-MM-DD)</Text>
+                <Text style={screenStyles.inputLabel}>To</Text>
                 <TextInput
                   style={screenStyles.input}
                   value={toDate}
@@ -272,12 +290,12 @@ export function PublicMapScreen({
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder="2026-03-31"
-                  placeholderTextColor="#809683"
+                  placeholderTextColor={brandColors.textSecondary}
                 />
               </View>
 
               <View style={screenStyles.filterFieldFull}>
-                <Text style={screenStyles.inputLabel}>Region (ACA or M)</Text>
+                <Text style={screenStyles.inputLabel}>Region</Text>
                 <TextInput
                   style={screenStyles.input}
                   value={region}
@@ -285,21 +303,45 @@ export function PublicMapScreen({
                   autoCapitalize="characters"
                   autoCorrect={false}
                   placeholder="ACA"
-                  placeholderTextColor="#809683"
+                  placeholderTextColor={brandColors.textSecondary}
                 />
               </View>
+
+              <Pressable
+                style={[screenStyles.refreshButton, loading ? screenStyles.refreshButtonDisabled : null]}
+                onPress={() => {
+                  void onLoad();
+                  if (parcelLayerRenderable) {
+                    void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom });
+                  }
+                }}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator size="small" color={brandColors.white} /> : <Ionicons name="sparkles-outline" size={16} color={brandColors.white} />}
+                <Text style={screenStyles.refreshButtonText}>{loading ? 'Refreshing…' : 'Refresh map'}</Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
       </View>
 
-      <Pressable
-        style={[screenStyles.locateButton, { bottom: Math.max(8, insets.bottom + 4) }]}
-        onPress={() => void handleCenterOnCurrentLocation()}
-        disabled={locating}
-      >
-        {locating ? <ActivityIndicator size="small" color="#eef8f0" /> : <Ionicons name="locate" size={18} color="#eef8f0" />}
-      </Pressable>
+      <View style={[screenStyles.bottomDock, { bottom: Math.max(12, insets.bottom + 10) }]}>
+        {showEmptyDock ? (
+          <View style={screenStyles.emptyDockBubble}>
+            <Text style={screenStyles.emptyDockText}>No public items found</Text>
+          </View>
+        ) : (
+          <View />
+        )}
+
+        <Pressable
+          style={screenStyles.locateButton}
+          onPress={() => void handleCenterOnCurrentLocation()}
+          disabled={locating}
+        >
+          {locating ? <ActivityIndicator size="small" color={brandColors.white} /> : <Ionicons name="locate" size={20} color={brandColors.white} />}
+        </Pressable>
+      </View>
 
       {selectedItem ? (
         <View style={[screenStyles.reportCard, { bottom: Math.max(84, insets.bottom + 62) }]}>
@@ -375,13 +417,6 @@ export function PublicMapScreen({
         </View>
       ) : null}
 
-      {!loading && items.length === 0 ? (
-        <View style={[screenStyles.emptyStateCard, { bottom: Math.max(18, insets.bottom + 10) }]}>
-          <Text style={screenStyles.emptyStateText}>
-            No public item found. Only submitted + public surveys are included.
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -389,173 +424,203 @@ export function PublicMapScreen({
 const screenStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#dfe8e0'
+    backgroundColor: brandColors.canvas
   },
   map: {
     ...StyleSheet.absoluteFillObject
   },
-  topPanel: {
+  overlayShell: {
     position: 'absolute',
-    top: 12,
     left: 12,
     right: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#c9d9ca',
-    backgroundColor: 'rgba(244, 250, 244, 0.96)',
-    padding: 10,
-    gap: 8
+    gap: 10
   },
-  topPanelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center'
-  },
-  titleWrap: {
+  topDock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    justifyContent: 'space-between',
+    gap: 12
   },
-  title: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1f6445'
-  },
-  actionsRow: {
+  topDockLeft: {
     flexDirection: 'row',
-    gap: 8
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    flex: 1
   },
-  layerStatusRow: {
+  topDockActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8
   },
-  layerToggleIconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
+  exploreBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center'
-  },
-  layerToggleIconButtonOn: {
-    borderColor: '#2b7c53',
-    backgroundColor: '#2f8258'
-  },
-  layerToggleIconButtonOff: {
-    borderColor: '#c5d7c7',
-    backgroundColor: '#edf5ee'
-  },
-  layerStatusText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#355e48'
-  },
-  layerToggleButton: {
-    borderRadius: 999,
+    gap: 6,
+    borderRadius: brandRadius.pill,
     borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.94)',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
+    paddingVertical: 10,
+    ...brandShadow.card
   },
-  layerToggleButtonOn: {
-    borderColor: '#2b7c53',
-    backgroundColor: '#2f8258'
+  exploreBadgeText: {
+    ...brandTypography.label,
+    color: brandColors.forest
   },
-  layerToggleButtonOff: {
-    borderColor: '#c5d7c7',
-    backgroundColor: '#edf5ee'
-  },
-  layerToggleButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2f5f46'
-  },
-  layerToggleButtonTextOn: {
-    color: '#eef8f0'
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: 999,
+  countBadge: {
+    borderRadius: brandRadius.pill,
     borderWidth: 1,
-    borderColor: '#c5d7c7',
-    backgroundColor: '#edf5ee',
-    paddingVertical: 8,
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(232, 229, 217, 0.94)',
     paddingHorizontal: 12,
-    flexDirection: 'row',
+    paddingVertical: 10
+  },
+  countBadgeText: {
+    ...brandTypography.meta,
+    color: brandColors.textPrimary
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6
+    ...brandShadow.card
   },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2d5a44'
-  },
-  actionButtonPrimary: {
-    minWidth: 110,
-    borderRadius: 999,
+  iconButtonPrimary: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 1,
-    borderColor: '#2b7c53',
-    backgroundColor: '#2f8258',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
+    borderColor: brandColors.forest,
+    backgroundColor: brandColors.forest,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6
+    ...brandShadow.card
   },
-  actionButtonPrimaryText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#f3fff7'
+  iconButtonDisabled: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: '#93A68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...brandShadow.card
   },
   filtersPanel: {
-    borderTopWidth: 1,
-    borderTopColor: '#d2dfd3',
-    paddingTop: 8,
-    gap: 8
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.96)',
+    padding: 14,
+    gap: 12,
+    ...brandShadow.card
+  },
+  filtersHeader: {
+    gap: 10
+  },
+  filtersHeaderCopy: {
+    gap: 4
+  },
+  filtersTitle: {
+    ...brandTypography.label,
+    color: brandColors.forest
+  },
+  filtersMeta: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
+  },
+  layerTogglePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  layerTogglePillOn: {
+    borderColor: brandColors.forest,
+    backgroundColor: brandColors.forest
+  },
+  layerTogglePillOff: {
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.panelMuted
+  },
+  layerTogglePillText: {
+    ...brandTypography.meta,
+    color: brandColors.forest
+  },
+  layerTogglePillTextOn: {
+    color: brandColors.white
   },
   filtersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8
+    gap: 10
   },
   filterFieldHalf: {
     flexGrow: 1,
     flexBasis: '48%',
-    gap: 4
+    gap: 5
   },
   filterFieldFull: {
     width: '100%',
-    gap: 4
+    gap: 5
   },
   inputLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#3b674f'
+    ...brandTypography.meta,
+    color: brandColors.forest
   },
   input: {
     borderWidth: 1,
-    borderColor: '#c1d4c4',
-    backgroundColor: '#edf4ee',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8
+    borderColor: brandColors.inputBorder,
+    backgroundColor: brandColors.inputFill,
+    borderRadius: brandRadius.field,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: brandColors.textPrimary,
+    ...brandTypography.input
+  },
+  refreshButton: {
+    width: '100%',
+    borderRadius: brandRadius.pill,
+    borderWidth: 1,
+    borderColor: brandColors.forest,
+    backgroundColor: brandColors.forest,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8
+  },
+  refreshButtonDisabled: {
+    backgroundColor: '#8FA188',
+    borderColor: '#8FA188'
+  },
+  refreshButtonText: {
+    ...brandTypography.button,
+    color: brandColors.white
   },
   reportCard: {
     position: 'absolute',
     left: 12,
     right: 12,
-    borderRadius: 12,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#c9d7ca',
-    backgroundColor: 'rgba(245, 250, 246, 0.97)',
-    padding: 10,
-    gap: 8
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.98)',
+    padding: 14,
+    gap: 10,
+    ...brandShadow.card
   },
   reportHeaderRow: {
     flexDirection: 'row',
@@ -563,58 +628,58 @@ const screenStyles = StyleSheet.create({
     justifyContent: 'space-between'
   },
   reportTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2d5a44'
+    ...brandTypography.label,
+    color: brandColors.forest
   },
   reportMeta: {
-    fontSize: 11,
-    color: '#486956'
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
   },
   reportOpenButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#e2c2a3',
-    backgroundColor: '#fbefe3',
+    borderColor: '#E4B99A',
+    backgroundColor: '#F6E2D5',
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6
   },
   reportOpenButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#74441e'
+    ...brandTypography.meta,
+    color: brandColors.terracotta
   },
   reportOwnSurveyInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderRadius: 10,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#c8d9cb',
-    backgroundColor: '#eaf2ea',
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.panelMuted,
     paddingHorizontal: 10,
-    paddingVertical: 8
+    paddingVertical: 10
   },
   reportOwnSurveyInfoText: {
-    fontSize: 12,
-    color: '#355544'
+    ...brandTypography.meta,
+    color: brandColors.textPrimary
   },
   reportForm: {
-    gap: 8
+    gap: 10
   },
   reportInput: {
     borderWidth: 1,
-    borderColor: '#cad3ca',
-    backgroundColor: '#f4f8f4',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderColor: brandColors.inputBorder,
+    backgroundColor: brandColors.inputFill,
+    borderRadius: brandRadius.field,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     minHeight: 72,
-    textAlignVertical: 'top'
+    textAlignVertical: 'top',
+    color: brandColors.textPrimary,
+    ...brandTypography.sectionBody
   },
   reportActionsRow: {
     flexDirection: 'row',
@@ -624,62 +689,69 @@ const screenStyles = StyleSheet.create({
   reportCancelButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#c8d5ca',
-    backgroundColor: '#edf4ee',
+    borderColor: brandColors.divider,
+    backgroundColor: brandColors.panelMuted,
     paddingHorizontal: 12,
-    paddingVertical: 7
+    paddingVertical: 9
   },
   reportCancelButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4b6657'
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
   },
   reportSubmitButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#7e3f11',
-    backgroundColor: '#94501b',
+    borderColor: brandColors.terracotta,
+    backgroundColor: brandColors.terracotta,
     paddingHorizontal: 12,
-    paddingVertical: 7
+    paddingVertical: 9
   },
   reportSubmitButtonDisabled: {
-    borderColor: '#a7adb0',
-    backgroundColor: '#b8bdc0'
+    borderColor: '#A6ABA3',
+    backgroundColor: '#A6ABA3'
   },
   reportSubmitButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff7f2'
+    ...brandTypography.meta,
+    color: brandColors.white
   },
   reportMessage: {
-    fontSize: 11,
-    color: '#4e6656'
+    ...brandTypography.meta,
+    color: brandColors.textSecondary
   },
-  emptyStateCard: {
+  bottomDock: {
     position: 'absolute',
     left: 12,
     right: 12,
-    bottom: 18,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#c5d6c7',
-    backgroundColor: 'rgba(245, 250, 246, 0.96)',
-    padding: 12
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10
   },
-  emptyStateText: {
-    fontSize: 12,
-    color: '#395d49'
+  emptyDockBubble: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    backgroundColor: 'rgba(247, 246, 240, 0.96)',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    ...brandShadow.card
+  },
+  emptyDockText: {
+    ...brandTypography.meta,
+    fontSize: 15,
+    lineHeight: 18,
+    color: brandColors.textPrimary
   },
   locateButton: {
-    position: 'absolute',
-    right: 14,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: '#2b7c53',
-    backgroundColor: '#2f8258',
+    borderColor: brandColors.forest,
+    backgroundColor: brandColors.forest,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    ...brandShadow.card
   }
 });

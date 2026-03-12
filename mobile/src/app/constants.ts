@@ -26,6 +26,19 @@ export const HELP_BY_FACTOR: Record<FactorKey, string> = {
   J: 'Milieux rocheux. On compte le nombre de types differents presents dans ou en bordure du peuplement.'
 };
 
+export const FACTOR_TITLES: Record<FactorKey, string> = {
+  A: 'Essences autochtones',
+  B: 'Structure verticale',
+  C: 'Bois morts sur pied',
+  D: 'Bois morts au sol',
+  E: 'Tres gros bois vivants',
+  F: 'Dendromicrohabitats',
+  G: 'Milieux ouverts floriferes',
+  H: 'Continuite boisee',
+  I: 'Milieux aquatiques',
+  J: 'Milieux rocheux'
+};
+
 export const FACTOR_INPUT_HINTS_BY_FACTOR: Record<FactorKey, string[]> = {
   A: [
     "Compter les genres autochtones distincts (pas les especes), sur arbres vivants (> 50 cm) et arbres morts.",

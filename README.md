@@ -100,3 +100,74 @@ Recommended starting points:
 ## Notes
 - This README intentionally focuses on onboarding and operations.
 - Detailed feature history and implementation notes should stay in `specifications/`.
+
+---
+
+## Roadmap déploiement
+
+### Étape 1 — Sécuriser l'API avant mise en prod
+- [ ] Désactiver `DEBUG_DATA_RESET_ENABLED` en prod (actuellement `true`)
+- [ ] Désactiver `AUTH_DEV_EXPOSE_EMAIL_TOKEN` en prod (actuellement `true`)
+- [ ] Remplacer `ACCESS_TOKEN_SECRET` et `REFRESH_TOKEN_SECRET` par des secrets forts
+- [ ] Configurer SMTP (confirmation email)
+- [ ] Ajouter rate limiting sur les endpoints auth (anti brute-force)
+- [ ] Restreindre CORS au domaine de production
+
+### Étape 2 — Infrastructure (OVH VPS)
+- [ ] Créer un VPS OVH (Value, 2GB RAM, ~3.5€/mois)
+- [ ] Installer Node.js 20 + PM2 sur le serveur
+- [ ] Installer et configurer PostgreSQL
+- [ ] Configurer OVH Object Storage (S3-compatible) pour les pièces jointes
+- [ ] Obtenir un nom de domaine et configurer le DNS
+- [ ] Mettre en place HTTPS avec Certbot (Let's Encrypt)
+- [ ] Déployer l'API via git + `npm run build` + `pm2 start`
+
+### Étape 3 — RGPD et légal
+- [ ] Rédiger la politique de confidentialité (modèles CNIL pour assos)
+- [ ] Rédiger les mentions légales
+- [ ] Vérifier la présence d'un endpoint de suppression de compte (droit à l'effacement)
+- [ ] Constituer le registre des traitements (doc interne)
+
+### Étape 4 — App mobile (stores)
+- [ ] Créer un compte Expo EAS (`eas login`)
+- [ ] Configurer `eas.json` pour les builds iOS et Android
+- [ ] Apple Developer Program (99$/an — obligatoire pour iOS)
+- [ ] Google Play Console (25$ one-time — obligatoire pour Android)
+- [ ] Intégrer la politique de confidentialité dans l'app (lien dans les paramètres)
+- [ ] Build de production : `eas build --platform all`
+- [ ] Soumission stores : `eas submit`
+
+### Étape 5 — Mises à jour continues
+- [ ] Configurer EAS Update pour les mises à jour JS sans repasser par les stores
+- [ ] Documenter le process de déploiement (`git push` → rebuild → `pm2 reload`)
+
+---
+
+## Estimation des coûts de production
+
+### Coûts uniques
+| Poste | Coût |
+|-------|------|
+| Google Play Console | ~25 € |
+| **Total** | **~25 €** |
+
+### Coûts récurrents
+| Poste | Coût |
+|-------|------|
+| OVH VPS (2 GB RAM) | ~3,50 €/mois |
+| Nom de domaine | ~1 €/mois (~12 €/an) |
+| Apple Developer Program | 99 €/an |
+| OVH Object Storage (photos) | <1 €/mois (pay-as-you-go) |
+| **Total mensuel moyen** | **~13 €/mois** |
+| **Total annuel** | **~155 €/an** |
+
+### Ce qui est gratuit
+- PostgreSQL — inclus sur le VPS
+- HTTPS — Let's Encrypt (gratuit)
+- SMTP — Brevo (ex-Sendinblue) : gratuit jusqu'à 300 emails/jour
+- EAS Build / EAS Update — tier gratuit suffisant pour un solo dev
+
+### Première année complète
+~25 € (Google) + 42 € (VPS) + 12 € (domaine) + 99 € (Apple) = **~178 €**
+
+> **Note** : Si l'app est portée par une association loi 1901, Apple propose un programme non-profit qui exonère les 99 €/an. Cela ramènerait les coûts à ~55 €/an après la première année.

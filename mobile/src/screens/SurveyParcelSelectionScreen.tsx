@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brandColors, brandRadius, brandShadow, brandTypography } from '../app/brand-tokens';
-import { areRegionsNearlyEqual, computeRegionZoom } from '../app/map-viewport';
+import { DEFAULT_FRANCE_CENTER, areRegionsNearlyEqual, buildFocusedMapRegion, computeRegionZoom } from '../app/map-viewport';
 import { GpsCaptureResult } from '../app/types';
 import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
 import { ParcelOverlayPolygons } from '../components/ParcelOverlayPolygons';
@@ -12,7 +13,6 @@ import { useParcelStatuses } from '../hooks/useParcelStatuses';
 
 type SurveyParcelSelectionScreenProps = {
   apiUrl: string;
-  siteName: string;
   gpsLocation: {
     lat: string;
     lng: string;
@@ -22,26 +22,21 @@ type SurveyParcelSelectionScreenProps = {
   onToggleParcelSelection: (parcelId: string) => void;
   onCaptureGpsLocation: () => Promise<GpsCaptureResult | null>;
   onSave: () => Promise<void>;
+  hideDoneAction?: boolean;
 };
 
-const DEFAULT_FRANCE_CENTER = { lat: 46.603354, lng: 1.888334 };
-const buildFocusedMapRegion = (location: Pick<GpsCaptureResult, 'lat' | 'lng'>): Region => ({
-  latitude: location.lat,
-  longitude: location.lng,
-  latitudeDelta: 0.015,
-  longitudeDelta: 0.015
-});
 
 export function SurveyParcelSelectionScreen({
   apiUrl,
-  siteName,
   gpsLocation,
   selectedParcelIds,
   onToggleParcelSelection,
   onCaptureGpsLocation,
-  onSave
+  onSave,
+  hideDoneAction = false
 }: SurveyParcelSelectionScreenProps) {
   const mapRef = useRef<MapView | null>(null);
+  const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
   const parsedLat = Number(gpsLocation.lat);
@@ -84,11 +79,18 @@ export function SurveyParcelSelectionScreen({
     mapZoom >= 15
       ? parcelsLoading
         ? 'Loading parcel overlay...'
-        : `${parcelStatuses.length} visible parcel(s) · tap polygons to select or deselect`
+        : `${parcelStatuses.length} visible parcel(s)`
       : 'Zoom in to unlock parcel selection';
 
   return (
-    <View style={screenStyles.fullscreen}>
+    <View
+      style={[
+        screenStyles.fullscreen,
+        {
+          marginTop: -headerHeight
+        }
+      ]}
+    >
       <MapView ref={mapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={handleMapRegionChange}>
         <IgnCadastreTileOverlay enabled={mapZoom >= 15} zIndex={0} />
         <ParcelOverlayPolygons items={parcelStatuses} selectedParcelIds={selectedParcelIds} onParcelPress={onToggleParcelSelection} />
@@ -100,18 +102,10 @@ export function SurveyParcelSelectionScreen({
         style={[
           screenStyles.overlayLayer,
           {
-            paddingTop: 10,
             paddingBottom: Math.max(insets.bottom, 12) + 12
           }
         ]}
       >
-        <View style={screenStyles.topPill}>
-          <Ionicons name="map-outline" size={14} color="#ffffff" />
-          <Text numberOfLines={1} style={screenStyles.topPillText}>
-            {siteName.trim() || 'Parcel selection'}
-          </Text>
-        </View>
-
         <View style={screenStyles.bottomArea}>
           <View style={screenStyles.floatingActions}>
             <Pressable
@@ -142,20 +136,22 @@ export function SurveyParcelSelectionScreen({
               </View>
             ) : null}
             <Text style={screenStyles.bottomHint}>Tap polygons to add or remove parcels from this survey.</Text>
-            <Pressable
-              style={[screenStyles.doneButton, saving ? screenStyles.doneButtonDisabled : null]}
-              onPress={() => {
-                if (saving) {
-                  return;
-                }
-                setSaving(true);
-                void onSave().finally(() => setSaving(false));
-              }}
-              disabled={saving}
-            >
-              <Ionicons name={saving ? 'hourglass-outline' : 'checkmark'} size={18} color={brandColors.white} />
-              <Text style={screenStyles.doneButtonText}>{saving ? 'Saving...' : 'Done'}</Text>
-            </Pressable>
+            {!hideDoneAction ? (
+              <Pressable
+                style={[screenStyles.doneButton, saving ? screenStyles.doneButtonDisabled : null]}
+                onPress={() => {
+                  if (saving) {
+                    return;
+                  }
+                  setSaving(true);
+                  void onSave().finally(() => setSaving(false));
+                }}
+                disabled={saving}
+              >
+                <Ionicons name={saving ? 'hourglass-outline' : 'checkmark'} size={18} color={brandColors.white} />
+                <Text style={screenStyles.doneButtonText}>{saving ? 'Saving...' : 'Done'}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </View>
@@ -174,24 +170,8 @@ const screenStyles = StyleSheet.create({
   },
   overlayLayer: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 16
-  },
-  topPill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: brandRadius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
-    backgroundColor: 'rgba(22, 47, 31, 0.76)',
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  topPillText: {
-    ...brandTypography.meta,
-    color: brandColors.white
   },
   bottomArea: {
     gap: 12

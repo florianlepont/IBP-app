@@ -1,5 +1,16 @@
 import { Region } from 'react-native-maps';
 
+export const DEFAULT_FRANCE_CENTER = { lat: 46.603354, lng: 1.888334 };
+
+export function buildFocusedMapRegion(location: { lat: number; lng: number }): Region {
+  return {
+    latitude: location.lat,
+    longitude: location.lng,
+    latitudeDelta: 0.015,
+    longitudeDelta: 0.015
+  };
+}
+
 export function computeRegionZoom(region: Region): number {
   const longitudeDelta = Math.max(region.longitudeDelta, 0.000001);
   return Math.round(Math.log2(360 / longitudeDelta));

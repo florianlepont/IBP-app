@@ -10,7 +10,6 @@ type SettingsScreenProps = {
   onRefreshLocalAttachments: () => Promise<void>;
   onDebugResetIbpData: () => Promise<void>;
   onDebugResetUserData: () => Promise<void>;
-  onBack: () => void;
   status: string;
 };
 
@@ -23,14 +22,10 @@ export function SettingsScreen({
   onRefreshLocalAttachments,
   onDebugResetIbpData,
   onDebugResetUserData,
-  onBack,
   status
 }: SettingsScreenProps) {
   return (
     <View style={styles.card}>
-      <Button title="Back to account" onPress={onBack} />
-      <View style={styles.spacer} />
-
       <Text style={styles.label}>API URL</Text>
       <TextInput style={styles.input} value={apiUrl} onChangeText={onApiUrlChange} autoCapitalize="none" autoCorrect={false} />
 
