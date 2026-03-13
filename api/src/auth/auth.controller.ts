@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { CurrentUser } from './current-user.decorator'
 import { AuthenticatedUser } from './auth.types'
 import { AuthGuard } from './auth.guard'
@@ -8,19 +9,20 @@ import { RegisterDto } from './dtos/register.dto'
 import { RefreshTokenDto } from './dtos/refresh-token.dto'
 
 @Controller('auth')
+@Throttle({ auth: { ttl: 60_000, limit: 10 } })
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   async login(@Body() body: LoginDto) {
-    return this.authService.login(body.email ?? '', body.password ?? '', {
+    return this.authService.login(body.email, body.password, {
       createIfMissing: body.create_if_missing,
     })
   }
 
   @Post('register')
   async register(@Body() body: RegisterDto) {
-    return this.authService.register(body.email ?? '', body.password ?? '', body.display_name ?? '')
+    return this.authService.register(body.email, body.password, body.display_name)
   }
 
   @Post('refresh')

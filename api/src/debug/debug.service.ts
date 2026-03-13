@@ -65,7 +65,7 @@ export class DebugService {
   }
 
   private assertEnabled(): void {
-    const enabled = (process.env.DEBUG_DATA_RESET_ENABLED ?? 'true').toLowerCase() === 'true';
+    const enabled = (process.env.DEBUG_DATA_RESET_ENABLED ?? 'false').toLowerCase() === 'true';
     if (!enabled) {
       throw new ForbiddenException('Debug data reset is disabled');
     }

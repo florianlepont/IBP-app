@@ -1,9 +1,10 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { DebugService } from './debug.service';
 
 @Controller('debug')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, AdminGuard)
 export class DebugController {
   constructor(private readonly debugService: DebugService) {}
 
