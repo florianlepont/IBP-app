@@ -335,13 +335,15 @@ export class AuthService {
   }
 
   private isLoginOrCreateEnabled(): boolean {
-    const explicit = process.env.AUTH_LOGIN_OR_CREATE_ENABLED;
-    if (typeof explicit === 'string' && explicit.trim().length > 0) {
-      return explicit.toLowerCase() === 'true';
-    }
+    return (process.env.AUTH_LOGIN_OR_CREATE_ENABLED ?? '').toLowerCase() === 'true';
+  }
 
-    const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
-    return nodeEnv !== 'production';
+  private requireSecret(envVar: string): string {
+    const value = process.env[envVar];
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+    return value;
   }
 
   private toPublicUser(user: UserRow): AuthenticatedUser {
