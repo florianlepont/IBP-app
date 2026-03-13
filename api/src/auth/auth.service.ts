@@ -223,8 +223,8 @@ export class AuthService {
 
   private signToken(userId: string, kind: TokenKind, options?: { sessionId?: string }): string {
     const secret = kind === 'access'
-      ? process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret'
-      : process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
+      ? this.requireSecret('ACCESS_TOKEN_SECRET')
+      : this.requireSecret('REFRESH_TOKEN_SECRET');
 
     const expiresIn = (kind === 'access'
       ? process.env.ACCESS_TOKEN_EXPIRES_IN ?? '15m'
@@ -239,7 +239,7 @@ export class AuthService {
   }
 
   private verifyAccessToken(token: string): string {
-    const secret = process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret';
+    const secret = this.requireSecret('ACCESS_TOKEN_SECRET');
 
     try {
       const payload = jwt.verify(token, secret) as { sub?: string; typ?: string };
@@ -253,7 +253,7 @@ export class AuthService {
   }
 
   private verifyRefreshToken(token: string): { userId: string; sessionId: string } {
-    const secret = process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
+    const secret = this.requireSecret('REFRESH_TOKEN_SECRET');
 
     try {
       const payload = jwt.verify(token, secret) as { sub?: string; typ?: string; sid?: string };
@@ -318,13 +318,15 @@ export class AuthService {
   }
 
   private isLoginOrCreateEnabled(): boolean {
-    const explicit = process.env.AUTH_LOGIN_OR_CREATE_ENABLED;
-    if (typeof explicit === 'string' && explicit.trim().length > 0) {
-      return explicit.toLowerCase() === 'true';
-    }
+    return (process.env.AUTH_LOGIN_OR_CREATE_ENABLED ?? '').toLowerCase() === 'true';
+  }
 
-    const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
-    return nodeEnv !== 'production';
+  private requireSecret(envVar: string): string {
+    const value = process.env[envVar];
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+    return value;
   }
 
   private toPublicUser(user: UserRow): AuthenticatedUser {
