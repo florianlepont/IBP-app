@@ -207,6 +207,10 @@ export function SurveyFormScreen({
 }: SurveyFormScreenProps) {
   const inlineMapRef = useRef<MapView | null>(null);
   const fullscreenMapRef = useRef<MapView | null>(null);
+  const inlineMapReadyRef = useRef(false);
+  const fullscreenMapReadyRef = useRef(false);
+  const pendingInlineRegionRef = useRef<Region | null>(null);
+  const pendingFullscreenRegionRef = useRef<Region | null>(null);
   const scrollRef = useRef<any>(null);
   const scrollOffsetRef = useRef(0);
   const identityScrollBeforeFocusRef = useRef(0);
@@ -254,14 +258,52 @@ export function SurveyFormScreen({
     onCaptureGpsLocationRef.current = onCaptureGpsLocation;
   }, [onCaptureGpsLocation]);
 
+  const animateParcelMapRegion = (
+    mapRef: React.MutableRefObject<MapView | null>,
+    mapReadyRef: React.MutableRefObject<boolean>,
+    pendingRegionRef: React.MutableRefObject<Region | null>,
+    nextRegion: Region,
+    duration = 420
+  ): void => {
+    if (!mapReadyRef.current || !mapRef.current) {
+      pendingRegionRef.current = nextRegion;
+      return;
+    }
+
+    pendingRegionRef.current = null;
+    mapRef.current.animateToRegion(nextRegion, duration);
+  };
+
+  const syncParcelMapsToRegion = (nextRegion: Region, duration = 420): void => {
+    animateParcelMapRegion(inlineMapRef, inlineMapReadyRef, pendingInlineRegionRef, nextRegion, duration);
+    animateParcelMapRegion(fullscreenMapRef, fullscreenMapReadyRef, pendingFullscreenRegionRef, nextRegion, duration);
+  };
+
+  const handleInlineMapReady = (): void => {
+    inlineMapReadyRef.current = true;
+    const nextRegion = pendingInlineRegionRef.current ?? mapRegion;
+    pendingInlineRegionRef.current = null;
+    requestAnimationFrame(() => {
+      inlineMapRef.current?.animateToRegion(nextRegion, 0);
+    });
+  };
+
+  const handleFullscreenMapReady = (): void => {
+    fullscreenMapReadyRef.current = true;
+    const nextRegion = pendingFullscreenRegionRef.current ?? mapRegion;
+    pendingFullscreenRegionRef.current = null;
+    requestAnimationFrame(() => {
+      fullscreenMapRef.current?.animateToRegion(nextRegion, 0);
+    });
+  };
+
   useEffect(() => {
     if (!hasGpsCoordinates) {
       return;
     }
     const nextRegion = buildFocusedMapRegion({ lat: parsedLat, lng: parsedLng });
     setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
-    inlineMapRef.current?.animateToRegion(nextRegion, 420);
-    fullscreenMapRef.current?.animateToRegion(nextRegion, 420);
+    syncParcelMapsToRegion(nextRegion, 420);
   }, [hasGpsCoordinates, parsedLat, parsedLng, gpsLocation.collected_at]);
 
   const factorProgress = useMemo(
@@ -581,8 +623,7 @@ export function SurveyFormScreen({
   const centerParcelMapsOnLocation = (location: GpsCaptureResult): void => {
     const nextRegion = buildFocusedMapRegion(location);
     setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
-    inlineMapRef.current?.animateToRegion(nextRegion, 420);
-    fullscreenMapRef.current?.animateToRegion(nextRegion, 420);
+    syncParcelMapsToRegion(nextRegion, 420);
   };
 
   const handleLocateParcelsMap = (): void => {
@@ -669,7 +710,7 @@ export function SurveyFormScreen({
     if (isParcelMapFullscreenVisible) {
       return;
     }
-    inlineMapRef.current?.animateToRegion(mapRegion, 0);
+    syncParcelMapsToRegion(mapRegion, 0);
   }, [isParcelMapFullscreenVisible, mapRegion]);
 
   return (
@@ -872,7 +913,20 @@ export function SurveyFormScreen({
               </View>
 
               <View style={screenStyles.mapFrame}>
-                <MapView ref={inlineMapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={handleMapRegionChange}>
+                <MapView
+                  ref={(instance) => {
+                    inlineMapRef.current = instance;
+                    if (!instance) {
+                      inlineMapReadyRef.current = false;
+                      return;
+                    }
+                    inlineMapReadyRef.current = false;
+                  }}
+                  style={screenStyles.map}
+                  initialRegion={mapRegion}
+                  onMapReady={handleInlineMapReady}
+                  onRegionChangeComplete={handleMapRegionChange}
+                >
                   <IgnCadastreTileOverlay enabled={mapZoom >= 15} zIndex={0} />
                   <ParcelOverlayPolygons
                     items={parcelStatuses}
@@ -977,9 +1031,17 @@ export function SurveyFormScreen({
             >
               <View style={screenStyles.fullscreenMapScreen}>
                 <MapView
-                  ref={fullscreenMapRef}
+                  ref={(instance) => {
+                    fullscreenMapRef.current = instance;
+                    if (!instance) {
+                      fullscreenMapReadyRef.current = false;
+                      return;
+                    }
+                    fullscreenMapReadyRef.current = false;
+                  }}
                   style={screenStyles.fullscreenMap}
                   initialRegion={mapRegion}
+                  onMapReady={handleFullscreenMapReady}
                   onRegionChangeComplete={handleMapRegionChange}
                 >
                   <IgnCadastreTileOverlay enabled={mapZoom >= 15} zIndex={0} />

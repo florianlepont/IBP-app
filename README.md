@@ -106,12 +106,12 @@ Recommended starting points:
 ## Roadmap déploiement
 
 ### Étape 1 — Sécuriser l'API avant mise en prod
-- [ ] Désactiver `DEBUG_DATA_RESET_ENABLED` en prod (actuellement `true`)
-- [ ] Désactiver `AUTH_DEV_EXPOSE_EMAIL_TOKEN` en prod (actuellement `true`)
-- [ ] Remplacer `ACCESS_TOKEN_SECRET` et `REFRESH_TOKEN_SECRET` par des secrets forts
-- [ ] Configurer SMTP (confirmation email)
-- [ ] Ajouter rate limiting sur les endpoints auth (anti brute-force)
-- [ ] Restreindre CORS au domaine de production
+- [x] Désactiver `DEBUG_DATA_RESET_ENABLED` en prod (default changé à `false`)
+- [x] Désactiver `AUTH_DEV_EXPOSE_EMAIL_TOKEN` en prod (désactivé automatiquement si `NODE_ENV=production`)
+- [ ] Remplacer `ACCESS_TOKEN_SECRET` et `REFRESH_TOKEN_SECRET` par des secrets forts (voir `api/.env.production.example`)
+- [ ] Configurer SMTP (confirmation email) — voir `api/.env.production.example` pour Brevo
+- [x] Ajouter rate limiting sur les endpoints auth (5 req/min sur login et register)
+- [x] Restreindre CORS au domaine de production (variable `CORS_ORIGIN`)
 
 ### Étape 2 — Infrastructure (OVH VPS)
 - [ ] Créer un VPS OVH (Value, 2GB RAM, ~3.5€/mois)
