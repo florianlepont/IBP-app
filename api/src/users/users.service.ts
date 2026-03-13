@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { extensionFromMime } from '../common/file.utils';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from './email.service';
 
@@ -211,7 +212,7 @@ export class UsersService {
       throw new BadRequestException('profile picture must be an image');
     }
 
-    const extension = this.extensionFromMime(mimeType);
+    const extension = extensionFromMime(mimeType);
     const storageKey = `profiles/${user.id}/avatar${extension}`;
     const storagePath = this.storagePathForKey(storageKey);
     await mkdir(dirname(storagePath), { recursive: true });
@@ -365,13 +366,6 @@ export class UsersService {
     }
   }
 
-  private extensionFromMime(mimeType: string): string {
-    if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') return '.jpg';
-    if (mimeType === 'image/png') return '.png';
-    if (mimeType === 'image/webp') return '.webp';
-    if (mimeType === 'image/heic') return '.heic';
-    return '.bin';
-  }
 
   private storagePathForKey(storageKey: string): string {
     return join(this.uploadsRootDir, storageKey);
