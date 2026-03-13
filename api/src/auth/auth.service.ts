@@ -223,8 +223,8 @@ export class AuthService {
 
   private signToken(userId: string, kind: TokenKind, options?: { sessionId?: string }): string {
     const secret = kind === 'access'
-      ? process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret'
-      : process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
+      ? this.requireSecret('ACCESS_TOKEN_SECRET', 'dev-access-secret')
+      : this.requireSecret('REFRESH_TOKEN_SECRET', 'dev-refresh-secret');
 
     const expiresIn = (kind === 'access'
       ? process.env.ACCESS_TOKEN_EXPIRES_IN ?? '15m'
@@ -239,7 +239,7 @@ export class AuthService {
   }
 
   private verifyAccessToken(token: string): string {
-    const secret = process.env.ACCESS_TOKEN_SECRET ?? 'dev-access-secret';
+    const secret = this.requireSecret('ACCESS_TOKEN_SECRET', 'dev-access-secret');
 
     try {
       const payload = jwt.verify(token, secret) as { sub?: string; typ?: string };
@@ -253,7 +253,7 @@ export class AuthService {
   }
 
   private verifyRefreshToken(token: string): { userId: string; sessionId: string } {
-    const secret = process.env.REFRESH_TOKEN_SECRET ?? 'dev-refresh-secret';
+    const secret = this.requireSecret('REFRESH_TOKEN_SECRET', 'dev-refresh-secret');
 
     try {
       const payload = jwt.verify(token, secret) as { sub?: string; typ?: string; sid?: string };
@@ -302,6 +302,15 @@ export class AuthService {
        WHERE id = $1`,
       [sessionId]
     );
+  }
+
+  private requireSecret(envKey: string, devFallback: string): string {
+    const value = process.env[envKey];
+    if (value) return value;
+    if ((process.env.NODE_ENV ?? 'development').toLowerCase() === 'production') {
+      throw new Error(`Missing required environment variable: ${envKey}`);
+    }
+    return devFallback;
   }
 
   private hashToken(token: string): string {
