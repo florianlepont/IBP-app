@@ -15,6 +15,7 @@ type RefreshSessionRow = {
 };
 
 type TokenKind = 'access' | 'refresh';
+const developmentFallbackSecrets = new Map<string, string>();
 
 @Injectable()
 export class AuthService {
@@ -302,6 +303,22 @@ export class AuthService {
        WHERE id = $1`,
       [sessionId]
     );
+  }
+
+  private requireSecret(envKey: string): string {
+    const value = process.env[envKey];
+    if (value) return value;
+    if ((process.env.NODE_ENV ?? 'development').toLowerCase() === 'production') {
+      throw new Error(`Missing required environment variable: ${envKey}`);
+    }
+
+    let runtimeSecret = developmentFallbackSecrets.get(envKey);
+    if (!runtimeSecret) {
+      runtimeSecret = createHash('sha256').update(`${envKey}:${randomUUID()}`).digest('hex');
+      developmentFallbackSecrets.set(envKey, runtimeSecret);
+    }
+
+    return runtimeSecret;
   }
 
   private hashToken(token: string): string {

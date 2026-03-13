@@ -36,6 +36,8 @@ export function SurveyParcelSelectionScreen({
   hideDoneAction = false
 }: SurveyParcelSelectionScreenProps) {
   const mapRef = useRef<MapView | null>(null);
+  const mapReadyRef = useRef(false);
+  const pendingRegionRef = useRef<Region | null>(null);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
@@ -60,13 +62,32 @@ export function SurveyParcelSelectionScreen({
     year: new Date().getFullYear()
   });
 
+  const syncMapRegion = (nextRegion: Region, duration = 420): void => {
+    if (!mapReadyRef.current || !mapRef.current) {
+      pendingRegionRef.current = nextRegion;
+      return;
+    }
+
+    pendingRegionRef.current = null;
+    mapRef.current.animateToRegion(nextRegion, duration);
+  };
+
+  const handleMapReady = (): void => {
+    mapReadyRef.current = true;
+    const nextRegion = pendingRegionRef.current ?? mapRegion;
+    pendingRegionRef.current = null;
+    requestAnimationFrame(() => {
+      mapRef.current?.animateToRegion(nextRegion, 0);
+    });
+  };
+
   useEffect(() => {
     if (!hasGpsCoordinates) {
       return;
     }
     const nextRegion = buildFocusedMapRegion({ lat: parsedLat, lng: parsedLng });
     setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
-    mapRef.current?.animateToRegion(nextRegion, 420);
+    syncMapRegion(nextRegion, 420);
   }, [hasGpsCoordinates, parsedLat, parsedLng, gpsLocation.collected_at]);
 
   const handleMapRegionChange = (nextRegion: Region): void => {
@@ -91,7 +112,20 @@ export function SurveyParcelSelectionScreen({
         }
       ]}
     >
-      <MapView ref={mapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={handleMapRegionChange}>
+      <MapView
+        ref={(instance) => {
+          mapRef.current = instance;
+          if (!instance) {
+            mapReadyRef.current = false;
+            return;
+          }
+          mapReadyRef.current = false;
+        }}
+        style={screenStyles.map}
+        initialRegion={mapRegion}
+        onMapReady={handleMapReady}
+        onRegionChangeComplete={handleMapRegionChange}
+      >
         <IgnCadastreTileOverlay enabled={mapZoom >= 15} zIndex={0} />
         <ParcelOverlayPolygons items={parcelStatuses} selectedParcelIds={selectedParcelIds} onParcelPress={onToggleParcelSelection} />
         {hasGpsCoordinates ? <Marker coordinate={{ latitude: parsedLat, longitude: parsedLng }} /> : null}
@@ -117,7 +151,7 @@ export function SurveyParcelSelectionScreen({
                   }
                   const nextRegion = buildFocusedMapRegion(capturedLocation);
                   setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion));
-                  mapRef.current?.animateToRegion(nextRegion, 420);
+                  syncMapRegion(nextRegion, 420);
                 });
               }}
             >
