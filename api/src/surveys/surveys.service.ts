@@ -14,6 +14,7 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
 import { CadastreProviderService } from './cadastre-provider.service';
 import { IbpRulesService } from './ibp-rules.service';
+import { extensionFromMime } from '../common/file.utils';
 import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from './public-map.utils';
 import { mapSyncError } from './sync-error.utils';
 import {
@@ -705,7 +706,7 @@ export class SurveysService {
 
     const attachmentId = randomUUID();
     const uploadToken = randomUUID();
-    const extension = this.extensionFromMime(body.mime_type);
+    const extension = extensionFromMime(body.mime_type);
     const storageKey = `surveys/${surveyId}/${attachmentId}${extension}`;
     const confirmUrl = this.buildConfirmUrl(surveyId, attachmentId, uploadToken);
     const uploadUrl = await this.buildUploadUrl(storageKey, body.mime_type, confirmUrl);
@@ -1817,14 +1818,6 @@ export class SurveysService {
     );
   }
 
-  private extensionFromMime(mimeType: string): string {
-    const normalized = mimeType.trim().toLowerCase();
-    if (normalized === 'image/jpeg' || normalized === 'image/jpg') return '.jpg';
-    if (normalized === 'image/png') return '.png';
-    if (normalized === 'image/heic') return '.heic';
-    if (normalized === 'image/webp') return '.webp';
-    return '.bin';
-  }
 
   private buildConfirmUrl(surveyId: string, attachmentId: string, uploadToken: string): string {
     const token = encodeURIComponent(uploadToken);
