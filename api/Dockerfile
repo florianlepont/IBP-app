@@ -3,11 +3,12 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm install --ignore-scripts
 
 COPY tsconfig*.json ./
 COPY src ./src
 COPY scripts ./scripts
+COPY migrations ./migrations
 
 RUN npm run build
 
@@ -19,10 +20,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/migrations ./migrations
 
 EXPOSE 3000
 
