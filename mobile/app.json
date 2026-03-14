@@ -27,6 +27,9 @@
         }
       ],
       "expo-secure-store"
-    ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.anonymous.ibp-app"
+    }
   }
 }
