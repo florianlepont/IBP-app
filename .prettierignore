@@ -1,6 +1,8 @@
 node_modules
 dist
 build
-.expo
 coverage
+.expo
+android
+ios
 *.lock
