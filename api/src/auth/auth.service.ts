@@ -353,14 +353,6 @@ export class AuthService {
     return (process.env.AUTH_LOGIN_OR_CREATE_ENABLED ?? "").toLowerCase() === "true"
   }
 
-  private requireSecret(envVar: string): string {
-    const value = process.env[envVar]
-    if (!value) {
-      throw new Error(`Missing required environment variable: ${envVar}`)
-    }
-    return value
-  }
-
   private toPublicUser(user: UserRow): AuthenticatedUser {
     return {
       id: user.id,
