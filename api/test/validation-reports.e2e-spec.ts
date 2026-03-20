@@ -3,9 +3,11 @@ import { INestApplication, ValidationPipe } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
 import request = require("supertest")
 import { AppModule } from "../src/app.module"
+import { DatabaseService } from "../src/database/database.service"
 
 describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
   let app: INestApplication
+  let db: DatabaseService
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -13,6 +15,7 @@ describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
     }).compile()
 
     app = moduleFixture.createNestApplication()
+    db = moduleFixture.get(DatabaseService)
     app.setGlobalPrefix("v1")
     app.useGlobalPipes(
       new ValidationPipe({
@@ -151,37 +154,45 @@ describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
 
   describe("Reports CRUD", () => {
     it("creates a report and lists it", async () => {
-      const { accessToken } = await loginAsNewUser()
+      const { accessToken: ownerToken } = await loginAsNewUser()
+      const { accessToken: moderatorToken } = await loginAsNewUser()
 
-      // create a survey to report on
+      // promote moderator user via DB
+      const meRes = await request(app.getHttpServer())
+        .get("/v1/me")
+        .set("Authorization", `Bearer ${moderatorToken}`)
+        .expect(200)
+      await db.query(`UPDATE users SET role = 'moderator' WHERE id = $1`, [meRes.body.id])
+
+      // create a public survey as owner
       const surveyId = `e2e-report-survey-${Date.now()}`
       await request(app.getHttpServer())
         .post("/v1/surveys")
-        .set("Authorization", `Bearer ${accessToken}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({
           id: surveyId,
           sync_version: 1,
           site_name: "Reportable site",
           status: "draft",
-          visibility: "private",
+          visibility: "public",
           factors: {},
           scores: {},
         })
         .expect(201)
 
-      // create report
+      // moderator creates a report on the public survey
       const createRes = await request(app.getHttpServer())
         .post("/v1/reports")
-        .set("Authorization", `Bearer ${accessToken}`)
+        .set("Authorization", `Bearer ${moderatorToken}`)
         .send({ survey_id: surveyId, reason: "Test report reason" })
         .expect(201)
 
       expect(createRes.body.survey_id ?? createRes.body.surveyId ?? createRes.body.id).toBeTruthy()
 
-      // list reports — should include our newly created one
+      // moderator lists reports — should include our newly created one
       const listRes = await request(app.getHttpServer())
         .get("/v1/reports")
-        .set("Authorization", `Bearer ${accessToken}`)
+        .set("Authorization", `Bearer ${moderatorToken}`)
         .expect(200)
 
       const reports = Array.isArray(listRes.body) ? listRes.body : (listRes.body.items ?? [])
