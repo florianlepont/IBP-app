@@ -11,7 +11,12 @@ import { UsersModule } from "./users/users.module"
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: process.env.NODE_ENV === "test" ? 10_000 : 10,
+      },
+    ]),
     DatabaseModule,
     AuthModule,
     UsersModule,

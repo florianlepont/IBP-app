@@ -216,6 +216,17 @@ describe("Surveys idempotency (e2e)", () => {
 
     const accessToken = login.body.access_token as string
     const surveyId = `e2e-submit-valid-${Date.now()}`
+    const lat = 48.643
+    const lng = 1.829
+
+    const resolved = await request(app.getHttpServer())
+      .get("/v1/parcels/resolve")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .query({ lat: String(lat), lng: String(lng) })
+      .expect(200)
+
+    const parcelId = resolved.body.parcel?.parcel_id as string
+    expect(parcelId).toBeTruthy()
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -226,6 +237,9 @@ describe("Surveys idempotency (e2e)", () => {
         site_name: "Valid Forest",
         status: "draft",
         visibility: "private",
+        parcel_id: parcelId,
+        observation_year: 2025,
+        version_number: 1,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: {
@@ -240,7 +254,7 @@ describe("Surveys idempotency (e2e)", () => {
           I: 2,
           J: 2,
         },
-        location: { source: "gps", lat: 48.643, lng: 1.829 },
+        location: { source: "gps", lat, lng },
       })
       .expect(201)
 
