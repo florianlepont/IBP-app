@@ -66,7 +66,6 @@ export class AuthService {
     displayName: string,
   ): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser }> {
     const normalizedEmail = email.trim().toLowerCase()
-    const normalizedDisplayName = displayName.trim()
 
     if (!normalizedEmail || !password) {
       throw new BadRequestException("Email and password are required")
@@ -77,6 +76,7 @@ export class AuthService {
       throw new ConflictException("Account already exists")
     }
 
+    const normalizedDisplayName = (displayName ?? "").trim()
     const user = await this.createUser(normalizedEmail, password, normalizedDisplayName)
     const refreshToken = await this.issueRefreshToken(user.id)
 
@@ -114,6 +114,12 @@ export class AuthService {
     try {
       await client.query("BEGIN")
 
+      await client.query(
+        `INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [nextSessionId, userId, this.hashToken(nextRefreshToken), nextRefreshExpiresAt],
+      )
+
       const revoked = await client.query(
         `UPDATE auth_sessions
          SET revoked_at = NOW(),
@@ -126,12 +132,6 @@ export class AuthService {
       if (!revoked.rowCount) {
         throw new UnauthorizedException("Refresh session already used")
       }
-
-      await client.query(
-        `INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at)
-         VALUES ($1, $2, $3, $4)`,
-        [nextSessionId, userId, this.hashToken(nextRefreshToken), nextRefreshExpiresAt],
-      )
 
       await client.query("COMMIT")
     } catch (error) {
