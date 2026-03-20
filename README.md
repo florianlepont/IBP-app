@@ -1,26 +1,43 @@
-# IBP App Monorepo
+# IBP App — Etats-Sauvages
 
-IBP field survey app workspace with:
-- `mobile/`: Expo + React Native + TypeScript
-- `api/`: NestJS + PostgreSQL
-- `infra/`: local Docker services (PostgreSQL, MinIO)
-- `specifications/`: product and technical documents
+A mobile field survey application for assessing forest biodiversity using the **IBP method** (Indice de Biodiversité Potentielle), designed for French metropolitan forest stands.
 
-## Prerequisites
+Field surveyors use the app to fill in the 10 IBP factors, attach photos, link surveys to cadastral parcels, and sync data back to a central API — all with offline-first support.
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Mobile | React Native + Expo + TypeScript |
+| API | NestJS + PostgreSQL |
+| Local infra | Docker (PostgreSQL + MinIO) |
+| Object storage | MinIO (local) / S3-compatible (production) |
+| Cadastral data | IGN reverse geocoding + API Carto |
+
+## Repository layout
+
+```
+.
+├── api/            # NestJS backend (REST API + migrations)
+├── mobile/         # Expo mobile app (iOS + Android)
+├── infra/          # Local Docker services
+└── specifications/ # Product and technical documents
+```
+
+---
+
+## Getting started
+
+### Prerequisites
+
 - Node.js 20+
 - npm 10+
 - Docker Desktop
 
-## Repository layout
-```text
-.
-├── api
-├── infra
-├── mobile
-└── specifications
-```
+### Setup
 
-## Setup
 ```bash
 npm install
 cp api/.env.example api/.env
@@ -28,146 +45,177 @@ cp mobile/.env.example mobile/.env
 docker compose -f infra/docker-compose.yml up -d
 ```
 
-## Run locally
-Terminal 1:
+### Run locally
+
+**Terminal 1 — API:**
 ```bash
 npm run dev:api:migrated
 ```
 
-Terminal 2:
+**Terminal 2 — Mobile:**
 ```bash
 npm run dev:mobile
 ```
 
-Quick health check:
+**Health check:**
 - API: `http://localhost:3000/v1/health`
-- Mobile: login and trigger a sync flow from the app
+- Mobile: open the app, tap **Check API /health**
+
+---
+
+## Environment variables
+
+### API (`api/.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | HTTP port (default: 3000) |
+| `POSTGRES_HOST/PORT/USER/PASSWORD/DB` | PostgreSQL connection |
+| `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET` | JWT secrets |
+| `OBJECT_STORAGE_MODE` | `local` or `minio` |
+| `ATTACHMENTS_UPLOAD_DIR` | Local upload path (when mode = local) |
+| `SMTP_ENABLED`, `SMTP_HOST/PORT/USER/PASS/FROM` | Email confirmation |
+| `WEB_CONFIRM_EMAIL_BASE_URL` | Email confirmation link base URL |
+| `CADASTRE_PROVIDER` | `synthetic` (offline) or `ign` (real parcels) |
+| `CORS_ORIGIN` | Allowed origin for CORS |
+
+### Mobile (`mobile/.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `EXPO_PUBLIC_API_URL` | Backend API URL |
+| `EXPO_PUBLIC_API_TIMEOUT_MS` | Request timeout in ms (optional) |
+
+Common values for `EXPO_PUBLIC_API_URL`:
+- iOS Simulator: `http://localhost:3000/v1`
+- Android Emulator: `http://10.0.2.2:3000/v1`
+- Physical device (same Wi-Fi): `http://<YOUR_LAN_IP>:3000/v1`
+
+---
 
 ## Quality checks
-API:
+
 ```bash
+# API
 npm --workspace api run build
 npm --workspace api run test:unit
 npm --workspace api run test:e2e
-```
 
-Mobile:
-```bash
+# Mobile
 npm --workspace mobile run typecheck
 npm --workspace mobile run test:unit
-```
 
-Coverage:
-```bash
+# Coverage reports
 npm run test:coverage:api
 npm run test:coverage:mobile
 ```
 
-## Useful scripts
-Root:
-```bash
-npm run migrate:api
-npm run dev:api
-npm run dev:mobile
-```
+---
 
-Workspaces:
+## Useful scripts
+
 ```bash
+# Root shortcuts
+npm run migrate:api        # Run DB migrations
+npm run dev:api            # Start API (no migration)
+npm run dev:api:migrated   # Migrate then start API
+npm run dev:mobile         # Start Expo dev server
+
+# Workspace-level
 npm --workspace api run migrate
 npm --workspace api run start:dev
 npm --workspace mobile run start
 ```
 
-## Main environment variables
-API (`api/.env`):
-- `PORT`
-- `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
-- `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`
-- `OBJECT_STORAGE_MODE` (`local` or `minio`)
-- `ATTACHMENTS_UPLOAD_DIR`
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `WEB_CONFIRM_EMAIL_BASE_URL`
-
-Mobile (`mobile/.env`):
-- `EXPO_PUBLIC_API_URL`
+---
 
 ## Specifications
-Recommended starting points:
+
+Key documents to get oriented:
+
+- [Technical Architecture V1](specifications/technical/technical-architecture-v1.md)
 - [API Contract V1](specifications/technical/api-contract-v1.md)
 - [Data Contract V1](specifications/technical/data-contract-v1.md)
-- [Technical Architecture V1](specifications/technical/technical-architecture-v1.md)
 - [IBP Form Spec](specifications/epics/ibp_form_spec.md)
 
-## Notes
-- This README intentionally focuses on onboarding and operations.
-- Detailed feature history and implementation notes should stay in `specifications/`.
+Detailed feature specs and implementation notes live in `specifications/`.
 
 ---
 
-## Roadmap déploiement
+## Deployment roadmap
 
-### Étape 1 — Sécuriser l'API avant mise en prod
-- [x] Désactiver `DEBUG_DATA_RESET_ENABLED` en prod (default changé à `false`)
-- [x] Désactiver `AUTH_DEV_EXPOSE_EMAIL_TOKEN` en prod (désactivé automatiquement si `NODE_ENV=production`)
-- [ ] Remplacer `ACCESS_TOKEN_SECRET` et `REFRESH_TOKEN_SECRET` par des secrets forts (voir `api/.env.production.example`)
-- [ ] Configurer SMTP (confirmation email) — voir `api/.env.production.example` pour Brevo
-- [x] Ajouter rate limiting sur les endpoints auth (5 req/min sur login et register)
-- [x] Restreindre CORS au domaine de production (variable `CORS_ORIGIN`)
+### Step 1 — Secure the API before production
 
-### Étape 2 — Infrastructure (OVH VPS)
-- [ ] Créer un VPS OVH (Value, 2GB RAM, ~3.5€/mois)
-- [ ] Installer Node.js 20 + PM2 sur le serveur
-- [ ] Installer et configurer PostgreSQL
-- [ ] Configurer OVH Object Storage (S3-compatible) pour les pièces jointes
-- [ ] Obtenir un nom de domaine et configurer le DNS
-- [ ] Mettre en place HTTPS avec Certbot (Let's Encrypt)
-- [ ] Déployer l'API via git + `npm run build` + `pm2 start`
+- [x] Disable `DEBUG_DATA_RESET_ENABLED` in production (default changed to `false`)
+- [x] Disable `AUTH_DEV_EXPOSE_EMAIL_TOKEN` in production (auto-disabled when `NODE_ENV=production`)
+- [ ] Replace `ACCESS_TOKEN_SECRET` and `REFRESH_TOKEN_SECRET` with strong secrets (see `api/.env.production.example`)
+- [ ] Configure SMTP for email confirmation (see `api/.env.production.example` for Brevo)
+- [x] Add rate limiting on auth endpoints (5 req/min on login and register)
+- [x] Restrict CORS to the production domain (`CORS_ORIGIN` variable)
 
-### Étape 3 — RGPD et légal
-- [ ] Rédiger la politique de confidentialité (modèles CNIL pour assos)
-- [ ] Rédiger les mentions légales
-- [ ] Vérifier la présence d'un endpoint de suppression de compte (droit à l'effacement)
-- [ ] Constituer le registre des traitements (doc interne)
+### Step 2 — Infrastructure (OVH VPS)
 
-### Étape 4 — App mobile (stores)
-- [ ] Créer un compte Expo EAS (`eas login`)
-- [ ] Configurer `eas.json` pour les builds iOS et Android
-- [ ] Apple Developer Program (99$/an — obligatoire pour iOS)
-- [ ] Google Play Console (25$ one-time — obligatoire pour Android)
-- [ ] Intégrer la politique de confidentialité dans l'app (lien dans les paramètres)
-- [ ] Build de production : `eas build --platform all`
-- [ ] Soumission stores : `eas submit`
+- [ ] Create an OVH VPS (Value, 2 GB RAM, ~€3.50/month)
+- [ ] Install Node.js 20 + PM2 on the server
+- [ ] Install and configure PostgreSQL
+- [ ] Configure OVH Object Storage (S3-compatible) for attachments
+- [ ] Obtain a domain name and configure DNS
+- [ ] Set up HTTPS with Certbot (Let's Encrypt)
+- [ ] Deploy the API via git + `npm run build` + `pm2 start`
 
-### Étape 5 — Mises à jour continues
-- [ ] Configurer EAS Update pour les mises à jour JS sans repasser par les stores
-- [ ] Documenter le process de déploiement (`git push` → rebuild → `pm2 reload`)
+### Step 3 — GDPR & legal
+
+- [ ] Write a privacy policy (CNIL templates for associations)
+- [ ] Write legal notices
+- [ ] Verify account deletion endpoint (right to erasure)
+- [ ] Maintain a data processing register (internal document)
+
+### Step 4 — Mobile app (stores)
+
+- [ ] Create an Expo EAS account (`eas login`)
+- [ ] Configure `eas.json` for iOS and Android builds
+- [ ] Apple Developer Program ($99/year — required for iOS)
+- [ ] Google Play Console ($25 one-time — required for Android)
+- [ ] Add privacy policy link in the app settings
+- [ ] Production build: `eas build --platform all`
+- [ ] Store submission: `eas submit`
+
+### Step 5 — Continuous updates
+
+- [ ] Configure EAS Update for JS-only updates (no store re-submission)
+- [ ] Document the deployment process (`git push` → rebuild → `pm2 reload`)
 
 ---
 
-## Estimation des coûts de production
+## Production cost estimate
 
-### Coûts uniques
-| Poste | Coût |
-|-------|------|
-| Google Play Console | ~25 € |
-| **Total** | **~25 €** |
+### One-time costs
 
-### Coûts récurrents
-| Poste | Coût |
-|-------|------|
-| OVH VPS (2 GB RAM) | ~3,50 €/mois |
-| Nom de domaine | ~1 €/mois (~12 €/an) |
-| Apple Developer Program | 99 €/an |
-| OVH Object Storage (photos) | <1 €/mois (pay-as-you-go) |
-| **Total mensuel moyen** | **~13 €/mois** |
-| **Total annuel** | **~155 €/an** |
+| Item | Cost |
+|------|------|
+| Google Play Console | ~€25 |
+| **Total** | **~€25** |
 
-### Ce qui est gratuit
-- PostgreSQL — inclus sur le VPS
-- HTTPS — Let's Encrypt (gratuit)
-- SMTP — Brevo (ex-Sendinblue) : gratuit jusqu'à 300 emails/jour
-- EAS Build / EAS Update — tier gratuit suffisant pour un solo dev
+### Recurring costs
 
-### Première année complète
-~25 € (Google) + 42 € (VPS) + 12 € (domaine) + 99 € (Apple) = **~178 €**
+| Item | Cost |
+|------|------|
+| OVH VPS (2 GB RAM) | ~€3.50/month |
+| Domain name | ~€1/month (~€12/year) |
+| Apple Developer Program | €99/year |
+| OVH Object Storage (photos) | <€1/month (pay-as-you-go) |
+| **Monthly average** | **~€13/month** |
+| **Annual total** | **~€155/year** |
 
-> **Note** : Si l'app est portée par une association loi 1901, Apple propose un programme non-profit qui exonère les 99 €/an. Cela ramènerait les coûts à ~55 €/an après la première année.
+### Free tier
+
+- PostgreSQL — included on the VPS
+- HTTPS — Let's Encrypt (free)
+- SMTP — Brevo (ex-Sendinblue): free up to 300 emails/day
+- EAS Build / EAS Update — free tier sufficient for a solo developer
+
+### First full year
+
+~€25 (Google) + €42 (VPS) + €12 (domain) + €99 (Apple) = **~€178**
+
+> **Note:** If the app is run by a French non-profit (association loi 1901), Apple's non-profit program may waive the €99/year fee, bringing annual costs down to ~€55/year after the first year.
