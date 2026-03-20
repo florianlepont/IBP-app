@@ -14,7 +14,7 @@ import { UsersModule } from "./users/users.module"
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,
-        limit: process.env.NODE_ENV === "test" ? 10_000 : 10,
+        limit: process.env.NODE_ENV === "production" ? 10 : 10_000,
       },
     ]),
     DatabaseModule,
