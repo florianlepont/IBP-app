@@ -6,5 +6,4 @@ module.exports = {
   testMatch: ['**/*.spec.ts'],
   testPathIgnorePatterns: ['\\.e2e-spec\\.ts$'],
   moduleFileExtensions: ['ts', 'js', 'json'],
-  verbose: true
 };
