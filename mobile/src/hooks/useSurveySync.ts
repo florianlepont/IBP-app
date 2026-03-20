@@ -1,40 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
-import {
-  SurveyDetailResponse,
-  SurveyDetailTab,
-  SurveyEventItem
-} from '../app/types';
-import {
-  loadSurveyDetail,
-  loadSurveyEvents,
-  resetIbpData,
-  resetUserData,
-} from '../api/ibp-api';
-import {
-  clearLocalIbpData,
-  LocalSurvey,
-} from '../storage';
-import { createInitialOperationStatus, updateOperationStatus } from './operation-status';
-import { AUTH_REQUIRED_ERROR, useAuthSession } from './useAuthSession';
-import { useSurveySyncNetwork } from './survey-sync/useSurveySyncNetwork';
-import { useSurveySyncProfile } from './survey-sync/useSurveySyncProfile';
-import { useSurveySyncSurveyOperations } from './survey-sync/useSurveySyncSurveyOperations';
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Alert } from "react-native"
+import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from "../app/types"
+import { loadSurveyDetail, loadSurveyEvents, resetIbpData, resetUserData } from "../api/ibp-api"
+import { clearLocalIbpData, LocalSurvey } from "../storage"
+import { createInitialOperationStatus, updateOperationStatus } from "./operation-status"
+import { AUTH_REQUIRED_ERROR, useAuthSession } from "./useAuthSession"
+import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
+import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
+import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
 
 type UseSurveySyncParams = {
-  apiUrl: string;
-  email: string;
-  password: string;
-  displayName: string;
-  surveys: LocalSurvey[];
-  selectedSurveyId: string | null;
-  surveyDetailTab: SurveyDetailTab;
-  editingSurveyId: string | null;
-  refreshLocalSurveys: () => Promise<void>;
-  refreshLocalAttachments: () => Promise<void>;
-  onCloseSurveyDetail: () => void;
-  onStopEditing: () => void;
-};
+  apiUrl: string
+  email: string
+  password: string
+  displayName: string
+  surveys: LocalSurvey[]
+  selectedSurveyId: string | null
+  surveyDetailTab: SurveyDetailTab
+  editingSurveyId: string | null
+  refreshLocalSurveys: () => Promise<void>
+  refreshLocalAttachments: () => Promise<void>
+  onCloseSurveyDetail: () => void
+  onStopEditing: () => void
+}
 
 export function useSurveySync({
   apiUrl,
@@ -48,30 +36,40 @@ export function useSurveySync({
   refreshLocalSurveys,
   refreshLocalAttachments,
   onCloseSurveyDetail,
-  onStopEditing
+  onStopEditing,
 }: UseSurveySyncParams) {
-  const [statusText, setStatusText] = useState<string>('Ready');
-  const [operationStatus, setOperationStatus] = useState(createInitialOperationStatus('Ready'));
-  const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({});
-  const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null);
-  const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({});
-  const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null);
-  const detailAutoLoadCooldownUntilRef = useRef<Record<string, number>>({});
+  const [statusText, setStatusText] = useState<string>("Ready")
+  const [operationStatus, setOperationStatus] = useState(createInitialOperationStatus("Ready"))
+  const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({})
+  const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null)
+  const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({})
+  const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null)
+  const detailAutoLoadCooldownUntilRef = useRef<Record<string, number>>({})
 
   const clearSurveySessionState = useCallback((): void => {
-    setSurveyDetails({});
-    setSurveyEvents({});
-    detailAutoLoadCooldownUntilRef.current = {};
-  }, []);
+    setSurveyDetails({})
+    setSurveyEvents({})
+    detailAutoLoadCooldownUntilRef.current = {}
+  }, [])
 
-  const reportStatus = useCallback((scope: 'session' | 'auth' | 'profile' | 'sync' | 'survey' | 'attachment' | 'debug', state: 'idle' | 'running' | 'success' | 'error', message: string): void => {
-    setStatusText(message);
-    setOperationStatus((current) => updateOperationStatus(current, scope, state, message));
-  }, []);
+  const reportStatus = useCallback(
+    (
+      scope: "session" | "auth" | "profile" | "sync" | "survey" | "attachment" | "debug",
+      state: "idle" | "running" | "success" | "error",
+      message: string,
+    ): void => {
+      setStatusText(message)
+      setOperationStatus((current) => updateOperationStatus(current, scope, state, message))
+    },
+    [],
+  )
 
-  const setStatus = useCallback((message: string): void => {
-    reportStatus('session', 'idle', message);
-  }, [reportStatus]);
+  const setStatus = useCallback(
+    (message: string): void => {
+      reportStatus("session", "idle", message)
+    },
+    [reportStatus],
+  )
 
   const {
     accessToken,
@@ -87,15 +85,15 @@ export function useSurveySync({
     handleLoadMyProfile,
     handleLogin,
     handleRegister,
-    handleLogout
+    handleLogout,
   } = useAuthSession({
     apiUrl,
     email,
     password,
     displayName,
     reportStatus,
-    onSessionCleared: clearSurveySessionState
-  });
+    onSessionCleared: clearSurveySessionState,
+  })
 
   const {
     profileUpdating,
@@ -103,7 +101,7 @@ export function useSurveySync({
     handleConfirmEmailChange,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
-    handleRemoveProfilePicture
+    handleRemoveProfilePicture,
   } = useSurveySyncProfile({
     apiUrl,
     currentUser,
@@ -111,170 +109,175 @@ export function useSurveySync({
     clearSession,
     withAuthRetry,
     handleLoadMyProfile,
-    setStatus
-  });
+    setStatus,
+  })
 
-  const {
-    handleSync,
-    handlePullChanges,
-    handleReportSurvey,
-    maybeAutoSync
-  } = useSurveySyncNetwork({
-    apiUrl,
-    accessToken,
-    refreshToken,
-    surveys,
-    clearSession,
-    withAuthRetry,
-    refreshLocalSurveys,
-    refreshLocalAttachments,
-    setStatus
-  });
+  const { handleSync, handlePullChanges, handleReportSurvey, maybeAutoSync } = useSurveySyncNetwork(
+    {
+      apiUrl,
+      accessToken,
+      refreshToken,
+      surveys,
+      clearSession,
+      withAuthRetry,
+      refreshLocalSurveys,
+      refreshLocalAttachments,
+      setStatus,
+    },
+  )
 
   const handleDebugResetIbpData = async (): Promise<void> => {
-    Alert.alert('Debug reset IBP data', 'This will delete all IBP surveys/events/attachments on server and clear local IBP data.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reset',
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            try {
-              setStatus('Debug reset IBP data in progress...');
-              const result = await withAuthRetry((token) => resetIbpData(apiUrl, token));
+    Alert.alert(
+      "Debug reset IBP data",
+      "This will delete all IBP surveys/events/attachments on server and clear local IBP data.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                setStatus("Debug reset IBP data in progress...")
+                const result = await withAuthRetry((token) => resetIbpData(apiUrl, token))
 
-              await clearLocalIbpData();
-              await refreshLocalSurveys();
-              await refreshLocalAttachments();
-              setSurveyDetails({});
-              setSurveyEvents({});
-              onCloseSurveyDetail();
-              if (editingSurveyId) {
-                onStopEditing();
+                await clearLocalIbpData()
+                await refreshLocalSurveys()
+                await refreshLocalAttachments()
+                setSurveyDetails({})
+                setSurveyEvents({})
+                onCloseSurveyDetail()
+                if (editingSurveyId) {
+                  onStopEditing()
+                }
+                setStatus(
+                  `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`,
+                )
+              } catch (error) {
+                if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+                  await clearSession()
+                  setStatus("Login required before debug reset")
+                  return
+                }
+                setStatus(`Debug reset IBP error: ${(error as Error).message}`)
               }
-              setStatus(
-                `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`
-              );
-            } catch (error) {
-              if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-                await clearSession();
-                setStatus('Login required before debug reset');
-                return;
-              }
-              setStatus(`Debug reset IBP error: ${(error as Error).message}`);
-            }
-          })();
-        }
-      }
-    ]);
-  };
+            })()
+          },
+        },
+      ],
+    )
+  }
 
   const handleDebugResetUserData = async (): Promise<void> => {
-    Alert.alert('Debug reset user data', 'This will delete all users on server and clear your local session and IBP data.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reset',
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            try {
-              setStatus('Debug reset user data in progress...');
-              const result = await withAuthRetry((token) => resetUserData(apiUrl, token));
+    Alert.alert(
+      "Debug reset user data",
+      "This will delete all users on server and clear your local session and IBP data.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                setStatus("Debug reset user data in progress...")
+                const result = await withAuthRetry((token) => resetUserData(apiUrl, token))
 
-              await clearLocalIbpData();
-              onCloseSurveyDetail();
-              if (editingSurveyId) {
-                onStopEditing();
+                await clearLocalIbpData()
+                onCloseSurveyDetail()
+                if (editingSurveyId) {
+                  onStopEditing()
+                }
+                await clearSession()
+                await refreshLocalSurveys()
+                await refreshLocalAttachments()
+                setStatus(
+                  `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`,
+                )
+              } catch (error) {
+                if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+                  await clearSession()
+                  setStatus("Login required before debug reset")
+                  return
+                }
+                setStatus(`Debug reset user error: ${(error as Error).message}`)
               }
-              await clearSession();
-              await refreshLocalSurveys();
-              await refreshLocalAttachments();
-              setStatus(
-                `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`
-              );
-            } catch (error) {
-              if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-                await clearSession();
-                setStatus('Login required before debug reset');
-                return;
-              }
-              setStatus(`Debug reset user error: ${(error as Error).message}`);
-            }
-          })();
-        }
-      }
-    ]);
-  };
+            })()
+          },
+        },
+      ],
+    )
+  }
   const handleLoadCanonicalDetails = useCallback(
     async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
-      const silent = options?.silent ?? false;
+      const silent = options?.silent ?? false
 
       try {
-        setDetailsLoadingSurveyId(surveyId);
+        setDetailsLoadingSurveyId(surveyId)
         if (!silent) {
-          setStatus(`Loading canonical details for ${surveyId}...`);
+          setStatus(`Loading canonical details for ${surveyId}...`)
         }
-        const payload = await withAuthRetry((token) => loadSurveyDetail(apiUrl, token, surveyId));
+        const payload = await withAuthRetry((token) => loadSurveyDetail(apiUrl, token, surveyId))
 
-        setSurveyDetails((previous) => ({ ...previous, [surveyId]: payload }));
+        setSurveyDetails((previous) => ({ ...previous, [surveyId]: payload }))
         if (detailAutoLoadCooldownUntilRef.current[surveyId]) {
-          delete detailAutoLoadCooldownUntilRef.current[surveyId];
+          delete detailAutoLoadCooldownUntilRef.current[surveyId]
         }
         if (!silent) {
-          setStatus(`Canonical details loaded for ${surveyId}`);
+          setStatus(`Canonical details loaded for ${surveyId}`)
         }
       } catch (error) {
         // Prevent endless request loops on non-fetchable surveys (local-only or server errors).
-        detailAutoLoadCooldownUntilRef.current[surveyId] = Date.now() + 60_000;
+        detailAutoLoadCooldownUntilRef.current[surveyId] = Date.now() + 60_000
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-          await clearSession();
+          await clearSession()
           if (!silent) {
-            setStatus('Login required before loading canonical details');
+            setStatus("Login required before loading canonical details")
           }
-          return;
+          return
         }
         if (!silent) {
-          setStatus(`Load detail error: ${(error as Error).message}`);
+          setStatus(`Load detail error: ${(error as Error).message}`)
         }
       } finally {
-        setDetailsLoadingSurveyId((current) => (current === surveyId ? null : current));
+        setDetailsLoadingSurveyId((current) => (current === surveyId ? null : current))
       }
     },
-    [apiUrl, clearSession, setStatus, withAuthRetry]
-  );
+    [apiUrl, clearSession, setStatus, withAuthRetry],
+  )
 
   const handleLoadSurveyEvents = useCallback(
     async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
-      const silent = options?.silent ?? false;
+      const silent = options?.silent ?? false
 
       try {
-        setEventsLoadingSurveyId(surveyId);
+        setEventsLoadingSurveyId(surveyId)
         if (!silent) {
-          setStatus(`Loading events for ${surveyId}...`);
+          setStatus(`Loading events for ${surveyId}...`)
         }
-        const payload = await withAuthRetry((token) => loadSurveyEvents(apiUrl, token, surveyId));
+        const payload = await withAuthRetry((token) => loadSurveyEvents(apiUrl, token, surveyId))
 
-        setSurveyEvents((previous) => ({ ...previous, [surveyId]: payload.items ?? [] }));
+        setSurveyEvents((previous) => ({ ...previous, [surveyId]: payload.items ?? [] }))
         if (!silent) {
-          setStatus(`Events loaded for ${surveyId}`);
+          setStatus(`Events loaded for ${surveyId}`)
         }
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-          await clearSession();
+          await clearSession()
           if (!silent) {
-            setStatus('Login required before loading survey events');
+            setStatus("Login required before loading survey events")
           }
-          return;
+          return
         }
         if (!silent) {
-          setStatus(`Load events error: ${(error as Error).message}`);
+          setStatus(`Load events error: ${(error as Error).message}`)
         }
       } finally {
-        setEventsLoadingSurveyId((current) => (current === surveyId ? null : current));
+        setEventsLoadingSurveyId((current) => (current === surveyId ? null : current))
       }
     },
-    [apiUrl, clearSession, setStatus, withAuthRetry]
-  );
+    [apiUrl, clearSession, setStatus, withAuthRetry],
+  )
 
   const {
     handleSubmitSurvey,
@@ -284,7 +287,7 @@ export function useSurveySync({
     confirmDeleteSurvey,
     handleQueueAttachmentFromLibrary,
     handleQueueAttachmentFromCamera,
-    handleDeleteAttachment
+    handleDeleteAttachment,
   } = useSurveySyncSurveyOperations({
     apiUrl,
     accessToken,
@@ -301,48 +304,52 @@ export function useSurveySync({
     onStopEditing,
     setStatus,
     maybeAutoSync,
-    handleLoadCanonicalDetails
-  });
+    handleLoadCanonicalDetails,
+  })
 
   useEffect(() => {
     if (!selectedSurveyId || !accessToken) {
-      return;
+      return
     }
-    const selectedSurvey = surveys.find((survey) => survey.id === selectedSurveyId);
+    const selectedSurvey = surveys.find((survey) => survey.id === selectedSurveyId)
     if (!selectedSurvey) {
-      return;
+      return
     }
-    if (selectedSurvey.status !== 'submitted' && selectedSurvey.status !== 'expired' && selectedSurvey.sync_state !== 'synced') {
-      return;
+    if (
+      selectedSurvey.status !== "submitted" &&
+      selectedSurvey.status !== "expired" &&
+      selectedSurvey.sync_state !== "synced"
+    ) {
+      return
     }
     if (surveyDetails[selectedSurveyId]) {
-      return;
+      return
     }
     if (detailsLoadingSurveyId === selectedSurveyId) {
-      return;
+      return
     }
-    const cooldownUntil = detailAutoLoadCooldownUntilRef.current[selectedSurveyId] ?? 0;
+    const cooldownUntil = detailAutoLoadCooldownUntilRef.current[selectedSurveyId] ?? 0
     if (cooldownUntil > Date.now()) {
-      return;
+      return
     }
-    void handleLoadCanonicalDetails(selectedSurveyId, { silent: true });
-  }, [selectedSurveyId, accessToken, surveys, surveyDetails, detailsLoadingSurveyId]);
+    void handleLoadCanonicalDetails(selectedSurveyId, { silent: true })
+  }, [selectedSurveyId, accessToken, surveys, surveyDetails, detailsLoadingSurveyId])
 
   useEffect(() => {
     if (!selectedSurveyId || !accessToken) {
-      return;
+      return
     }
-    if (surveyDetailTab !== 'events') {
-      return;
+    if (surveyDetailTab !== "events") {
+      return
     }
     if (surveyEvents[selectedSurveyId]) {
-      return;
+      return
     }
     if (eventsLoadingSurveyId === selectedSurveyId) {
-      return;
+      return
     }
-    void handleLoadSurveyEvents(selectedSurveyId, { silent: true });
-  }, [selectedSurveyId, accessToken, surveyDetailTab, surveyEvents, eventsLoadingSurveyId]);
+    void handleLoadSurveyEvents(selectedSurveyId, { silent: true })
+  }, [selectedSurveyId, accessToken, surveyDetailTab, surveyEvents, eventsLoadingSurveyId])
 
   return {
     accessToken,
@@ -381,6 +388,6 @@ export function useSurveySync({
     handleQueueAttachmentFromCamera,
     handleDeleteAttachment,
     handleLoadCanonicalDetails,
-    handleLoadSurveyEvents
-  };
+    handleLoadSurveyEvents,
+  }
 }

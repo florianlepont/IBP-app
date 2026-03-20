@@ -1,17 +1,17 @@
-import { Button, Text, TextInput, View } from 'react-native';
-import { styles } from '../app/styles';
+import { Button, Text, TextInput, View } from "react-native"
+import { styles } from "../app/styles"
 
 type SettingsScreenProps = {
-  apiUrl: string;
-  onApiUrlChange: (value: string) => void;
-  onSync: () => Promise<void>;
-  onPullChanges: () => Promise<void>;
-  onRefreshLocalList: () => Promise<void>;
-  onRefreshLocalAttachments: () => Promise<void>;
-  onDebugResetIbpData: () => Promise<void>;
-  onDebugResetUserData: () => Promise<void>;
-  status: string;
-};
+  apiUrl: string
+  onApiUrlChange: (value: string) => void
+  onSync: () => Promise<void>
+  onPullChanges: () => Promise<void>
+  onRefreshLocalList: () => Promise<void>
+  onRefreshLocalAttachments: () => Promise<void>
+  onDebugResetIbpData: () => Promise<void>
+  onDebugResetUserData: () => Promise<void>
+  status: string
+}
 
 export function SettingsScreen({
   apiUrl,
@@ -22,12 +22,18 @@ export function SettingsScreen({
   onRefreshLocalAttachments,
   onDebugResetIbpData,
   onDebugResetUserData,
-  status
+  status,
 }: SettingsScreenProps) {
   return (
     <View style={styles.card}>
       <Text style={styles.label}>API URL</Text>
-      <TextInput style={styles.input} value={apiUrl} onChangeText={onApiUrlChange} autoCapitalize="none" autoCorrect={false} />
+      <TextInput
+        style={styles.input}
+        value={apiUrl}
+        onChangeText={onApiUrlChange}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
 
       <Button title="Sync now (push + pull)" onPress={() => void onSync()} />
       <View style={styles.spacer} />
@@ -44,5 +50,5 @@ export function SettingsScreen({
 
       <Text style={styles.status}>{status}</Text>
     </View>
-  );
+  )
 }

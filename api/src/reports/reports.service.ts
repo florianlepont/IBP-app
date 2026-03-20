@@ -1,15 +1,20 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { AuthenticatedUser } from '../auth/auth.types';
-import { DatabaseService } from '../database/database.service';
-import { CreateReportBody, PatchReportBody, ReportRow, ReportStatus } from './reports.types';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common"
+import { randomUUID } from "crypto"
+import { AuthenticatedUser } from "../auth/auth.types"
+import { DatabaseService } from "../database/database.service"
+import { CreateReportBody, PatchReportBody, ReportRow, ReportStatus } from "./reports.types"
 
 type ReportedSurveyRow = {
-  id: string;
-  user_id: string;
-  visibility: 'private' | 'public';
-  deleted_at: string | null;
-};
+  id: string
+  user_id: string
+  visibility: "private" | "public"
+  deleted_at: string | null
+}
 
 @Injectable()
 export class ReportsService {
@@ -17,65 +22,62 @@ export class ReportsService {
 
   async createReport(
     user: AuthenticatedUser,
-    body: CreateReportBody
+    body: CreateReportBody,
   ): Promise<{ id: string; status: ReportStatus }> {
-    const surveyId = body.survey_id?.trim();
+    const surveyId = body.survey_id?.trim()
     if (!surveyId) {
-      throw new BadRequestException('survey_id is required');
+      throw new BadRequestException("survey_id is required")
     }
 
-    const reason = body.reason?.trim();
+    const reason = body.reason?.trim()
     if (!reason) {
-      throw new BadRequestException('reason is required');
+      throw new BadRequestException("reason is required")
     }
 
-    const survey = await this.findSurveyForReport(surveyId);
+    const survey = await this.findSurveyForReport(surveyId)
     if (!survey) {
-      throw new NotFoundException('Survey not found');
+      throw new NotFoundException("Survey not found")
     }
     if (survey.deleted_at) {
-      throw new NotFoundException('Survey not found');
+      throw new NotFoundException("Survey not found")
     }
     if (!this.canReportSurvey(user, survey)) {
-      throw new ForbiddenException('Survey is not reportable by this user');
+      throw new ForbiddenException("Survey is not reportable by this user")
     }
 
-    const reportId = randomUUID();
-    const result = await this.db.query<Pick<ReportRow, 'id' | 'status'>>(
+    const reportId = randomUUID()
+    const result = await this.db.query<Pick<ReportRow, "id" | "status">>(
       `INSERT INTO reports (id, survey_id, reporter_user_id, reason, status)
        VALUES ($1, $2, $3, $4, 'open')
        RETURNING id, status`,
-      [reportId, surveyId, user.id, reason]
-    );
+      [reportId, surveyId, user.id, reason],
+    )
 
     await this.db.query(
       `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
        VALUES ($1, $2, $3, 'reported', $4::jsonb)`,
-      [randomUUID(), surveyId, user.id, JSON.stringify({ report_id: reportId, reason })]
-    );
+      [randomUUID(), surveyId, user.id, JSON.stringify({ report_id: reportId, reason })],
+    )
 
-    const report = result.rows[0];
+    const report = result.rows[0]
     return {
       id: report.id,
-      status: report.status
-    };
+      status: report.status,
+    }
   }
 
-  async listReports(
-    user: AuthenticatedUser,
-    statusRaw?: string
-  ): Promise<{ items: ReportRow[] }> {
-    this.assertCanReviewReports(user);
+  async listReports(user: AuthenticatedUser, statusRaw?: string): Promise<{ items: ReportRow[] }> {
+    this.assertCanReviewReports(user)
 
-    const status = this.normalizeStatusFilter(statusRaw);
-    const filters: string[] = [];
-    const values: unknown[] = [];
+    const status = this.normalizeStatusFilter(statusRaw)
+    const filters: string[] = []
+    const values: unknown[] = []
     if (status) {
-      values.push(status);
-      filters.push(`status = $${values.length}`);
+      values.push(status)
+      filters.push(`status = $${values.length}`)
     }
 
-    const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+    const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : ""
     const result = await this.db.query<ReportRow>(
       `SELECT
          id,
@@ -89,44 +91,44 @@ export class ReportsService {
        FROM reports
        ${whereClause}
        ORDER BY created_at DESC, id DESC`,
-      values
-    );
+      values,
+    )
 
-    return { items: result.rows };
+    return { items: result.rows }
   }
 
   async reviewReport(
     user: AuthenticatedUser,
     reportId: string,
-    body: PatchReportBody
+    body: PatchReportBody,
   ): Promise<{ id: string; status: ReportStatus; reviewed_at: string | null }> {
-    this.assertCanReviewReports(user);
+    this.assertCanReviewReports(user)
 
-    const requestedStatus = (body.status ?? '').trim().toLowerCase();
-    if (requestedStatus !== 'reviewed') {
-      throw new BadRequestException('status must be reviewed');
+    const requestedStatus = (body.status ?? "").trim().toLowerCase()
+    if (requestedStatus !== "reviewed") {
+      throw new BadRequestException("status must be reviewed")
     }
 
-    const result = await this.db.query<Pick<ReportRow, 'id' | 'status' | 'reviewed_at'>>(
+    const result = await this.db.query<Pick<ReportRow, "id" | "status" | "reviewed_at">>(
       `UPDATE reports
        SET status = 'reviewed',
            reviewed_at = COALESCE(reviewed_at, NOW()),
            reviewed_by = COALESCE(reviewed_by, $2)
        WHERE id = $1
        RETURNING id, status, reviewed_at::text`,
-      [reportId, user.id]
-    );
+      [reportId, user.id],
+    )
 
-    const report = result.rows[0];
+    const report = result.rows[0]
     if (!report) {
-      throw new NotFoundException('Report not found');
+      throw new NotFoundException("Report not found")
     }
 
     return {
       id: report.id,
       status: report.status,
-      reviewed_at: report.reviewed_at
-    };
+      reviewed_at: report.reviewed_at,
+    }
   }
 
   private async findSurveyForReport(surveyId: string): Promise<ReportedSurveyRow | null> {
@@ -134,38 +136,38 @@ export class ReportsService {
       `SELECT id, user_id, visibility, deleted_at::text
        FROM surveys
        WHERE id = $1`,
-      [surveyId]
-    );
-    return result.rows[0] ?? null;
+      [surveyId],
+    )
+    return result.rows[0] ?? null
   }
 
   private canReportSurvey(user: AuthenticatedUser, survey: ReportedSurveyRow): boolean {
-    if (user.role === 'moderator' || user.role === 'admin') {
-      return true;
+    if (user.role === "moderator" || user.role === "admin") {
+      return true
     }
     if (survey.user_id === user.id) {
-      return false;
+      return false
     }
-    return survey.visibility === 'public';
+    return survey.visibility === "public"
   }
 
   private assertCanReviewReports(user: AuthenticatedUser): void {
-    if (user.role === 'moderator' || user.role === 'admin') {
-      return;
+    if (user.role === "moderator" || user.role === "admin") {
+      return
     }
-    throw new ForbiddenException('Moderator or admin role required');
+    throw new ForbiddenException("Moderator or admin role required")
   }
 
   private normalizeStatusFilter(statusRaw?: string): ReportStatus | null {
-    if (!statusRaw || typeof statusRaw !== 'string' || statusRaw.trim().length === 0) {
-      return null;
+    if (!statusRaw || typeof statusRaw !== "string" || statusRaw.trim().length === 0) {
+      return null
     }
 
-    const normalized = statusRaw.trim().toLowerCase();
-    if (normalized === 'open' || normalized === 'reviewed') {
-      return normalized;
+    const normalized = statusRaw.trim().toLowerCase()
+    if (normalized === "open" || normalized === "reviewed") {
+      return normalized
     }
 
-    throw new BadRequestException('status must be open or reviewed');
+    throw new BadRequestException("status must be open or reviewed")
   }
 }

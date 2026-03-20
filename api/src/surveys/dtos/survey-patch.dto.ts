@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString } from "class-validator"
 
 export class SurveyPatchDto {
   @IsOptional()
@@ -6,8 +6,8 @@ export class SurveyPatchDto {
   site_name?: string
 
   @IsOptional()
-  @IsEnum(['private', 'public'])
-  visibility?: 'private' | 'public'
+  @IsEnum(["private", "public"])
+  visibility?: "private" | "public"
 
   @IsOptional()
   @IsString()
@@ -31,8 +31,8 @@ export class SurveyPatchDto {
   previous_survey_id?: string
 
   @IsOptional()
-  @IsEnum(['ACA', 'M'])
-  region_version?: 'ACA' | 'M'
+  @IsEnum(["ACA", "M"])
+  region_version?: "ACA" | "M"
 
   @IsOptional()
   @IsString()

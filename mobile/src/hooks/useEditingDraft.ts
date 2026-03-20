@@ -1,14 +1,14 @@
-import { useEffect, useRef } from 'react'
-import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from '../storage'
-import { DEFAULT_SURVEY_FORM } from '../app/constants'
-import { FormMode } from '../app/AuthenticatedAppNavigation'
-import { useSurveyForm } from './useSurveyForm'
-import { useSurveyList } from './useSurveyList'
+import { useEffect, useRef } from "react"
+import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from "../storage"
+import { DEFAULT_SURVEY_FORM } from "../app/constants"
+import { FormMode } from "../app/AuthenticatedAppNavigation"
+import { useSurveyForm } from "./useSurveyForm"
+import { useSurveyList } from "./useSurveyList"
 
 type UseEditingDraftParams = {
   editingSurveyId: string | null
   setEditingSurveyId: (id: string | null) => void
-  editingSurveyVisibility: 'private' | 'public'
+  editingSurveyVisibility: "private" | "public"
   setFormMode: (mode: FormMode) => void
   surveyForm: ReturnType<typeof useSurveyForm>
   surveyList: ReturnType<typeof useSurveyList>
@@ -28,7 +28,7 @@ export function useEditingDraft({
 }: UseEditingDraftParams) {
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autosaveInFlightRef = useRef(false)
-  const autosaveSignatureRef = useRef('')
+  const autosaveSignatureRef = useRef("")
   const createDraftBootstrappingRef = useRef(false)
 
   useEffect(() => {
@@ -86,12 +86,12 @@ export function useEditingDraft({
       clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
     }
-    autosaveSignatureRef.current = ''
+    autosaveSignatureRef.current = ""
     setEditingSurveyId(null)
-    setFormMode('create')
+    setFormMode("create")
     onCloseSurveyDetail()
     surveyForm.resetSurveyForm()
-    onStatusChange('Create survey view opened. Initializing local draft...')
+    onStatusChange("Create survey view opened. Initializing local draft...")
 
     if (createDraftBootstrappingRef.current) {
       return
@@ -99,7 +99,7 @@ export function useEditingDraft({
     createDraftBootstrappingRef.current = true
 
     const initialDraftInput = {
-      site_name: '',
+      site_name: "",
       region_version: DEFAULT_SURVEY_FORM.regionVersion,
       vegetation_stage: DEFAULT_SURVEY_FORM.vegetationStage,
       parcel_ids: [],
@@ -131,14 +131,14 @@ export function useEditingDraft({
         await updateLocalDraft({
           survey_id: editingSurveyId,
           ...draftInput,
-          visibility: current?.visibility ?? 'private',
+          visibility: current?.visibility ?? "private",
         })
 
         await surveyList.refreshLocalSurveys()
         await surveyList.refreshLocalAttachments()
-        autosaveSignatureRef.current = ''
+        autosaveSignatureRef.current = ""
         setEditingSurveyId(null)
-        setFormMode('create')
+        setFormMode("create")
         surveyList.setSelectedSurveyId(editingSurveyId)
         onStatusChange(`Local IBP draft ${editingSurveyId} saved`)
         return true
@@ -148,9 +148,9 @@ export function useEditingDraft({
       await surveyList.refreshLocalSurveys()
       await surveyList.refreshLocalAttachments()
       setEditingSurveyId(null)
-      setFormMode('create')
+      setFormMode("create")
       surveyList.setSelectedSurveyId(created.id)
-      onStatusChange('Local IBP draft created with raw observations')
+      onStatusChange("Local IBP draft created with raw observations")
       return true
     } catch (error) {
       onStatusChange(`Draft error: ${(error as Error).message}`)
@@ -160,7 +160,7 @@ export function useEditingDraft({
 
   const handleStartEditSurvey = async (surveyId: string): Promise<boolean> => {
     const current = surveyList.surveys.find((survey) => survey.id === surveyId)
-    if (current?.status === 'submitted') {
+    if (current?.status === "submitted") {
       onStatusChange(`Survey ${surveyId} is submitted and read-only`)
       return false
     }
@@ -172,15 +172,15 @@ export function useEditingDraft({
         return false
       }
       autosaveSignatureRef.current = JSON.stringify({
-        site_name: draft.site_name ?? '',
-        region_version: draft.region_version ?? 'ACA',
-        vegetation_stage: draft.vegetation_stage ?? '',
+        site_name: draft.site_name ?? "",
+        region_version: draft.region_version ?? "ACA",
+        vegetation_stage: draft.vegetation_stage ?? "",
         parcel_ids: Array.isArray(draft.parcel_ids) ? draft.parcel_ids : [],
         factors: draft.factors ?? {},
       })
       surveyForm.applyDraftToForm(draft)
       setEditingSurveyId(surveyId)
-      setFormMode('edit')
+      setFormMode("edit")
       surveyList.setSelectedSurveyId(surveyId)
       onStatusChange(`Editing survey ${surveyId}`)
       return true
@@ -192,7 +192,7 @@ export function useEditingDraft({
 
   const handleSaveSurveyEdits = async (): Promise<boolean> => {
     if (!editingSurveyId) {
-      onStatusChange('No survey selected for editing')
+      onStatusChange("No survey selected for editing")
       return false
     }
 
@@ -202,14 +202,14 @@ export function useEditingDraft({
       await updateLocalDraft({
         survey_id: editingSurveyId,
         ...draftInput,
-        visibility: current?.visibility ?? 'private',
+        visibility: current?.visibility ?? "private",
       })
 
       await surveyList.refreshLocalSurveys()
       await surveyList.refreshLocalAttachments()
-      autosaveSignatureRef.current = ''
+      autosaveSignatureRef.current = ""
       setEditingSurveyId(null)
-      setFormMode('create')
+      setFormMode("create")
       onStatusChange(`Local survey ${editingSurveyId} updated and queued for sync`)
       return true
     } catch (error) {

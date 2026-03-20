@@ -13,7 +13,7 @@ const mockRequestForegroundPermissionsAsync = jest.fn()
 const mockGetLastKnownPositionAsync = jest.fn()
 const mockGetCurrentPositionAsync = jest.fn()
 
-jest.mock('expo-location', () => ({
+jest.mock("expo-location", () => ({
   hasServicesEnabledAsync: mockHasServicesEnabledAsync,
   getForegroundPermissionsAsync: mockGetForegroundPermissionsAsync,
   requestForegroundPermissionsAsync: mockRequestForegroundPermissionsAsync,
@@ -22,7 +22,7 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
 }))
 
-import { useGpsCapture } from './useGpsCapture'
+import { useGpsCapture } from "./useGpsCapture"
 
 const TEST_POSITION = {
   coords: { latitude: 48.643, longitude: 1.829 },
@@ -34,11 +34,15 @@ const TEST_FALLBACK = {
   timestamp: 1699999000000,
 }
 
-describe('useGpsCapture', () => {
+describe("useGpsCapture", () => {
   let surveyForm: { applyGpsLocation: jest.Mock }
   let onStatusChange: jest.Mock
   let onAlert: jest.Mock
-  let handleCaptureGpsLocation: () => Promise<{ lat: number; lng: number; collected_at: string } | null>
+  let handleCaptureGpsLocation: () => Promise<{
+    lat: number
+    lng: number
+    collected_at: string
+  } | null>
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -49,17 +53,17 @@ describe('useGpsCapture', () => {
     handleCaptureGpsLocation = hook.handleCaptureGpsLocation
   })
 
-  test('returns false and alerts when location services are disabled', async () => {
+  test("returns false and alerts when location services are disabled", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(false)
 
     const result = await handleCaptureGpsLocation()
 
     expect(result).toBeNull()
-    expect(onStatusChange).toHaveBeenCalledWith('Location services disabled')
-    expect(onAlert).toHaveBeenCalledWith('Location disabled', expect.any(String))
+    expect(onStatusChange).toHaveBeenCalledWith("Location services disabled")
+    expect(onAlert).toHaveBeenCalledWith("Location disabled", expect.any(String))
   })
 
-  test('returns false and alerts when permission is denied', async () => {
+  test("returns false and alerts when permission is denied", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockGetForegroundPermissionsAsync.mockResolvedValue({ granted: false })
     mockRequestForegroundPermissionsAsync.mockResolvedValue({ granted: false })
@@ -67,10 +71,10 @@ describe('useGpsCapture', () => {
     const result = await handleCaptureGpsLocation()
 
     expect(result).toBeNull()
-    expect(onAlert).toHaveBeenCalledWith('Location disabled', expect.any(String))
+    expect(onAlert).toHaveBeenCalledWith("Location disabled", expect.any(String))
   })
 
-  test('uses existing permission without requesting again', async () => {
+  test("uses existing permission without requesting again", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockGetForegroundPermissionsAsync.mockResolvedValue({ granted: true })
     mockGetLastKnownPositionAsync.mockResolvedValue(null)
@@ -81,7 +85,7 @@ describe('useGpsCapture', () => {
     expect(mockRequestForegroundPermissionsAsync).not.toHaveBeenCalled()
   })
 
-  test('applies fallback then refines with accurate position', async () => {
+  test("applies fallback then refines with accurate position", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockGetForegroundPermissionsAsync.mockResolvedValue({ granted: true })
     mockGetLastKnownPositionAsync.mockResolvedValue(TEST_FALLBACK)
@@ -105,14 +109,14 @@ describe('useGpsCapture', () => {
       lng: 1.829,
       collected_at: expect.any(String),
     })
-    expect(onStatusChange).toHaveBeenCalledWith('GPS location captured')
+    expect(onStatusChange).toHaveBeenCalledWith("GPS location captured")
   })
 
-  test('returns true using fallback when getCurrentPositionAsync fails', async () => {
+  test("returns true using fallback when getCurrentPositionAsync fails", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockGetForegroundPermissionsAsync.mockResolvedValue({ granted: true })
     mockGetLastKnownPositionAsync.mockResolvedValue(TEST_FALLBACK)
-    mockGetCurrentPositionAsync.mockRejectedValue(new Error('GPS timeout'))
+    mockGetCurrentPositionAsync.mockRejectedValue(new Error("GPS timeout"))
 
     const result = await handleCaptureGpsLocation()
 
@@ -121,23 +125,23 @@ describe('useGpsCapture', () => {
       lng: 2.0,
       collected_at: expect.any(String),
     })
-    expect(onStatusChange).toHaveBeenCalledWith('Approximate location captured')
+    expect(onStatusChange).toHaveBeenCalledWith("Approximate location captured")
     expect(surveyForm.applyGpsLocation).toHaveBeenCalledTimes(1)
   })
 
-  test('returns false and alerts when no fallback and GPS fails', async () => {
+  test("returns false and alerts when no fallback and GPS fails", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockGetForegroundPermissionsAsync.mockResolvedValue({ granted: true })
     mockGetLastKnownPositionAsync.mockResolvedValue(null)
-    mockGetCurrentPositionAsync.mockRejectedValue(new Error('GPS unavailable'))
+    mockGetCurrentPositionAsync.mockRejectedValue(new Error("GPS unavailable"))
 
     const result = await handleCaptureGpsLocation()
 
     expect(result).toBeNull()
-    expect(onAlert).toHaveBeenCalledWith('GPS unavailable', expect.any(String))
+    expect(onAlert).toHaveBeenCalledWith("GPS unavailable", expect.any(String))
   })
 
-  test('returns true and applies position when no last known position', async () => {
+  test("returns true and applies position when no last known position", async () => {
     mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockGetForegroundPermissionsAsync.mockResolvedValue({ granted: true })
     mockGetLastKnownPositionAsync.mockResolvedValue(null)
@@ -156,6 +160,6 @@ describe('useGpsCapture', () => {
       lng: 1.829,
       collected_at: expect.any(String),
     })
-    expect(onStatusChange).toHaveBeenCalledWith('GPS location captured')
+    expect(onStatusChange).toHaveBeenCalledWith("GPS location captured")
   })
 })

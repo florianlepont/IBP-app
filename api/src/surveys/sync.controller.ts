@@ -1,11 +1,11 @@
-import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
-import { CurrentUser } from '../auth/current-user.decorator';
-import { AuthenticatedUser } from '../auth/auth.types';
-import { SurveysService } from './surveys.service';
-import { SyncBatchBody } from './surveys.types';
+import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from "@nestjs/common"
+import { AuthGuard } from "../auth/auth.guard"
+import { CurrentUser } from "../auth/current-user.decorator"
+import { AuthenticatedUser } from "../auth/auth.types"
+import { SurveysService } from "./surveys.service"
+import { SyncBatchBody } from "./surveys.types"
 
-@Controller('sync')
+@Controller("sync")
 @UseGuards(AuthGuard)
 export class SyncController {
   constructor(private readonly surveysService: SurveysService) {}
@@ -13,16 +13,21 @@ export class SyncController {
   @Post()
   @HttpCode(200)
   async syncBatch(@CurrentUser() user: AuthenticatedUser, @Body() body: SyncBatchBody) {
-    return this.surveysService.syncBatch(user, body);
+    return this.surveysService.syncBatch(user, body)
   }
 
-  @Get('changes')
+  @Get("changes")
   async getChanges(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('cursor') cursor?: string,
-    @Query('limit') limit?: string
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
   ) {
-    const parsedLimit = typeof limit === 'string' && limit.trim().length > 0 ? Number(limit) : undefined;
-    return this.surveysService.getSyncChanges(user, cursor, Number.isFinite(parsedLimit) ? parsedLimit : undefined);
+    const parsedLimit =
+      typeof limit === "string" && limit.trim().length > 0 ? Number(limit) : undefined
+    return this.surveysService.getSyncChanges(
+      user,
+      cursor,
+      Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    )
   }
 }

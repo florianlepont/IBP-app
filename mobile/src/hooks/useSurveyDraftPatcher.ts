@@ -1,10 +1,12 @@
-import { getLocalSurveyDraft, updateLocalDraft } from '../storage'
-import { DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from '../app/constants'
-import { RegionVersion, VegetationStage } from '../app/types'
-import { useSurveyList } from './useSurveyList'
+import { getLocalSurveyDraft, updateLocalDraft } from "../storage"
+import { DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from "../app/constants"
+import { RegionVersion, VegetationStage } from "../app/types"
+import { useSurveyList } from "./useSurveyList"
 
 const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 
 type DirectDraftPatchInput = {
   site_name: string
@@ -26,7 +28,7 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
     successMessage: string,
   ): Promise<boolean> => {
     const current = surveyList.surveys.find((survey) => survey.id === surveyId)
-    if (current?.status === 'submitted') {
+    if (current?.status === "submitted") {
       onStatusChange(`Survey ${surveyId} is submitted and read-only`)
       return false
     }
@@ -38,20 +40,22 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
         return false
       }
 
-      const baseRegion: RegionVersion = draft.region_version === 'M' ? 'M' : 'ACA'
+      const baseRegion: RegionVersion = draft.region_version === "M" ? "M" : "ACA"
       const baseStage = normalizeVegetationStageForRegion(
         baseRegion,
-        typeof draft.vegetation_stage === 'string' ? draft.vegetation_stage : DEFAULT_SURVEY_FORM.vegetationStage,
+        typeof draft.vegetation_stage === "string"
+          ? draft.vegetation_stage
+          : DEFAULT_SURVEY_FORM.vegetationStage,
       )
       const base: DirectDraftPatchInput = {
         site_name:
-          typeof draft.site_name === 'string' && draft.site_name.trim().length > 0
+          typeof draft.site_name === "string" && draft.site_name.trim().length > 0
             ? draft.site_name
-            : 'Unnamed site',
+            : "Unnamed site",
         region_version: baseRegion,
         vegetation_stage: baseStage,
         parcel_ids: Array.isArray(draft.parcel_ids)
-          ? draft.parcel_ids.filter((value): value is string => typeof value === 'string')
+          ? draft.parcel_ids.filter((value): value is string => typeof value === "string")
           : [],
         factors: asRecord(draft.factors),
       }
@@ -64,7 +68,7 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
         vegetation_stage: next.vegetation_stage,
         parcel_ids: next.parcel_ids,
         factors: next.factors,
-        visibility: current?.visibility ?? 'private',
+        visibility: current?.visibility ?? "private",
       })
 
       await surveyList.refreshLocalSurveys()
@@ -80,12 +84,15 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
   const handleRenameSurvey = async (surveyId: string, nextSiteName: string): Promise<void> => {
     await patchSurveyDraftDirectly(
       surveyId,
-      (draft) => ({ ...draft, site_name: nextSiteName.trim() || 'Unnamed site' }),
+      (draft) => ({ ...draft, site_name: nextSiteName.trim() || "Unnamed site" }),
       `Survey name updated for ${surveyId}`,
     )
   }
 
-  const handleUpdateSurveyRegionVersion = async (surveyId: string, region: RegionVersion): Promise<void> => {
+  const handleUpdateSurveyRegionVersion = async (
+    surveyId: string,
+    region: RegionVersion,
+  ): Promise<void> => {
     await patchSurveyDraftDirectly(
       surveyId,
       (draft) => ({
@@ -97,7 +104,10 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
     )
   }
 
-  const handleUpdateSurveyVegetationStage = async (surveyId: string, stage: VegetationStage): Promise<void> => {
+  const handleUpdateSurveyVegetationStage = async (
+    surveyId: string,
+    stage: VegetationStage,
+  ): Promise<void> => {
     await patchSurveyDraftDirectly(
       surveyId,
       (draft) => ({

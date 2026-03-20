@@ -1,38 +1,38 @@
-import { Text, View } from 'react-native';
+import { Text, View } from "react-native"
 import {
   formatSurveySyncDisplayLabel,
   formatSurveyWorkflowStatusLabel,
   resolveSurveySyncDisplay,
-  resolveSurveyWorkflowStatus
-} from '../app/survey-logic';
-import { styles } from '../app/styles';
-import { LocalSurvey } from '../storage';
+  resolveSurveyWorkflowStatus,
+} from "../app/survey-logic"
+import { styles } from "../app/styles"
+import { LocalSurvey } from "../storage"
 
 type SurveyBadgesProps = {
-  survey: LocalSurvey;
-};
+  survey: LocalSurvey
+}
 
 export function SurveyBadges({ survey }: SurveyBadgesProps) {
-  const workflowStatus = resolveSurveyWorkflowStatus(survey);
-  const syncDisplay = resolveSurveySyncDisplay(survey);
+  const workflowStatus = resolveSurveyWorkflowStatus(survey)
+  const syncDisplay = resolveSurveySyncDisplay(survey)
 
   const workflowBadgeStyle =
-    workflowStatus === 'submitted'
+    workflowStatus === "submitted"
       ? styles.badgeStatusSubmitted
-      : workflowStatus === 'expired'
+      : workflowStatus === "expired"
         ? styles.badgeBlocked
-        : workflowStatus === 'pending'
+        : workflowStatus === "pending"
           ? styles.badgeSyncPending
-          : styles.badgeStatusDraft;
+          : styles.badgeStatusDraft
 
   const syncBadgeStyle =
-    syncDisplay === 'sync'
+    syncDisplay === "sync"
       ? styles.badgeSyncSynced
-      : syncDisplay === 'sync_error'
+      : syncDisplay === "sync_error"
         ? styles.badgeSyncFailed
-        : syncDisplay === 'sync_blocked'
+        : syncDisplay === "sync_blocked"
           ? styles.badgeBlocked
-          : styles.badgeNeutral;
+          : styles.badgeNeutral
 
   return (
     <View style={styles.badgeRow}>
@@ -46,5 +46,5 @@ export function SurveyBadges({ survey }: SurveyBadgesProps) {
         <Text style={styles.badgeText}>{survey.visibility}</Text>
       </View>
     </View>
-  );
+  )
 }

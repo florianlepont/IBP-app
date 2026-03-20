@@ -4,13 +4,8 @@
     "slug": "ibp-app",
     "version": "0.1.0",
     "orientation": "portrait",
-    "platforms": [
-      "ios",
-      "android"
-    ],
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "platforms": ["ios", "android"],
+    "assetBundlePatterns": ["**/*"],
     "plugins": [
       "expo-sqlite",
       [

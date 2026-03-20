@@ -1,12 +1,12 @@
-import { Text, TextInput, View } from 'react-native';
-import { styles } from '../app/styles';
-import { FactorField, FactorKey } from '../app/types';
+import { Text, TextInput, View } from "react-native"
+import { styles } from "../app/styles"
+import { FactorField, FactorKey } from "../app/types"
 
 type FactorSectionProps = {
-  factorKey: FactorKey;
-  helpText: string;
-  fields: FactorField[];
-};
+  factorKey: FactorKey
+  helpText: string
+  fields: FactorField[]
+}
 
 export function FactorSection({ factorKey, helpText, fields }: FactorSectionProps) {
   return (
@@ -20,13 +20,18 @@ export function FactorSection({ factorKey, helpText, fields }: FactorSectionProp
           <View key={`${factorKey}-${field.label}`} style={styles.factorItemWide}>
             <Text style={styles.factorKey}>
               {field.label}
-              {field.required ? ' *' : ''}
+              {field.required ? " *" : ""}
             </Text>
-            <TextInput style={styles.factorInput} value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            <TextInput
+              style={styles.factorInput}
+              value={field.value}
+              onChangeText={field.onChange}
+              keyboardType="numeric"
+            />
             {field.error ? <Text style={styles.fieldError}>{field.error}</Text> : null}
           </View>
         ))}
       </View>
     </View>
-  );
+  )
 }

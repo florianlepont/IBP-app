@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react"
 import {
   Image,
   ImageSourcePropType,
@@ -11,67 +11,80 @@ import {
   TextInputProps,
   TouchableWithoutFeedback,
   View,
-  useWindowDimensions
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { brandColors, brandRadius, brandShadow, brandSpacing, brandTypography } from '../app/brand-tokens';
+  useWindowDimensions,
+} from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import {
+  brandColors,
+  brandRadius,
+  brandShadow,
+  brandSpacing,
+  brandTypography,
+} from "../app/brand-tokens"
 
 type AuthGateScreenProps = {
-  apiUrl: string;
-  onApiUrlChange: (value: string) => void;
-  email: string;
-  onEmailChange: (value: string) => void;
-  password: string;
-  onPasswordChange: (value: string) => void;
-  displayName: string;
-  onDisplayNameChange: (value: string) => void;
-  onLogin: () => Promise<void>;
-  onRegister: () => Promise<void>;
-  status: string;
-  logoSource?: ImageSourcePropType;
-  heroMartenSource?: ImageSourcePropType;
-};
+  apiUrl: string
+  onApiUrlChange: (value: string) => void
+  email: string
+  onEmailChange: (value: string) => void
+  password: string
+  onPasswordChange: (value: string) => void
+  displayName: string
+  onDisplayNameChange: (value: string) => void
+  onLogin: () => Promise<void>
+  onRegister: () => Promise<void>
+  status: string
+  logoSource?: ImageSourcePropType
+  heroMartenSource?: ImageSourcePropType
+}
 
-type AuthMode = 'login' | 'register';
-const AUTH_REQUEST_TIMEOUT_MS = 15000;
-const HERO_MIN_HEIGHT_RATIO = 0.35;
-const HERO_MIN_HEIGHT_PX = 280;
+type AuthMode = "login" | "register"
+const AUTH_REQUEST_TIMEOUT_MS = 15000
+const HERO_MIN_HEIGHT_RATIO = 0.35
+const HERO_MIN_HEIGHT_PX = 280
 
 const AUTH_COPY: Record<AuthMode, { title: string; subtitle: string; submitLabel: string }> = {
   login: {
-    title: 'Sign in',
-    subtitle: 'Access your surveys, public map, and account settings.',
-    submitLabel: 'Sign in'
+    title: "Sign in",
+    subtitle: "Access your surveys, public map, and account settings.",
+    submitLabel: "Sign in",
   },
   register: {
-    title: 'Create account',
-    subtitle: 'Create your profile to save drafts, sync observations, and keep your IBP work across devices.',
-    submitLabel: 'Create account'
-  }
-};
+    title: "Create account",
+    subtitle:
+      "Create your profile to save drafts, sync observations, and keep your IBP work across devices.",
+    submitLabel: "Create account",
+  },
+}
 
-async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number, apiUrl: string): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+async function runWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  apiUrl: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_resolve, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error(`Server not responding (${apiUrl}). Check API URL and network connection.`));
-        }, timeoutMs);
-      })
-    ]);
+          reject(
+            new Error(`Server not responding (${apiUrl}). Check API URL and network connection.`),
+          )
+        }, timeoutMs)
+      }),
+    ])
   } finally {
     if (timeoutId) {
-      clearTimeout(timeoutId);
+      clearTimeout(timeoutId)
     }
   }
 }
 
 type AuthFieldProps = {
-  label: string;
-  testID?: string;
-} & TextInputProps;
+  label: string
+  testID?: string
+} & TextInputProps
 
 function AuthField({ label, testID, ...inputProps }: AuthFieldProps) {
   return (
@@ -84,75 +97,89 @@ function AuthField({ label, testID, ...inputProps }: AuthFieldProps) {
         {...inputProps}
       />
     </>
-  );
+  )
 }
 
 type HeroSectionProps = {
-  height: number;
-  topInset: number;
-  logoSource?: ImageSourcePropType;
-  heroMartenSource?: ImageSourcePropType;
-};
+  height: number
+  topInset: number
+  logoSource?: ImageSourcePropType
+  heroMartenSource?: ImageSourcePropType
+}
 
 function HeroSection({ height, topInset, logoSource, heroMartenSource }: HeroSectionProps) {
   return (
     <View style={[authStyles.hero, { height }]}>
       <View style={[authStyles.heroBackground, { paddingTop: Math.max(topInset, 12) + 18 }]}>
-        {heroMartenSource ? <Image source={heroMartenSource} style={authStyles.heroMarten} resizeMode="contain" /> : null}
+        {heroMartenSource ? (
+          <Image source={heroMartenSource} style={authStyles.heroMarten} resizeMode="contain" />
+        ) : null}
         <View style={authStyles.heroContent}>
-          {logoSource ? <Image source={logoSource} style={authStyles.heroLogo} resizeMode="contain" /> : null}
+          {logoSource ? (
+            <Image source={logoSource} style={authStyles.heroLogo} resizeMode="contain" />
+          ) : null}
           <Text style={authStyles.heroTitle}>Welcome to the IBP app</Text>
-          <Text style={authStyles.heroBody}>Sign in or create an account to sync and manage your field surveys.</Text>
+          <Text style={authStyles.heroBody}>
+            Sign in or create an account to sync and manage your field surveys.
+          </Text>
         </View>
       </View>
     </View>
-  );
+  )
 }
 
 type AuthModeSwitchProps = {
-  authMode: AuthMode;
-  onSwitchMode: (nextMode: AuthMode) => void;
-};
+  authMode: AuthMode
+  onSwitchMode: (nextMode: AuthMode) => void
+}
 
 function AuthModeSwitch({ authMode, onSwitchMode }: AuthModeSwitchProps) {
-  const isRegister = authMode === 'register';
+  const isRegister = authMode === "register"
 
   return (
     <View style={authStyles.modeRow}>
       <Pressable
         style={[authStyles.modeButton, !isRegister ? authStyles.modeButtonActive : null]}
-        onPress={() => onSwitchMode('login')}
+        onPress={() => onSwitchMode("login")}
         testID="auth-mode-login"
       >
-        <Text style={[authStyles.modeButtonText, !isRegister ? authStyles.modeButtonTextActive : null]}>Sign in</Text>
+        <Text
+          style={[authStyles.modeButtonText, !isRegister ? authStyles.modeButtonTextActive : null]}
+        >
+          Sign in
+        </Text>
       </Pressable>
       <Pressable
         style={[authStyles.modeButton, isRegister ? authStyles.modeButtonActive : null]}
-        onPress={() => onSwitchMode('register')}
+        onPress={() => onSwitchMode("register")}
         testID="auth-mode-register"
       >
-        <Text style={[authStyles.modeButtonText, isRegister ? authStyles.modeButtonTextActive : null]}>Create account</Text>
+        <Text
+          style={[authStyles.modeButtonText, isRegister ? authStyles.modeButtonTextActive : null]}
+        >
+          Create account
+        </Text>
       </Pressable>
     </View>
-  );
+  )
 }
 
 type AuthFormCardProps = {
-  authMode: AuthMode;
-  activeCopy: (typeof AUTH_COPY)[AuthMode];
-  displayName: string;
-  onDisplayNameChange: (value: string) => void;
-  email: string;
-  onEmailChange: (value: string) => void;
-  password: string;
-  onPasswordChange: (value: string) => void;
-  confirmPassword: string;
-  onConfirmPasswordChange: (value: string) => void;
-  submitting: boolean;
-  onSubmit: () => void;
-  feedbackMessage?: string;
-  feedbackTone?: 'error' | 'status';
-};
+  authMode: AuthMode
+  activeCopy: (typeof AUTH_COPY)[AuthMode]
+  displayName: string
+  onDisplayNameChange: (value: string) => void
+  email: string
+  onEmailChange: (value: string) => void
+  password: string
+  onPasswordChange: (value: string) => void
+  confirmPassword: string
+  onConfirmPasswordChange: (value: string) => void
+  submitting: boolean
+  onSubmit: () => void
+  feedbackMessage?: string
+  feedbackTone?: "error" | "status"
+}
 
 function AuthFormCard({
   authMode,
@@ -168,9 +195,9 @@ function AuthFormCard({
   submitting,
   onSubmit,
   feedbackMessage,
-  feedbackTone = 'status'
+  feedbackTone = "status",
 }: AuthFormCardProps) {
-  const isRegister = authMode === 'register';
+  const isRegister = authMode === "register"
 
   return (
     <View style={authStyles.formCard}>
@@ -223,28 +250,43 @@ function AuthFormCard({
         disabled={submitting}
         testID="auth-submit"
       >
-        <Text style={authStyles.primaryButtonText}>{submitting ? 'Processing...' : activeCopy.submitLabel}</Text>
+        <Text style={authStyles.primaryButtonText}>
+          {submitting ? "Processing..." : activeCopy.submitLabel}
+        </Text>
       </Pressable>
 
       {feedbackMessage ? (
-        <Text style={feedbackTone === 'error' ? authStyles.errorText : authStyles.statusText}>{feedbackMessage}</Text>
+        <Text style={feedbackTone === "error" ? authStyles.errorText : authStyles.statusText}>
+          {feedbackMessage}
+        </Text>
       ) : null}
     </View>
-  );
+  )
 }
 
 type AuthPanelFooterProps = {
-  showAdvanced: boolean;
-  onToggleAdvanced: () => void;
-  apiUrl: string;
-  onApiUrlChange: (value: string) => void;
-};
+  showAdvanced: boolean
+  onToggleAdvanced: () => void
+  apiUrl: string
+  onApiUrlChange: (value: string) => void
+}
 
-function AuthPanelFooter({ showAdvanced, onToggleAdvanced, apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
+function AuthPanelFooter({
+  showAdvanced,
+  onToggleAdvanced,
+  apiUrl,
+  onApiUrlChange,
+}: AuthPanelFooterProps) {
   return (
     <View style={authStyles.panelFooter}>
-      <Pressable onPress={onToggleAdvanced} style={authStyles.advancedToggle} testID="auth-advanced-toggle">
-        <Text style={authStyles.advancedToggleText}>{showAdvanced ? 'Hide API options' : 'Show API options'}</Text>
+      <Pressable
+        onPress={onToggleAdvanced}
+        style={authStyles.advancedToggle}
+        testID="auth-advanced-toggle"
+      >
+        <Text style={authStyles.advancedToggleText}>
+          {showAdvanced ? "Hide API options" : "Show API options"}
+        </Text>
       </Pressable>
 
       {showAdvanced ? (
@@ -263,7 +305,7 @@ function AuthPanelFooter({ showAdvanced, onToggleAdvanced, apiUrl, onApiUrlChang
         </View>
       ) : null}
     </View>
-  );
+  )
 }
 
 export function AuthGateScreen({
@@ -279,84 +321,86 @@ export function AuthGateScreen({
   onRegister,
   logoSource,
   heroMartenSource,
-  status
+  status,
 }: AuthGateScreenProps) {
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [localError, setLocalError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
+  const [authMode, setAuthMode] = useState<AuthMode>("login")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [localError, setLocalError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  const isRegister = authMode === 'register';
-  const activeCopy = AUTH_COPY[authMode];
-  const normalizedStatus = status.trim().toLowerCase();
+  const isRegister = authMode === "register"
+  const activeCopy = AUTH_COPY[authMode]
+  const normalizedStatus = status.trim().toLowerCase()
   const remoteFeedbackMessage =
     normalizedStatus &&
-    !normalizedStatus.includes('logged in') &&
-    !normalizedStatus.includes('account created and logged in')
+    !normalizedStatus.includes("logged in") &&
+    !normalizedStatus.includes("account created and logged in")
       ? status
-      : '';
-  const feedbackMessage = localError || remoteFeedbackMessage;
-  const feedbackTone: 'error' | 'status' =
-    localError || normalizedStatus.includes('error') || normalizedStatus.includes('failed') ? 'error' : 'status';
+      : ""
+  const feedbackMessage = localError || remoteFeedbackMessage
+  const feedbackTone: "error" | "status" =
+    localError || normalizedStatus.includes("error") || normalizedStatus.includes("failed")
+      ? "error"
+      : "status"
 
   const validate = (): string | null => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !normalizedEmail.includes('@')) {
-      return 'Enter a valid email address.';
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      return "Enter a valid email address."
     }
     if (!password || !password.trim()) {
-      return 'Enter your password.';
+      return "Enter your password."
     }
     if (!isRegister) {
-      return null;
+      return null
     }
     if (!displayName.trim()) {
-      return 'Enter a display name.';
+      return "Enter a display name."
     }
     if (password.length < 6) {
-      return 'Password must contain at least 6 characters.';
+      return "Password must contain at least 6 characters."
     }
     if (password !== confirmPassword) {
-      return 'Passwords do not match.';
+      return "Passwords do not match."
     }
-    return null;
-  };
+    return null
+  }
 
   const handleSubmit = async (): Promise<void> => {
-    const validationError = validate();
+    const validationError = validate()
     if (validationError) {
-      setLocalError(validationError);
-      return;
+      setLocalError(validationError)
+      return
     }
 
     try {
-      Keyboard.dismiss();
-      setLocalError('');
-      setSubmitting(true);
-      await runWithTimeout(isRegister ? onRegister() : onLogin(), AUTH_REQUEST_TIMEOUT_MS, apiUrl);
+      Keyboard.dismiss()
+      setLocalError("")
+      setSubmitting(true)
+      await runWithTimeout(isRegister ? onRegister() : onLogin(), AUTH_REQUEST_TIMEOUT_MS, apiUrl)
     } catch (error) {
-      setLocalError((error as Error).message);
+      setLocalError((error as Error).message)
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  };
+  }
 
   const switchMode = (nextMode: AuthMode): void => {
     if (nextMode === authMode) {
-      return;
+      return
     }
-    setAuthMode(nextMode);
-    setLocalError('');
-    if (nextMode === 'login') {
-      setConfirmPassword('');
+    setAuthMode(nextMode)
+    setLocalError("")
+    if (nextMode === "login") {
+      setConfirmPassword("")
     }
-  };
+  }
 
-  const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX);
-  const useScrollablePanel = isRegister;
+  const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
+  const useScrollablePanel = isRegister
 
   const panelBody = (
     <>
@@ -393,12 +437,17 @@ export function AuthGateScreen({
         onApiUrlChange={onApiUrlChange}
       />
     </>
-  );
+  )
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={authStyles.screen}>
-        <HeroSection height={heroHeight} topInset={insets.top} logoSource={logoSource} heroMartenSource={heroMartenSource} />
+        <HeroSection
+          height={heroHeight}
+          topInset={insets.top}
+          logoSource={logoSource}
+          heroMartenSource={heroMartenSource}
+        />
 
         <View style={authStyles.panelWrap}>
           {useScrollablePanel ? (
@@ -417,128 +466,128 @@ export function AuthGateScreen({
         </View>
       </View>
     </TouchableWithoutFeedback>
-  );
+  )
 }
 
 const authStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: brandColors.canvas
+    backgroundColor: brandColors.canvas,
   },
   hero: {
-    width: '100%'
+    width: "100%",
   },
   heroBackground: {
     flex: 1,
     backgroundColor: brandColors.forest,
-    overflow: 'hidden',
+    overflow: "hidden",
     paddingHorizontal: brandSpacing.lg,
     paddingBottom: 30,
-    justifyContent: 'flex-end'
+    justifyContent: "flex-end",
   },
   heroContent: {
     zIndex: 1,
-    width: '62%',
-    alignItems: 'flex-start',
-    gap: 8
+    width: "62%",
+    alignItems: "flex-start",
+    gap: 8,
   },
   heroLogo: {
     width: 154,
     height: 50,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     marginLeft: -22,
-    marginBottom: 6
+    marginBottom: 6,
   },
   heroTitle: {
     ...brandTypography.heroTitle,
-    color: brandColors.white
+    color: brandColors.white,
   },
   heroBody: {
     ...brandTypography.sectionBody,
-    color: '#E8ECD9',
-    maxWidth: 260
+    color: "#E8ECD9",
+    maxWidth: 260,
   },
   heroMarten: {
-    position: 'absolute',
+    position: "absolute",
     right: 12,
     bottom: -14,
     width: 168,
     height: 216,
-    zIndex: 0
+    zIndex: 0,
   },
   panelWrap: {
     flex: 1,
     marginTop: -24,
-    position: 'relative',
-    overflow: 'visible',
+    position: "relative",
+    overflow: "visible",
     borderTopLeftRadius: brandRadius.panel,
     borderTopRightRadius: brandRadius.panel,
     backgroundColor: brandColors.panel,
-    zIndex: 2
+    zIndex: 2,
   },
   panelScroll: {
-    flex: 1
+    flex: 1,
   },
   panelContent: {
     flexGrow: 1,
     paddingHorizontal: 22,
     paddingTop: 18,
-    paddingBottom: 20
+    paddingBottom: 20,
   },
   panelContentScrollable: {
-    gap: 18
+    gap: 18,
   },
   panelContentFixed: {
     flex: 1,
-    justifyContent: 'space-between'
+    justifyContent: "space-between",
   },
   panelMain: {
-    gap: 14
+    gap: 14,
   },
   panelFooter: {
     gap: 10,
-    paddingTop: 10
+    paddingTop: 10,
   },
   panelHeader: {
     minHeight: 88,
     paddingTop: 6,
     paddingRight: 0,
-    justifyContent: 'center',
-    gap: 4
+    justifyContent: "center",
+    gap: 4,
   },
   panelTitle: {
     ...brandTypography.sectionTitle,
-    color: brandColors.textPrimary
+    color: brandColors.textPrimary,
   },
   panelSubtitle: {
     ...brandTypography.sectionBody,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   modeRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandColors.divider,
     padding: 4,
-    backgroundColor: '#ECE9DE'
+    backgroundColor: "#ECE9DE",
   },
   modeButton: {
     flex: 1,
     minHeight: 42,
     borderRadius: brandRadius.pill,
-    alignItems: 'center',
-    justifyContent: 'center'
+    alignItems: "center",
+    justifyContent: "center",
   },
   modeButtonActive: {
-    backgroundColor: brandColors.textPrimary
+    backgroundColor: brandColors.textPrimary,
   },
   modeButtonText: {
     ...brandTypography.label,
     color: brandColors.textSecondary,
-    textAlign: 'center'
+    textAlign: "center",
   },
   modeButtonTextActive: {
-    color: brandColors.white
+    color: brandColors.white,
   },
   formCard: {
     borderRadius: brandRadius.card,
@@ -547,12 +596,12 @@ const authStyles = StyleSheet.create({
     borderColor: brandColors.panelMuted,
     padding: 14,
     gap: 8,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   label: {
     ...brandTypography.label,
     color: brandColors.textPrimary,
-    marginTop: 2
+    marginTop: 2,
   },
   input: {
     borderWidth: 1,
@@ -566,7 +615,7 @@ const authStyles = StyleSheet.create({
     ...brandTypography.input,
     fontSize: 15,
     lineHeight: 18,
-    fontWeight: '500'
+    fontWeight: "500",
   },
   primaryButton: {
     marginTop: 8,
@@ -574,46 +623,46 @@ const authStyles = StyleSheet.create({
     backgroundColor: brandColors.textPrimary,
     minHeight: 46,
     paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center'
+    alignItems: "center",
+    justifyContent: "center",
   },
   primaryButtonDisabled: {
-    opacity: 0.7
+    opacity: 0.7,
   },
   primaryButtonText: {
     ...brandTypography.button,
     color: brandColors.white,
-    textAlign: 'center'
+    textAlign: "center",
   },
   advancedToggle: {
-    alignSelf: 'center',
+    alignSelf: "center",
     minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: 12
+    justifyContent: "center",
+    paddingHorizontal: 12,
   },
   advancedToggleText: {
     ...brandTypography.meta,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   advancedPanel: {
     borderWidth: 1,
     borderColor: brandColors.panelMuted,
     borderRadius: brandRadius.card,
-    backgroundColor: '#F0EEE4',
+    backgroundColor: "#F0EEE4",
     padding: 14,
-    gap: 6
+    gap: 6,
   },
   hint: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   errorText: {
     borderRadius: 16,
     backgroundColor: brandColors.errorSoft,
-    color: '#6B2E1C',
+    color: "#6B2E1C",
     paddingHorizontal: 14,
     paddingVertical: 12,
-    ...brandTypography.sectionBody
+    ...brandTypography.sectionBody,
   },
   statusText: {
     borderRadius: 16,
@@ -621,6 +670,6 @@ const authStyles = StyleSheet.create({
     color: brandColors.forest,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    ...brandTypography.sectionBody
-  }
-});
+    ...brandTypography.sectionBody,
+  },
+})
