@@ -282,8 +282,8 @@ describe("Surveys idempotency (e2e)", () => {
     const accessToken = login.body.access_token as string
     const surveyId = `e2e-submit-readonly-${Date.now()}`
     const seed = Date.now() % 90000
-    const lat = 48.700 + seed / 100000
-    const lng = 1.900 + seed / 100000
+    const lat = 48.7 + seed / 100000
+    const lng = 1.9 + seed / 100000
 
     const resolved = await request(app.getHttpServer())
       .get("/v1/parcels/resolve")
@@ -350,8 +350,8 @@ describe("Surveys idempotency (e2e)", () => {
     const accessToken = login.body.access_token as string
     const surveyId = `e2e-submit-visibility-${Date.now()}`
     const seed = Date.now() % 90000
-    const lat = 48.750 + seed / 100000
-    const lng = 1.950 + seed / 100000
+    const lat = 48.75 + seed / 100000
+    const lng = 1.95 + seed / 100000
 
     const resolved = await request(app.getHttpServer())
       .get("/v1/parcels/resolve")
@@ -528,7 +528,7 @@ describe("Surveys idempotency (e2e)", () => {
     const resolvedPub = await request(app.getHttpServer())
       .get("/v1/parcels/resolve")
       .set("Authorization", `Bearer ${accessToken}`)
-      .query({ lat: String(48.900 + seed / 100000), lng: String(2.100 + seed / 100000) })
+      .query({ lat: String(48.9 + seed / 100000), lng: String(2.1 + seed / 100000) })
       .expect(200)
     const parcelPubId = resolvedPub.body.parcel?.parcel_id as string
     expect(parcelPubId).toBeTruthy()
@@ -536,7 +536,7 @@ describe("Surveys idempotency (e2e)", () => {
     const resolvedPrv = await request(app.getHttpServer())
       .get("/v1/parcels/resolve")
       .set("Authorization", `Bearer ${accessToken}`)
-      .query({ lat: String(48.910 + seed / 100000), lng: String(2.110 + seed / 100000) })
+      .query({ lat: String(48.91 + seed / 100000), lng: String(2.11 + seed / 100000) })
       .expect(200)
     const parcelPrvId = resolvedPrv.body.parcel?.parcel_id as string
     expect(parcelPrvId).toBeTruthy()
@@ -556,7 +556,7 @@ describe("Surveys idempotency (e2e)", () => {
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: validFactors,
-        location: { source: "gps", lat: 48.900 + seed / 100000, lng: 2.100 + seed / 100000 },
+        location: { source: "gps", lat: 48.9 + seed / 100000, lng: 2.1 + seed / 100000 },
       })
       .expect(201)
 
@@ -586,7 +586,7 @@ describe("Surveys idempotency (e2e)", () => {
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: validFactors,
-        location: { source: "gps", lat: 48.910 + seed / 100000, lng: 2.110 + seed / 100000 },
+        location: { source: "gps", lat: 48.91 + seed / 100000, lng: 2.11 + seed / 100000 },
       })
       .expect(201)
 
@@ -844,8 +844,8 @@ describe("Surveys idempotency (e2e)", () => {
     const surveyId = `e2e-raw-full-${Date.now()}`
 
     const seed = Date.now() % 90000
-    const lat = 48.850 + seed / 100000
-    const lng = 2.050 + seed / 100000
+    const lat = 48.85 + seed / 100000
+    const lng = 2.05 + seed / 100000
 
     const resolvedParcel = await request(app.getHttpServer())
       .get("/v1/parcels/resolve")
