@@ -1,3 +1,3 @@
-import App from './mobile/App'
+import App from "./mobile/App"
 
 export default App

@@ -1,40 +1,44 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, View } from 'react-native'
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
-import { initLocalDb } from './src/storage'
-import { AuthenticatedAppNavigation, FormMode } from './src/app/AuthenticatedAppNavigation'
-import { styles } from './src/app/styles'
-import { SurveyDetailTab } from './src/app/types'
-import { useSurveyForm } from './src/hooks/useSurveyForm'
-import { useSurveyList } from './src/hooks/useSurveyList'
-import { usePublicMapExplorer } from './src/hooks/usePublicMapExplorer'
-import { useSurveySync } from './src/hooks/useSurveySync'
-import { useAuthenticationState } from './src/hooks/useAuthenticationState'
-import { useEditingDraft } from './src/hooks/useEditingDraft'
-import { useSurveyDraftPatcher } from './src/hooks/useSurveyDraftPatcher'
-import { useGpsCapture } from './src/hooks/useGpsCapture'
-import { AuthGateScreen } from './src/screens/AuthGateScreen'
+import { useEffect, useMemo, useState } from "react"
+import { Alert, View } from "react-native"
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
+import { initLocalDb } from "./src/storage"
+import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
+import { styles } from "./src/app/styles"
+import { SurveyDetailTab } from "./src/app/types"
+import { useSurveyForm } from "./src/hooks/useSurveyForm"
+import { useSurveyList } from "./src/hooks/useSurveyList"
+import { usePublicMapExplorer } from "./src/hooks/usePublicMapExplorer"
+import { useSurveySync } from "./src/hooks/useSurveySync"
+import { useAuthenticationState } from "./src/hooks/useAuthenticationState"
+import { useEditingDraft } from "./src/hooks/useEditingDraft"
+import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
+import { useGpsCapture } from "./src/hooks/useGpsCapture"
+import { AuthGateScreen } from "./src/screens/AuthGateScreen"
 
 export default function App() {
   const auth = useAuthenticationState()
-  const [formMode, setFormMode] = useState<FormMode>('create')
+  const [formMode, setFormMode] = useState<FormMode>("create")
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
-  const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>('summary')
+  const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>("summary")
 
   const surveyForm = useSurveyForm()
   const surveyList = useSurveyList()
-  const ownSurveyIds = useMemo(() => surveyList.surveys.map((survey) => survey.id), [surveyList.surveys])
+  const ownSurveyIds = useMemo(
+    () => surveyList.surveys.map((survey) => survey.id),
+    [surveyList.surveys],
+  )
   const editingSurveyVisibility = useMemo(
     () =>
       editingSurveyId
-        ? (surveyList.surveys.find((survey) => survey.id === editingSurveyId)?.visibility ?? 'private')
-        : 'private',
+        ? (surveyList.surveys.find((survey) => survey.id === editingSurveyId)?.visibility ??
+          "private")
+        : "private",
     [editingSurveyId, surveyList.surveys],
   )
 
   const closeSurveyDetailSelection = (): void => {
     surveyList.closeSurvey()
-    setSurveyDetailTab('summary')
+    setSurveyDetailTab("summary")
   }
 
   const surveySync = useSurveySync({
@@ -51,7 +55,7 @@ export default function App() {
     onCloseSurveyDetail: closeSurveyDetailSelection,
     onStopEditing: () => {
       setEditingSurveyId(null)
-      setFormMode('create')
+      setFormMode("create")
     },
   })
 
@@ -94,7 +98,7 @@ export default function App() {
 
   const handleOpenSurvey = (surveyId: string): void => {
     surveyList.openSurvey(surveyId)
-    setSurveyDetailTab('summary')
+    setSurveyDetailTab("summary")
     surveySync.setStatus(`Survey ${surveyId} opened`)
   }
 
@@ -102,7 +106,7 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView
         style={styles.container}
-        edges={surveySync.isAuthenticated ? ['top', 'left', 'right'] : ['left', 'right']}
+        edges={surveySync.isAuthenticated ? ["top", "left", "right"] : ["left", "right"]}
       >
         <View style={styles.appLayout}>
           {!surveySync.isAuthenticated ? (
@@ -117,9 +121,9 @@ export default function App() {
               onDisplayNameChange={auth.setDisplayName}
               onLogin={surveySync.handleLogin}
               onRegister={surveySync.handleRegister}
-              logoSource={require('./assets/logo-etats-sauvages-cropped.png')}
-              heroMartenSource={require('./assets/auth/marten.png')}
-              status={surveySync.sessionRestoring ? 'Restoring session...' : surveySync.status}
+              logoSource={require("./assets/logo-etats-sauvages-cropped.png")}
+              heroMartenSource={require("./assets/auth/marten.png")}
+              status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
             />
           ) : (
             <AuthenticatedAppNavigation

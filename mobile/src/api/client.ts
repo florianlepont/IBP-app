@@ -1,111 +1,115 @@
 export class ApiError extends Error {
-  readonly status: number;
-  readonly body: unknown;
+  readonly status: number
+  readonly body: unknown
 
   constructor(status: number, message: string, body: unknown) {
-    super(message);
-    this.status = status;
-    this.body = body;
+    super(message)
+    this.status = status
+    this.body = body
   }
 }
 
 type ApiRequestOptions = {
-  baseUrl: string;
-  path: string;
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  token?: string;
-  body?: BodyInit | null;
-  json?: unknown;
-  headers?: Record<string, string>;
-  expectJson?: boolean;
-  timeoutMs?: number;
-};
+  baseUrl: string
+  path: string
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE"
+  token?: string
+  body?: BodyInit | null
+  json?: unknown
+  headers?: Record<string, string>
+  expectJson?: boolean
+  timeoutMs?: number
+}
 
-type JsonLike = Record<string, unknown>;
-const DEFAULT_API_TIMEOUT_MS = 15000;
+type JsonLike = Record<string, unknown>
+const DEFAULT_API_TIMEOUT_MS = 15000
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
+  return baseUrl.replace(/\/+$/, "")
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {
-  const text = await response.text();
-  if (!text) return null;
+  const text = await response.text()
+  if (!text) return null
 
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(text) as unknown
   } catch {
-    return text;
+    return text
   }
 }
 
 function errorMessageForStatus(status: number, parsedBody: unknown): string {
-  if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
-    const body = parsedBody as JsonLike;
-    if (typeof body.message === 'string' && body.message.trim().length > 0) {
-      return body.message;
+  if (parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)) {
+    const body = parsedBody as JsonLike
+    if (typeof body.message === "string" && body.message.trim().length > 0) {
+      return body.message
     }
   }
-  return `HTTP ${status}`;
+  return `HTTP ${status}`
 }
 
 function resolveTimeoutMs(timeoutMs?: number): number {
-  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
-    return timeoutMs;
+  if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return timeoutMs
   }
 
-  const fromEnv = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? '');
+  const fromEnv = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? "")
   if (Number.isFinite(fromEnv) && fromEnv > 0) {
-    return fromEnv;
+    return fromEnv
   }
 
-  return DEFAULT_API_TIMEOUT_MS;
+  return DEFAULT_API_TIMEOUT_MS
 }
 
 export async function apiRequest<T>(options: ApiRequestOptions): Promise<T> {
-  const method = options.method ?? 'GET';
-  const headers: Record<string, string> = { ...(options.headers ?? {}) };
-  const baseUrl = normalizeBaseUrl(options.baseUrl);
-  const timeoutMs = resolveTimeoutMs(options.timeoutMs);
+  const method = options.method ?? "GET"
+  const headers: Record<string, string> = { ...(options.headers ?? {}) }
+  const baseUrl = normalizeBaseUrl(options.baseUrl)
+  const timeoutMs = resolveTimeoutMs(options.timeoutMs)
 
   if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`;
+    headers.Authorization = `Bearer ${options.token}`
   }
 
-  let body: BodyInit | null | undefined = options.body;
+  let body: BodyInit | null | undefined = options.body
   if (options.json !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    body = JSON.stringify(options.json);
+    headers["Content-Type"] = "application/json"
+    body = JSON.stringify(options.json)
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  let response: Response;
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  let response: Response
   try {
     response = await fetch(`${baseUrl}${options.path}`, {
       method,
       headers,
       body,
-      signal: controller.signal
-    });
+      signal: controller.signal,
+    })
   } catch (error) {
-    const errorName = (error as { name?: string } | null)?.name;
-    if (errorName === 'AbortError') {
-      throw new ApiError(408, `Request timeout after ${timeoutMs}ms`, null);
+    const errorName = (error as { name?: string } | null)?.name
+    if (errorName === "AbortError") {
+      throw new ApiError(408, `Request timeout after ${timeoutMs}ms`, null)
     }
-    throw error;
+    throw error
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId)
   }
 
-  const parsedBody = await parseResponseBody(response);
+  const parsedBody = await parseResponseBody(response)
   if (!response.ok) {
-    throw new ApiError(response.status, errorMessageForStatus(response.status, parsedBody), parsedBody);
+    throw new ApiError(
+      response.status,
+      errorMessageForStatus(response.status, parsedBody),
+      parsedBody,
+    )
   }
 
   if (options.expectJson === false) {
-    return undefined as T;
+    return undefined as T
   }
 
-  return parsedBody as T;
+  return parsedBody as T
 }

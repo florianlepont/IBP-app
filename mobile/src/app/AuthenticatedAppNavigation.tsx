@@ -1,91 +1,97 @@
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
-import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
-import type { SearchBarCommands } from 'react-native-screens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { brandColors } from './brand-tokens';
-import { styles } from './styles';
-import { FactorKey, GpsCaptureResult, RegionVersion, SurveyDetailTab, VegetationStage } from './types';
-import { SurveyFormScreen } from '../screens/SurveyFormScreen';
-import { SurveyListScreen } from '../screens/SurveyListScreen';
-import { SurveyDetailScreen } from '../screens/SurveyDetailScreen';
-import { PublicMapScreen } from '../screens/PublicMapScreen';
-import { AccountScreen } from '../screens/AccountScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
-import { FactorDetailScreen } from '../screens/FactorDetailScreen';
-import { SurveyParcelSelectionScreen } from '../screens/SurveyParcelSelectionScreen';
-import { useSurveyForm } from '../hooks/useSurveyForm';
-import { useSurveyList } from '../hooks/useSurveyList';
-import { useSurveySync } from '../hooks/useSurveySync';
-import { usePublicMapExplorer } from '../hooks/usePublicMapExplorer';
+import { useEffect, useRef, useState } from "react"
+import { Platform, Pressable, ScrollView, View } from "react-native"
+import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native"
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
+import { createNativeStackNavigator } from "@react-navigation/native-stack"
+import { Ionicons } from "@expo/vector-icons"
+import type { SearchBarCommands } from "react-native-screens"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { brandColors } from "./brand-tokens"
+import { styles } from "./styles"
+import {
+  FactorKey,
+  GpsCaptureResult,
+  RegionVersion,
+  SurveyDetailTab,
+  VegetationStage,
+} from "./types"
+import { SurveyFormScreen } from "../screens/SurveyFormScreen"
+import { SurveyListScreen } from "../screens/SurveyListScreen"
+import { SurveyDetailScreen } from "../screens/SurveyDetailScreen"
+import { PublicMapScreen } from "../screens/PublicMapScreen"
+import { AccountScreen } from "../screens/AccountScreen"
+import { SettingsScreen } from "../screens/SettingsScreen"
+import { FactorDetailScreen } from "../screens/FactorDetailScreen"
+import { SurveyParcelSelectionScreen } from "../screens/SurveyParcelSelectionScreen"
+import { useSurveyForm } from "../hooks/useSurveyForm"
+import { useSurveyList } from "../hooks/useSurveyList"
+import { useSurveySync } from "../hooks/useSurveySync"
+import { usePublicMapExplorer } from "../hooks/usePublicMapExplorer"
 
 export type RootTabParamList = {
-  surveys: undefined;
-  publicMap: undefined;
-  account: undefined;
-};
+  surveys: undefined
+  publicMap: undefined
+  account: undefined
+}
 
 type AccountStackParamList = {
-  accountHome: undefined;
-  settings: undefined;
-};
+  accountHome: undefined
+  settings: undefined
+}
 
 type SurveysStackParamList = {
-  surveysHome: undefined;
-  surveyDetail: undefined;
-  surveyForm: undefined;
-  surveyFactorDetail: { factor: FactorKey };
-  surveyParcels: { surveyId: string; mode: 'wizard' | 'edit' };
-};
+  surveysHome: undefined
+  surveyDetail: undefined
+  surveyForm: undefined
+  surveyFactorDetail: { factor: FactorKey }
+  surveyParcels: { surveyId: string; mode: "wizard" | "edit" }
+}
 
-export type FormMode = 'create' | 'edit';
+export type FormMode = "create" | "edit"
 
-type SurveyFormController = ReturnType<typeof useSurveyForm>;
-type SurveyListController = ReturnType<typeof useSurveyList>;
-type SurveySyncController = ReturnType<typeof useSurveySync>;
-type PublicMapExplorerController = ReturnType<typeof usePublicMapExplorer>;
+type SurveyFormController = ReturnType<typeof useSurveyForm>
+type SurveyListController = ReturnType<typeof useSurveyList>
+type SurveySyncController = ReturnType<typeof useSurveySync>
+type PublicMapExplorerController = ReturnType<typeof usePublicMapExplorer>
 
 type AuthenticatedAppNavigationProps = {
-  apiUrl: string;
-  formMode: FormMode;
-  editingSurveyId: string | null;
-  surveyDetailTab: SurveyDetailTab;
-  setSurveyDetailTab: (tab: SurveyDetailTab) => void;
-  surveyForm: SurveyFormController;
-  surveyList: SurveyListController;
-  surveySync: SurveySyncController;
-  publicMapExplorer: PublicMapExplorerController;
-  ownSurveyIds: string[];
-  onOpenCreateSurvey: () => void;
-  onOpenSurvey: (surveyId: string) => void;
-  onStartEditSurvey: (surveyId: string) => Promise<boolean>;
-  onRenameSurvey: (surveyId: string, nextSiteName: string) => Promise<void>;
-  onUpdateRegionVersion: (surveyId: string, region: RegionVersion) => Promise<void>;
-  onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void>;
-  onSaveSurveyEdits: () => Promise<boolean>;
-  onCreateDraft: () => Promise<boolean>;
-  onCaptureGpsLocation: () => Promise<GpsCaptureResult | null>;
-  onApiUrlChange: (value: string) => void;
-  onCloseSurveyDetailSelection: () => void;
-};
+  apiUrl: string
+  formMode: FormMode
+  editingSurveyId: string | null
+  surveyDetailTab: SurveyDetailTab
+  setSurveyDetailTab: (tab: SurveyDetailTab) => void
+  surveyForm: SurveyFormController
+  surveyList: SurveyListController
+  surveySync: SurveySyncController
+  publicMapExplorer: PublicMapExplorerController
+  ownSurveyIds: string[]
+  onOpenCreateSurvey: () => void
+  onOpenSurvey: (surveyId: string) => void
+  onStartEditSurvey: (surveyId: string) => Promise<boolean>
+  onRenameSurvey: (surveyId: string, nextSiteName: string) => Promise<void>
+  onUpdateRegionVersion: (surveyId: string, region: RegionVersion) => Promise<void>
+  onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void>
+  onSaveSurveyEdits: () => Promise<boolean>
+  onCreateDraft: () => Promise<boolean>
+  onCaptureGpsLocation: () => Promise<GpsCaptureResult | null>
+  onApiUrlChange: (value: string) => void
+  onCloseSurveyDetailSelection: () => void
+}
 
-const Tab = createBottomTabNavigator<RootTabParamList>();
-const AccountStack = createNativeStackNavigator<AccountStackParamList>();
-const SurveysStack = createNativeStackNavigator<SurveysStackParamList>();
+const Tab = createBottomTabNavigator<RootTabParamList>()
+const AccountStack = createNativeStackNavigator<AccountStackParamList>()
+const SurveysStack = createNativeStackNavigator<SurveysStackParamList>()
 
 const tabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList } }) => ({
   headerShown: true,
-  headerTitleAlign: 'left' as const,
+  headerTitleAlign: "left" as const,
   headerTitleStyle: {
     fontSize: 30,
-    fontWeight: '900' as const,
-    color: brandColors.forest
+    fontWeight: "900" as const,
+    color: brandColors.forest,
   },
   headerStyle: {
-    backgroundColor: brandColors.canvas
+    backgroundColor: brandColors.canvas,
   },
   headerShadowVisible: false,
   tabBarActiveTintColor: brandColors.forest,
@@ -96,37 +102,45 @@ const tabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList } }
     borderTopWidth: 1,
     height: Platform.select({ ios: 84, default: 68 }),
     paddingBottom: Platform.select({ ios: 22, default: 10 }),
-    paddingTop: Platform.select({ ios: 8, default: 6 })
+    paddingTop: Platform.select({ ios: 8, default: 6 }),
   },
   tabBarLabelStyle: {
     fontSize: 13,
-    fontWeight: '600' as const
+    fontWeight: "600" as const,
   },
-  tabBarLabel: route.name === 'publicMap' ? 'Explore' : route.name === 'surveys' ? 'My Surveys' : 'Account',
+  tabBarLabel:
+    route.name === "publicMap" ? "Explore" : route.name === "surveys" ? "My Surveys" : "Account",
   tabBarIcon: ({ color, size }: { color: string; size: number }) => {
     const iconName =
-      route.name === 'surveys' ? 'list-outline' : route.name === 'publicMap' ? 'map-outline' : 'person-outline';
-    return <Ionicons name={iconName as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
-  }
-});
+      route.name === "surveys"
+        ? "list-outline"
+        : route.name === "publicMap"
+          ? "map-outline"
+          : "person-outline"
+    return <Ionicons name={iconName as keyof typeof Ionicons.glyphMap} size={size} color={color} />
+  },
+})
 
 function FloatingSurveyActions({
   searchOpen,
   onOpenSearch,
-  onCreateSurvey
+  onCreateSurvey,
 }: {
-  searchOpen: boolean;
-  onOpenSearch: () => void;
-  onCreateSurvey: () => void;
+  searchOpen: boolean
+  onOpenSearch: () => void
+  onCreateSurvey: () => void
 }) {
   return (
     <View pointerEvents="box-none" style={styles.fabDockShell}>
       <View style={styles.fabDock}>
         <Pressable
-          style={[styles.fabDockSecondaryButton, searchOpen ? styles.fabDockSecondaryButtonActive : null]}
+          style={[
+            styles.fabDockSecondaryButton,
+            searchOpen ? styles.fabDockSecondaryButtonActive : null,
+          ]}
           onPress={onOpenSearch}
         >
-          <Ionicons name="search-outline" size={20} color={searchOpen ? '#ffffff' : '#2a764f'} />
+          <Ionicons name="search-outline" size={20} color={searchOpen ? "#ffffff" : "#2a764f"} />
         </Pressable>
         <View style={styles.fabDockDivider} />
         <Pressable style={styles.fabDockPrimaryButton} onPress={onCreateSurvey}>
@@ -134,7 +148,7 @@ function FloatingSurveyActions({
         </Pressable>
       </View>
     </View>
-  );
+  )
 }
 
 function SurveysTabNavigator({
@@ -155,76 +169,73 @@ function SurveysTabNavigator({
   onSaveSurveyEdits,
   onCreateDraft,
   onCaptureGpsLocation,
-  onCloseSurveyDetailSelection
-}: Omit<
-  AuthenticatedAppNavigationProps,
-  'publicMapExplorer' | 'ownSurveyIds' | 'onApiUrlChange'
->) {
-  const [isSurveySearchOpen, setIsSurveySearchOpen] = useState(false);
-  const searchBarRef = useRef<SearchBarCommands>(null!);
-  const isSurveySearchActive = isSurveySearchOpen || surveyList.surveyQuery.trim().length > 0;
+  onCloseSurveyDetailSelection,
+}: Omit<AuthenticatedAppNavigationProps, "publicMapExplorer" | "ownSurveyIds" | "onApiUrlChange">) {
+  const [isSurveySearchOpen, setIsSurveySearchOpen] = useState(false)
+  const searchBarRef = useRef<SearchBarCommands>(null!)
+  const isSurveySearchActive = isSurveySearchOpen || surveyList.surveyQuery.trim().length > 0
 
   useEffect(() => {
     if (!isSurveySearchOpen) {
-      return;
+      return
     }
 
     const timeoutId = setTimeout(() => {
-      searchBarRef.current?.focus();
-    }, 80);
+      searchBarRef.current?.focus()
+    }, 80)
 
-    return () => clearTimeout(timeoutId);
-  }, [isSurveySearchOpen]);
+    return () => clearTimeout(timeoutId)
+  }, [isSurveySearchOpen])
 
   return (
     <SurveysStack.Navigator
       screenOptions={{
         headerShown: true,
         headerLargeTitle: false,
-        headerTitleAlign: 'left',
+        headerTitleAlign: "left",
         headerTitleStyle: {
           fontSize: 30,
-          fontWeight: '900',
-          color: brandColors.forest
+          fontWeight: "900",
+          color: brandColors.forest,
         },
         headerStyle: {
-          backgroundColor: brandColors.canvas
+          backgroundColor: brandColors.canvas,
         },
         headerShadowVisible: false,
-        headerTintColor: brandColors.forest
+        headerTintColor: brandColors.forest,
       }}
     >
       <SurveysStack.Screen
         name="surveysHome"
         options={{
           headerShown: isSurveySearchActive,
-          headerTitle: '',
+          headerTitle: "",
           headerShadowVisible: false,
           headerTransparent: false,
           headerStyle: {
-            backgroundColor: brandColors.canvas
+            backgroundColor: brandColors.canvas,
           },
           headerSearchBarOptions: isSurveySearchActive
             ? {
                 ref: searchBarRef,
-                placeholder: 'Search surveys',
-                autoCapitalize: 'none',
+                placeholder: "Search surveys",
+                autoCapitalize: "none",
                 hideWhenScrolling: false,
                 hideNavigationBar: false,
                 obscureBackground: false,
                 onChangeText: (event) => {
-                  surveyList.setSurveyQuery(event.nativeEvent.text);
+                  surveyList.setSurveyQuery(event.nativeEvent.text)
                 },
                 onCancelButtonPress: () => {
-                  surveyList.setSurveyQuery('');
-                  setIsSurveySearchOpen(false);
+                  surveyList.setSurveyQuery("")
+                  setIsSurveySearchOpen(false)
                 },
                 onClose: () => {
-                  surveyList.setSurveyQuery('');
-                  setIsSurveySearchOpen(false);
-                }
+                  surveyList.setSurveyQuery("")
+                  setIsSurveySearchOpen(false)
+                },
               }
-            : undefined
+            : undefined,
         }}
       >
         {({ navigation }) => (
@@ -253,16 +264,16 @@ function SurveysTabNavigator({
               resetFilters={surveyList.resetFilters}
               searchActive={isSurveySearchActive}
               onOpenSurvey={(surveyId) => {
-                onOpenSurvey(surveyId);
-                navigation.navigate('surveyDetail');
+                onOpenSurvey(surveyId)
+                navigation.navigate("surveyDetail")
               }}
             />
             <FloatingSurveyActions
               searchOpen={isSurveySearchOpen}
               onOpenSearch={() => setIsSurveySearchOpen(true)}
               onCreateSurvey={() => {
-                onOpenCreateSurvey();
-                navigation.navigate('surveyForm');
+                onOpenCreateSurvey()
+                navigation.navigate("surveyForm")
               }}
             />
           </View>
@@ -271,13 +282,13 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveyDetail"
         options={{
-          title: 'Detail',
-          headerLargeTitle: false
+          title: "Detail",
+          headerLargeTitle: false,
         }}
         listeners={{
           beforeRemove: () => {
-            onCloseSurveyDetailSelection();
-          }
+            onCloseSurveyDetailSelection()
+          },
         }}
       >
         {({ navigation }) => (
@@ -303,18 +314,18 @@ function SurveysTabNavigator({
                 onDiscardSurvey={surveySync.handleDiscardSurvey}
                 onToggleVisibility={surveySync.handleToggleVisibility}
                 onOpenFactor={async (surveyId, factor) => {
-                  const loaded = await onStartEditSurvey(surveyId);
+                  const loaded = await onStartEditSurvey(surveyId)
                   if (loaded) {
-                    navigation.navigate('surveyFactorDetail', { factor });
+                    navigation.navigate("surveyFactorDetail", { factor })
                   }
                 }}
                 onRenameSurvey={onRenameSurvey}
                 onUpdateRegionVersion={onUpdateRegionVersion}
                 onUpdateVegetationStage={onUpdateVegetationStage}
                 onOpenParcels={async (surveyId) => {
-                  const loaded = await onStartEditSurvey(surveyId);
+                  const loaded = await onStartEditSurvey(surveyId)
                   if (loaded) {
-                    navigation.navigate('surveyParcels', { surveyId, mode: 'edit' });
+                    navigation.navigate("surveyParcels", { surveyId, mode: "edit" })
                   }
                 }}
               />
@@ -325,25 +336,25 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveyForm"
         options={{
-          title: '',
+          title: "",
           headerLargeTitle: false,
           headerTransparent: true,
           headerShadowVisible: false,
           headerTintColor: brandColors.forest,
-          headerBackButtonDisplayMode: 'minimal',
+          headerBackButtonDisplayMode: "minimal",
           headerStyle: {
-            backgroundColor: 'transparent'
+            backgroundColor: "transparent",
           },
-          headerBackground: () => <View style={{ flex: 1, backgroundColor: 'transparent' }} />,
+          headerBackground: () => <View style={{ flex: 1, backgroundColor: "transparent" }} />,
           contentStyle: {
-            backgroundColor: brandColors.canvas
-          }
+            backgroundColor: brandColors.canvas,
+          },
         }}
       >
         {({ navigation }) => (
           <SurveyFormScreen
             apiUrl={apiUrl}
-            screen={formMode === 'edit' ? 'edit' : 'create'}
+            screen={formMode === "edit" ? "edit" : "create"}
             editingSurveyId={editingSurveyId}
             siteName={surveyForm.siteName}
             setSiteName={surveyForm.setSiteName}
@@ -358,18 +369,23 @@ function SurveysTabNavigator({
             factorSections={surveyForm.factorSections}
             factorRetainedScores={surveyForm.factorRetainedScores}
             formErrors={surveyForm.formErrors}
-            onOpenFactor={(factor) => navigation.navigate('surveyFactorDetail', { factor })}
-            onOpenParcelFullscreen={() => navigation.navigate('surveyParcels', { surveyId: editingSurveyId ?? 'draft', mode: 'wizard' })}
+            onOpenFactor={(factor) => navigation.navigate("surveyFactorDetail", { factor })}
+            onOpenParcelFullscreen={() =>
+              navigation.navigate("surveyParcels", {
+                surveyId: editingSurveyId ?? "draft",
+                mode: "wizard",
+              })
+            }
             onSaveSurveyEdits={async () => {
-              const saved = await onSaveSurveyEdits();
+              const saved = await onSaveSurveyEdits()
               if (saved) {
-                navigation.goBack();
+                navigation.goBack()
               }
             }}
             onCreateDraft={async () => {
-              const created = await onCreateDraft();
+              const created = await onCreateDraft()
               if (created) {
-                navigation.goBack();
+                navigation.goBack()
               }
             }}
             status={surveySync.status}
@@ -380,7 +396,7 @@ function SurveysTabNavigator({
         name="surveyFactorDetail"
         options={({ route }) => ({
           title: `Factor ${route.params.factor}`,
-          headerLargeTitle: false
+          headerLargeTitle: false,
         })}
       >
         {({ route }) => (
@@ -396,19 +412,19 @@ function SurveysTabNavigator({
       <SurveysStack.Screen
         name="surveyParcels"
         options={() => ({
-          title: '',
+          title: "",
           headerLargeTitle: false,
           headerTransparent: true,
           headerShadowVisible: false,
           headerTintColor: brandColors.forest,
-          headerBackButtonDisplayMode: 'minimal',
+          headerBackButtonDisplayMode: "minimal",
           headerStyle: {
-            backgroundColor: 'transparent'
+            backgroundColor: "transparent",
           },
-          headerBackground: () => <View style={{ flex: 1, backgroundColor: 'transparent' }} />,
+          headerBackground: () => <View style={{ flex: 1, backgroundColor: "transparent" }} />,
           contentStyle: {
-            backgroundColor: '#132434'
-          }
+            backgroundColor: "#132434",
+          },
         })}
       >
         {({ route, navigation }) => (
@@ -418,28 +434,28 @@ function SurveysTabNavigator({
             selectedParcelIds={surveyForm.selectedParcelIds}
             onToggleParcelSelection={surveyForm.toggleParcelSelection}
             onCaptureGpsLocation={onCaptureGpsLocation}
-            hideDoneAction={route.params.mode === 'wizard'}
+            hideDoneAction={route.params.mode === "wizard"}
             onSave={async () => {
-              const saved = await onSaveSurveyEdits();
+              const saved = await onSaveSurveyEdits()
               if (saved) {
-                navigation.goBack();
+                navigation.goBack()
               }
             }}
           />
         )}
       </SurveysStack.Screen>
     </SurveysStack.Navigator>
-  );
+  )
 }
 
 type PublicMapTabProps = {
-  publicMapExplorer: PublicMapExplorerController;
-  ownSurveyIds: string[];
-  onReportSurvey: SurveySyncController['handleReportSurvey'];
-};
+  publicMapExplorer: PublicMapExplorerController
+  ownSurveyIds: string[]
+  onReportSurvey: SurveySyncController["handleReportSurvey"]
+}
 
 function PublicMapTab({ publicMapExplorer, ownSurveyIds, onReportSurvey }: PublicMapTabProps) {
-  const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets()
 
   return (
     <View style={[styles.tabScreenContainer, { marginTop: -insets.top }]}>
@@ -460,54 +476,59 @@ function PublicMapTab({ publicMapExplorer, ownSurveyIds, onReportSurvey }: Publi
         onReportSurvey={onReportSurvey}
       />
     </View>
-  );
+  )
 }
 
 type AccountTabNavigatorProps = {
-  apiUrl: string;
-  onApiUrlChange: (value: string) => void;
-  surveyList: SurveyListController;
-  surveySync: SurveySyncController;
-};
+  apiUrl: string
+  onApiUrlChange: (value: string) => void
+  surveyList: SurveyListController
+  surveySync: SurveySyncController
+}
 
-function AccountTabNavigator({ apiUrl, onApiUrlChange, surveyList, surveySync }: AccountTabNavigatorProps) {
+function AccountTabNavigator({
+  apiUrl,
+  onApiUrlChange,
+  surveyList,
+  surveySync,
+}: AccountTabNavigatorProps) {
   return (
     <AccountStack.Navigator
       screenOptions={{
         headerShown: true,
         headerShadowVisible: false,
         headerStyle: {
-          backgroundColor: brandColors.canvas
+          backgroundColor: brandColors.canvas,
         },
         headerTitleStyle: {
           fontSize: 20,
-          fontWeight: '800',
-          color: brandColors.forest
-        }
+          fontWeight: "800",
+          color: brandColors.forest,
+        },
       }}
     >
       <AccountStack.Screen
         name="accountHome"
         options={({ navigation }) => ({
-          title: 'Account',
+          title: "Account",
           headerRight: () => (
             <Pressable
-              onPress={() => navigation.navigate('settings')}
+              onPress={() => navigation.navigate("settings")}
               hitSlop={8}
               style={{
                 width: 40,
                 height: 40,
                 borderRadius: 20,
-                alignItems: 'center',
-                justifyContent: 'center',
+                alignItems: "center",
+                justifyContent: "center",
                 borderWidth: 1,
                 borderColor: brandColors.divider,
-                backgroundColor: brandColors.panel
+                backgroundColor: brandColors.panel,
               }}
             >
               <Ionicons name="settings-outline" size={20} color={brandColors.forest} />
             </Pressable>
-          )
+          ),
         })}
       >
         {() => (
@@ -534,7 +555,7 @@ function AccountTabNavigator({ apiUrl, onApiUrlChange, surveyList, surveySync }:
           </ScrollView>
         )}
       </AccountStack.Screen>
-      <AccountStack.Screen name="settings" options={{ title: 'Settings' }}>
+      <AccountStack.Screen name="settings" options={{ title: "Settings" }}>
         {() => (
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
             <SettingsScreen
@@ -552,7 +573,7 @@ function AccountTabNavigator({ apiUrl, onApiUrlChange, surveyList, surveySync }:
         )}
       </AccountStack.Screen>
     </AccountStack.Navigator>
-  );
+  )
 }
 
 export function AuthenticatedAppNavigation({
@@ -576,7 +597,7 @@ export function AuthenticatedAppNavigation({
   onCreateDraft,
   onCaptureGpsLocation,
   onApiUrlChange,
-  onCloseSurveyDetailSelection
+  onCloseSurveyDetailSelection,
 }: AuthenticatedAppNavigationProps) {
   return (
     <NavigationContainer>
@@ -584,20 +605,20 @@ export function AuthenticatedAppNavigation({
         <Tab.Screen
           name="surveys"
           options={({ route }) => {
-            const focusedRouteName = getFocusedRouteNameFromRoute(route) ?? 'surveysHome';
+            const focusedRouteName = getFocusedRouteNameFromRoute(route) ?? "surveysHome"
 
             return {
-              tabBarLabel: 'My Surveys',
+              tabBarLabel: "My Surveys",
               headerShown: false,
-              tabBarStyle: focusedRouteName === 'surveyParcels' ? { display: 'none' } : undefined
-            };
+              tabBarStyle: focusedRouteName === "surveyParcels" ? { display: "none" } : undefined,
+            }
           }}
           listeners={{
             tabPress: () => {
               if (surveySync.isAuthenticated) {
-                void surveySync.handlePullChanges();
+                void surveySync.handlePullChanges()
               }
-            }
+            },
           }}
         >
           {() => (
@@ -626,14 +647,14 @@ export function AuthenticatedAppNavigation({
         <Tab.Screen
           name="publicMap"
           options={{
-            title: 'Explore',
-            headerShown: false
+            title: "Explore",
+            headerShown: false,
           }}
           listeners={{
             tabPress: () => {
-              onCloseSurveyDetailSelection();
-              void publicMapExplorer.loadPublicMap();
-            }
+              onCloseSurveyDetailSelection()
+              void publicMapExplorer.loadPublicMap()
+            },
           }}
         >
           {() => (
@@ -647,16 +668,16 @@ export function AuthenticatedAppNavigation({
         <Tab.Screen
           name="account"
           options={{
-            title: 'Account',
-            headerShown: false
+            title: "Account",
+            headerShown: false,
           }}
           listeners={{
             tabPress: () => {
-              onCloseSurveyDetailSelection();
+              onCloseSurveyDetailSelection()
               if (surveySync.isAuthenticated) {
-                void surveySync.handleLoadMyProfile({ silent: true });
+                void surveySync.handleLoadMyProfile({ silent: true })
               }
-            }
+            },
           }}
         >
           {() => (
@@ -670,5 +691,5 @@ export function AuthenticatedAppNavigation({
         </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>
-  );
+  )
 }

@@ -1,10 +1,10 @@
-import 'dotenv/config'
-import { INestApplication, ValidationPipe } from '@nestjs/common'
-import { Test, TestingModule } from '@nestjs/testing'
-import request = require('supertest')
-import { AppModule } from '../src/app.module'
+import "dotenv/config"
+import { INestApplication, ValidationPipe } from "@nestjs/common"
+import { Test, TestingModule } from "@nestjs/testing"
+import request = require("supertest")
+import { AppModule } from "../src/app.module"
 
-describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
+describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
   let app: INestApplication
 
   beforeAll(async () => {
@@ -13,7 +13,7 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
     }).compile()
 
     app = moduleFixture.createNestApplication()
-    app.setGlobalPrefix('v1')
+    app.setGlobalPrefix("v1")
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -35,8 +35,8 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
   async function loginAsNewUser(): Promise<{ accessToken: string; refreshToken: string }> {
     const email = `e2e-val-${Date.now()}-${Math.random().toString(36).slice(2)}@ibp.local`
     const res = await request(app.getHttpServer())
-      .post('/v1/auth/login')
-      .send({ email, password: 'demo123' })
+      .post("/v1/auth/login")
+      .send({ email, password: "demo123" })
       .expect(201)
     return {
       accessToken: res.body.access_token as string,
@@ -46,72 +46,72 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
 
   // ─── ValidationPipe — invalid enum ────────────────────────────────────────
 
-  describe('ValidationPipe', () => {
-    it('rejects survey upsert with invalid status enum (400)', async () => {
+  describe("ValidationPipe", () => {
+    it("rejects survey upsert with invalid status enum (400)", async () => {
       const { accessToken } = await loginAsNewUser()
 
       await request(app.getHttpServer())
-        .post('/v1/surveys')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .post("/v1/surveys")
+        .set("Authorization", `Bearer ${accessToken}`)
         .send({
           id: `e2e-val-${Date.now()}`,
           sync_version: 1,
-          site_name: 'Test',
-          status: 'INVALID_STATUS',
-          visibility: 'private',
+          site_name: "Test",
+          status: "INVALID_STATUS",
+          visibility: "private",
           factors: {},
           scores: {},
         })
         .expect(400)
     })
 
-    it('rejects survey upsert with invalid visibility enum (400)', async () => {
+    it("rejects survey upsert with invalid visibility enum (400)", async () => {
       const { accessToken } = await loginAsNewUser()
 
       await request(app.getHttpServer())
-        .post('/v1/surveys')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .post("/v1/surveys")
+        .set("Authorization", `Bearer ${accessToken}`)
         .send({
           id: `e2e-val-${Date.now()}`,
           sync_version: 1,
-          site_name: 'Test',
-          status: 'draft',
-          visibility: 'secret',
+          site_name: "Test",
+          status: "draft",
+          visibility: "secret",
           factors: {},
           scores: {},
         })
         .expect(400)
     })
 
-    it('strips unknown fields (whitelist: true) instead of rejecting', async () => {
+    it("strips unknown fields (whitelist: true) instead of rejecting", async () => {
       const { accessToken } = await loginAsNewUser()
       const surveyId = `e2e-whitelist-${Date.now()}`
 
       const res = await request(app.getHttpServer())
-        .post('/v1/surveys')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .post("/v1/surveys")
+        .set("Authorization", `Bearer ${accessToken}`)
         .send({
           id: surveyId,
           sync_version: 1,
-          site_name: 'Whitelist test',
-          status: 'draft',
-          visibility: 'private',
+          site_name: "Whitelist test",
+          status: "draft",
+          visibility: "private",
           factors: {},
           scores: {},
-          __unknown_field__: 'should be stripped',
+          __unknown_field__: "should be stripped",
         })
         .expect(201)
 
       expect(res.body.id).toBe(surveyId)
-      expect(res.body).not.toHaveProperty('__unknown_field__')
+      expect(res.body).not.toHaveProperty("__unknown_field__")
     })
 
-    it('rejects report create with non-string survey_id (400)', async () => {
+    it("rejects report create with non-string survey_id (400)", async () => {
       const { accessToken } = await loginAsNewUser()
 
       await request(app.getHttpServer())
-        .post('/v1/reports')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .post("/v1/reports")
+        .set("Authorization", `Bearer ${accessToken}`)
         .send({ survey_id: 12345 })
         .expect(400)
     })
@@ -119,30 +119,28 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
 
   // ─── Token refresh ────────────────────────────────────────────────────────
 
-  describe('POST /v1/auth/refresh', () => {
-    it('returns new access_token and refresh_token', async () => {
+  describe("POST /v1/auth/refresh", () => {
+    it("returns new access_token and refresh_token", async () => {
       const { refreshToken } = await loginAsNewUser()
 
       const res = await request(app.getHttpServer())
-        .post('/v1/auth/refresh')
+        .post("/v1/auth/refresh")
         .send({ refresh_token: refreshToken })
         .expect(201)
 
-      expect(typeof res.body.access_token).toBe('string')
-      expect(typeof res.body.refresh_token).toBe('string')
+      expect(typeof res.body.access_token).toBe("string")
+      expect(typeof res.body.refresh_token).toBe("string")
     })
 
-    it('rejects an invalid refresh token (401)', async () => {
+    it("rejects an invalid refresh token (401)", async () => {
       await request(app.getHttpServer())
-        .post('/v1/auth/refresh')
-        .send({ refresh_token: 'not-a-valid-token' })
+        .post("/v1/auth/refresh")
+        .send({ refresh_token: "not-a-valid-token" })
         .expect(401)
     })
 
-    it('rejects request with missing refresh_token field gracefully', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/v1/auth/refresh')
-        .send({})
+    it("rejects request with missing refresh_token field gracefully", async () => {
+      const res = await request(app.getHttpServer()).post("/v1/auth/refresh").send({})
 
       // 401 or 400 — either is acceptable; just not 500
       expect(res.status).toBeLessThan(500)
@@ -151,21 +149,21 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
 
   // ─── Reports CRUD ─────────────────────────────────────────────────────────
 
-  describe('Reports CRUD', () => {
-    it('creates a report and lists it', async () => {
+  describe("Reports CRUD", () => {
+    it("creates a report and lists it", async () => {
       const { accessToken } = await loginAsNewUser()
 
       // create a survey to report on
       const surveyId = `e2e-report-survey-${Date.now()}`
       await request(app.getHttpServer())
-        .post('/v1/surveys')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .post("/v1/surveys")
+        .set("Authorization", `Bearer ${accessToken}`)
         .send({
           id: surveyId,
           sync_version: 1,
-          site_name: 'Reportable site',
-          status: 'draft',
-          visibility: 'private',
+          site_name: "Reportable site",
+          status: "draft",
+          visibility: "private",
           factors: {},
           scores: {},
         })
@@ -173,51 +171,51 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
 
       // create report
       const createRes = await request(app.getHttpServer())
-        .post('/v1/reports')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ survey_id: surveyId, reason: 'Test report reason' })
+        .post("/v1/reports")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ survey_id: surveyId, reason: "Test report reason" })
         .expect(201)
 
       expect(createRes.body.survey_id ?? createRes.body.surveyId ?? createRes.body.id).toBeTruthy()
 
       // list reports — should include our newly created one
       const listRes = await request(app.getHttpServer())
-        .get('/v1/reports')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .get("/v1/reports")
+        .set("Authorization", `Bearer ${accessToken}`)
         .expect(200)
 
       const reports = Array.isArray(listRes.body) ? listRes.body : (listRes.body.items ?? [])
       expect(reports.length).toBeGreaterThanOrEqual(1)
     })
 
-    it('rejects unauthenticated report creation (401)', async () => {
+    it("rejects unauthenticated report creation (401)", async () => {
       await request(app.getHttpServer())
-        .post('/v1/reports')
-        .send({ survey_id: 'some-survey', reason: 'test' })
+        .post("/v1/reports")
+        .send({ survey_id: "some-survey", reason: "test" })
         .expect(401)
     })
 
-    it('rejects unauthenticated report listing (401)', async () => {
-      await request(app.getHttpServer()).get('/v1/reports').expect(401)
+    it("rejects unauthenticated report listing (401)", async () => {
+      await request(app.getHttpServer()).get("/v1/reports").expect(401)
     })
   })
 
   // ─── Survey delete ────────────────────────────────────────────────────────
 
-  describe('DELETE /v1/surveys/:id', () => {
-    it('returns 204 when deleting an existing survey', async () => {
+  describe("DELETE /v1/surveys/:id", () => {
+    it("returns 204 when deleting an existing survey", async () => {
       const { accessToken } = await loginAsNewUser()
       const surveyId = `e2e-delete-${Date.now()}`
 
       await request(app.getHttpServer())
-        .post('/v1/surveys')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .post("/v1/surveys")
+        .set("Authorization", `Bearer ${accessToken}`)
         .send({
           id: surveyId,
           sync_version: 1,
-          site_name: 'To delete',
-          status: 'draft',
-          visibility: 'private',
+          site_name: "To delete",
+          status: "draft",
+          visibility: "private",
           factors: {},
           scores: {},
         })
@@ -225,16 +223,16 @@ describe('ValidationPipe + Reports CRUD + Token refresh (e2e)', () => {
 
       await request(app.getHttpServer())
         .delete(`/v1/surveys/${surveyId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set("Authorization", `Bearer ${accessToken}`)
         .expect(204)
     })
 
-    it('returns 204 even when survey does not exist (allowMissing)', async () => {
+    it("returns 204 even when survey does not exist (allowMissing)", async () => {
       const { accessToken } = await loginAsNewUser()
 
       await request(app.getHttpServer())
-        .delete('/v1/surveys/non-existent-id')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .delete("/v1/surveys/non-existent-id")
+        .set("Authorization", `Bearer ${accessToken}`)
         .expect(204)
     })
   })

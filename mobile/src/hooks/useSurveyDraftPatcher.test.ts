@@ -5,38 +5,42 @@
  * verify that each handler correctly delegates to patchSurveyDraftDirectly.
  */
 
-jest.mock('react-native', () => ({
+jest.mock("react-native", () => ({
   Platform: { select: (opts: Record<string, unknown>) => opts.default ?? Object.values(opts)[0] },
 }))
 
-jest.mock('../storage', () => ({
+jest.mock("../storage", () => ({
   getLocalSurveyDraft: jest.fn(),
   updateLocalDraft: jest.fn(),
 }))
 
-import { getLocalSurveyDraft, updateLocalDraft } from '../storage'
-import { useSurveyDraftPatcher } from './useSurveyDraftPatcher'
+import { getLocalSurveyDraft, updateLocalDraft } from "../storage"
+import { useSurveyDraftPatcher } from "./useSurveyDraftPatcher"
 
 const mockGetLocalSurveyDraft = getLocalSurveyDraft as jest.Mock
 const mockUpdateLocalDraft = updateLocalDraft as jest.Mock
 
-const TEST_SURVEY_ID = 'survey-test-1'
+const TEST_SURVEY_ID = "survey-test-1"
 
 function makeDraftRow(overrides: Record<string, unknown> = {}) {
   return {
     id: TEST_SURVEY_ID,
-    site_name: 'Old site',
-    region_version: 'ACA',
-    vegetation_stage: 'adult',
-    parcel_ids: ['AB001'],
+    site_name: "Old site",
+    region_version: "ACA",
+    vegetation_stage: "adult",
+    parcel_ids: ["AB001"],
     factors: { A: { native_genus_count: 3 } },
     ...overrides,
   }
 }
 
-describe('useSurveyDraftPatcher', () => {
+describe("useSurveyDraftPatcher", () => {
   let onStatusChange: jest.Mock
-  let surveyList: { surveys: Record<string, unknown>[]; refreshLocalSurveys: jest.Mock; refreshLocalAttachments: jest.Mock }
+  let surveyList: {
+    surveys: Record<string, unknown>[]
+    refreshLocalSurveys: jest.Mock
+    refreshLocalAttachments: jest.Mock
+  }
 
   function useBuildHook() {
     return useSurveyDraftPatcher({ surveyList: surveyList as never, onStatusChange })
@@ -55,75 +59,81 @@ describe('useSurveyDraftPatcher', () => {
 
   // ─── patchSurveyDraftDirectly ──────────────────────────────────────────────
 
-  describe('patchSurveyDraftDirectly', () => {
-    test('returns false when survey is submitted (read-only)', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'submitted', visibility: 'private' }]
+  describe("patchSurveyDraftDirectly", () => {
+    test("returns false when survey is submitted (read-only)", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "submitted", visibility: "private" }]
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, 'should not reach')
+      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "should not reach")
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(`Survey ${TEST_SURVEY_ID} is submitted and read-only`)
+      expect(onStatusChange).toHaveBeenCalledWith(
+        `Survey ${TEST_SURVEY_ID} is submitted and read-only`,
+      )
       expect(mockUpdateLocalDraft).not.toHaveBeenCalled()
     })
 
-    test('returns false when survey is not found locally', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
+    test("returns false when survey is not found locally", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockGetLocalSurveyDraft.mockResolvedValue(null)
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, 'success')
+      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "success")
 
       expect(result).toBe(false)
       expect(onStatusChange).toHaveBeenCalledWith(`Survey not found locally: ${TEST_SURVEY_ID}`)
     })
 
-    test('calls updateLocalDraft with mutated data and returns true', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'public' }]
+    test("calls updateLocalDraft with mutated data and returns true", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "public" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
       const result = await patchSurveyDraftDirectly(
         TEST_SURVEY_ID,
-        (draft) => ({ ...draft, site_name: 'New name' }),
-        'Update done!',
+        (draft) => ({ ...draft, site_name: "New name" }),
+        "Update done!",
       )
 
       expect(result).toBe(true)
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ survey_id: TEST_SURVEY_ID, site_name: 'New name', visibility: 'public' }),
+        expect.objectContaining({
+          survey_id: TEST_SURVEY_ID,
+          site_name: "New name",
+          visibility: "public",
+        }),
       )
-      expect(onStatusChange).toHaveBeenCalledWith('Update done!')
+      expect(onStatusChange).toHaveBeenCalledWith("Update done!")
     })
 
-    test('refreshes surveys and attachments on success', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
+    test("refreshes surveys and attachments on success", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, 'done')
+      await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "done")
 
       expect(surveyList.refreshLocalSurveys).toHaveBeenCalled()
       expect(surveyList.refreshLocalAttachments).toHaveBeenCalled()
     })
 
-    test('returns false and reports error on storage exception', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
-      mockGetLocalSurveyDraft.mockRejectedValue(new Error('DB crash'))
+    test("returns false and reports error on storage exception", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
+      mockGetLocalSurveyDraft.mockRejectedValue(new Error("DB crash"))
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, 'success')
+      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "success")
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining('DB crash'))
+      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("DB crash"))
     })
 
-    test('treats survey as non-submitted when not found in surveys list', async () => {
+    test("treats survey as non-submitted when not found in surveys list", async () => {
       surveyList.surveys = [] // survey not in list — no status check
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, 'ok')
+      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "ok")
 
       expect(result).toBe(true)
     })
@@ -131,70 +141,72 @@ describe('useSurveyDraftPatcher', () => {
 
   // ─── handleRenameSurvey ────────────────────────────────────────────────────
 
-  describe('handleRenameSurvey', () => {
-    test('saves trimmed site name', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
+  describe("handleRenameSurvey", () => {
+    test("saves trimmed site name", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { handleRenameSurvey } = useBuildHook()
 
-      await handleRenameSurvey(TEST_SURVEY_ID, '  Forest Nord  ')
+      await handleRenameSurvey(TEST_SURVEY_ID, "  Forest Nord  ")
 
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ site_name: 'Forest Nord' }),
+        expect.objectContaining({ site_name: "Forest Nord" }),
       )
     })
 
     test('falls back to "Unnamed site" for blank name', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { handleRenameSurvey } = useBuildHook()
 
-      await handleRenameSurvey(TEST_SURVEY_ID, '   ')
+      await handleRenameSurvey(TEST_SURVEY_ID, "   ")
 
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ site_name: 'Unnamed site' }),
+        expect.objectContaining({ site_name: "Unnamed site" }),
       )
     })
   })
 
   // ─── handleUpdateSurveyRegionVersion ──────────────────────────────────────
 
-  describe('handleUpdateSurveyRegionVersion', () => {
-    test('updates region_version', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
+  describe("handleUpdateSurveyRegionVersion", () => {
+    test("updates region_version", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { handleUpdateSurveyRegionVersion } = useBuildHook()
 
-      await handleUpdateSurveyRegionVersion(TEST_SURVEY_ID, 'M')
+      await handleUpdateSurveyRegionVersion(TEST_SURVEY_ID, "M")
 
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ region_version: 'M' }),
+        expect.objectContaining({ region_version: "M" }),
       )
     })
 
-    test('normalizes vegetation stage when region changes', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
+    test("normalizes vegetation stage when region changes", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       // 'adult' stage must be valid for both regions or get normalized
-      mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow({ vegetation_stage: 'adult' }))
+      mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow({ vegetation_stage: "adult" }))
       const { handleUpdateSurveyRegionVersion } = useBuildHook()
 
-      await handleUpdateSurveyRegionVersion(TEST_SURVEY_ID, 'ACA')
+      await handleUpdateSurveyRegionVersion(TEST_SURVEY_ID, "ACA")
 
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ region_version: 'ACA', vegetation_stage: expect.any(String) }),
+        expect.objectContaining({ region_version: "ACA", vegetation_stage: expect.any(String) }),
       )
     })
   })
 
   // ─── handleUpdateSurveyVegetationStage ────────────────────────────────────
 
-  describe('handleUpdateSurveyVegetationStage', () => {
-    test('updates vegetation_stage normalized for current region', async () => {
-      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: 'draft', visibility: 'private' }]
-      mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow({ region_version: 'ACA', vegetation_stage: 'young' }))
+  describe("handleUpdateSurveyVegetationStage", () => {
+    test("updates vegetation_stage normalized for current region", async () => {
+      surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
+      mockGetLocalSurveyDraft.mockResolvedValue(
+        makeDraftRow({ region_version: "ACA", vegetation_stage: "young" }),
+      )
       const { handleUpdateSurveyVegetationStage } = useBuildHook()
 
-      await handleUpdateSurveyVegetationStage(TEST_SURVEY_ID, 'planitiaire')
+      await handleUpdateSurveyVegetationStage(TEST_SURVEY_ID, "planitiaire")
 
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
         expect.objectContaining({ vegetation_stage: expect.any(String) }),

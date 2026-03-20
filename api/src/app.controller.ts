@@ -1,13 +1,13 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get } from "@nestjs/common"
 
 @Controller()
 export class AppController {
-  @Get('health')
+  @Get("health")
   health(): { status: string; service: string; timestamp: string } {
     return {
-      status: 'ok',
-      service: 'ibp-api',
-      timestamp: new Date().toISOString()
-    };
+      status: "ok",
+      service: "ibp-api",
+      timestamp: new Date().toISOString(),
+    }
   }
 }

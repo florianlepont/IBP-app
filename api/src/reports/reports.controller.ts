@@ -1,12 +1,12 @@
-import { Body, Controller, Get, Patch, Post, Query, Param, UseGuards } from '@nestjs/common'
-import { AuthGuard } from '../auth/auth.guard'
-import { CurrentUser } from '../auth/current-user.decorator'
-import { AuthenticatedUser } from '../auth/auth.types'
-import { ReportsService } from './reports.service'
-import { CreateReportDto } from './dtos/create-report.dto'
-import { PatchReportDto } from './dtos/patch-report.dto'
+import { Body, Controller, Get, Patch, Post, Query, Param, UseGuards } from "@nestjs/common"
+import { AuthGuard } from "../auth/auth.guard"
+import { CurrentUser } from "../auth/current-user.decorator"
+import { AuthenticatedUser } from "../auth/auth.types"
+import { ReportsService } from "./reports.service"
+import { CreateReportDto } from "./dtos/create-report.dto"
+import { PatchReportDto } from "./dtos/patch-report.dto"
 
-@Controller('reports')
+@Controller("reports")
 @UseGuards(AuthGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
@@ -17,12 +17,16 @@ export class ReportsController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthenticatedUser, @Query('status') status?: string) {
+  list(@CurrentUser() user: AuthenticatedUser, @Query("status") status?: string) {
     return this.reportsService.listReports(user, status)
   }
 
-  @Patch(':id')
-  patch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() body: PatchReportDto) {
+  @Patch(":id")
+  patch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Body() body: PatchReportDto,
+  ) {
     return this.reportsService.reviewReport(user, id, body)
   }
 }

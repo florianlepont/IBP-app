@@ -1,6 +1,6 @@
-import * as Location from 'expo-location'
-import { GpsCaptureResult } from '../app/types'
-import { useSurveyForm } from './useSurveyForm'
+import * as Location from "expo-location"
+import { GpsCaptureResult } from "../app/types"
+import { useSurveyForm } from "./useSurveyForm"
 
 type UseGpsCaptureParams = {
   surveyForm: ReturnType<typeof useSurveyForm>
@@ -13,19 +13,25 @@ export function useGpsCapture({ surveyForm, onStatusChange, onAlert }: UseGpsCap
     try {
       const locationServicesEnabled = await Location.hasServicesEnabledAsync()
       if (!locationServicesEnabled) {
-        onStatusChange('Location services disabled')
-        onAlert('Location disabled', 'Enable location services to center the map and find nearby parcels.')
+        onStatusChange("Location services disabled")
+        onAlert(
+          "Location disabled",
+          "Enable location services to center the map and find nearby parcels.",
+        )
         return null
       }
 
-      onStatusChange('Requesting GPS permission...')
+      onStatusChange("Requesting GPS permission...")
       const existingPermission = await Location.getForegroundPermissionsAsync()
       const permission = existingPermission.granted
         ? existingPermission
         : await Location.requestForegroundPermissionsAsync()
       if (!permission.granted) {
-        onStatusChange('Location permission denied')
-        onAlert('Location disabled', 'Allow location access to center the map and find nearby parcels.')
+        onStatusChange("Location permission denied")
+        onAlert(
+          "Location disabled",
+          "Allow location access to center the map and find nearby parcels.",
+        )
         return null
       }
 
@@ -38,9 +44,9 @@ export function useGpsCapture({ surveyForm, onStatusChange, onAlert }: UseGpsCap
           collected_at: new Date(lastKnownPosition.timestamp).toISOString(),
         }
         surveyForm.applyGpsLocation(fallbackLocation)
-        onStatusChange('Approximate location captured. Refining GPS...')
+        onStatusChange("Approximate location captured. Refining GPS...")
       } else {
-        onStatusChange('Capturing GPS location...')
+        onStatusChange("Capturing GPS location...")
       }
 
       try {
@@ -54,18 +60,18 @@ export function useGpsCapture({ surveyForm, onStatusChange, onAlert }: UseGpsCap
           collected_at: new Date(position.timestamp).toISOString(),
         }
         surveyForm.applyGpsLocation(currentLocation)
-        onStatusChange('GPS location captured')
+        onStatusChange("GPS location captured")
         return currentLocation
       } catch (error) {
         if (fallbackLocation) {
-          onStatusChange('Approximate location captured')
+          onStatusChange("Approximate location captured")
           return fallbackLocation
         }
         throw error
       }
     } catch (error) {
       onStatusChange(`GPS error: ${(error as Error).message}`)
-      onAlert('GPS unavailable', 'The device could not provide a GPS position.')
+      onAlert("GPS unavailable", "The device could not provide a GPS position.")
       return null
     }
   }

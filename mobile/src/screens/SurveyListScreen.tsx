@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from "react"
 import {
   Animated,
   Image,
@@ -7,117 +7,124 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+  useWindowDimensions,
+} from "react-native"
+import { Ionicons } from "@expo/vector-icons"
 import {
   brandColors,
   brandRadius,
   brandShadow,
   brandSpacing,
-  brandTypography
-} from '../app/brand-tokens';
-import { formatDateTime } from '../app/formatters';
+  brandTypography,
+} from "../app/brand-tokens"
+import { formatDateTime } from "../app/formatters"
 import {
   computeSurveyStats,
   formatSurveySyncDisplayLabel,
   formatSurveyWorkflowStatusLabel,
   resolveSurveySyncDisplay,
-  resolveSurveyWorkflowStatus
-} from '../app/survey-logic';
+  resolveSurveyWorkflowStatus,
+} from "../app/survey-logic"
 import {
   SurveyAttachmentFilter,
   SurveyBlockedFilter,
   SurveySort,
   SurveyStatusFilter,
   SurveyVisibilityFilter,
-  SurveySyncFilter
-} from '../app/types';
-import { LocalAttachment, LocalSurvey } from '../storage';
+  SurveySyncFilter,
+} from "../app/types"
+import { LocalAttachment, LocalSurvey } from "../storage"
 
 type SurveyListScreenProps = {
-  surveys: LocalSurvey[];
-  visibleSurveys: LocalSurvey[];
-  selectedSurveyId: string | null;
-  attachmentsBySurvey: Record<string, LocalAttachment[]>;
-  surveyFromDate: string;
-  setSurveyFromDate: (value: string) => void;
-  surveyToDate: string;
-  setSurveyToDate: (value: string) => void;
-  statusFilter: SurveyStatusFilter;
-  setStatusFilter: (value: SurveyStatusFilter) => void;
-  visibilityFilter: SurveyVisibilityFilter;
-  setVisibilityFilter: (value: SurveyVisibilityFilter) => void;
-  syncFilter: SurveySyncFilter;
-  setSyncFilter: (value: SurveySyncFilter) => void;
-  blockedFilter: SurveyBlockedFilter;
-  setBlockedFilter: (value: SurveyBlockedFilter) => void;
-  attachmentFilter: SurveyAttachmentFilter;
-  setAttachmentFilter: (value: SurveyAttachmentFilter) => void;
-  sortMode: SurveySort;
-  setSortMode: (value: SurveySort) => void;
-  resetFilters: () => void;
-  searchActive: boolean;
-  onOpenSurvey: (surveyId: string) => void;
-};
+  surveys: LocalSurvey[]
+  visibleSurveys: LocalSurvey[]
+  selectedSurveyId: string | null
+  attachmentsBySurvey: Record<string, LocalAttachment[]>
+  surveyFromDate: string
+  setSurveyFromDate: (value: string) => void
+  surveyToDate: string
+  setSurveyToDate: (value: string) => void
+  statusFilter: SurveyStatusFilter
+  setStatusFilter: (value: SurveyStatusFilter) => void
+  visibilityFilter: SurveyVisibilityFilter
+  setVisibilityFilter: (value: SurveyVisibilityFilter) => void
+  syncFilter: SurveySyncFilter
+  setSyncFilter: (value: SurveySyncFilter) => void
+  blockedFilter: SurveyBlockedFilter
+  setBlockedFilter: (value: SurveyBlockedFilter) => void
+  attachmentFilter: SurveyAttachmentFilter
+  setAttachmentFilter: (value: SurveyAttachmentFilter) => void
+  sortMode: SurveySort
+  setSortMode: (value: SurveySort) => void
+  resetFilters: () => void
+  searchActive: boolean
+  onOpenSurvey: (surveyId: string) => void
+}
 
 type SurveyFilterChipProps = {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-};
+  label: string
+  active: boolean
+  onPress: () => void
+}
 
 type SurveyStatTileProps = {
-  label: string;
-  value: number;
-};
+  label: string
+  value: number
+}
 
-type SurveyBadgeTone = 'neutral' | 'success' | 'warning' | 'danger';
-type SurveyRowTone = SurveyBadgeTone;
+type SurveyBadgeTone = "neutral" | "success" | "warning" | "danger"
+type SurveyRowTone = SurveyBadgeTone
 
 type SurveyBadgeProps = {
-  label: string;
-  tone?: SurveyBadgeTone;
-};
+  label: string
+  tone?: SurveyBadgeTone
+}
 
 const STATUS_OPTIONS: Array<{ label: string; value: SurveyStatusFilter }> = [
-  { label: 'All', value: 'all' },
-  { label: 'Draft', value: 'draft' },
-  { label: 'Submitted', value: 'submitted' },
-  { label: 'Expired', value: 'expired' }
-];
+  { label: "All", value: "all" },
+  { label: "Draft", value: "draft" },
+  { label: "Submitted", value: "submitted" },
+  { label: "Expired", value: "expired" },
+]
 
 const SYNC_OPTIONS: Array<{ label: string; value: SurveySyncFilter }> = [
-  { label: 'All', value: 'all' },
-  { label: 'Pending', value: 'pending' },
-  { label: 'Synced', value: 'synced' },
-  { label: 'Failed', value: 'failed' }
-];
+  { label: "All", value: "all" },
+  { label: "Pending", value: "pending" },
+  { label: "Synced", value: "synced" },
+  { label: "Failed", value: "failed" },
+]
 
 const BLOCKED_OPTIONS: Array<{ label: string; value: SurveyBlockedFilter }> = [
-  { label: 'All', value: 'all' },
-  { label: 'Blocked only', value: 'blocked' },
-  { label: 'Unblocked', value: 'unblocked' }
-];
+  { label: "All", value: "all" },
+  { label: "Blocked only", value: "blocked" },
+  { label: "Unblocked", value: "unblocked" },
+]
 
 const ATTACHMENT_OPTIONS: Array<{ label: string; value: SurveyAttachmentFilter }> = [
-  { label: 'All', value: 'all' },
-  { label: 'With photo', value: 'with' },
-  { label: 'Without photo', value: 'without' }
-];
+  { label: "All", value: "all" },
+  { label: "With photo", value: "with" },
+  { label: "Without photo", value: "without" },
+]
 
 const SORT_OPTIONS: Array<{ label: string; value: SurveySort }> = [
-  { label: 'Updated (newest)', value: 'updated_desc' },
-  { label: 'Updated (oldest)', value: 'updated_asc' },
-  { label: 'Site A-Z', value: 'site_asc' }
-];
+  { label: "Updated (newest)", value: "updated_desc" },
+  { label: "Updated (oldest)", value: "updated_asc" },
+  { label: "Site A-Z", value: "site_asc" },
+]
 
 function SurveyFilterChip({ label, active, onPress }: SurveyFilterChipProps) {
   return (
-    <Pressable onPress={onPress} style={[screenStyles.filterChip, active ? screenStyles.filterChipActive : null]}>
-      <Text style={[screenStyles.filterChipText, active ? screenStyles.filterChipTextActive : null]}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      style={[screenStyles.filterChip, active ? screenStyles.filterChipActive : null]}
+    >
+      <Text
+        style={[screenStyles.filterChipText, active ? screenStyles.filterChipTextActive : null]}
+      >
+        {label}
+      </Text>
     </Pressable>
-  );
+  )
 }
 
 function SurveyStatTile({ label, value }: SurveyStatTileProps) {
@@ -126,49 +133,53 @@ function SurveyStatTile({ label, value }: SurveyStatTileProps) {
       <Text style={screenStyles.heroStatLabel}>{label}</Text>
       <Text style={screenStyles.heroStatValue}>{value}</Text>
     </View>
-  );
+  )
 }
 
-function SurveyBadge({ label, tone = 'neutral' }: SurveyBadgeProps) {
+function SurveyBadge({ label, tone = "neutral" }: SurveyBadgeProps) {
   return (
     <View
       style={[
         screenStyles.badge,
-        tone === 'success'
+        tone === "success"
           ? screenStyles.badgeSuccess
-          : tone === 'warning'
+          : tone === "warning"
             ? screenStyles.badgeWarning
-            : tone === 'danger'
+            : tone === "danger"
               ? screenStyles.badgeDanger
-              : screenStyles.badgeNeutral
+              : screenStyles.badgeNeutral,
       ]}
     >
-      <Text style={[screenStyles.badgeText, tone === 'danger' ? screenStyles.badgeTextDanger : null]}>{label}</Text>
+      <Text
+        style={[screenStyles.badgeText, tone === "danger" ? screenStyles.badgeTextDanger : null]}
+      >
+        {label}
+      </Text>
     </View>
-  );
+  )
 }
 
 function resolveSurveyRowTone(
   workflowStatus: ReturnType<typeof resolveSurveyWorkflowStatus>,
-  syncDisplay: ReturnType<typeof resolveSurveySyncDisplay>
+  syncDisplay: ReturnType<typeof resolveSurveySyncDisplay>,
 ): SurveyRowTone {
-  if (syncDisplay === 'sync_error' || syncDisplay === 'sync_blocked') return 'danger';
-  if (workflowStatus === 'submitted') return 'success';
-  if (workflowStatus === 'expired') return 'danger';
-  if (workflowStatus === 'pending') return 'warning';
-  return 'neutral';
+  if (syncDisplay === "sync_error" || syncDisplay === "sync_blocked") return "danger"
+  if (workflowStatus === "submitted") return "success"
+  if (workflowStatus === "expired") return "danger"
+  if (workflowStatus === "pending") return "warning"
+  return "neutral"
 }
 
 function FilterSection<T extends string>({
   label,
   options,
   value,
-  onChange
+  onChange,
 }: {
-  label: string;
-  options: Array<{ label: string; value: T }>;
-  value: T;
-  onChange: (next: T) => void;
+  label: string
+  options: Array<{ label: string; value: T }>
+  value: T
+  onChange: (next: T) => void
 }) {
   return (
     <View style={screenStyles.filterSection}>
@@ -184,7 +195,7 @@ function FilterSection<T extends string>({
         ))}
       </View>
     </View>
-  );
+  )
 }
 
 export function SurveyListScreen({
@@ -210,60 +221,61 @@ export function SurveyListScreen({
   setSortMode,
   resetFilters,
   searchActive,
-  onOpenSurvey
+  onOpenSurvey,
 }: SurveyListScreenProps) {
-  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const { height: viewportHeight } = useWindowDimensions();
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
+  const scrollY = useRef(new Animated.Value(0)).current
+  const { height: viewportHeight } = useWindowDimensions()
 
-  const surveyStats = useMemo(() => computeSurveyStats(surveys), [surveys]);
+  const surveyStats = useMemo(() => computeSurveyStats(surveys), [surveys])
   const advancedFilterCount = useMemo(() => {
-    let count = 0;
-    if (surveyFromDate.trim()) count += 1;
-    if (surveyToDate.trim()) count += 1;
-    if (syncFilter !== 'all') count += 1;
-    if (blockedFilter !== 'all') count += 1;
-    if (attachmentFilter !== 'all') count += 1;
-    if (sortMode !== 'updated_desc') count += 1;
-    return count;
-  }, [attachmentFilter, blockedFilter, sortMode, surveyFromDate, surveyToDate, syncFilter]);
+    let count = 0
+    if (surveyFromDate.trim()) count += 1
+    if (surveyToDate.trim()) count += 1
+    if (syncFilter !== "all") count += 1
+    if (blockedFilter !== "all") count += 1
+    if (attachmentFilter !== "all") count += 1
+    if (sortMode !== "updated_desc") count += 1
+    return count
+  }, [attachmentFilter, blockedFilter, sortMode, surveyFromDate, surveyToDate, syncFilter])
 
   const compactSummary = useMemo(
-    () => `${surveyStats.total} total • ${surveyStats.draft} drafts • ${surveyStats.pending} pending`,
-    [surveyStats.draft, surveyStats.pending, surveyStats.total]
-  );
+    () =>
+      `${surveyStats.total} total • ${surveyStats.draft} drafts • ${surveyStats.pending} pending`,
+    [surveyStats.draft, surveyStats.pending, surveyStats.total],
+  )
 
-  const expandedHeroHeight = Math.max(324, Math.min(388, Math.round(viewportHeight * 0.39)));
-  const collapsedHeroHeight = 84;
-  const collapseDistance = expandedHeroHeight - collapsedHeroHeight;
+  const expandedHeroHeight = Math.max(324, Math.min(388, Math.round(viewportHeight * 0.39)))
+  const collapsedHeroHeight = 84
+  const collapseDistance = expandedHeroHeight - collapsedHeroHeight
 
   const heroHeight = scrollY.interpolate({
     inputRange: [0, collapseDistance],
     outputRange: [expandedHeroHeight, collapsedHeroHeight],
-    extrapolate: 'clamp'
-  });
+    extrapolate: "clamp",
+  })
   const expandedOpacity = scrollY.interpolate({
     inputRange: [0, collapseDistance * 0.34, collapseDistance * 0.56],
     outputRange: [1, 0.22, 0],
-    extrapolate: 'clamp'
-  });
+    extrapolate: "clamp",
+  })
   const expandedTranslateY = scrollY.interpolate({
     inputRange: [0, collapseDistance * 0.56],
     outputRange: [0, -10],
-    extrapolate: 'clamp'
-  });
+    extrapolate: "clamp",
+  })
   const compactOpacity = scrollY.interpolate({
     inputRange: [collapseDistance * 0.4, collapseDistance * 0.68, collapseDistance],
     outputRange: [0, 0.6, 1],
-    extrapolate: 'clamp'
-  });
+    extrapolate: "clamp",
+  })
   const compactTranslateY = scrollY.interpolate({
     inputRange: [collapseDistance * 0.4, collapseDistance],
     outputRange: [8, 0],
-    extrapolate: 'clamp'
-  });
-  const stickyFilterOffset = collapsedHeroHeight + brandSpacing.sm;
-  const topSpacerHeight = searchActive ? brandSpacing.sm : expandedHeroHeight + brandSpacing.md;
+    extrapolate: "clamp",
+  })
+  const stickyFilterOffset = collapsedHeroHeight + brandSpacing.sm
+  const topSpacerHeight = searchActive ? brandSpacing.sm : expandedHeroHeight + brandSpacing.md
 
   return (
     <View style={screenStyles.container}>
@@ -273,8 +285,8 @@ export function SurveyListScreen({
           style={[
             screenStyles.heroShell,
             {
-              height: heroHeight
-            }
+              height: heroHeight,
+            },
           ]}
         >
           <View style={screenStyles.heroCard}>
@@ -284,8 +296,8 @@ export function SurveyListScreen({
                 screenStyles.heroExpandedLayer,
                 {
                   opacity: expandedOpacity,
-                  transform: [{ translateY: expandedTranslateY }]
-                }
+                  transform: [{ translateY: expandedTranslateY }],
+                },
               ]}
             >
               <View style={screenStyles.heroExpandedHeader}>
@@ -308,8 +320,8 @@ export function SurveyListScreen({
                 screenStyles.heroCompactLayer,
                 {
                   opacity: compactOpacity,
-                  transform: [{ translateY: compactTranslateY }]
-                }
+                  transform: [{ translateY: compactTranslateY }],
+                },
               ]}
             >
               <Text numberOfLines={1} style={screenStyles.heroTitleCompact}>
@@ -331,7 +343,7 @@ export function SurveyListScreen({
         stickyHeaderIndices={searchActive ? undefined : [1]}
         contentInsetAdjustmentBehavior="automatic"
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: false
+          useNativeDriver: false,
         })}
       >
         <View style={{ height: topSpacerHeight }} />
@@ -342,8 +354,8 @@ export function SurveyListScreen({
               screenStyles.filtersStickyHost,
               {
                 paddingTop: stickyFilterOffset,
-                marginTop: -stickyFilterOffset
-              }
+                marginTop: -stickyFilterOffset,
+              },
             ]}
           >
             <View style={screenStyles.filtersCard}>
@@ -356,14 +368,27 @@ export function SurveyListScreen({
                   style={screenStyles.advancedToggle}
                   onPress={() => setAdvancedFiltersOpen((current) => !current)}
                 >
-                  <Ionicons name={advancedFiltersOpen ? 'close' : 'funnel-outline'} size={16} color={brandColors.forest} />
+                  <Ionicons
+                    name={advancedFiltersOpen ? "close" : "funnel-outline"}
+                    size={16}
+                    color={brandColors.forest}
+                  />
                   <Text style={screenStyles.advancedToggleText}>
-                    {advancedFiltersOpen ? 'Hide' : advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Filters'}
+                    {advancedFiltersOpen
+                      ? "Hide"
+                      : advancedFilterCount > 0
+                        ? `${advancedFilterCount} active`
+                        : "Filters"}
                   </Text>
                 </Pressable>
               </View>
 
-              <FilterSection label="Status" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+              <FilterSection
+                label="Status"
+                options={STATUS_OPTIONS}
+                value={statusFilter}
+                onChange={setStatusFilter}
+              />
               {advancedFiltersOpen ? (
                 <View style={screenStyles.advancedPanel}>
                   <View style={screenStyles.dateInputsRow}>
@@ -393,15 +418,30 @@ export function SurveyListScreen({
                     </View>
                   </View>
 
-                  <FilterSection label="Sync" options={SYNC_OPTIONS} value={syncFilter} onChange={setSyncFilter} />
-                  <FilterSection label="Blocked" options={BLOCKED_OPTIONS} value={blockedFilter} onChange={setBlockedFilter} />
+                  <FilterSection
+                    label="Sync"
+                    options={SYNC_OPTIONS}
+                    value={syncFilter}
+                    onChange={setSyncFilter}
+                  />
+                  <FilterSection
+                    label="Blocked"
+                    options={BLOCKED_OPTIONS}
+                    value={blockedFilter}
+                    onChange={setBlockedFilter}
+                  />
                   <FilterSection
                     label="Attachments"
                     options={ATTACHMENT_OPTIONS}
                     value={attachmentFilter}
                     onChange={setAttachmentFilter}
                   />
-                  <FilterSection label="Sort" options={SORT_OPTIONS} value={sortMode} onChange={setSortMode} />
+                  <FilterSection
+                    label="Sort"
+                    options={SORT_OPTIONS}
+                    value={sortMode}
+                    onChange={setSortMode}
+                  />
 
                   <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
                     <Text style={screenStyles.resetButtonText}>Reset filters</Text>
@@ -413,57 +453,64 @@ export function SurveyListScreen({
         )}
 
         <Text style={screenStyles.listHeaderMeta}>
-          {visibleSurveys.length} {visibleSurveys.length > 1 ? 'surveys' : 'survey'}
-          {surveys.length === visibleSurveys.length ? ' • All local records' : ` • Filtered from ${surveys.length}`}
+          {visibleSurveys.length} {visibleSurveys.length > 1 ? "surveys" : "survey"}
+          {surveys.length === visibleSurveys.length
+            ? " • All local records"
+            : ` • Filtered from ${surveys.length}`}
         </Text>
 
         {visibleSurveys.map((survey) => {
-          const attachments = attachmentsBySurvey[survey.id] ?? [];
-          const firstAttachmentWithPreview = attachments.find((attachment) => Boolean(attachment.local_uri?.trim()));
-          const completionRate = Math.max(0, Math.min(100, survey.completion_rate));
-          const workflowStatus = resolveSurveyWorkflowStatus(survey);
-          const syncDisplay = resolveSurveySyncDisplay(survey);
-          const workflowLabel = formatSurveyWorkflowStatusLabel(workflowStatus);
-          const supportText = survey.last_sync_error?.trim() ? survey.last_sync_error : null;
-          const rowTone = resolveSurveyRowTone(workflowStatus, syncDisplay);
+          const attachments = attachmentsBySurvey[survey.id] ?? []
+          const firstAttachmentWithPreview = attachments.find((attachment) =>
+            Boolean(attachment.local_uri?.trim()),
+          )
+          const completionRate = Math.max(0, Math.min(100, survey.completion_rate))
+          const workflowStatus = resolveSurveyWorkflowStatus(survey)
+          const syncDisplay = resolveSurveySyncDisplay(survey)
+          const workflowLabel = formatSurveyWorkflowStatusLabel(workflowStatus)
+          const supportText = survey.last_sync_error?.trim() ? survey.last_sync_error : null
+          const rowTone = resolveSurveyRowTone(workflowStatus, syncDisplay)
           const syncTone =
-            syncDisplay === 'sync'
-              ? 'success'
-              : syncDisplay === 'sync_error' || syncDisplay === 'sync_blocked'
-                ? 'danger'
-                : 'neutral';
+            syncDisplay === "sync"
+              ? "success"
+              : syncDisplay === "sync_error" || syncDisplay === "sync_blocked"
+                ? "danger"
+                : "neutral"
 
           return (
             <Pressable
               key={survey.id}
               style={[
                 screenStyles.surveyCard,
-                rowTone === 'success'
+                rowTone === "success"
                   ? screenStyles.surveyCardSuccess
-                  : rowTone === 'warning'
+                  : rowTone === "warning"
                     ? screenStyles.surveyCardWarning
-                    : rowTone === 'danger'
+                    : rowTone === "danger"
                       ? screenStyles.surveyCardDanger
                       : null,
-                selectedSurveyId === survey.id ? screenStyles.surveyCardSelected : null
+                selectedSurveyId === survey.id ? screenStyles.surveyCardSelected : null,
               ]}
               onPress={() => onOpenSurvey(survey.id)}
             >
               <View
                 style={[
                   screenStyles.surveyCardAccent,
-                  rowTone === 'success'
+                  rowTone === "success"
                     ? screenStyles.surveyCardAccentSuccess
-                    : rowTone === 'warning'
+                    : rowTone === "warning"
                       ? screenStyles.surveyCardAccentWarning
-                      : rowTone === 'danger'
+                      : rowTone === "danger"
                         ? screenStyles.surveyCardAccentDanger
-                        : null
+                        : null,
                 ]}
               />
               <View style={screenStyles.surveyCardMedia}>
                 {firstAttachmentWithPreview?.local_uri ? (
-                  <Image source={{ uri: firstAttachmentWithPreview.local_uri }} style={screenStyles.surveyCardPreview} />
+                  <Image
+                    source={{ uri: firstAttachmentWithPreview.local_uri }}
+                    style={screenStyles.surveyCardPreview}
+                  />
                 ) : (
                   <View style={screenStyles.surveyCardPreviewPlaceholder}>
                     <Ionicons name="image-outline" size={22} color={brandColors.textSecondary} />
@@ -482,31 +529,33 @@ export function SurveyListScreen({
                   <View
                     style={[
                       screenStyles.workflowTag,
-                      rowTone === 'success'
+                      rowTone === "success"
                         ? screenStyles.workflowTagSuccess
-                        : rowTone === 'warning'
+                        : rowTone === "warning"
                           ? screenStyles.workflowTagWarning
-                          : rowTone === 'danger'
+                          : rowTone === "danger"
                             ? screenStyles.workflowTagDanger
-                            : null
+                            : null,
                     ]}
                   >
                     <Text
                       style={[
                         screenStyles.workflowTagText,
-                        rowTone === 'success'
+                        rowTone === "success"
                           ? screenStyles.workflowTagTextSuccess
-                          : rowTone === 'warning'
+                          : rowTone === "warning"
                             ? screenStyles.workflowTagTextWarning
-                            : rowTone === 'danger'
+                            : rowTone === "danger"
                               ? screenStyles.workflowTagTextDanger
-                              : null
+                              : null,
                       ]}
                     >
                       {workflowLabel}
                     </Text>
                   </View>
-                  <Text style={screenStyles.surveyCardDate}>Updated {formatDateTime(survey.updated_at)}</Text>
+                  <Text style={screenStyles.surveyCardDate}>
+                    Updated {formatDateTime(survey.updated_at)}
+                  </Text>
                 </View>
 
                 {supportText ? (
@@ -514,7 +563,7 @@ export function SurveyListScreen({
                     numberOfLines={1}
                     style={[
                       screenStyles.surveyCardSupport,
-                      survey.last_sync_error?.trim() ? screenStyles.surveyCardSupportWarning : null
+                      survey.last_sync_error?.trim() ? screenStyles.surveyCardSupportWarning : null,
                     ]}
                   >
                     {supportText}
@@ -530,14 +579,14 @@ export function SurveyListScreen({
                     <View
                       style={[
                         screenStyles.progressFill,
-                        rowTone === 'success'
+                        rowTone === "success"
                           ? screenStyles.progressFillSuccess
-                          : rowTone === 'warning'
+                          : rowTone === "warning"
                             ? screenStyles.progressFillWarning
-                            : rowTone === 'danger'
+                            : rowTone === "danger"
                               ? screenStyles.progressFillDanger
                               : null,
-                        { width: `${completionRate}%` }
+                        { width: `${completionRate}%` },
                       ]}
                     />
                   </View>
@@ -545,11 +594,11 @@ export function SurveyListScreen({
 
                 <View style={screenStyles.badgeRow}>
                   <SurveyBadge label={formatSurveySyncDisplayLabel(syncDisplay)} tone={syncTone} />
-                  <SurveyBadge label={survey.visibility === 'public' ? 'Public' : 'Private'} />
+                  <SurveyBadge label={survey.visibility === "public" ? "Public" : "Private"} />
                 </View>
               </View>
             </Pressable>
-          );
+          )
         })}
 
         {surveys.length === 0 ? (
@@ -576,121 +625,121 @@ export function SurveyListScreen({
         ) : null}
       </Animated.ScrollView>
     </View>
-  );
+  )
 }
 
 const screenStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: brandColors.canvas
+    backgroundColor: brandColors.canvas,
   },
   heroShell: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 2,
     paddingTop: 10,
-    paddingHorizontal: 16
+    paddingHorizontal: 16,
   },
   heroCard: {
     flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
     borderRadius: 34,
     backgroundColor: brandColors.forest,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   heroAccentOrb: {
-    position: 'absolute',
+    position: "absolute",
     top: -18,
     right: -26,
     width: 132,
     height: 132,
     borderRadius: 999,
-    backgroundColor: 'rgba(137, 163, 58, 0.22)'
+    backgroundColor: "rgba(137, 163, 58, 0.22)",
   },
   heroExpandedLayer: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
     paddingTop: 24,
     paddingBottom: 18,
-    paddingHorizontal: 20
+    paddingHorizontal: 20,
   },
   heroExpandedHeader: {
     gap: 10,
-    paddingRight: 54
+    paddingRight: 54,
   },
   heroTitleExpanded: {
     ...brandTypography.heroTitle,
     fontSize: 33,
     lineHeight: 37,
-    color: brandColors.white
+    color: brandColors.white,
   },
   heroBody: {
     ...brandTypography.heroBody,
     fontSize: 14,
     lineHeight: 20,
-    color: '#E4ECD8'
+    color: "#E4ECD8",
   },
   heroStatsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   heroStatTile: {
-    minWidth: '47%',
+    minWidth: "47%",
     flex: 1,
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    gap: 2
+    gap: 2,
   },
   heroStatLabel: {
     ...brandTypography.heroEyebrow,
     fontSize: 11,
     lineHeight: 13,
-    color: '#D9E3C6'
+    color: "#D9E3C6",
   },
   heroStatValue: {
     fontSize: 22,
     lineHeight: 24,
-    fontWeight: '900',
-    color: brandColors.white
+    fontWeight: "900",
+    color: brandColors.white,
   },
   heroCompactLayer: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: 20,
     paddingRight: 84,
-    gap: 4
+    gap: 4,
   },
   heroTitleCompact: {
     ...brandTypography.heroTitle,
     fontSize: 20,
     lineHeight: 22,
-    color: brandColors.white
+    color: brandColors.white,
   },
   heroCompactSummary: {
     ...brandTypography.meta,
-    color: '#D9E3C6'
+    color: "#D9E3C6",
   },
   pageScroll: {
-    flex: 1
+    flex: 1,
   },
   pageContent: {
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 120,
-    gap: 14
+    gap: 14,
   },
   filtersStickyHost: {
     backgroundColor: brandColors.canvas,
     zIndex: 1,
-    paddingBottom: 14
+    paddingBottom: 14,
   },
   filtersCard: {
     borderRadius: 28,
@@ -698,13 +747,13 @@ const screenStyles = StyleSheet.create({
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panel,
     padding: 14,
-    gap: 8
+    gap: 8,
   },
   filtersHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 10
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
   },
   filtersHeadingBlock: {
     flex: 1,
@@ -713,39 +762,39 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.sectionTitle,
     fontSize: 19,
     lineHeight: 22,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   advancedToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panelMuted,
     paddingHorizontal: 10,
-    paddingVertical: 8
+    paddingVertical: 8,
   },
   advancedToggleText: {
     ...brandTypography.meta,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   filterSection: {
-    gap: 6
+    gap: 6,
   },
   filterSectionLabel: {
     fontSize: 12,
     lineHeight: 14,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.2,
     color: brandColors.forest,
-    textTransform: 'uppercase'
+    textTransform: "uppercase",
   },
   filterChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
-    paddingRight: 8
+    paddingRight: 8,
   },
   filterChip: {
     borderRadius: brandRadius.pill,
@@ -753,34 +802,34 @@ const screenStyles = StyleSheet.create({
     borderColor: brandColors.inputBorder,
     backgroundColor: brandColors.panelMuted,
     paddingHorizontal: 10,
-    paddingVertical: 7
+    paddingVertical: 7,
   },
   filterChipActive: {
     borderColor: brandColors.forest,
-    backgroundColor: brandColors.forest
+    backgroundColor: brandColors.forest,
   },
   filterChipText: {
     fontSize: 12,
     lineHeight: 15,
-    fontWeight: '600',
-    color: brandColors.forest
+    fontWeight: "600",
+    color: brandColors.forest,
   },
   filterChipTextActive: {
-    color: brandColors.white
+    color: brandColors.white,
   },
   advancedPanel: {
     gap: 10,
     borderTopWidth: 1,
     borderTopColor: brandColors.divider,
-    paddingTop: 10
+    paddingTop: 10,
   },
   dateInputsRow: {
-    flexDirection: 'row',
-    gap: 8
+    flexDirection: "row",
+    gap: 8,
   },
   dateInputBlock: {
     flex: 1,
-    gap: 4
+    gap: 4,
   },
   compactInput: {
     minHeight: 40,
@@ -791,232 +840,232 @@ const screenStyles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 15,
     lineHeight: 18,
-    fontWeight: '600',
-    color: brandColors.textPrimary
+    fontWeight: "600",
+    color: brandColors.textPrimary,
   },
   resetButton: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     borderRadius: brandRadius.pill,
     backgroundColor: brandColors.sage,
     paddingHorizontal: 12,
-    paddingVertical: 8
+    paddingVertical: 8,
   },
   resetButtonText: {
     ...brandTypography.meta,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   listHeaderMeta: {
     ...brandTypography.meta,
     color: brandColors.textSecondary,
-    paddingHorizontal: 2
+    paddingHorizontal: 2,
   },
   surveyCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 10,
     borderRadius: brandRadius.card,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.white,
     padding: 12,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   surveyCardSuccess: {
-    backgroundColor: '#F5F9EC',
-    borderColor: '#D7E2C0'
+    backgroundColor: "#F5F9EC",
+    borderColor: "#D7E2C0",
   },
   surveyCardWarning: {
-    backgroundColor: '#FBF4E9',
-    borderColor: '#E5D0B0'
+    backgroundColor: "#FBF4E9",
+    borderColor: "#E5D0B0",
   },
   surveyCardDanger: {
-    backgroundColor: '#FBF1EC',
-    borderColor: '#E7CFC3'
+    backgroundColor: "#FBF1EC",
+    borderColor: "#E7CFC3",
   },
   surveyCardSelected: {
     borderColor: brandColors.forest,
-    backgroundColor: '#F9FBF4'
+    backgroundColor: "#F9FBF4",
   },
   surveyCardAccent: {
     width: 4,
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
     borderRadius: 999,
-    backgroundColor: '#D7E0D1'
+    backgroundColor: "#D7E0D1",
   },
   surveyCardAccentSuccess: {
-    backgroundColor: brandColors.sage
+    backgroundColor: brandColors.sage,
   },
   surveyCardAccentWarning: {
-    backgroundColor: brandColors.ochre
+    backgroundColor: brandColors.ochre,
   },
   surveyCardAccentDanger: {
-    backgroundColor: brandColors.terracotta
+    backgroundColor: brandColors.terracotta,
   },
   surveyCardMedia: {
     width: 72,
-    height: 88
+    height: 88,
   },
   surveyCardPreview: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 16,
-    backgroundColor: brandColors.panelMuted
+    backgroundColor: brandColors.panelMuted,
   },
   surveyCardPreviewPlaceholder: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: brandColors.panelMuted
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: brandColors.panelMuted,
   },
   surveyCardContent: {
     flex: 1,
-    gap: 6
+    gap: 6,
   },
   surveyCardHeader: {
-    gap: 3
+    gap: 3,
   },
   surveyCardMetaBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
   },
   surveyCardTitle: {
     ...brandTypography.input,
     fontSize: 18,
     lineHeight: 21,
-    fontWeight: '800',
-    color: brandColors.textPrimary
+    fontWeight: "800",
+    color: brandColors.textPrimary,
   },
   surveyCardDate: {
     ...brandTypography.meta,
     fontSize: 11,
     lineHeight: 14,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   workflowTag: {
     borderRadius: brandRadius.pill,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#E3E8DE'
+    backgroundColor: "#E3E8DE",
   },
   workflowTagSuccess: {
-    backgroundColor: '#DDE8C5'
+    backgroundColor: "#DDE8C5",
   },
   workflowTagWarning: {
-    backgroundColor: '#F0DEC4'
+    backgroundColor: "#F0DEC4",
   },
   workflowTagDanger: {
-    backgroundColor: '#F0D9D1'
+    backgroundColor: "#F0D9D1",
   },
   workflowTagText: {
     ...brandTypography.meta,
     fontSize: 11,
     lineHeight: 13,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   workflowTagTextSuccess: {
-    color: '#476329'
+    color: "#476329",
   },
   workflowTagTextWarning: {
-    color: '#8B5517'
+    color: "#8B5517",
   },
   workflowTagTextDanger: {
-    color: '#8A3E2B'
+    color: "#8A3E2B",
   },
   surveyCardSupport: {
     ...brandTypography.meta,
     fontSize: 11,
     lineHeight: 14,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   surveyCardSupportWarning: {
-    color: brandColors.terracotta
+    color: brandColors.terracotta,
   },
   progressBlock: {
-    gap: 4
+    gap: 4,
   },
   progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   progressLabel: {
     ...brandTypography.label,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   progressValue: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   progressTrack: {
     height: 8,
     borderRadius: brandRadius.pill,
-    backgroundColor: '#DFE5D7',
-    overflow: 'hidden'
+    backgroundColor: "#DFE5D7",
+    overflow: "hidden",
   },
   progressFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: brandRadius.pill,
-    backgroundColor: brandColors.moss
+    backgroundColor: brandColors.moss,
   },
   progressFillSuccess: {
-    backgroundColor: brandColors.moss
+    backgroundColor: brandColors.moss,
   },
   progressFillWarning: {
-    backgroundColor: brandColors.ochre
+    backgroundColor: brandColors.ochre,
   },
   progressFillDanger: {
-    backgroundColor: brandColors.terracotta
+    backgroundColor: brandColors.terracotta,
   },
   badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
   },
   badge: {
     borderRadius: brandRadius.pill,
     paddingHorizontal: 9,
-    paddingVertical: 5
+    paddingVertical: 5,
   },
   badgeText: {
     ...brandTypography.meta,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   badgeTextDanger: {
-    color: '#6B2E1C'
+    color: "#6B2E1C",
   },
   badgeNeutral: {
-    backgroundColor: brandColors.panelMuted
+    backgroundColor: brandColors.panelMuted,
   },
   badgeSuccess: {
-    backgroundColor: brandColors.successSoft
+    backgroundColor: brandColors.successSoft,
   },
   badgeWarning: {
-    backgroundColor: 'rgba(204, 112, 31, 0.18)'
+    backgroundColor: "rgba(204, 112, 31, 0.18)",
   },
   badgeDanger: {
-    backgroundColor: brandColors.errorSoft
+    backgroundColor: brandColors.errorSoft,
   },
   emptyState: {
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
     borderRadius: brandRadius.card,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panel,
     paddingHorizontal: 18,
-    paddingVertical: 22
+    paddingVertical: 22,
   },
   emptyStateTitle: {
     ...brandTypography.input,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   emptyStateBody: {
     ...brandTypography.sectionBody,
-    textAlign: 'center',
-    color: brandColors.textSecondary
-  }
-});
+    textAlign: "center",
+    color: brandColors.textSecondary,
+  },
+})

@@ -1,41 +1,45 @@
-import { useCallback, useEffect, useState } from 'react';
-import { AuthUser } from '../app/types';
-import { ApiError } from '../api/client';
+import { useCallback, useEffect, useState } from "react"
+import { AuthUser } from "../app/types"
+import { ApiError } from "../api/client"
 import {
   getMyProfile,
   loginWithCredentials,
   logoutSession,
   refreshAuthTokens,
-  registerWithCredentials
-} from '../api/ibp-api';
-import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from '../auth/session-storage';
-import { OperationScope, OperationState } from './operation-status';
+  registerWithCredentials,
+} from "../api/ibp-api"
+import {
+  clearStoredAuthSession,
+  loadStoredAuthSession,
+  saveStoredAuthSession,
+} from "../auth/session-storage"
+import { OperationScope, OperationState } from "./operation-status"
 
-export const AUTH_REQUIRED_ERROR = 'AUTH_REQUIRED';
+export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 
 const isUnauthorizedMessage = (message: string): boolean =>
-  /(^|[^0-9])401([^0-9]|$)|unauthorized|auth_required/i.test(message);
+  /(^|[^0-9])401([^0-9]|$)|unauthorized|auth_required/i.test(message)
 
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) {
-    return error.status === 401;
+    return error.status === 401
   }
 
   if (error instanceof Error) {
-    return isUnauthorizedMessage(error.message ?? '');
+    return isUnauthorizedMessage(error.message ?? "")
   }
 
-  return false;
+  return false
 }
 
 type UseAuthSessionParams = {
-  apiUrl: string;
-  email: string;
-  password: string;
-  displayName: string;
-  reportStatus: (scope: OperationScope, state: OperationState, message: string) => void;
-  onSessionCleared?: () => void | Promise<void>;
-};
+  apiUrl: string
+  email: string
+  password: string
+  displayName: string
+  reportStatus: (scope: OperationScope, state: OperationState, message: string) => void
+  onSessionCleared?: () => void | Promise<void>
+}
 
 export function useAuthSession({
   apiUrl,
@@ -43,164 +47,166 @@ export function useAuthSession({
   password,
   displayName,
   reportStatus,
-  onSessionCleared
+  onSessionCleared,
 }: UseAuthSessionParams) {
-  const [accessToken, setAccessToken] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
-  const [sessionRestoring, setSessionRestoring] = useState(true);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<string>('Not logged in');
+  const [accessToken, setAccessToken] = useState("")
+  const [refreshToken, setRefreshToken] = useState("")
+  const [sessionRestoring, setSessionRestoring] = useState(true)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [profile, setProfile] = useState<string>("Not logged in")
 
   const setProfileFromUser = useCallback((user: AuthUser): void => {
-    setCurrentUser(user);
-    setProfile(`${user.display_name} (${user.email})`);
-  }, []);
+    setCurrentUser(user)
+    setProfile(`${user.display_name} (${user.email})`)
+  }, [])
 
   const clearSession = useCallback(async (): Promise<void> => {
-    setAccessToken('');
-    setRefreshToken('');
-    setSessionRestoring(false);
-    setCurrentUser(null);
-    setProfile('Not logged in');
-    await clearStoredAuthSession();
-    await onSessionCleared?.();
-  }, [onSessionCleared]);
+    setAccessToken("")
+    setRefreshToken("")
+    setSessionRestoring(false)
+    setCurrentUser(null)
+    setProfile("Not logged in")
+    await clearStoredAuthSession()
+    await onSessionCleared?.()
+  }, [onSessionCleared])
 
   const refreshSessionTokens = useCallback(
-    async (tokenOverride?: string): Promise<{ accessToken: string; refreshToken: string } | null> => {
-      const activeRefreshToken = tokenOverride ?? refreshToken;
+    async (
+      tokenOverride?: string,
+    ): Promise<{ accessToken: string; refreshToken: string } | null> => {
+      const activeRefreshToken = tokenOverride ?? refreshToken
       if (!activeRefreshToken || !activeRefreshToken.trim()) {
-        return null;
+        return null
       }
 
       try {
-        const payload = await refreshAuthTokens(apiUrl, activeRefreshToken);
+        const payload = await refreshAuthTokens(apiUrl, activeRefreshToken)
         if (!payload.access_token || !payload.refresh_token) {
-          return null;
+          return null
         }
 
-        setAccessToken(payload.access_token);
-        setRefreshToken(payload.refresh_token);
+        setAccessToken(payload.access_token)
+        setRefreshToken(payload.refresh_token)
         await saveStoredAuthSession({
           accessToken: payload.access_token,
-          refreshToken: payload.refresh_token
-        });
+          refreshToken: payload.refresh_token,
+        })
 
         return {
           accessToken: payload.access_token,
-          refreshToken: payload.refresh_token
-        };
+          refreshToken: payload.refresh_token,
+        }
       } catch {
-        return null;
+        return null
       }
     },
-    [apiUrl, refreshToken]
-  );
+    [apiUrl, refreshToken],
+  )
 
   const ensureAccessToken = useCallback(async (): Promise<string | null> => {
     if (accessToken) {
-      return accessToken;
+      return accessToken
     }
 
-    const refreshed = await refreshSessionTokens();
-    return refreshed?.accessToken ?? null;
-  }, [accessToken, refreshSessionTokens]);
+    const refreshed = await refreshSessionTokens()
+    return refreshed?.accessToken ?? null
+  }, [accessToken, refreshSessionTokens])
 
   const withAuthRetry = useCallback(
     async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
-      const token = await ensureAccessToken();
+      const token = await ensureAccessToken()
       if (!token) {
-        throw new Error(AUTH_REQUIRED_ERROR);
+        throw new Error(AUTH_REQUIRED_ERROR)
       }
 
       try {
-        return await operation(token);
+        return await operation(token)
       } catch (error) {
         if (!isUnauthorizedError(error)) {
-          throw error;
+          throw error
         }
 
-        const refreshed = await refreshSessionTokens();
+        const refreshed = await refreshSessionTokens()
         if (!refreshed?.accessToken) {
-          throw new Error(AUTH_REQUIRED_ERROR);
+          throw new Error(AUTH_REQUIRED_ERROR)
         }
-        return operation(refreshed.accessToken);
+        return operation(refreshed.accessToken)
       }
     },
-    [ensureAccessToken, refreshSessionTokens]
-  );
+    [ensureAccessToken, refreshSessionTokens],
+  )
 
   const handleLoadMyProfile = useCallback(
     async (options?: { silent?: boolean }): Promise<AuthUser | null> => {
-      const silent = options?.silent ?? false;
+      const silent = options?.silent ?? false
       try {
-        const user = await withAuthRetry((token) => getMyProfile(apiUrl, token));
-        setProfileFromUser(user);
+        const user = await withAuthRetry((token) => getMyProfile(apiUrl, token))
+        setProfileFromUser(user)
         if (!silent) {
-          reportStatus('profile', 'success', 'Profile loaded');
+          reportStatus("profile", "success", "Profile loaded")
         }
-        return user;
+        return user
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-          await clearSession();
+          await clearSession()
           if (!silent) {
-            reportStatus('profile', 'error', 'Login required before loading profile');
+            reportStatus("profile", "error", "Login required before loading profile")
           }
-          return null;
+          return null
         }
 
         if (!silent) {
-          reportStatus('profile', 'error', `Profile load error: ${(error as Error).message}`);
+          reportStatus("profile", "error", `Profile load error: ${(error as Error).message}`)
         }
-        return null;
+        return null
       }
     },
-    [apiUrl, clearSession, reportStatus, setProfileFromUser, withAuthRetry]
-  );
+    [apiUrl, clearSession, reportStatus, setProfileFromUser, withAuthRetry],
+  )
 
   useEffect(() => {
-    let active = true;
+    let active = true
 
     const restoreSession = async (): Promise<void> => {
       try {
         if (active) {
-          setSessionRestoring(true);
+          setSessionRestoring(true)
         }
-        const stored = await loadStoredAuthSession();
+        const stored = await loadStoredAuthSession()
         if (!stored) {
           if (active) {
-            reportStatus('session', 'idle', 'Ready');
-            setSessionRestoring(false);
+            reportStatus("session", "idle", "Ready")
+            setSessionRestoring(false)
           }
-          return;
+          return
         }
 
         if (active) {
-          reportStatus('session', 'running', 'Restoring session...');
-          setAccessToken(stored.accessToken);
-          setRefreshToken(stored.refreshToken);
+          reportStatus("session", "running", "Restoring session...")
+          setAccessToken(stored.accessToken)
+          setRefreshToken(stored.refreshToken)
         }
 
-        let nextAccessToken = stored.accessToken;
-        let nextRefreshToken = stored.refreshToken;
-        let lastProfileError: unknown = null;
+        let nextAccessToken = stored.accessToken
+        let nextRefreshToken = stored.refreshToken
+        let lastProfileError: unknown = null
         let user = nextAccessToken
           ? await getMyProfile(apiUrl, nextAccessToken).catch((error) => {
-              lastProfileError = error;
-              return null;
+              lastProfileError = error
+              return null
             })
-          : null;
+          : null
 
         if (!user) {
           try {
-            const refreshed = await refreshAuthTokens(apiUrl, stored.refreshToken);
+            const refreshed = await refreshAuthTokens(apiUrl, stored.refreshToken)
             if (refreshed.access_token && refreshed.refresh_token) {
-              nextAccessToken = refreshed.access_token;
-              nextRefreshToken = refreshed.refresh_token;
+              nextAccessToken = refreshed.access_token
+              nextRefreshToken = refreshed.refresh_token
               user = await getMyProfile(apiUrl, nextAccessToken).catch((error) => {
-                lastProfileError = error;
-                return null;
-              });
+                lastProfileError = error
+                return null
+              })
             }
           } catch {
             // Keep stored tokens and retry profile loading later when network is back.
@@ -208,95 +214,101 @@ export function useAuthSession({
         }
 
         if (!active) {
-          return;
+          return
         }
 
         if (!user) {
           if (isUnauthorizedError(lastProfileError)) {
-            await clearSession();
-            reportStatus('session', 'error', 'Session expired. Please login');
-            return;
+            await clearSession()
+            reportStatus("session", "error", "Session expired. Please login")
+            return
           }
-          setAccessToken(nextAccessToken);
-          setRefreshToken(nextRefreshToken);
-          reportStatus('session', 'success', 'Session restored (offline). Profile will load when API is reachable');
-          setSessionRestoring(false);
-          return;
+          setAccessToken(nextAccessToken)
+          setRefreshToken(nextRefreshToken)
+          reportStatus(
+            "session",
+            "success",
+            "Session restored (offline). Profile will load when API is reachable",
+          )
+          setSessionRestoring(false)
+          return
         }
 
-        setAccessToken(nextAccessToken);
-        setRefreshToken(nextRefreshToken);
-        setProfileFromUser(user);
+        setAccessToken(nextAccessToken)
+        setRefreshToken(nextRefreshToken)
+        setProfileFromUser(user)
         await saveStoredAuthSession({
           accessToken: nextAccessToken,
-          refreshToken: nextRefreshToken
-        });
-        reportStatus('session', 'success', 'Session restored');
-        setSessionRestoring(false);
+          refreshToken: nextRefreshToken,
+        })
+        reportStatus("session", "success", "Session restored")
+        setSessionRestoring(false)
       } catch (error) {
         if (!active) {
-          return;
+          return
         }
-        await clearSession().catch(() => undefined);
-        reportStatus('session', 'error', `Session restore error: ${(error as Error).message}`);
-        setSessionRestoring(false);
+        await clearSession().catch(() => undefined)
+        reportStatus("session", "error", `Session restore error: ${(error as Error).message}`)
+        setSessionRestoring(false)
       }
-    };
+    }
 
-    void restoreSession();
+    void restoreSession()
 
     return () => {
-      active = false;
-    };
-  }, [apiUrl, clearSession, reportStatus, setProfileFromUser]);
+      active = false
+    }
+  }, [apiUrl, clearSession, reportStatus, setProfileFromUser])
 
   const handleLogin = useCallback(async (): Promise<void> => {
     try {
-      setSessionRestoring(false);
-      reportStatus('auth', 'running', 'Logging in...');
-      const payload = await loginWithCredentials(apiUrl, email, password, { createIfMissing: false });
-      setAccessToken(payload.access_token);
-      setRefreshToken(payload.refresh_token);
-      setProfileFromUser(payload.user);
+      setSessionRestoring(false)
+      reportStatus("auth", "running", "Logging in...")
+      const payload = await loginWithCredentials(apiUrl, email, password, {
+        createIfMissing: false,
+      })
+      setAccessToken(payload.access_token)
+      setRefreshToken(payload.refresh_token)
+      setProfileFromUser(payload.user)
       await saveStoredAuthSession({
         accessToken: payload.access_token,
-        refreshToken: payload.refresh_token
-      });
-      reportStatus('auth', 'success', 'Logged in');
+        refreshToken: payload.refresh_token,
+      })
+      reportStatus("auth", "success", "Logged in")
     } catch (error) {
-      reportStatus('auth', 'error', `Login error: ${(error as Error).message}`);
+      reportStatus("auth", "error", `Login error: ${(error as Error).message}`)
     }
-  }, [apiUrl, email, password, reportStatus, setProfileFromUser]);
+  }, [apiUrl, email, password, reportStatus, setProfileFromUser])
 
   const handleRegister = useCallback(async (): Promise<void> => {
     try {
-      setSessionRestoring(false);
-      reportStatus('auth', 'running', 'Creating account...');
-      const payload = await registerWithCredentials(apiUrl, email, password, displayName);
-      setAccessToken(payload.access_token);
-      setRefreshToken(payload.refresh_token);
-      setProfileFromUser(payload.user);
+      setSessionRestoring(false)
+      reportStatus("auth", "running", "Creating account...")
+      const payload = await registerWithCredentials(apiUrl, email, password, displayName)
+      setAccessToken(payload.access_token)
+      setRefreshToken(payload.refresh_token)
+      setProfileFromUser(payload.user)
       await saveStoredAuthSession({
         accessToken: payload.access_token,
-        refreshToken: payload.refresh_token
-      });
-      reportStatus('auth', 'success', 'Account created and logged in');
+        refreshToken: payload.refresh_token,
+      })
+      reportStatus("auth", "success", "Account created and logged in")
     } catch (error) {
-      reportStatus('auth', 'error', `Registration error: ${(error as Error).message}`);
+      reportStatus("auth", "error", `Registration error: ${(error as Error).message}`)
     }
-  }, [apiUrl, displayName, email, password, reportStatus, setProfileFromUser]);
+  }, [apiUrl, displayName, email, password, reportStatus, setProfileFromUser])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
-      const token = await ensureAccessToken();
+      const token = await ensureAccessToken()
       if (token) {
-        await logoutSession(apiUrl, token).catch(() => undefined);
+        await logoutSession(apiUrl, token).catch(() => undefined)
       }
     } finally {
-      await clearSession();
-      reportStatus('auth', 'success', 'Logged out');
+      await clearSession()
+      reportStatus("auth", "success", "Logged out")
     }
-  }, [apiUrl, clearSession, ensureAccessToken, reportStatus]);
+  }, [apiUrl, clearSession, ensureAccessToken, reportStatus])
 
   return {
     accessToken,
@@ -313,6 +325,6 @@ export function useAuthSession({
     handleLoadMyProfile,
     handleLogin,
     handleRegister,
-    handleLogout
-  };
+    handleLogout,
+  }
 }

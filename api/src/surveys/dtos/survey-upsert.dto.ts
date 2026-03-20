@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString } from "class-validator"
 
 export class SurveyUpsertDto {
   @IsOptional()
@@ -14,12 +14,12 @@ export class SurveyUpsertDto {
   site_name?: string
 
   @IsOptional()
-  @IsEnum(['draft', 'submitted', 'synced', 'error', 'expired'])
-  status?: 'draft' | 'submitted' | 'synced' | 'error' | 'expired'
+  @IsEnum(["draft", "submitted", "synced", "error", "expired"])
+  status?: "draft" | "submitted" | "synced" | "error" | "expired"
 
   @IsOptional()
-  @IsEnum(['private', 'public'])
-  visibility?: 'private' | 'public'
+  @IsEnum(["private", "public"])
+  visibility?: "private" | "public"
 
   @IsOptional()
   @IsString()
@@ -43,8 +43,8 @@ export class SurveyUpsertDto {
   previous_survey_id?: string
 
   @IsOptional()
-  @IsEnum(['ACA', 'M'])
-  region_version?: 'ACA' | 'M'
+  @IsEnum(["ACA", "M"])
+  region_version?: "ACA" | "M"
 
   @IsOptional()
   @IsString()

@@ -1,76 +1,84 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { brandColors, brandRadius, brandShadow, brandTypography } from '../app/brand-tokens';
-import { PublicMapItem, PublicParcelStatusItem } from '../app/types';
-import { computeRegionBbox, computeRegionZoom } from '../app/map-viewport';
-import { IgnCadastreTileOverlay } from '../components/IgnCadastreTileOverlay';
-import { ParcelOverlayPolygons } from '../components/ParcelOverlayPolygons';
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native"
+import MapView, { Marker, Region } from "react-native-maps"
+import { Ionicons } from "@expo/vector-icons"
+import * as Location from "expo-location"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { brandColors, brandRadius, brandShadow, brandTypography } from "../app/brand-tokens"
+import { PublicMapItem, PublicParcelStatusItem } from "../app/types"
+import { computeRegionBbox, computeRegionZoom } from "../app/map-viewport"
+import { IgnCadastreTileOverlay } from "../components/IgnCadastreTileOverlay"
+import { ParcelOverlayPolygons } from "../components/ParcelOverlayPolygons"
 
 type PublicMapScreenProps = {
-  items: PublicMapItem[];
-  parcelStatuses: PublicParcelStatusItem[];
-  ownSurveyIds: string[];
-  loading: boolean;
-  parcelsLoading: boolean;
-  fromDate: string;
-  toDate: string;
-  region: string;
-  onChangeFromDate: (value: string) => void;
-  onChangeToDate: (value: string) => void;
-  onChangeRegion: (value: string) => void;
-  onLoad: () => Promise<void>;
-  onLoadParcels: (input: { bbox: string; zoom: number }) => Promise<void>;
-  onReportSurvey: (surveyId: string, reason: string) => Promise<{ ok: boolean; message: string }>;
-};
+  items: PublicMapItem[]
+  parcelStatuses: PublicParcelStatusItem[]
+  ownSurveyIds: string[]
+  loading: boolean
+  parcelsLoading: boolean
+  fromDate: string
+  toDate: string
+  region: string
+  onChangeFromDate: (value: string) => void
+  onChangeToDate: (value: string) => void
+  onChangeRegion: (value: string) => void
+  onLoad: () => Promise<void>
+  onLoadParcels: (input: { bbox: string; zoom: number }) => Promise<void>
+  onReportSurvey: (surveyId: string, reason: string) => Promise<{ ok: boolean; message: string }>
+}
 
 const DEFAULT_REGION: Region = {
   latitude: 46.603354,
   longitude: 1.888334,
   latitudeDelta: 7,
-  longitudeDelta: 7
-};
+  longitudeDelta: 7,
+}
 
 function computeRegionFromItems(items: PublicMapItem[]): Region {
   if (items.length === 0) {
-    return DEFAULT_REGION;
+    return DEFAULT_REGION
   }
 
-  let minLat = Number.POSITIVE_INFINITY;
-  let maxLat = Number.NEGATIVE_INFINITY;
-  let minLng = Number.POSITIVE_INFINITY;
-  let maxLng = Number.NEGATIVE_INFINITY;
+  let minLat = Number.POSITIVE_INFINITY
+  let maxLat = Number.NEGATIVE_INFINITY
+  let minLng = Number.POSITIVE_INFINITY
+  let maxLng = Number.NEGATIVE_INFINITY
 
   for (const item of items) {
-    const lat = item.display_location.lat;
-    const lng = item.display_location.lng;
+    const lat = item.display_location.lat
+    const lng = item.display_location.lng
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      continue;
+      continue
     }
-    minLat = Math.min(minLat, lat);
-    maxLat = Math.max(maxLat, lat);
-    minLng = Math.min(minLng, lng);
-    maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+    minLng = Math.min(minLng, lng)
+    maxLng = Math.max(maxLng, lng)
   }
 
   if (!Number.isFinite(minLat) || !Number.isFinite(minLng)) {
-    return DEFAULT_REGION;
+    return DEFAULT_REGION
   }
 
-  const latitude = (minLat + maxLat) / 2;
-  const longitude = (minLng + maxLng) / 2;
-  const latitudeDelta = Math.max(0.08, (maxLat - minLat) * 1.4);
-  const longitudeDelta = Math.max(0.08, (maxLng - minLng) * 1.4);
+  const latitude = (minLat + maxLat) / 2
+  const longitude = (minLng + maxLng) / 2
+  const latitudeDelta = Math.max(0.08, (maxLat - minLat) * 1.4)
+  const longitudeDelta = Math.max(0.08, (maxLng - minLng) * 1.4)
 
   return {
     latitude,
     longitude,
     latitudeDelta,
-    longitudeDelta
-  };
+    longitudeDelta,
+  }
 }
 
 export function PublicMapScreen({
@@ -87,110 +95,126 @@ export function PublicMapScreen({
   onChangeRegion,
   onLoad,
   onLoadParcels,
-  onReportSurvey
+  onReportSurvey,
 }: PublicMapScreenProps) {
-  const [showFilters, setShowFilters] = useState(false);
-  const [showParcelLayer, setShowParcelLayer] = useState(true);
-  const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
-  const [selectedItem, setSelectedItem] = useState<PublicMapItem | null>(null);
-  const [reportPanelOpen, setReportPanelOpen] = useState(false);
-  const [reportReason, setReportReason] = useState('');
-  const [reportSending, setReportSending] = useState(false);
-  const [reportMessage, setReportMessage] = useState<string | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [currentLocationMarker, setCurrentLocationMarker] = useState<{ lat: number; lng: number } | null>(null);
-  const mapRef = useRef<MapView | null>(null);
-  const onLoadParcelsRef = useRef(onLoadParcels);
-  const lastParcelsRequestKeyRef = useRef('');
-  const insets = useSafeAreaInsets();
-  const ownSurveyIdSet = useMemo(() => new Set(ownSurveyIds), [ownSurveyIds]);
-  const targetRegion = useMemo(() => computeRegionFromItems(items), [items]);
-  const selectedItemIsOwnSurvey = selectedItem ? ownSurveyIdSet.has(selectedItem.survey_id) : false;
-  const mapZoom = useMemo(() => computeRegionZoom(mapRegion), [mapRegion]);
-  const parcelLayerRenderable = showParcelLayer && mapZoom >= 15;
-  const visibleCountLabel = `${items.length} public survey${items.length === 1 ? '' : 's'}`;
+  const [showFilters, setShowFilters] = useState(false)
+  const [showParcelLayer, setShowParcelLayer] = useState(true)
+  const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION)
+  const [selectedItem, setSelectedItem] = useState<PublicMapItem | null>(null)
+  const [reportPanelOpen, setReportPanelOpen] = useState(false)
+  const [reportReason, setReportReason] = useState("")
+  const [reportSending, setReportSending] = useState(false)
+  const [reportMessage, setReportMessage] = useState<string | null>(null)
+  const [locating, setLocating] = useState(false)
+  const [currentLocationMarker, setCurrentLocationMarker] = useState<{
+    lat: number
+    lng: number
+  } | null>(null)
+  const mapRef = useRef<MapView | null>(null)
+  const onLoadParcelsRef = useRef(onLoadParcels)
+  const lastParcelsRequestKeyRef = useRef("")
+  const insets = useSafeAreaInsets()
+  const ownSurveyIdSet = useMemo(() => new Set(ownSurveyIds), [ownSurveyIds])
+  const targetRegion = useMemo(() => computeRegionFromItems(items), [items])
+  const selectedItemIsOwnSurvey = selectedItem ? ownSurveyIdSet.has(selectedItem.survey_id) : false
+  const mapZoom = useMemo(() => computeRegionZoom(mapRegion), [mapRegion])
+  const parcelLayerRenderable = showParcelLayer && mapZoom >= 15
+  const visibleCountLabel = `${items.length} public survey${items.length === 1 ? "" : "s"}`
   const layerStatusLabel = !showParcelLayer
-    ? 'Parcels hidden'
+    ? "Parcels hidden"
     : parcelsLoading
-      ? 'Loading cadastre'
+      ? "Loading cadastre"
       : mapZoom >= 15
-        ? 'Cadastre active'
-        : 'Zoom in to unlock parcels';
+        ? "Cadastre active"
+        : "Zoom in to unlock parcels"
 
   useEffect(() => {
-    setMapRegion(targetRegion);
-    mapRef.current?.animateToRegion(targetRegion, 520);
-  }, [targetRegion.latitude, targetRegion.longitude, targetRegion.latitudeDelta, targetRegion.longitudeDelta]);
+    setMapRegion(targetRegion)
+    mapRef.current?.animateToRegion(targetRegion, 520)
+  }, [
+    targetRegion.latitude,
+    targetRegion.longitude,
+    targetRegion.latitudeDelta,
+    targetRegion.longitudeDelta,
+  ])
 
   useEffect(() => {
-    onLoadParcelsRef.current = onLoadParcels;
-  }, [onLoadParcels]);
+    onLoadParcelsRef.current = onLoadParcels
+  }, [onLoadParcels])
 
   useEffect(() => {
     if (!parcelLayerRenderable) {
-      lastParcelsRequestKeyRef.current = '';
-      return;
+      lastParcelsRequestKeyRef.current = ""
+      return
     }
     const timer = setTimeout(() => {
-      const bbox = computeRegionBbox(mapRegion);
-      const key = `${mapZoom.toFixed(2)}:${bbox}`;
+      const bbox = computeRegionBbox(mapRegion)
+      const key = `${mapZoom.toFixed(2)}:${bbox}`
       if (lastParcelsRequestKeyRef.current === key) {
-        return;
+        return
       }
-      lastParcelsRequestKeyRef.current = key;
-      void onLoadParcelsRef.current({ bbox, zoom: mapZoom });
-    }, 400);
+      lastParcelsRequestKeyRef.current = key
+      void onLoadParcelsRef.current({ bbox, zoom: mapZoom })
+    }, 400)
 
-    return () => clearTimeout(timer);
-  }, [parcelLayerRenderable, mapRegion, mapZoom]);
+    return () => clearTimeout(timer)
+  }, [parcelLayerRenderable, mapRegion, mapZoom])
 
   const handleCenterOnCurrentLocation = async (): Promise<void> => {
     if (locating) {
-      return;
+      return
     }
 
     try {
-      setLocating(true);
-      const permission = await Location.requestForegroundPermissionsAsync();
+      setLocating(true)
+      const permission = await Location.requestForegroundPermissionsAsync()
       if (!permission.granted) {
-        Alert.alert('Location disabled', 'Allow location access to center the map on your position.');
-        return;
+        Alert.alert(
+          "Location disabled",
+          "Allow location access to center the map on your position.",
+        )
+        return
       }
 
       const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced
-      });
+        accuracy: Location.Accuracy.Balanced,
+      })
       const nextRegion: Region = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
         latitudeDelta: 0.012,
-        longitudeDelta: 0.012
-      };
+        longitudeDelta: 0.012,
+      }
       setCurrentLocationMarker({
         lat: position.coords.latitude,
-        lng: position.coords.longitude
-      });
-      setMapRegion(nextRegion);
-      mapRef.current?.animateToRegion(nextRegion, 450);
+        lng: position.coords.longitude,
+      })
+      setMapRegion(nextRegion)
+      mapRef.current?.animateToRegion(nextRegion, 450)
     } catch (_error) {
-      Alert.alert('Location unavailable', 'Unable to retrieve your current position.');
+      Alert.alert("Location unavailable", "Unable to retrieve your current position.")
     } finally {
-      setLocating(false);
+      setLocating(false)
     }
-  };
+  }
 
-  const showEmptyDock = !loading && items.length === 0;
+  const showEmptyDock = !loading && items.length === 0
 
   return (
     <View style={screenStyles.container}>
-      <MapView ref={mapRef} style={screenStyles.map} initialRegion={mapRegion} onRegionChangeComplete={setMapRegion}>
+      <MapView
+        ref={mapRef}
+        style={screenStyles.map}
+        initialRegion={mapRegion}
+        onRegionChangeComplete={setMapRegion}
+      >
         <IgnCadastreTileOverlay enabled={parcelLayerRenderable} zIndex={0} />
         <ParcelOverlayPolygons items={parcelLayerRenderable ? parcelStatuses : []} />
         {currentLocationMarker ? (
           <Marker
             coordinate={{
               latitude: currentLocationMarker.lat,
-              longitude: currentLocationMarker.lng
+              longitude: currentLocationMarker.lng,
             }}
             pinColor="#245f96"
             title="Your position"
@@ -202,13 +226,13 @@ export function PublicMapScreen({
             key={item.survey_id}
             coordinate={{
               latitude: item.display_location.lat,
-              longitude: item.display_location.lng
+              longitude: item.display_location.lng,
             }}
             onPress={() => {
-              setSelectedItem(item);
-              setReportPanelOpen(false);
-              setReportReason('');
-              setReportMessage(null);
+              setSelectedItem(item)
+              setReportPanelOpen(false)
+              setReportReason("")
+              setReportMessage(null)
             }}
             pinColor="#2a7a52"
             title={`IBP ${item.ibp_total}`}
@@ -231,20 +255,31 @@ export function PublicMapScreen({
           </View>
 
           <View style={screenStyles.topDockActions}>
-            <Pressable style={screenStyles.iconButton} onPress={() => setShowFilters((current) => !current)}>
-              <Ionicons name={showFilters ? 'close-outline' : 'options-outline'} size={18} color={brandColors.forest} />
+            <Pressable
+              style={screenStyles.iconButton}
+              onPress={() => setShowFilters((current) => !current)}
+            >
+              <Ionicons
+                name={showFilters ? "close-outline" : "options-outline"}
+                size={18}
+                color={brandColors.forest}
+              />
             </Pressable>
             <Pressable
               style={loading ? screenStyles.iconButtonDisabled : screenStyles.iconButtonPrimary}
               onPress={() => {
-                void onLoad();
+                void onLoad()
                 if (parcelLayerRenderable) {
-                  void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom });
+                  void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom })
                 }
               }}
               disabled={loading}
             >
-              {loading ? <ActivityIndicator size="small" color={brandColors.white} /> : <Ionicons name="refresh" size={18} color={brandColors.white} />}
+              {loading ? (
+                <ActivityIndicator size="small" color={brandColors.white} />
+              ) : (
+                <Ionicons name="refresh" size={18} color={brandColors.white} />
+              )}
             </Pressable>
           </View>
         </View>
@@ -254,14 +289,30 @@ export function PublicMapScreen({
             <View style={screenStyles.filtersHeader}>
               <View style={screenStyles.filtersHeaderCopy}>
                 <Text style={screenStyles.filtersTitle}>Filters</Text>
-                <Text style={screenStyles.filtersMeta}>Tune the published survey slice without leaving the map.</Text>
+                <Text style={screenStyles.filtersMeta}>
+                  Tune the published survey slice without leaving the map.
+                </Text>
               </View>
               <Pressable
-                style={[screenStyles.layerTogglePill, showParcelLayer ? screenStyles.layerTogglePillOn : screenStyles.layerTogglePillOff]}
+                style={[
+                  screenStyles.layerTogglePill,
+                  showParcelLayer
+                    ? screenStyles.layerTogglePillOn
+                    : screenStyles.layerTogglePillOff,
+                ]}
                 onPress={() => setShowParcelLayer((current) => !current)}
               >
-                <Ionicons name={showParcelLayer ? 'layers' : 'layers-outline'} size={14} color={showParcelLayer ? brandColors.white : brandColors.forest} />
-                <Text style={[screenStyles.layerTogglePillText, showParcelLayer ? screenStyles.layerTogglePillTextOn : null]}>
+                <Ionicons
+                  name={showParcelLayer ? "layers" : "layers-outline"}
+                  size={14}
+                  color={showParcelLayer ? brandColors.white : brandColors.forest}
+                />
+                <Text
+                  style={[
+                    screenStyles.layerTogglePillText,
+                    showParcelLayer ? screenStyles.layerTogglePillTextOn : null,
+                  ]}
+                >
                   {layerStatusLabel}
                 </Text>
               </Pressable>
@@ -308,17 +359,26 @@ export function PublicMapScreen({
               </View>
 
               <Pressable
-                style={[screenStyles.refreshButton, loading ? screenStyles.refreshButtonDisabled : null]}
+                style={[
+                  screenStyles.refreshButton,
+                  loading ? screenStyles.refreshButtonDisabled : null,
+                ]}
                 onPress={() => {
-                  void onLoad();
+                  void onLoad()
                   if (parcelLayerRenderable) {
-                    void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom });
+                    void onLoadParcels({ bbox: computeRegionBbox(mapRegion), zoom: mapZoom })
                   }
                 }}
                 disabled={loading}
               >
-                {loading ? <ActivityIndicator size="small" color={brandColors.white} /> : <Ionicons name="sparkles-outline" size={16} color={brandColors.white} />}
-                <Text style={screenStyles.refreshButtonText}>{loading ? 'Refreshing…' : 'Refresh map'}</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color={brandColors.white} />
+                ) : (
+                  <Ionicons name="sparkles-outline" size={16} color={brandColors.white} />
+                )}
+                <Text style={screenStyles.refreshButtonText}>
+                  {loading ? "Refreshing…" : "Refresh map"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -339,7 +399,11 @@ export function PublicMapScreen({
           onPress={() => void handleCenterOnCurrentLocation()}
           disabled={locating}
         >
-          {locating ? <ActivityIndicator size="small" color={brandColors.white} /> : <Ionicons name="locate" size={20} color={brandColors.white} />}
+          {locating ? (
+            <ActivityIndicator size="small" color={brandColors.white} />
+          ) : (
+            <Ionicons name="locate" size={20} color={brandColors.white} />
+          )}
         </Pressable>
       </View>
 
@@ -358,10 +422,15 @@ export function PublicMapScreen({
           {selectedItemIsOwnSurvey ? (
             <View style={screenStyles.reportOwnSurveyInfo}>
               <Ionicons name="information-circle-outline" size={14} color="#40654f" />
-              <Text style={screenStyles.reportOwnSurveyInfoText}>You cannot report your own survey.</Text>
+              <Text style={screenStyles.reportOwnSurveyInfoText}>
+                You cannot report your own survey.
+              </Text>
             </View>
           ) : !reportPanelOpen ? (
-            <Pressable style={screenStyles.reportOpenButton} onPress={() => setReportPanelOpen(true)}>
+            <Pressable
+              style={screenStyles.reportOpenButton}
+              onPress={() => setReportPanelOpen(true)}
+            >
               <Ionicons name="flag-outline" size={14} color="#6e3f1a" />
               <Text style={screenStyles.reportOpenButtonText}>Report this survey</Text>
             </Pressable>
@@ -383,103 +452,109 @@ export function PublicMapScreen({
                 <Pressable
                   style={screenStyles.reportCancelButton}
                   onPress={() => {
-                    setReportPanelOpen(false);
-                    setReportReason('');
-                    setReportMessage(null);
+                    setReportPanelOpen(false)
+                    setReportReason("")
+                    setReportMessage(null)
                   }}
                   disabled={reportSending}
                 >
                   <Text style={screenStyles.reportCancelButtonText}>Cancel</Text>
                 </Pressable>
                 <Pressable
-                  style={[screenStyles.reportSubmitButton, reportSending ? screenStyles.reportSubmitButtonDisabled : null]}
+                  style={[
+                    screenStyles.reportSubmitButton,
+                    reportSending ? screenStyles.reportSubmitButtonDisabled : null,
+                  ]}
                   disabled={reportSending}
                   onPress={() => {
-                    if (reportSending) return;
-                    setReportSending(true);
+                    if (reportSending) return
+                    setReportSending(true)
                     void onReportSurvey(selectedItem.survey_id, reportReason)
                       .then((result) => {
-                        setReportMessage(result.message);
+                        setReportMessage(result.message)
                         if (result.ok) {
-                          setReportPanelOpen(false);
-                          setReportReason('');
+                          setReportPanelOpen(false)
+                          setReportReason("")
                         }
                       })
-                      .finally(() => setReportSending(false));
+                      .finally(() => setReportSending(false))
                   }}
                 >
-                  <Text style={screenStyles.reportSubmitButtonText}>{reportSending ? 'Sending...' : 'Send report'}</Text>
+                  <Text style={screenStyles.reportSubmitButtonText}>
+                    {reportSending ? "Sending..." : "Send report"}
+                  </Text>
                 </Pressable>
               </View>
-              {reportMessage ? <Text style={screenStyles.reportMessage}>{reportMessage}</Text> : null}
+              {reportMessage ? (
+                <Text style={screenStyles.reportMessage}>{reportMessage}</Text>
+              ) : null}
             </View>
           )}
         </View>
       ) : null}
-
     </View>
-  );
+  )
 }
 
 const screenStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: brandColors.canvas
+    backgroundColor: brandColors.canvas,
   },
   map: {
-    ...StyleSheet.absoluteFillObject
+    ...StyleSheet.absoluteFillObject,
   },
   overlayShell: {
-    position: 'absolute',
+    position: "absolute",
     left: 12,
     right: 12,
-    gap: 10
+    gap: 10,
   },
   topDock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   topDockLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
     gap: 8,
-    flex: 1
+    flex: 1,
   },
   topDockActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   exploreBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: 'rgba(247, 246, 240, 0.94)',
+    backgroundColor: "rgba(247, 246, 240, 0.94)",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   exploreBadgeText: {
     ...brandTypography.label,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   countBadge: {
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: 'rgba(232, 229, 217, 0.94)',
+    backgroundColor: "rgba(232, 229, 217, 0.94)",
     paddingHorizontal: 12,
-    paddingVertical: 10
+    paddingVertical: 10,
   },
   countBadgeText: {
     ...brandTypography.meta,
-    color: brandColors.textPrimary
+    color: brandColors.textPrimary,
   },
   iconButton: {
     width: 42,
@@ -487,10 +562,10 @@ const screenStyles = StyleSheet.create({
     borderRadius: 21,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: 'rgba(247, 246, 240, 0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...brandShadow.card
+    backgroundColor: "rgba(247, 246, 240, 0.94)",
+    alignItems: "center",
+    justifyContent: "center",
+    ...brandShadow.card,
   },
   iconButtonPrimary: {
     width: 42,
@@ -499,9 +574,9 @@ const screenStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: brandColors.forest,
     backgroundColor: brandColors.forest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...brandShadow.card
+    alignItems: "center",
+    justifyContent: "center",
+    ...brandShadow.card,
   },
   iconButtonDisabled: {
     width: 42,
@@ -509,75 +584,75 @@ const screenStyles = StyleSheet.create({
     borderRadius: 21,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: '#93A68A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...brandShadow.card
+    backgroundColor: "#93A68A",
+    alignItems: "center",
+    justifyContent: "center",
+    ...brandShadow.card,
   },
   filtersPanel: {
     borderRadius: 24,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: 'rgba(247, 246, 240, 0.96)',
+    backgroundColor: "rgba(247, 246, 240, 0.96)",
     padding: 14,
     gap: 12,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   filtersHeader: {
-    gap: 10
+    gap: 10,
   },
   filtersHeaderCopy: {
-    gap: 4
+    gap: 4,
   },
   filtersTitle: {
     ...brandTypography.label,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   filtersMeta: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   layerTogglePill: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   layerTogglePillOn: {
     borderColor: brandColors.forest,
-    backgroundColor: brandColors.forest
+    backgroundColor: brandColors.forest,
   },
   layerTogglePillOff: {
     borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted
+    backgroundColor: brandColors.panelMuted,
   },
   layerTogglePillText: {
     ...brandTypography.meta,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   layerTogglePillTextOn: {
-    color: brandColors.white
+    color: brandColors.white,
   },
   filtersGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
   },
   filterFieldHalf: {
     flexGrow: 1,
-    flexBasis: '48%',
-    gap: 5
+    flexBasis: "48%",
+    gap: 5,
   },
   filterFieldFull: {
-    width: '100%',
-    gap: 5
+    width: "100%",
+    gap: 5,
   },
   inputLabel: {
     ...brandTypography.meta,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   input: {
     borderWidth: 1,
@@ -587,87 +662,87 @@ const screenStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: brandColors.textPrimary,
-    ...brandTypography.input
+    ...brandTypography.input,
   },
   refreshButton: {
-    width: '100%',
+    width: "100%",
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandColors.forest,
     backgroundColor: brandColors.forest,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
   refreshButtonDisabled: {
-    backgroundColor: '#8FA188',
-    borderColor: '#8FA188'
+    backgroundColor: "#8FA188",
+    borderColor: "#8FA188",
   },
   refreshButtonText: {
     ...brandTypography.button,
-    color: brandColors.white
+    color: brandColors.white,
   },
   reportCard: {
-    position: 'absolute',
+    position: "absolute",
     left: 12,
     right: 12,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: 'rgba(247, 246, 240, 0.98)',
+    backgroundColor: "rgba(247, 246, 240, 0.98)",
     padding: 14,
     gap: 10,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   reportHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   reportTitle: {
     ...brandTypography.label,
-    color: brandColors.forest
+    color: brandColors.forest,
   },
   reportMeta: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   reportOpenButton: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E4B99A',
-    backgroundColor: '#F6E2D5',
+    borderColor: "#E4B99A",
+    backgroundColor: "#F6E2D5",
     paddingHorizontal: 12,
     paddingVertical: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   reportOpenButtonText: {
     ...brandTypography.meta,
-    color: brandColors.terracotta
+    color: brandColors.terracotta,
   },
   reportOwnSurveyInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panelMuted,
     paddingHorizontal: 10,
-    paddingVertical: 10
+    paddingVertical: 10,
   },
   reportOwnSurveyInfoText: {
     ...brandTypography.meta,
-    color: brandColors.textPrimary
+    color: brandColors.textPrimary,
   },
   reportForm: {
-    gap: 10
+    gap: 10,
   },
   reportInput: {
     borderWidth: 1,
@@ -677,14 +752,14 @@ const screenStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 72,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
     color: brandColors.textPrimary,
-    ...brandTypography.sectionBody
+    ...brandTypography.sectionBody,
   },
   reportActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
   },
   reportCancelButton: {
     borderRadius: 999,
@@ -692,11 +767,11 @@ const screenStyles = StyleSheet.create({
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panelMuted,
     paddingHorizontal: 12,
-    paddingVertical: 9
+    paddingVertical: 9,
   },
   reportCancelButtonText: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   reportSubmitButton: {
     borderRadius: 999,
@@ -704,44 +779,44 @@ const screenStyles = StyleSheet.create({
     borderColor: brandColors.terracotta,
     backgroundColor: brandColors.terracotta,
     paddingHorizontal: 12,
-    paddingVertical: 9
+    paddingVertical: 9,
   },
   reportSubmitButtonDisabled: {
-    borderColor: '#A6ABA3',
-    backgroundColor: '#A6ABA3'
+    borderColor: "#A6ABA3",
+    backgroundColor: "#A6ABA3",
   },
   reportSubmitButtonText: {
     ...brandTypography.meta,
-    color: brandColors.white
+    color: brandColors.white,
   },
   reportMessage: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary
+    color: brandColors.textSecondary,
   },
   bottomDock: {
-    position: 'absolute',
+    position: "absolute",
     left: 12,
     right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   emptyDockBubble: {
     flex: 1,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: brandColors.divider,
-    backgroundColor: 'rgba(247, 246, 240, 0.96)',
+    backgroundColor: "rgba(247, 246, 240, 0.96)",
     paddingHorizontal: 14,
     paddingVertical: 14,
-    ...brandShadow.card
+    ...brandShadow.card,
   },
   emptyDockText: {
     ...brandTypography.meta,
     fontSize: 15,
     lineHeight: 18,
-    color: brandColors.textPrimary
+    color: brandColors.textPrimary,
   },
   locateButton: {
     width: 56,
@@ -750,8 +825,8 @@ const screenStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: brandColors.forest,
     backgroundColor: brandColors.forest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...brandShadow.card
-  }
-});
+    alignItems: "center",
+    justifyContent: "center",
+    ...brandShadow.card,
+  },
+})
