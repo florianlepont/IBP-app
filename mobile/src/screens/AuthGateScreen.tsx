@@ -9,8 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TextInputProps,
   TouchableWithoutFeedback,
   View,
   useWindowDimensions,
@@ -19,10 +17,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   brandColors,
   brandRadius,
-  brandShadow,
   brandSpacing,
   brandTypography,
 } from "../app/brand-tokens"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppField } from "../ui/AppField"
 
 type AuthGateScreenProps = {
   apiUrl: string
@@ -81,25 +81,6 @@ async function runWithTimeout<T>(
       clearTimeout(timeoutId)
     }
   }
-}
-
-type AuthFieldProps = {
-  label: string
-  testID?: string
-} & TextInputProps
-
-function AuthField({ label, testID, ...inputProps }: AuthFieldProps) {
-  return (
-    <>
-      <Text style={authStyles.label}>{label}</Text>
-      <TextInput
-        style={authStyles.input}
-        placeholderTextColor={brandColors.textSecondary}
-        testID={testID}
-        {...inputProps}
-      />
-    </>
-  )
 }
 
 type HeroSectionProps = {
@@ -202,9 +183,9 @@ function AuthFormCard({
   const isRegister = authMode === "register"
 
   return (
-    <View style={authStyles.formCard}>
+    <AppCard variant="surface" padding={14} style={authStyles.formCard}>
       {isRegister ? (
-        <AuthField
+        <AppField
           label="Display name"
           value={displayName}
           onChangeText={onDisplayNameChange}
@@ -213,7 +194,7 @@ function AuthFormCard({
         />
       ) : null}
 
-      <AuthField
+      <AppField
         label="Email address"
         value={email}
         onChangeText={onEmailChange}
@@ -223,7 +204,7 @@ function AuthFormCard({
         placeholder="you@example.com"
       />
 
-      <AuthField
+      <AppField
         label="Password"
         value={password}
         onChangeText={onPasswordChange}
@@ -234,7 +215,7 @@ function AuthFormCard({
       />
 
       {isRegister ? (
-        <AuthField
+        <AppField
           label="Confirm password"
           value={confirmPassword}
           onChangeText={onConfirmPasswordChange}
@@ -246,23 +227,20 @@ function AuthFormCard({
         />
       ) : null}
 
-      <Pressable
-        style={[authStyles.primaryButton, submitting ? authStyles.primaryButtonDisabled : null]}
+      <AppButton
+        label={submitting ? "Processing..." : activeCopy.submitLabel}
         onPress={onSubmit}
         disabled={submitting}
+        style={authStyles.primaryButton}
         testID="auth-submit"
-      >
-        <Text style={authStyles.primaryButtonText}>
-          {submitting ? "Processing..." : activeCopy.submitLabel}
-        </Text>
-      </Pressable>
+      />
 
       {feedbackMessage ? (
         <Text style={feedbackTone === "error" ? authStyles.errorText : authStyles.statusText}>
           {feedbackMessage}
         </Text>
       ) : null}
-    </View>
+    </AppCard>
   )
 }
 
@@ -277,8 +255,8 @@ function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
   return (
     <View style={authStyles.panelFooter}>
       {editing ? (
-        <View style={authStyles.advancedPanel}>
-          <AuthField
+        <AppCard variant="soft" padding={14} style={authStyles.advancedPanel}>
+          <AppField
             label="API URL"
             value={apiUrl}
             onChangeText={onApiUrlChange}
@@ -292,7 +270,7 @@ function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
           <Text style={authStyles.hint}>
             iOS Simulator: localhost · Physical device: Mac local IP on same Wi-Fi
           </Text>
-        </View>
+        </AppCard>
       ) : (
         <Pressable
           onPress={() => setEditing(true)}
@@ -597,49 +575,10 @@ const authStyles = StyleSheet.create({
     color: brandColors.white,
   },
   formCard: {
-    borderRadius: brandRadius.card,
-    backgroundColor: brandColors.white,
-    borderWidth: 1,
-    borderColor: brandColors.panelMuted,
-    padding: 14,
     gap: 8,
-    ...brandShadow.card,
-  },
-  label: {
-    ...brandTypography.label,
-    color: brandColors.textPrimary,
-    marginTop: 2,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    borderRadius: brandRadius.field,
-    paddingHorizontal: 16,
-    minHeight: 48,
-    paddingVertical: 10,
-    backgroundColor: brandColors.inputFill,
-    color: brandColors.textPrimary,
-    ...brandTypography.input,
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: "500",
   },
   primaryButton: {
     marginTop: 8,
-    borderRadius: brandRadius.pill,
-    backgroundColor: brandColors.textPrimary,
-    minHeight: 46,
-    paddingHorizontal: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    ...brandTypography.button,
-    color: brandColors.white,
-    textAlign: "center",
   },
   apiUrlPill: {
     flexDirection: "row",
@@ -669,11 +608,6 @@ const authStyles = StyleSheet.create({
     fontWeight: "600",
   },
   advancedPanel: {
-    borderWidth: 1,
-    borderColor: brandColors.panelMuted,
-    borderRadius: brandRadius.card,
-    backgroundColor: "#F0EEE4",
-    padding: 14,
     gap: 6,
   },
   hint: {
