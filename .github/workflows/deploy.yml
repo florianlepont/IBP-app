@@ -16,7 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Pull base image
+        run: |
+          for i in 1 2 3; do
+            docker pull node:22-alpine && break
+            echo "Pull attempt $i failed, retrying..."
+            sleep 10
+          done
+
       - name: Build image (arm64 native)
+        env:
+          DOCKER_BUILDKIT: 0
         run: |
           docker build -t ibp-api:latest ./api
 
