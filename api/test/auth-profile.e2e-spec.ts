@@ -28,7 +28,7 @@ describe("Auth + profile (e2e)", () => {
     const email = `e2e-profile-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -47,7 +47,7 @@ describe("Auth + profile (e2e)", () => {
 
     const register = await request(app.getHttpServer())
       .post("/v1/auth/register")
-      .send({ email, password: "demo123", display_name: "New User" })
+      .send({ email, password: "demo1234", display_name: "New User" })
       .expect(201)
 
     expect(register.body.user.email).toBe(email)
@@ -57,7 +57,7 @@ describe("Auth + profile (e2e)", () => {
 
     await request(app.getHttpServer())
       .post("/v1/auth/register")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(409)
   })
 
@@ -66,7 +66,7 @@ describe("Auth + profile (e2e)", () => {
 
     await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123", create_if_missing: false })
+      .send({ email, password: "demo1234", create_if_missing: false })
       .expect(401)
   })
 
@@ -75,7 +75,7 @@ describe("Auth + profile (e2e)", () => {
     const requestedEmail = `e2e-email-confirmed-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -122,7 +122,7 @@ describe("Auth + profile (e2e)", () => {
     const email = `e2e-avatar-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string

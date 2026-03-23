@@ -30,7 +30,7 @@ describe("Epic E - Search and Reports (e2e)", () => {
     const email = `e2e-epic-e2-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -145,7 +145,7 @@ describe("Epic E - Search and Reports (e2e)", () => {
     const ownerEmail = `e2e-epic-e3-owner-${Date.now()}@ibp.local`
     const ownerLogin = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email: ownerEmail, password: "demo123" })
+      .send({ email: ownerEmail, password: "demo1234" })
       .expect(201)
     const ownerToken = ownerLogin.body.access_token as string
 
@@ -158,14 +158,14 @@ describe("Epic E - Search and Reports (e2e)", () => {
     const reporterEmail = `e2e-epic-e3-reporter-${Date.now()}@ibp.local`
     const reporterLogin = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email: reporterEmail, password: "demo123" })
+      .send({ email: reporterEmail, password: "demo1234" })
       .expect(201)
     const reporterToken = reporterLogin.body.access_token as string
 
     const moderatorEmail = `e2e-epic-e3-moderator-${Date.now()}@ibp.local`
     const moderatorLogin = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email: moderatorEmail, password: "demo123" })
+      .send({ email: moderatorEmail, password: "demo1234" })
       .expect(201)
     const moderatorToken = moderatorLogin.body.access_token as string
 

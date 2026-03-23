@@ -10,7 +10,7 @@ import { dirname, join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { extensionFromMime } from "../common/file.utils"
 import { DatabaseService } from "../database/database.service"
-import { EmailService } from "./email.service"
+import { EmailService } from "../email/email.service"
 
 const EMAIL_CHANGE_TTL_MS = 24 * 60 * 60 * 1000
 const PROFILE_PICTURE_MAX_BYTES = 10 * 1024 * 1024

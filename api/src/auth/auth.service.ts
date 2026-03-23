@@ -1,16 +1,23 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common"
+import { Cron, CronExpression } from "@nestjs/schedule"
 import { createHash, randomUUID } from "crypto"
 import * as bcrypt from "bcryptjs"
 import * as jwt from "jsonwebtoken"
 import { DatabaseService } from "../database/database.service"
+import { EmailService } from "../email/email.service"
 import { AuthenticatedUser } from "./auth.types"
 
-type UserRow = AuthenticatedUser & { password_hash: string | null }
+type UserRow = AuthenticatedUser & {
+  password_hash: string | null
+  email_verified: boolean
+}
 type RefreshSessionRow = {
   id: string
   user_id: string
@@ -22,9 +29,16 @@ type RefreshSessionRow = {
 type TokenKind = "access" | "refresh"
 const developmentFallbackSecrets = new Map<string, string>()
 
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000
+
 @Injectable()
 export class AuthService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly logger = new Logger(AuthService.name)
+
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async login(
     email: string,
@@ -42,13 +56,16 @@ export class AuthService {
       if (!createIfMissing || !this.isLoginOrCreateEnabled()) {
         throw new UnauthorizedException("Invalid credentials")
       }
-      user = await this.createUser(normalizedEmail, password)
+      user = await this.createUser(normalizedEmail, password, undefined, { verified: true })
     }
 
     const passwordOk = await this.verifyOrBootstrapPassword(user, password)
-
     if (!passwordOk) {
       throw new UnauthorizedException("Invalid credentials")
+    }
+
+    if (!user.email_verified) {
+      throw new ForbiddenException("Email not verified. Please check your inbox.")
     }
 
     const refreshToken = await this.issueRefreshToken(user.id)
@@ -64,7 +81,7 @@ export class AuthService {
     email: string,
     password: string,
     displayName: string,
-  ): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser }> {
+  ): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser; email_verification_token_dev?: string }> {
     const normalizedEmail = email.trim().toLowerCase()
 
     if (!normalizedEmail || !password) {
@@ -77,13 +94,127 @@ export class AuthService {
     }
 
     const normalizedDisplayName = (displayName ?? "").trim()
-    const user = await this.createUser(normalizedEmail, password, normalizedDisplayName)
+    const verificationToken = randomUUID()
+    const verificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS).toISOString()
+
+    const user = await this.createUser(normalizedEmail, password, normalizedDisplayName, {
+      verified: false,
+      verificationToken,
+      verificationExpiresAt,
+    })
+
+    try {
+      await this.emailService.sendEmailVerification({
+        toEmail: normalizedEmail,
+        displayName: normalizedDisplayName || normalizedEmail.split("@")[0],
+        token: verificationToken,
+        expiresAtIso: verificationExpiresAt,
+      })
+    } catch (_error) {
+      // Don't block registration if email fails — user can resend
+      this.logger.warn(`Failed to send verification email to ${normalizedEmail}`)
+    }
+
     const refreshToken = await this.issueRefreshToken(user.id)
 
-    return {
+    const response: ReturnType<typeof this.register> extends Promise<infer R> ? R : never = {
       access_token: this.signToken(user.id, "access"),
       refresh_token: refreshToken,
       user: this.toPublicUser(user),
+    }
+
+    if (this.shouldExposeDevToken()) {
+      response.email_verification_token_dev = verificationToken
+    }
+
+    return response
+  }
+
+  async verifyEmail(token: string): Promise<void> {
+    const normalizedToken = token.trim()
+    if (!normalizedToken) {
+      throw new BadRequestException("token is required")
+    }
+
+    const result = await this.db.query<{
+      id: string
+      email_verified: boolean
+      email_verification_expires_at: string | null
+    }>(
+      `SELECT id, email_verified, email_verification_expires_at::text
+       FROM users
+       WHERE email_verification_token = $1`,
+      [normalizedToken],
+    )
+
+    const user = result.rows[0]
+    if (!user) {
+      throw new BadRequestException("Invalid verification token")
+    }
+
+    if (user.email_verified) {
+      return // Already verified — idempotent
+    }
+
+    const expiresAtMs = user.email_verification_expires_at
+      ? Date.parse(user.email_verification_expires_at)
+      : NaN
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs < Date.now()) {
+      throw new BadRequestException("Verification token expired. Please request a new one.")
+    }
+
+    await this.db.query(
+      `UPDATE users
+       SET email_verified = TRUE,
+           email_verification_token = NULL,
+           email_verification_expires_at = NULL,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [user.id],
+    )
+  }
+
+  async resendVerification(email: string): Promise<void> {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail) {
+      throw new BadRequestException("email is required")
+    }
+
+    const result = await this.db.query<{
+      id: string
+      display_name: string
+      email_verified: boolean
+    }>(
+      `SELECT id, display_name, email_verified FROM users WHERE email = $1`,
+      [normalizedEmail],
+    )
+
+    const user = result.rows[0]
+
+    // Always respond 200 to avoid leaking whether the email exists
+    if (!user || user.email_verified) return
+
+    const verificationToken = randomUUID()
+    const verificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS).toISOString()
+
+    await this.db.query(
+      `UPDATE users
+       SET email_verification_token = $2,
+           email_verification_expires_at = $3,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [user.id, verificationToken, verificationExpiresAt],
+    )
+
+    try {
+      await this.emailService.sendEmailVerification({
+        toEmail: normalizedEmail,
+        displayName: user.display_name || normalizedEmail.split("@")[0],
+        token: verificationToken,
+        expiresAtIso: verificationExpiresAt,
+      })
+    } catch (_error) {
+      this.logger.warn(`Failed to resend verification email to ${normalizedEmail}`)
     }
   }
 
@@ -163,6 +294,14 @@ export class AuthService {
     )
   }
 
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async cleanupExpiredSessions(): Promise<void> {
+    const result = await this.db.query(
+      `DELETE FROM auth_sessions WHERE expires_at < NOW()`,
+    )
+    this.logger.log(`Cleaned up ${result.rowCount} expired auth sessions`)
+  }
+
   private async requireUserById(userId: string): Promise<AuthenticatedUser> {
     const result = await this.db.query<AuthenticatedUser>(
       `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url
@@ -181,7 +320,8 @@ export class AuthService {
 
   private async findUserByEmail(email: string): Promise<UserRow | null> {
     const existing = await this.db.query<UserRow>(
-      `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url, password_hash
+      `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url,
+              password_hash, email_verified
        FROM users
        WHERE email = $1`,
       [email],
@@ -194,18 +334,30 @@ export class AuthService {
     email: string,
     password: string,
     displayNameOverride?: string,
+    emailOptions?: {
+      verified?: boolean
+      verificationToken?: string
+      verificationExpiresAt?: string
+    },
   ): Promise<UserRow> {
     const id = randomUUID()
     const displayName = displayNameOverride?.trim() || email.split("@")[0] || "Contributor"
     const passwordHash = await bcrypt.hash(password, 10)
+    const verified = emailOptions?.verified ?? false
+    const verificationToken = emailOptions?.verificationToken ?? null
+    const verificationExpiresAt = emailOptions?.verificationExpiresAt ?? null
 
     let created
     try {
       created = await this.db.query<UserRow>(
-        `INSERT INTO users (id, email, password_hash, role, first_name, last_name, display_name)
-         VALUES ($1, $2, $3, 'contributor', '', '', $4)
-         RETURNING id, email, role, first_name, last_name, display_name, profile_picture_url, password_hash`,
-        [id, email, passwordHash, displayName],
+        `INSERT INTO users (
+           id, email, password_hash, role, first_name, last_name, display_name,
+           email_verified, email_verification_token, email_verification_expires_at
+         )
+         VALUES ($1, $2, $3, 'contributor', '', '', $4, $5, $6, $7)
+         RETURNING id, email, role, first_name, last_name, display_name,
+                   profile_picture_url, password_hash, email_verified`,
+        [id, email, passwordHash, displayName, verified, verificationToken, verificationExpiresAt],
       )
     } catch (error) {
       const errorCode = (error as { code?: string } | null)?.code
@@ -351,6 +503,12 @@ export class AuthService {
 
   private isLoginOrCreateEnabled(): boolean {
     return (process.env.AUTH_LOGIN_OR_CREATE_ENABLED ?? "").toLowerCase() === "true"
+  }
+
+  private shouldExposeDevToken(): boolean {
+    const nodeEnv = (process.env.NODE_ENV ?? "").toLowerCase()
+    if (nodeEnv !== "development") return false
+    return (process.env.AUTH_DEV_EXPOSE_EMAIL_TOKEN ?? "true").toLowerCase() !== "false"
   }
 
   private toPublicUser(user: UserRow): AuthenticatedUser {

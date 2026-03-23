@@ -121,7 +121,7 @@ export default function App() {
               onDisplayNameChange={auth.setDisplayName}
               onLogin={surveySync.handleLogin}
               onRegister={surveySync.handleRegister}
-              logoSource={require("./assets/logo-etats-sauvages-cropped.png")}
+              logoSource={require("./assets/logo-app.png")}
               heroMartenSource={require("./assets/auth/marten.png")}
               status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
             />

@@ -39,7 +39,7 @@ describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
     const email = `e2e-val-${Date.now()}-${Math.random().toString(36).slice(2)}@ibp.local`
     const res = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
     return {
       accessToken: res.body.access_token as string,
