@@ -82,8 +82,7 @@ export function EmailVerificationScreen({
         <View style={styles.content}>
           <Text style={styles.title}>Verify your email</Text>
           <Text style={styles.subtitle}>
-            We sent a verification code to{" "}
-            <Text style={styles.emailHighlight}>{email}</Text>
+            We sent a verification code to <Text style={styles.emailHighlight}>{email}</Text>
             {". "}
             Enter it below to activate your account.
           </Text>
