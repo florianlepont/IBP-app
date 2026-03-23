@@ -76,14 +76,14 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - Donation prompts must stay transparent and non-blocking for core app usage.
 
 ## 6) Epic Documents
-- Epic A - Access and Security: `specifications/epics/epic-a-access-security.md`
-- Epic B - Survey Preparation: `specifications/epics/epic-b-survey-preparation.md`
-- Epic C - IBP Survey Data Entry: `specifications/epics/epic-c-survey-data-entry.md`
-- Epic D - Offline and Synchronization: `specifications/epics/epic-d-offline-sync.md`
-- Epic E - Data Quality and Trust: `specifications/epics/epic-e-data-quality-trust.md`
-- Epic F - Participatory Experience and Gamification: `specifications/epics/epic-f-participatory-gamification.md`
-- Epic G - IBP Information, Association Visibility and Donation: `specifications/epics/epic-g-ibp-information-association-and-donation.md`
-- Epic H - Forest Insights and Analytics (V2): `specifications/epics/epic-h-forest-insights-analytics.md`
+- Epic A - Access and Security: `docs/specs/epic-a-access-and-security.md`
+- Epic B - Survey Preparation: `docs/specs/epic-b-survey-preparation.md`
+- Epic C - IBP Survey Data Entry: `docs/specs/epic-c-ibp-survey-data-entry.md`
+- Epic D - Offline and Synchronization: `docs/specs/epic-d-offline-and-synchronization.md`
+- Epic E - Data Quality and Trust: `docs/specs/epic-e-data-quality-and-trust.md`
+- Epic F - Participatory Experience and Gamification: `docs/specs/epic-f-participatory-experience-and-gamification.md`
+- Epic G - IBP Information, Association Visibility and Donation: `docs/specs/epic-g-ibp-information-association-visibility-and-donation.md`
+- Epic H - Forest Insights and Analytics (V2): `docs/specs/epic-h-forest-insights-and-analytics.md`
 
 ## 7) Suggested Delivery Priority
 1. Epic A - Access and Security
@@ -122,4 +122,4 @@ The app is a public-interest project led by the association Etats-Sauvages and i
 - What moderation policy should Etats-Sauvages apply for disputed surveys?
 
 ## 11) Detailed Functional Specification Reference
-- IBP factor-level form definition: [ibp_form_spec.md](specifications/epics/ibp_form_spec.md)
+- IBP factor-level form definition: [ibp-form-spec.md](ibp-form-spec.md)
