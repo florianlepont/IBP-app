@@ -23,21 +23,30 @@ if (!TOKEN) {
 
 // ── Notion API helpers ───────────────────────────────────────────────────────
 
-async function notionFetch(path, options = {}) {
-  const res = await fetch(`https://api.notion.com/v1${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  })
-  if (!res.ok) {
+async function notionFetch(path, options = {}, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(`https://api.notion.com/v1${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    })
+    if (res.ok) return res.json()
+
+    const isRetryable = res.status === 502 || res.status === 503 || res.status === 429
+    if (isRetryable && attempt < retries) {
+      const delay = res.status === 429 ? 10000 : 2000 * attempt
+      console.warn(`  Notion ${res.status}, retrying in ${delay / 1000}s... (attempt ${attempt}/${retries})`)
+      await new Promise((r) => setTimeout(r, delay))
+      continue
+    }
+
     const body = await res.text()
     throw new Error(`Notion API error ${res.status}: ${body}`)
   }
-  return res.json()
 }
 
 async function queryDatabase(databaseId) {
