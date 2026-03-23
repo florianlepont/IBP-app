@@ -265,31 +265,16 @@ function AuthFormCard({
 }
 
 type AuthPanelFooterProps = {
-  showAdvanced: boolean
-  onToggleAdvanced: () => void
   apiUrl: string
   onApiUrlChange: (value: string) => void
 }
 
-function AuthPanelFooter({
-  showAdvanced,
-  onToggleAdvanced,
-  apiUrl,
-  onApiUrlChange,
-}: AuthPanelFooterProps) {
+function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
+  const [editing, setEditing] = useState(false)
+
   return (
     <View style={authStyles.panelFooter}>
-      <Pressable
-        onPress={onToggleAdvanced}
-        style={authStyles.advancedToggle}
-        testID="auth-advanced-toggle"
-      >
-        <Text style={authStyles.advancedToggleText}>
-          {showAdvanced ? "Hide API options" : "Show API options"}
-        </Text>
-      </Pressable>
-
-      {showAdvanced ? (
+      {editing ? (
         <View style={authStyles.advancedPanel}>
           <AuthField
             label="API URL"
@@ -297,13 +282,28 @@ function AuthPanelFooter({
             onChangeText={onApiUrlChange}
             autoCapitalize="none"
             autoCorrect={false}
+            autoFocus
             placeholder="http://192.168.x.x:3000/v1"
+            onBlur={() => setEditing(false)}
+            testID="auth-api-url-input"
           />
           <Text style={authStyles.hint}>
-            iOS Simulator: localhost. Physical phone: your Mac local IP on the same Wi-Fi.
+            iOS Simulator: localhost · Physical device: Mac local IP on same Wi-Fi
           </Text>
         </View>
-      ) : null}
+      ) : (
+        <Pressable
+          onPress={() => setEditing(true)}
+          style={authStyles.apiUrlPill}
+          testID="auth-advanced-toggle"
+        >
+          <Text style={authStyles.apiUrlPillLabel}>API</Text>
+          <Text style={authStyles.apiUrlPillValue} numberOfLines={1}>
+            {apiUrl}
+          </Text>
+          <Text style={authStyles.apiUrlPillEdit}>Edit</Text>
+        </Pressable>
+      )}
     </View>
   )
 }
@@ -327,7 +327,6 @@ export function AuthGateScreen({
   const insets = useSafeAreaInsets()
   const [authMode, setAuthMode] = useState<AuthMode>("login")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [localError, setLocalError] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
@@ -430,12 +429,7 @@ export function AuthGateScreen({
         />
       </View>
 
-      <AuthPanelFooter
-        showAdvanced={showAdvanced}
-        onToggleAdvanced={() => setShowAdvanced((current) => !current)}
-        apiUrl={apiUrl}
-        onApiUrlChange={onApiUrlChange}
-      />
+      <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
     </>
   )
 
@@ -634,15 +628,32 @@ const authStyles = StyleSheet.create({
     color: brandColors.white,
     textAlign: "center",
   },
-  advancedToggle: {
+  apiUrlPill: {
+    flexDirection: "row",
+    alignItems: "center",
     alignSelf: "center",
-    minHeight: 36,
-    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: brandColors.divider,
+    borderRadius: brandRadius.pill,
+    paddingVertical: 6,
     paddingHorizontal: 12,
+    gap: 6,
+    maxWidth: "100%",
   },
-  advancedToggleText: {
+  apiUrlPillLabel: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary,
+    fontWeight: "600",
+  },
+  apiUrlPillValue: {
+    ...brandTypography.meta,
+    color: brandColors.textPrimary,
+    flex: 1,
+  },
+  apiUrlPillEdit: {
     ...brandTypography.meta,
     color: brandColors.forest,
+    fontWeight: "600",
   },
   advancedPanel: {
     borderWidth: 1,
