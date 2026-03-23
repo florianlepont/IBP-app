@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Pressable, StyleSheet, Text, View } from "react-native"
+import { StyleSheet, Text, View } from "react-native"
 import { useHeaderHeight } from "@react-navigation/elements"
 import MapView, { Marker, Region } from "react-native-maps"
-import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { brandColors, brandRadius, brandShadow, brandTypography } from "../app/brand-tokens"
+import { brandColors, brandShadow, brandTypography } from "../app/brand-tokens"
 import {
   DEFAULT_FRANCE_CENTER,
   areRegionsNearlyEqual,
@@ -15,6 +14,9 @@ import { GpsCaptureResult } from "../app/types"
 import { IgnCadastreTileOverlay } from "../components/IgnCadastreTileOverlay"
 import { ParcelOverlayPolygons } from "../components/ParcelOverlayPolygons"
 import { useParcelStatuses } from "../hooks/useParcelStatuses"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppNotice } from "../ui/AppNotice"
 
 type SurveyParcelSelectionScreenProps = {
   apiUrl: string
@@ -152,7 +154,10 @@ export function SurveyParcelSelectionScreen({
       >
         <View style={screenStyles.bottomArea}>
           <View style={screenStyles.floatingActions}>
-            <Pressable
+            <AppButton
+              label="Current position"
+              leadingIcon="locate-outline"
+              size="sm"
               style={screenStyles.locateButton}
               onPress={() => {
                 void onCaptureGpsLocation().then((capturedLocation) => {
@@ -166,31 +171,30 @@ export function SurveyParcelSelectionScreen({
                   syncMapRegion(nextRegion, 420)
                 })
               }}
-            >
-              <Ionicons name="locate-outline" size={18} color={brandColors.white} />
-              <Text style={screenStyles.locateButtonText}>Current position</Text>
-            </Pressable>
+            />
           </View>
 
-          <View style={screenStyles.bottomSheet}>
+          <AppCard variant="panelElevated" style={screenStyles.bottomSheet}>
             <Text style={screenStyles.bottomTitle}>
               {hasParcelSelection ? parcelSelectionLabel : "No parcel selected yet"}
             </Text>
             <Text style={screenStyles.bottomMeta}>{parcelHelperText}</Text>
             {!hasParcelSelection ? (
-              <View style={screenStyles.warningCard}>
-                <Ionicons name="alert-circle-outline" size={18} color={brandColors.terracotta} />
-                <Text style={screenStyles.warningText}>
-                  Select at least one parcel to continue.
-                </Text>
-              </View>
+              <AppNotice
+                tone="danger"
+                icon="alert-circle-outline"
+                message="Select at least one parcel to continue."
+              />
             ) : null}
             <Text style={screenStyles.bottomHint}>
               Tap polygons to add or remove parcels from this survey.
             </Text>
             {!hideDoneAction ? (
-              <Pressable
-                style={[screenStyles.doneButton, saving ? screenStyles.doneButtonDisabled : null]}
+              <AppButton
+                label={saving ? "Saving..." : "Done"}
+                leadingIcon={saving ? "hourglass-outline" : "checkmark"}
+                size="lg"
+                style={screenStyles.doneButton}
                 onPress={() => {
                   if (saving) {
                     return
@@ -199,16 +203,9 @@ export function SurveyParcelSelectionScreen({
                   void onSave().finally(() => setSaving(false))
                 }}
                 disabled={saving}
-              >
-                <Ionicons
-                  name={saving ? "hourglass-outline" : "checkmark"}
-                  size={18}
-                  color={brandColors.white}
-                />
-                <Text style={screenStyles.doneButtonText}>{saving ? "Saving..." : "Done"}</Text>
-              </Pressable>
+              />
             ) : null}
-          </View>
+          </AppCard>
         </View>
       </View>
     </View>
@@ -236,31 +233,13 @@ const screenStyles = StyleSheet.create({
     alignSelf: "flex-end",
   },
   locateButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
     borderWidth: 1,
     borderColor: "#8EA97C",
-    backgroundColor: brandColors.forest,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: brandRadius.pill,
     ...brandShadow.card,
-  },
-  locateButtonText: {
-    ...brandTypography.meta,
-    color: brandColors.white,
   },
   bottomSheet: {
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
     backgroundColor: "rgba(247, 246, 240, 0.97)",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
     gap: 8,
-    ...brandShadow.card,
   },
   bottomTitle: {
     ...brandTypography.sectionTitle,
@@ -278,39 +257,8 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
-  warningCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#E7B8AA",
-    backgroundColor: "#F6E1DA",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  warningText: {
-    flex: 1,
-    ...brandTypography.meta,
-    color: brandColors.terracotta,
-  },
   doneButton: {
     marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: brandRadius.pill,
-    backgroundColor: brandColors.forest,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
     ...brandShadow.card,
-  },
-  doneButtonDisabled: {
-    opacity: 0.62,
-  },
-  doneButtonText: {
-    ...brandTypography.button,
-    color: brandColors.white,
   },
 })

@@ -2,21 +2,17 @@ import { useEffect, useRef, useState } from "react"
 import {
   BackHandler,
   Keyboard,
-  Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableWithoutFeedback,
   View,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
-import {
-  brandColors,
-  brandRadius,
-  brandShadow,
-  brandSpacing,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
 
 type EmailVerificationScreenProps = {
   email: string
@@ -107,12 +103,14 @@ export function EmailVerificationScreen({
       <View style={styles.screen}>
         <View style={styles.content}>
           {devToken ? (
-            <View style={styles.devBanner}>
-              <Text style={styles.devBannerLabel}>DEV — token pré-rempli</Text>
-              <Text style={styles.devBannerToken} numberOfLines={1} ellipsizeMode="middle">
-                {devToken}
-              </Text>
-            </View>
+            <AppNotice
+              tone="warning"
+              title="DEV"
+              message={`Token pre-rempli: ${devToken}`}
+              icon="construct-outline"
+              style={styles.devBanner}
+              messageStyle={styles.devBannerToken}
+            />
           ) : null}
           <Text style={styles.title}>Verify your email</Text>
           <Text style={styles.subtitle}>
@@ -121,46 +119,47 @@ export function EmailVerificationScreen({
             Enter it below to activate your account.
           </Text>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>Verification code</Text>
-            <TextInput
-              style={styles.input}
+          <AppCard variant="surface" padding={14} style={styles.card}>
+            <AppField
+              label="Verification code"
               value={token}
               onChangeText={setToken}
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="Paste your code here"
-              placeholderTextColor={brandColors.textSecondary}
               testID="verify-token-input"
+              inputStyle={styles.input}
             />
 
-            <Pressable
-              style={[styles.primaryButton, submitting ? styles.primaryButtonDisabled : null]}
+            <AppButton
+              label={submitting ? "Verifying..." : "Verify email"}
               onPress={() => void handleVerify()}
               disabled={submitting}
+              style={styles.primaryButton}
               testID="verify-submit"
-            >
-              <Text style={styles.primaryButtonText}>
-                {submitting ? "Verifying..." : "Verify email"}
-              </Text>
-            </Pressable>
+            />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            {resendSuccess && !error ? (
-              <Text style={styles.successText}>A new code has been sent to your inbox.</Text>
+            {error ? (
+              <AppNotice tone="danger" message={error} icon="alert-circle-outline" />
             ) : null}
-          </View>
+            {resendSuccess && !error ? (
+              <AppNotice
+                tone="success"
+                message="A new code has been sent to your inbox."
+                icon="mail-outline"
+              />
+            ) : null}
+          </AppCard>
 
-          <Pressable
+          <AppButton
+            label={resending ? "Sending..." : "Didn't receive the email? Resend"}
+            variant="secondary"
+            size="sm"
             onPress={() => void handleResend()}
             disabled={resending}
             style={styles.resendButton}
             testID="verify-resend"
-          >
-            <Text style={styles.resendText}>
-              {resending ? "Sending..." : "Didn't receive the email? Resend"}
-            </Text>
-          </Pressable>
+          />
         </View>
       </View>
     </TouchableWithoutFeedback>
@@ -193,92 +192,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   card: {
-    borderRadius: brandRadius.card,
-    backgroundColor: brandColors.white,
-    borderWidth: 1,
-    borderColor: brandColors.panelMuted,
-    padding: 14,
     gap: 8,
-    ...brandShadow.card,
-  },
-  label: {
-    ...brandTypography.label,
-    color: brandColors.textPrimary,
-    marginTop: 2,
   },
   input: {
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    borderRadius: brandRadius.field,
-    paddingHorizontal: 16,
-    minHeight: 48,
-    paddingVertical: 10,
-    backgroundColor: brandColors.inputFill,
-    color: brandColors.textPrimary,
-    ...brandTypography.input,
     fontSize: 15,
     lineHeight: 18,
     fontWeight: "500",
   },
   primaryButton: {
     marginTop: 8,
-    borderRadius: brandRadius.pill,
-    backgroundColor: brandColors.textPrimary,
-    minHeight: 46,
-    paddingHorizontal: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    ...brandTypography.button,
-    color: brandColors.white,
-    textAlign: "center",
-  },
-  errorText: {
-    borderRadius: 16,
-    backgroundColor: brandColors.errorSoft,
-    color: "#6B2E1C",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    ...brandTypography.sectionBody,
-  },
-  successText: {
-    borderRadius: 16,
-    backgroundColor: brandColors.successSoft,
-    color: brandColors.forest,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    ...brandTypography.sectionBody,
   },
   resendButton: {
     alignSelf: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  resendText: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
   },
   devBanner: {
-    backgroundColor: "#FFF3CD",
-    borderWidth: 1,
-    borderColor: "#FFCB47",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 2,
-  },
-  devBannerLabel: {
-    ...brandTypography.meta,
-    color: "#7A5800",
-    fontWeight: "700",
+    alignItems: "flex-start",
   },
   devBannerToken: {
     ...brandTypography.meta,
     color: "#7A5800",
-    fontFamily: "monospace",
   },
 })

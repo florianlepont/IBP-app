@@ -10,7 +10,9 @@ export const brandColors = {
   white: "#FFFFFF",
   canvas: "#EEF1E8",
   panel: "#F7F6F0",
+  surfaceSoft: "#F0EEE4",
   panelMuted: "#E8E5D9",
+  warningSoft: "#F7E6CA",
   inputFill: "#F2F0E8",
   inputBorder: "#D6D1C3",
   divider: "#D3D7C8",
@@ -20,9 +22,30 @@ export const brandColors = {
   errorSoft: "#F3D3C8",
 } as const
 
-// Custom fonts from the charter are not loaded in the app yet.
+// The official charter typography is documented here even though the custom
+// font files are not loaded in the app yet. Runtime styles still rely on
+// system fonts until the assets are added and wired through Expo.
+export const brandFontFamilies = {
+  title: {
+    preferred: "Mazzard H",
+    fallback: "Avenir Next / system-ui",
+  },
+  body: {
+    preferred: "Mazzard H",
+    fallback: "Avenir Next / system-ui",
+  },
+  meta: {
+    preferred: "Futura",
+    fallback: "Avenir Next / system-ui",
+  },
+  accent: {
+    preferred: "HeadTurn Smooth",
+    fallback: "Mazzard H Bold",
+  },
+} as const
+
 // These typography tokens keep the intended hierarchy while relying on
-// the platform system font as the current fallback.
+// the current platform font stack.
 export const brandTypography = {
   heroEyebrow: {
     fontSize: 12,
@@ -95,5 +118,95 @@ export const brandShadow = {
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
+  },
+} as const
+
+export const brandSemanticColors = {
+  backgroundCanvas: brandColors.canvas,
+  surfaceBase: brandColors.panel,
+  surfaceElevated: brandColors.white,
+  surfaceSoft: brandColors.surfaceSoft,
+  textPrimary: brandColors.textPrimary,
+  textSecondary: brandColors.textSecondary,
+  textStrong: brandColors.forest,
+  ctaPrimary: brandColors.forest,
+  ctaAccent: brandColors.moss,
+  ctaSecondaryOutline: brandColors.forest,
+  ctaDanger: brandColors.terracotta,
+  successSurface: brandColors.successSoft,
+  errorSurface: brandColors.errorSoft,
+  warningSurface: brandColors.warningSoft,
+} as const
+
+export const brandComponentTokens = {
+  button: {
+    minHeight: 44,
+    minHeightSmall: 36,
+    minHeightLarge: 50,
+    horizontalPaddingSmall: 10,
+    horizontalPadding: 16,
+    horizontalPaddingLarge: 14,
+    iconOnlySizeSmall: 34,
+    iconOnlySize: 40,
+    iconOnlySizeLarge: 46,
+    primaryBackground: brandSemanticColors.ctaPrimary,
+    secondaryBackground: brandSemanticColors.surfaceElevated,
+    secondaryBorder: brandSemanticColors.ctaSecondaryOutline,
+    dangerBackground: brandSemanticColors.ctaDanger,
+  },
+  card: {
+    defaultPadding: brandSpacing.md,
+    surfaceBorder: brandColors.panelMuted,
+    softSurface: brandSemanticColors.surfaceSoft,
+    panelBorder: brandColors.divider,
+  },
+  field: {
+    minHeight: 48,
+    horizontalPadding: brandSpacing.md,
+    verticalPadding: 10,
+    gap: brandSpacing.sm - 2,
+    background: brandColors.inputFill,
+    border: brandColors.inputBorder,
+    borderError: brandColors.terracotta,
+  },
+  statusChip: {
+    neutralBorder: brandColors.divider,
+    neutralBackground: brandColors.panelMuted,
+    successBorder: "#BBD09B",
+    successBackground: brandColors.successSoft,
+    warningBorder: "#E7C281",
+    warningBackground: brandColors.warningSoft,
+    dangerBorder: "#E4A595",
+    dangerBackground: brandColors.errorSoft,
+    textColor: brandColors.forest,
+  },
+  choiceChip: {
+    border: brandColors.inputBorder,
+    background: brandColors.panelMuted,
+    interactiveBorder: brandColors.forest,
+    interactiveBackground: brandColors.white,
+    activeBorder: brandColors.forest,
+    activeBackground: brandColors.forest,
+    text: brandColors.forest,
+    activeText: brandColors.white,
+    staticText: brandColors.textSecondary,
+    successBackground: brandColors.successSoft,
+    warningBackground: brandColors.warningSoft,
+    dangerBackground: brandColors.errorSoft,
+  },
+  notice: {
+    infoBackground: brandColors.panelMuted,
+    infoBorder: brandColors.divider,
+    successBackground: brandColors.successSoft,
+    successBorder: "#BBD09B",
+    warningBackground: brandColors.warningSoft,
+    warningBorder: "#E7C281",
+    dangerBackground: brandColors.errorSoft,
+    dangerBorder: "#E4A595",
+    title: brandColors.textPrimary,
+    text: brandColors.textSecondary,
+    warningText: brandColors.ochre,
+    dangerText: brandColors.terracotta,
+    successText: brandColors.forest,
   },
 } as const
