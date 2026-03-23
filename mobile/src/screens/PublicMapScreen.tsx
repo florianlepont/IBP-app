@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native"
 import MapView, { Marker, Region } from "react-native-maps"
@@ -17,6 +16,11 @@ import { PublicMapItem, PublicParcelStatusItem } from "../app/types"
 import { computeRegionBbox, computeRegionZoom } from "../app/map-viewport"
 import { IgnCadastreTileOverlay } from "../components/IgnCadastreTileOverlay"
 import { ParcelOverlayPolygons } from "../components/ParcelOverlayPolygons"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
 
 type PublicMapScreenProps = {
   items: PublicMapItem[]
@@ -280,84 +284,79 @@ export function PublicMapScreen({
         </View>
 
         {showFilters ? (
-          <View style={screenStyles.filtersPanel}>
-            <View style={screenStyles.filtersHeader}>
-              <View style={screenStyles.filtersHeaderCopy}>
-                <Text style={screenStyles.filtersTitle}>Filters</Text>
-                <Text style={screenStyles.filtersMeta}>
-                  Tune the published survey slice without leaving the map.
-                </Text>
-              </View>
-              <Pressable
-                style={[
-                  screenStyles.layerTogglePill,
-                  showParcelLayer
-                    ? screenStyles.layerTogglePillOn
-                    : screenStyles.layerTogglePillOff,
-                ]}
-                onPress={() => setShowParcelLayer((current) => !current)}
-              >
-                <Ionicons
-                  name={showParcelLayer ? "layers" : "layers-outline"}
-                  size={14}
-                  color={showParcelLayer ? brandColors.white : brandColors.forest}
-                />
-                <Text
+          <AppCard variant="panelElevated" padding={14} style={screenStyles.filtersPanel}>
+            <AppSectionHeader
+              title="Filters"
+              subtitle="Tune the published survey slice without leaving the map."
+              titleStyle={screenStyles.filtersTitle}
+              subtitleStyle={screenStyles.filtersMeta}
+              trailing={
+                <Pressable
                   style={[
-                    screenStyles.layerTogglePillText,
-                    showParcelLayer ? screenStyles.layerTogglePillTextOn : null,
+                    screenStyles.layerTogglePill,
+                    showParcelLayer
+                      ? screenStyles.layerTogglePillOn
+                      : screenStyles.layerTogglePillOff,
                   ]}
+                  onPress={() => setShowParcelLayer((current) => !current)}
                 >
-                  {layerStatusLabel}
-                </Text>
-              </Pressable>
-            </View>
+                  <Ionicons
+                    name={showParcelLayer ? "layers" : "layers-outline"}
+                    size={14}
+                    color={showParcelLayer ? brandColors.white : brandColors.forest}
+                  />
+                  <Text
+                    style={[
+                      screenStyles.layerTogglePillText,
+                      showParcelLayer ? screenStyles.layerTogglePillTextOn : null,
+                    ]}
+                  >
+                    {layerStatusLabel}
+                  </Text>
+                </Pressable>
+              }
+            />
 
             <View style={screenStyles.filtersGrid}>
-              <View style={screenStyles.filterFieldHalf}>
-                <Text style={screenStyles.inputLabel}>From</Text>
-                <TextInput
-                  style={screenStyles.input}
-                  value={fromDate}
-                  onChangeText={onChangeFromDate}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder="2026-03-01"
-                  placeholderTextColor={brandColors.textSecondary}
-                />
-              </View>
+              <AppField
+                label="From"
+                value={fromDate}
+                onChangeText={onChangeFromDate}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="2026-03-01"
+                containerStyle={screenStyles.filterFieldHalf}
+                labelStyle={screenStyles.inputLabel}
+                inputStyle={screenStyles.input}
+              />
 
-              <View style={screenStyles.filterFieldHalf}>
-                <Text style={screenStyles.inputLabel}>To</Text>
-                <TextInput
-                  style={screenStyles.input}
-                  value={toDate}
-                  onChangeText={onChangeToDate}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder="2026-03-31"
-                  placeholderTextColor={brandColors.textSecondary}
-                />
-              </View>
+              <AppField
+                label="To"
+                value={toDate}
+                onChangeText={onChangeToDate}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="2026-03-31"
+                containerStyle={screenStyles.filterFieldHalf}
+                labelStyle={screenStyles.inputLabel}
+                inputStyle={screenStyles.input}
+              />
 
-              <View style={screenStyles.filterFieldFull}>
-                <Text style={screenStyles.inputLabel}>Region</Text>
-                <TextInput
-                  style={screenStyles.input}
-                  value={region}
-                  onChangeText={onChangeRegion}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  placeholder="ACA"
-                  placeholderTextColor={brandColors.textSecondary}
-                />
-              </View>
+              <AppField
+                label="Region"
+                value={region}
+                onChangeText={onChangeRegion}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                placeholder="ACA"
+                containerStyle={screenStyles.filterFieldFull}
+                labelStyle={screenStyles.inputLabel}
+                inputStyle={screenStyles.input}
+              />
 
-              <Pressable
-                style={[
-                  screenStyles.refreshButton,
-                  loading ? screenStyles.refreshButtonDisabled : null,
-                ]}
+              <AppButton
+                label={loading ? "Refreshing…" : "Refresh map"}
+                leadingIcon="sparkles-outline"
                 onPress={() => {
                   void onLoad()
                   if (parcelLayerRenderable) {
@@ -365,26 +364,21 @@ export function PublicMapScreen({
                   }
                 }}
                 disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color={brandColors.white} />
-                ) : (
-                  <Ionicons name="sparkles-outline" size={16} color={brandColors.white} />
-                )}
-                <Text style={screenStyles.refreshButtonText}>
-                  {loading ? "Refreshing…" : "Refresh map"}
-                </Text>
-              </Pressable>
+                style={[
+                  screenStyles.refreshButton,
+                  loading ? screenStyles.refreshButtonDisabled : null,
+                ]}
+              />
             </View>
-          </View>
+          </AppCard>
         ) : null}
       </View>
 
       <View style={[screenStyles.bottomDock, { bottom: Math.max(12, insets.bottom + 10) }]}>
         {showEmptyDock ? (
-          <View style={screenStyles.emptyDockBubble}>
+          <AppCard variant="panelElevated" padding={14} style={screenStyles.emptyDockBubble}>
             <Text style={screenStyles.emptyDockText}>No public items found</Text>
-          </View>
+          </AppCard>
         ) : (
           <View />
         )}
@@ -403,37 +397,44 @@ export function PublicMapScreen({
       </View>
 
       {selectedItem ? (
-        <View style={[screenStyles.reportCard, { bottom: Math.max(84, insets.bottom + 62) }]}>
-          <View style={screenStyles.reportHeaderRow}>
-            <Text style={screenStyles.reportTitle}>Survey {selectedItem.survey_id}</Text>
-            <Pressable onPress={() => setSelectedItem(null)}>
-              <Ionicons name="close" size={18} color="#40654f" />
-            </Pressable>
-          </View>
+        <AppCard
+          variant="panelElevated"
+          padding={14}
+          style={[screenStyles.reportCard, { bottom: Math.max(84, insets.bottom + 62) }]}
+        >
+          <AppSectionHeader
+            title={`Survey ${selectedItem.survey_id}`}
+            trailing={
+              <Pressable onPress={() => setSelectedItem(null)}>
+                <Ionicons name="close" size={18} color="#40654f" />
+              </Pressable>
+            }
+            titleStyle={screenStyles.reportTitle}
+          />
           <Text style={screenStyles.reportMeta}>
             {selectedItem.region_code} · {selectedItem.survey_date} · IBP {selectedItem.ibp_total}
           </Text>
 
           {selectedItemIsOwnSurvey ? (
-            <View style={screenStyles.reportOwnSurveyInfo}>
-              <Ionicons name="information-circle-outline" size={14} color="#40654f" />
-              <Text style={screenStyles.reportOwnSurveyInfoText}>
-                You cannot report your own survey.
-              </Text>
-            </View>
+            <AppNotice
+              tone="info"
+              icon="information-circle-outline"
+              message="You cannot report your own survey."
+            />
           ) : !reportPanelOpen ? (
-            <Pressable
-              style={screenStyles.reportOpenButton}
+            <AppButton
+              label="Report this survey"
+              leadingIcon="flag-outline"
+              variant="danger"
+              size="sm"
               onPress={() => setReportPanelOpen(true)}
-            >
-              <Ionicons name="flag-outline" size={14} color="#6e3f1a" />
-              <Text style={screenStyles.reportOpenButtonText}>Report this survey</Text>
-            </Pressable>
+              style={screenStyles.reportOpenButton}
+              labelStyle={screenStyles.reportOpenButtonText}
+            />
           ) : (
             <View style={screenStyles.reportForm}>
-              <Text style={screenStyles.inputLabel}>Reason (required)</Text>
-              <TextInput
-                style={screenStyles.reportInput}
+              <AppField
+                label="Reason (required)"
                 value={reportReason}
                 onChangeText={setReportReason}
                 autoCapitalize="sentences"
@@ -441,10 +442,15 @@ export function PublicMapScreen({
                 multiline
                 numberOfLines={3}
                 placeholder="Explain why this survey looks suspicious"
-                placeholderTextColor="#8a9287"
+                containerStyle={screenStyles.reportField}
+                labelStyle={screenStyles.inputLabel}
+                inputStyle={screenStyles.reportInput}
               />
               <View style={screenStyles.reportActionsRow}>
-                <Pressable
+                <AppButton
+                  label="Cancel"
+                  variant="secondary"
+                  size="sm"
                   style={screenStyles.reportCancelButton}
                   onPress={() => {
                     setReportPanelOpen(false)
@@ -452,10 +458,12 @@ export function PublicMapScreen({
                     setReportMessage(null)
                   }}
                   disabled={reportSending}
-                >
-                  <Text style={screenStyles.reportCancelButtonText}>Cancel</Text>
-                </Pressable>
-                <Pressable
+                  labelStyle={screenStyles.reportCancelButtonText}
+                />
+                <AppButton
+                  label={reportSending ? "Sending..." : "Send report"}
+                  variant="danger"
+                  size="sm"
                   style={[
                     screenStyles.reportSubmitButton,
                     reportSending ? screenStyles.reportSubmitButtonDisabled : null,
@@ -474,18 +482,15 @@ export function PublicMapScreen({
                       })
                       .finally(() => setReportSending(false))
                   }}
-                >
-                  <Text style={screenStyles.reportSubmitButtonText}>
-                    {reportSending ? "Sending..." : "Send report"}
-                  </Text>
-                </Pressable>
+                  labelStyle={screenStyles.reportSubmitButtonText}
+                />
               </View>
               {reportMessage ? (
                 <Text style={screenStyles.reportMessage}>{reportMessage}</Text>
               ) : null}
             </View>
           )}
-        </View>
+        </AppCard>
       ) : null}
     </View>
   )
@@ -585,19 +590,8 @@ const screenStyles = StyleSheet.create({
     ...brandShadow.card,
   },
   filtersPanel: {
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
     backgroundColor: "rgba(247, 246, 240, 0.96)",
-    padding: 14,
     gap: 12,
-    ...brandShadow.card,
-  },
-  filtersHeader: {
-    gap: 10,
-  },
-  filtersHeaderCopy: {
-    gap: 4,
   },
   filtersTitle: {
     ...brandTypography.label,
@@ -650,52 +644,21 @@ const screenStyles = StyleSheet.create({
     color: brandColors.forest,
   },
   input: {
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    backgroundColor: brandColors.inputFill,
-    borderRadius: brandRadius.field,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: brandColors.textPrimary,
     ...brandTypography.input,
   },
   refreshButton: {
     width: "100%",
-    borderRadius: brandRadius.pill,
-    borderWidth: 1,
-    borderColor: brandColors.forest,
-    backgroundColor: brandColors.forest,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
   },
   refreshButtonDisabled: {
     backgroundColor: "#8FA188",
     borderColor: "#8FA188",
   },
-  refreshButtonText: {
-    ...brandTypography.button,
-    color: brandColors.white,
-  },
   reportCard: {
     position: "absolute",
     left: 12,
     right: 12,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
     backgroundColor: "rgba(247, 246, 240, 0.98)",
-    padding: 14,
     gap: 10,
-    ...brandShadow.card,
-  },
-  reportHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
   reportTitle: {
     ...brandTypography.label,
@@ -721,34 +684,15 @@ const screenStyles = StyleSheet.create({
     ...brandTypography.meta,
     color: brandColors.terracotta,
   },
-  reportOwnSurveyInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  reportOwnSurveyInfoText: {
-    ...brandTypography.meta,
-    color: brandColors.textPrimary,
-  },
   reportForm: {
     gap: 10,
   },
+  reportField: {
+    gap: 5,
+  },
   reportInput: {
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    backgroundColor: brandColors.inputFill,
-    borderRadius: brandRadius.field,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
     minHeight: 72,
     textAlignVertical: "top",
-    color: brandColors.textPrimary,
     ...brandTypography.sectionBody,
   },
   reportActionsRow: {
@@ -757,24 +701,12 @@ const screenStyles = StyleSheet.create({
     gap: 8,
   },
   reportCancelButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
   },
   reportCancelButtonText: {
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
   reportSubmitButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: brandColors.terracotta,
-    backgroundColor: brandColors.terracotta,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
   },
   reportSubmitButtonDisabled: {
     borderColor: "#A6ABA3",
@@ -799,13 +731,7 @@ const screenStyles = StyleSheet.create({
   },
   emptyDockBubble: {
     flex: 1,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
     backgroundColor: "rgba(247, 246, 240, 0.96)",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    ...brandShadow.card,
   },
   emptyDockText: {
     ...brandTypography.meta,

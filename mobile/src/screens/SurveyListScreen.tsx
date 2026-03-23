@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native"
@@ -34,6 +33,12 @@ import {
   SurveySyncFilter,
 } from "../app/types"
 import { LocalAttachment, LocalSurvey } from "../storage"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppChoiceChip } from "../ui/AppChoiceChip"
+import { AppField } from "../ui/AppField"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { AppStatusChip } from "../ui/AppStatusChip"
 
 type SurveyListScreenProps = {
   surveys: LocalSurvey[]
@@ -113,18 +118,7 @@ const SORT_OPTIONS: Array<{ label: string; value: SurveySort }> = [
 ]
 
 function SurveyFilterChip({ label, active, onPress }: SurveyFilterChipProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[screenStyles.filterChip, active ? screenStyles.filterChipActive : null]}
-    >
-      <Text
-        style={[screenStyles.filterChipText, active ? screenStyles.filterChipTextActive : null]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
+  return <AppChoiceChip label={label} active={active} onPress={onPress} />
 }
 
 function SurveyStatTile({ label, value }: SurveyStatTileProps) {
@@ -138,24 +132,12 @@ function SurveyStatTile({ label, value }: SurveyStatTileProps) {
 
 function SurveyBadge({ label, tone = "neutral" }: SurveyBadgeProps) {
   return (
-    <View
-      style={[
-        screenStyles.badge,
-        tone === "success"
-          ? screenStyles.badgeSuccess
-          : tone === "warning"
-            ? screenStyles.badgeWarning
-            : tone === "danger"
-              ? screenStyles.badgeDanger
-              : screenStyles.badgeNeutral,
-      ]}
-    >
-      <Text
-        style={[screenStyles.badgeText, tone === "danger" ? screenStyles.badgeTextDanger : null]}
-      >
-        {label}
-      </Text>
-    </View>
+    <AppStatusChip
+      label={label}
+      tone={tone}
+      style={screenStyles.badge}
+      labelStyle={tone === "danger" ? screenStyles.badgeTextDanger : undefined}
+    />
   )
 }
 
@@ -358,11 +340,13 @@ export function SurveyListScreen({
               },
             ]}
           >
-            <View style={screenStyles.filtersCard}>
+            <AppCard variant="panelElevated" padding={14} style={screenStyles.filtersCard}>
               <View style={screenStyles.filtersHeaderRow}>
-                <View style={screenStyles.filtersHeadingBlock}>
-                  <Text style={screenStyles.filtersTitle}>Find the right survey</Text>
-                </View>
+                <AppSectionHeader
+                  title="Find the right survey"
+                  style={screenStyles.filtersHeadingBlock}
+                  titleStyle={screenStyles.filtersTitle}
+                />
 
                 <Pressable
                   style={screenStyles.advancedToggle}
@@ -392,30 +376,28 @@ export function SurveyListScreen({
               {advancedFiltersOpen ? (
                 <View style={screenStyles.advancedPanel}>
                   <View style={screenStyles.dateInputsRow}>
-                    <View style={screenStyles.dateInputBlock}>
-                      <Text style={screenStyles.filterSectionLabel}>From</Text>
-                      <TextInput
-                        style={screenStyles.compactInput}
-                        value={surveyFromDate}
-                        onChangeText={setSurveyFromDate}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={brandColors.textSecondary}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
-                    </View>
-                    <View style={screenStyles.dateInputBlock}>
-                      <Text style={screenStyles.filterSectionLabel}>To</Text>
-                      <TextInput
-                        style={screenStyles.compactInput}
-                        value={surveyToDate}
-                        onChangeText={setSurveyToDate}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={brandColors.textSecondary}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
-                    </View>
+                    <AppField
+                      label="From"
+                      value={surveyFromDate}
+                      onChangeText={setSurveyFromDate}
+                      placeholder="YYYY-MM-DD"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      containerStyle={screenStyles.dateInputBlock}
+                      labelStyle={screenStyles.filterSectionLabel}
+                      inputStyle={screenStyles.compactInput}
+                    />
+                    <AppField
+                      label="To"
+                      value={surveyToDate}
+                      onChangeText={setSurveyToDate}
+                      placeholder="YYYY-MM-DD"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      containerStyle={screenStyles.dateInputBlock}
+                      labelStyle={screenStyles.filterSectionLabel}
+                      inputStyle={screenStyles.compactInput}
+                    />
                   </View>
 
                   <FilterSection
@@ -443,12 +425,17 @@ export function SurveyListScreen({
                     onChange={setSortMode}
                   />
 
-                  <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
-                    <Text style={screenStyles.resetButtonText}>Reset filters</Text>
-                  </Pressable>
+                  <AppButton
+                    label="Reset filters"
+                    variant="secondary"
+                    size="sm"
+                    onPress={resetFilters}
+                    style={screenStyles.resetButton}
+                    labelStyle={screenStyles.resetButtonText}
+                  />
                 </View>
               ) : null}
-            </View>
+            </AppCard>
           </View>
         )}
 
@@ -602,26 +589,31 @@ export function SurveyListScreen({
         })}
 
         {surveys.length === 0 ? (
-          <View style={screenStyles.emptyState}>
+          <AppCard variant="panelElevated" padding={22} style={screenStyles.emptyState}>
             <Ionicons name="leaf-outline" size={22} color={brandColors.forest} />
             <Text style={screenStyles.emptyStateTitle}>No survey yet</Text>
             <Text style={screenStyles.emptyStateBody}>
               Start a new IBP record to build your field notebook.
             </Text>
-          </View>
+          </AppCard>
         ) : null}
 
         {surveys.length > 0 && visibleSurveys.length === 0 ? (
-          <View style={screenStyles.emptyState}>
+          <AppCard variant="panelElevated" padding={22} style={screenStyles.emptyState}>
             <Ionicons name="funnel-outline" size={22} color={brandColors.forest} />
             <Text style={screenStyles.emptyStateTitle}>No result with these filters</Text>
             <Text style={screenStyles.emptyStateBody}>
               Broaden the criteria or reset the advanced filters to see more surveys.
             </Text>
-            <Pressable onPress={resetFilters} style={screenStyles.resetButton}>
-              <Text style={screenStyles.resetButtonText}>Reset filters</Text>
-            </Pressable>
-          </View>
+            <AppButton
+              label="Reset filters"
+              variant="secondary"
+              size="sm"
+              onPress={resetFilters}
+              style={screenStyles.resetButton}
+              labelStyle={screenStyles.resetButtonText}
+            />
+          </AppCard>
         ) : null}
       </Animated.ScrollView>
     </View>
@@ -742,11 +734,6 @@ const screenStyles = StyleSheet.create({
     paddingBottom: 14,
   },
   filtersCard: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panel,
-    padding: 14,
     gap: 8,
   },
   filtersHeaderRow: {
@@ -833,22 +820,12 @@ const screenStyles = StyleSheet.create({
   },
   compactInput: {
     minHeight: 40,
-    borderRadius: brandRadius.field,
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    backgroundColor: brandColors.inputFill,
-    paddingHorizontal: 12,
     fontSize: 15,
     lineHeight: 18,
     fontWeight: "600",
-    color: brandColors.textPrimary,
   },
   resetButton: {
     alignSelf: "flex-start",
-    borderRadius: brandRadius.pill,
-    backgroundColor: brandColors.sage,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   resetButtonText: {
     ...brandTypography.meta,
@@ -1052,12 +1029,6 @@ const screenStyles = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     gap: 8,
-    borderRadius: brandRadius.card,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panel,
-    paddingHorizontal: 18,
-    paddingVertical: 22,
   },
   emptyStateTitle: {
     ...brandTypography.input,

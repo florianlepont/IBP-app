@@ -10,15 +10,12 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { BlurView } from "expo-blur"
-import {
-  brandColors,
-  brandRadius,
-  brandSpacing,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
 import { AuthUser } from "../app/types"
+import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip } from "../ui/AppStatusChip"
 
@@ -43,69 +40,7 @@ type AccountScreenProps = {
   onLogout: () => Promise<void>
 }
 
-type ActionButtonVariant = "neutral" | "primary" | "danger"
 type PhotoMenuAnchor = { x: number; y: number; width: number; height: number }
-
-type ActionButtonProps = {
-  label: string
-  icon: keyof typeof Ionicons.glyphMap
-  variant?: ActionButtonVariant
-  disabled?: boolean
-  compact?: boolean
-  large?: boolean
-  onPress: () => void
-}
-
-function ActionButton({
-  label,
-  icon,
-  variant = "neutral",
-  disabled = false,
-  compact = false,
-  large = false,
-  onPress,
-}: ActionButtonProps) {
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={[
-        styles.actionButton,
-        compact ? styles.actionButtonCompact : null,
-        large ? styles.actionButtonLarge : null,
-        variant === "primary" ? styles.actionButtonPrimary : null,
-        variant === "danger" ? styles.actionButtonDanger : null,
-        disabled ? styles.actionButtonDisabled : null,
-      ]}
-    >
-      <Ionicons
-        name={icon}
-        size={large ? 18 : 16}
-        color={
-          disabled
-            ? brandColors.textSecondary
-            : variant === "primary"
-              ? brandColors.white
-              : variant === "danger"
-                ? brandColors.terracotta
-                : brandColors.forest
-        }
-      />
-      <Text
-        style={[
-          styles.actionButtonText,
-          compact ? styles.actionButtonTextCompact : null,
-          large ? styles.actionButtonTextLarge : null,
-          variant === "primary" ? styles.actionButtonTextPrimary : null,
-          variant === "danger" ? styles.actionButtonTextDanger : null,
-          disabled ? styles.actionButtonTextDisabled : null,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
 
 function ProfileField({
   label,
@@ -418,12 +353,12 @@ export function AccountScreen({
           </View>
 
           <View style={styles.summaryFooterRow}>
-            <ActionButton
+            <AppButton
               label="Logout"
-              icon="log-out-outline"
+              leadingIcon="log-out-outline"
               variant="danger"
               onPress={() => void onLogout()}
-              compact
+              size="sm"
             />
           </View>
         </AppCard>
@@ -481,11 +416,9 @@ export function AccountScreen({
             keyboardType="email-address"
           />
 
-          <ActionButton
+          <AppButton
             label={profileUpdating ? "Saving profile..." : "Save profile"}
-            icon={profileUpdating ? "hourglass-outline" : "save-outline"}
-            variant="primary"
-            large
+            leadingIcon={profileUpdating ? "hourglass-outline" : "save-outline"}
             onPress={() =>
               void onSaveProfile({
                 first_name: firstName,
@@ -495,11 +428,16 @@ export function AccountScreen({
               })
             }
             disabled={profileUpdating || !isProfileDirty}
+            size="lg"
           />
         </AppCard>
 
         {currentUser?.email_change_required ? (
-          <AppCard variant="panelElevated" padding={14} style={[styles.panel, styles.pendingEmailPanel]}>
+          <AppCard
+            variant="panelElevated"
+            padding={14}
+            style={[styles.panel, styles.pendingEmailPanel]}
+          >
             <AppSectionHeader
               title="Confirm pending email"
               subtitle="A confirmation step is required before the new email becomes active on the account."
@@ -508,12 +446,12 @@ export function AccountScreen({
               subtitleStyle={styles.sectionBody}
             />
 
-            <View style={styles.pendingEmailNotice}>
-              <Ionicons name="mail-open-outline" size={18} color={brandColors.ochre} />
-              <Text style={styles.pendingEmailNoticeText}>
-                Pending email: {currentUser.email_change_pending_to ?? "unknown"}
-              </Text>
-            </View>
+            <AppNotice
+              tone="warning"
+              icon="mail-open-outline"
+              message={`Pending email: ${currentUser.email_change_pending_to ?? "unknown"}`}
+              style={styles.pendingEmailNotice}
+            />
 
             <ProfileField
               label="Confirmation token"
@@ -524,10 +462,9 @@ export function AccountScreen({
               autoCorrect={false}
             />
 
-            <ActionButton
+            <AppButton
               label="Confirm pending email"
-              icon="checkmark-circle-outline"
-              variant="primary"
+              leadingIcon="checkmark-circle-outline"
               onPress={() => void onConfirmEmailChange(emailConfirmToken)}
               disabled={profileUpdating || emailConfirmToken.trim().length === 0}
             />
@@ -719,58 +656,6 @@ const styles = StyleSheet.create({
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: brandRadius.pill,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  actionButtonCompact: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  actionButtonLarge: {
-    minHeight: 54,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  actionButtonPrimary: {
-    borderColor: brandColors.forest,
-    backgroundColor: brandColors.forest,
-  },
-  actionButtonDanger: {
-    borderColor: "#E4A595",
-    backgroundColor: brandColors.errorSoft,
-  },
-  actionButtonDisabled: {
-    opacity: 0.48,
-  },
-  actionButtonText: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
-  },
-  actionButtonTextCompact: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  actionButtonTextLarge: {
-    ...brandTypography.button,
-  },
-  actionButtonTextPrimary: {
-    color: brandColors.white,
-  },
-  actionButtonTextDanger: {
-    color: brandColors.terracotta,
-  },
-  actionButtonTextDisabled: {
-    color: brandColors.textSecondary,
-  },
   twoColumnRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -792,17 +677,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   pendingEmailNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 18,
-    backgroundColor: "#F7E6CA",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  pendingEmailNoticeText: {
-    flex: 1,
-    ...brandTypography.sectionBody,
-    color: brandColors.textPrimary,
+    marginTop: 2,
   },
 })
