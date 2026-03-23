@@ -40,10 +40,9 @@ export class AuthController {
   }
 
   @Post("resend-verification")
-  @HttpCode(204)
   @Throttle(throttle(3, 60_000))
-  async resendVerification(@Body() body: ResendVerificationDto): Promise<void> {
-    await this.authService.resendVerification(body.email)
+  async resendVerification(@Body() body: ResendVerificationDto) {
+    return this.authService.resendVerification(body.email)
   }
 
   @Post("refresh")

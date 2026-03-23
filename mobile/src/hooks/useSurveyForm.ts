@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   DEFAULT_SURVEY_FORM,
   defaultVegetationStageForRegion,
@@ -140,7 +140,7 @@ export function useSurveyForm() {
     )
   }
 
-  const buildFactorsPayload = (): Record<string, unknown> => {
+  const buildFactorsPayload = useCallback((): Record<string, unknown> => {
     const payload: Record<string, unknown> = {}
 
     const a = toFiniteNumberInRange(factorA.native_genus_count, { min: 0, integer: true })
@@ -188,7 +188,7 @@ export function useSurveyForm() {
     if (j !== null) payload.J = { type_count: j }
 
     return payload
-  }
+  }, [factorA, factorB, factorC, factorD, factorE, factorF, factorG, factorH, factorI, factorJ])
 
   const applyDraftToForm = (draftValue: unknown): void => {
     const draft = asObject(draftValue)
@@ -480,25 +480,10 @@ export function useSurveyForm() {
       factors: buildFactorsPayload(),
       parcel_ids: selectedParcelIds,
     }),
-    [
-      siteName,
-      regionVersion,
-      vegetationStage,
-      factorA,
-      factorB,
-      factorC,
-      factorD,
-      factorE,
-      factorF,
-      factorG,
-      factorH,
-      factorI,
-      factorJ,
-      selectedParcelIds,
-    ],
+    [siteName, regionVersion, vegetationStage, buildFactorsPayload, selectedParcelIds],
   )
 
-  const buildDraftInput = () => draftInput
+  const buildDraftInput = useCallback(() => draftInput, [draftInput])
 
   return {
     siteName,

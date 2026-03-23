@@ -57,6 +57,7 @@ export function useAuthSession({
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState<string>("Not logged in")
   const [pendingEmailVerification, setPendingEmailVerification] = useState<string | null>(null)
+  const [devVerificationToken, setDevVerificationToken] = useState<string | null>(null)
 
   const setProfileFromUser = useCallback((user: AuthUser): void => {
     setCurrentUser(user)
@@ -272,7 +273,9 @@ export function useAuthSession({
       })
       setAccessToken(payload.access_token)
       setRefreshToken(payload.refresh_token)
-      setProfileFromUser(payload.user)
+      if (payload.user) {
+        setProfileFromUser(payload.user)
+      }
       await saveStoredAuthSession({
         accessToken: payload.access_token,
         refreshToken: payload.refresh_token,
@@ -280,7 +283,16 @@ export function useAuthSession({
       reportStatus("auth", "success", "Logged in")
     } catch (error) {
       if (error instanceof ApiError && error.status === 403) {
-        setPendingEmailVerification(email.trim().toLowerCase())
+        const normalizedEmail = email.trim().toLowerCase()
+        setPendingEmailVerification(normalizedEmail)
+        // In dev mode, auto-resend to surface the verification token
+        resendVerificationEmail(apiUrl, normalizedEmail)
+          .then((result) => {
+            if (result?.email_verification_token_dev) {
+              setDevVerificationToken(result.email_verification_token_dev)
+            }
+          })
+          .catch(() => undefined)
         reportStatus("auth", "idle", "")
         return
       }
@@ -295,29 +307,42 @@ export function useAuthSession({
       const payload = await registerWithCredentials(apiUrl, email, password, displayName)
       setAccessToken(payload.access_token)
       setRefreshToken(payload.refresh_token)
-      setProfileFromUser(payload.user)
+      if (payload.user) {
+        setProfileFromUser(payload.user)
+      }
       await saveStoredAuthSession({
         accessToken: payload.access_token,
         refreshToken: payload.refresh_token,
       })
       setPendingEmailVerification(email.trim().toLowerCase())
+      setDevVerificationToken(payload.email_verification_token_dev ?? null)
       reportStatus("auth", "idle", "")
     } catch (error) {
       reportStatus("auth", "error", `Registration error: ${(error as Error).message}`)
     }
   }, [apiUrl, displayName, email, password, reportStatus, setProfileFromUser])
 
+  const handleCancelEmailVerification = useCallback(async (): Promise<void> => {
+    setPendingEmailVerification(null)
+    setDevVerificationToken(null)
+    await clearSession()
+  }, [clearSession])
+
   const handleVerifyEmail = useCallback(
     async (token: string): Promise<void> => {
       await verifyEmail(apiUrl, token)
       setPendingEmailVerification(null)
+      setDevVerificationToken(null)
     },
     [apiUrl],
   )
 
   const handleResendVerification = useCallback(async (): Promise<void> => {
     if (!pendingEmailVerification) return
-    await resendVerificationEmail(apiUrl, pendingEmailVerification)
+    const result = await resendVerificationEmail(apiUrl, pendingEmailVerification)
+    if (result?.email_verification_token_dev) {
+      setDevVerificationToken(result.email_verification_token_dev)
+    }
   }, [apiUrl, pendingEmailVerification])
 
   const handleLogout = useCallback(async (): Promise<void> => {
@@ -340,6 +365,8 @@ export function useAuthSession({
     profile,
     isAuthenticated: Boolean(accessToken || refreshToken),
     pendingEmailVerification,
+    devVerificationToken,
+    handleCancelEmailVerification,
     handleVerifyEmail,
     handleResendVerification,
     setProfileFromUser,

@@ -8,5 +8,8 @@ mobile.env
 dist/
 coverage/
 .expo/
+/app.json
+/ios/
+/android/
 .DS_Store
 *.log

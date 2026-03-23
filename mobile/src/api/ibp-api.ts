@@ -101,13 +101,15 @@ export async function verifyEmail(apiUrl: string, token: string): Promise<void> 
   })
 }
 
-export async function resendVerificationEmail(apiUrl: string, email: string): Promise<void> {
-  await apiRequest<void>({
+export async function resendVerificationEmail(
+  apiUrl: string,
+  email: string,
+): Promise<{ email_verification_token_dev?: string }> {
+  return apiRequest<{ email_verification_token_dev?: string }>({
     baseUrl: apiUrl,
     path: "/auth/resend-verification",
     method: "POST",
     json: { email },
-    expectJson: false,
   })
 }
 

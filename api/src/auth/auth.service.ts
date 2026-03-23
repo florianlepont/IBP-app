@@ -179,7 +179,7 @@ export class AuthService {
     )
   }
 
-  async resendVerification(email: string): Promise<void> {
+  async resendVerification(email: string): Promise<{ email_verification_token_dev?: string }> {
     const normalizedEmail = email.trim().toLowerCase()
     if (!normalizedEmail) {
       throw new BadRequestException("email is required")
@@ -194,7 +194,7 @@ export class AuthService {
     const user = result.rows[0]
 
     // Always respond 200 to avoid leaking whether the email exists
-    if (!user || user.email_verified) return
+    if (!user || user.email_verified) return {}
 
     const verificationToken = randomUUID()
     const verificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS).toISOString()
@@ -218,6 +218,8 @@ export class AuthService {
     } catch (_error) {
       this.logger.warn(`Failed to resend verification email to ${normalizedEmail}`)
     }
+
+    return this.shouldExposeDevToken() ? { email_verification_token_dev: verificationToken } : {}
   }
 
   async refresh(refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {

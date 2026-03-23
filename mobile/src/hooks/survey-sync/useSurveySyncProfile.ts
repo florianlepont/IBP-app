@@ -28,6 +28,12 @@ type UseSurveySyncProfileParams = {
   setStatus: (message: string) => void
 }
 
+type ReactNativeFormFile = Blob & {
+  uri: string
+  type: string
+  name: string
+}
+
 export function useSurveySyncProfile({
   apiUrl,
   currentUser,
@@ -117,11 +123,12 @@ export function useSurveySyncProfile({
     async (asset: ImagePicker.ImagePickerAsset): Promise<void> => {
       const mimeType = asset.mimeType ?? guessMimeType(asset.uri)
       const payload = new FormData()
-      payload.append("file", {
+      const file: ReactNativeFormFile = {
         uri: asset.uri,
         type: mimeType,
         name: asset.fileName ?? `profile-${Date.now()}`,
-      } as any)
+      } as unknown as ReactNativeFormFile
+      payload.append("file", file)
 
       try {
         setProfileUpdating(true)

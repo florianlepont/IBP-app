@@ -61,6 +61,37 @@ npm run dev:mobile
 - API: `http://localhost:3000/v1/health`
 - Mobile: open the app, tap **Check API /health**
 
+### Run on a physical phone
+
+Fastest path for device debugging:
+
+```bash
+npm run dev:mobile
+```
+
+Then:
+- open **Expo Go** on the phone
+- connect the phone to the same Wi-Fi as the Mac
+- scan the QR code shown by Expo
+
+API URL on a physical phone:
+- if you want to hit the deployed API already configured in `mobile/.env`, keep `EXPO_PUBLIC_API_URL` as-is
+- if you want to hit your local API, use `http://<YOUR_MAC_LAN_IP>:3000/v1`
+- inside the app, on the auth screen, tap the **API** pill to edit the URL manually
+
+If you need a native iOS development build instead of Expo Go:
+
+```bash
+npm run ios -- --device
+```
+
+If the iOS build fails with a missing `ReactCodegen.modulemap`, regenerate Pods from the real mobile project:
+
+```bash
+cd mobile/ios
+pod install
+```
+
 ---
 
 ## Environment variables

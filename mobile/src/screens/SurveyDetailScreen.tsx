@@ -274,9 +274,13 @@ export function SurveyDetailScreen({
   const photoAttachments = selectedSurveyAttachments.filter((attachment) =>
     Boolean(attachment.local_uri?.trim()),
   )
-  const canonicalFactorEntries = detail
-    ? Object.entries(detail.factor_results).sort(([left], [right]) => left.localeCompare(right))
-    : []
+  const canonicalFactorEntries = useMemo(
+    () =>
+      detail
+        ? Object.entries(detail.factor_results).sort(([left], [right]) => left.localeCompare(right))
+        : [],
+    [detail],
+  )
   const [localDraftScores, setLocalDraftScores] = useState<DisplayedScores | null>(null)
   const [localDraftFactorEntries, setLocalDraftFactorEntries] = useState<
     Array<[string, DisplayedFactorResult]>
@@ -288,7 +292,10 @@ export function SurveyDetailScreen({
   const [siteNameInput, setSiteNameInput] = useState("")
   const [isHeroCompressed, setIsHeroCompressed] = useState(false)
   const mediaSlideWidth = Math.max(viewportWidth - brandSpacing.md * 2, 0)
-  const gpsCoordinates = resolveDisplayCoordinates(detail?.display_location)
+  const gpsCoordinates = useMemo(
+    () => resolveDisplayCoordinates(detail?.display_location),
+    [detail?.display_location],
+  )
   const hasMapPreview = gpsCoordinates !== null
   const mapPreviewRegion = useMemo<Region>(() => {
     if (!gpsCoordinates) return DEFAULT_FRANCE_REGION
@@ -298,7 +305,7 @@ export function SurveyDetailScreen({
       latitudeDelta: 0.01,
       longitudeDelta: 0.01,
     }
-  }, [gpsCoordinates?.lat, gpsCoordinates?.lng])
+  }, [gpsCoordinates])
   const mapPreviewZoom = useMemo(() => computeRegionZoom(mapPreviewRegion), [mapPreviewRegion])
   const { items: parcelStatuses } = useParcelStatuses({
     apiUrl,
@@ -411,7 +418,7 @@ export function SurveyDetailScreen({
     return () => {
       cancelled = true
     }
-  }, [selectedSurvey.id, selectedSurvey.updated_at])
+  }, [selectedSurvey.id, selectedSurvey.site_name, selectedSurvey.updated_at])
 
   const useLocalDraftView = selectedSurvey.status !== "submitted" && localDraftScores !== null
   const displayedScores: DisplayedScores | null = useMemo(() => {
