@@ -10,12 +10,7 @@ type AppStatusChipProps = {
   labelStyle?: StyleProp<TextStyle>
 }
 
-export function AppStatusChip({
-  label,
-  tone = "neutral",
-  style,
-  labelStyle,
-}: AppStatusChipProps) {
+export function AppStatusChip({ label, tone = "neutral", style, labelStyle }: AppStatusChipProps) {
   return (
     <View style={[styles.base, styles[tone], style]}>
       <Text style={[styles.label, labelStyle]}>{label}</Text>

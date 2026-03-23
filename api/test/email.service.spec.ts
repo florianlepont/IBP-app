@@ -34,7 +34,9 @@ describe("EmailService", () => {
     })
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[DEV EMAIL] to=user@example.com subject="Verify your IBP account email" token=dev-token'),
+      expect.stringContaining(
+        '[DEV EMAIL] to=user@example.com subject="Verify your IBP account email" token=dev-token',
+      ),
     )
     expect(mockCreateTransport).not.toHaveBeenCalled()
   })

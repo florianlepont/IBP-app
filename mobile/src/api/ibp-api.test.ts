@@ -35,12 +35,7 @@ describe("ibp-api", () => {
     await loginWithCredentials("https://api.example.com", "user@example.com", "secret", {
       createIfMissing: false,
     })
-    await registerWithCredentials(
-      "https://api.example.com",
-      "user@example.com",
-      "secret",
-      "User",
-    )
+    await registerWithCredentials("https://api.example.com", "user@example.com", "secret", "User")
     await refreshAuthTokens("https://api.example.com", "refresh-token")
     await verifyEmail("https://api.example.com", "verify-token")
     await resendVerificationEmail("https://api.example.com", "user@example.com")

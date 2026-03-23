@@ -126,9 +126,7 @@ describe("CadastreProviderService", () => {
     const parcel = await service.resolveFromPoint(43.6, 1.44)
 
     expect(parcel?.source).toBe("synthetic_v1")
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("switching to fallback strategy"),
-    )
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("switching to fallback strategy"))
   })
 
   it("returns null when IGN fails and fallback is disabled", async () => {
