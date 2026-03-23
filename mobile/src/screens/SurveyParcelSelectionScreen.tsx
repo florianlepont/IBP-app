@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native"
 import { useHeaderHeight } from "@react-navigation/elements"
 import MapView, { Marker, Region } from "react-native-maps"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { brandColors, brandShadow, brandTypography } from "../app/brand-tokens"
 import {
   DEFAULT_FRANCE_CENTER,
@@ -46,6 +47,7 @@ export function SurveyParcelSelectionScreen({
   const pendingRegionRef = useRef<Region | null>(null)
   const headerHeight = useHeaderHeight()
   const insets = useSafeAreaInsets()
+  const tabBarHeight = useAppBottomTabBarHeight()
   const [saving, setSaving] = useState(false)
   const parsedLat = Number(gpsLocation.lat)
   const parsedLng = Number(gpsLocation.lng)
@@ -148,7 +150,7 @@ export function SurveyParcelSelectionScreen({
         style={[
           screenStyles.overlayLayer,
           {
-            paddingBottom: Math.max(insets.bottom, 12) + 12,
+            paddingBottom: Math.max(Math.max(tabBarHeight, insets.bottom), 12) + 12,
           },
         ]}
       >

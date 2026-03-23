@@ -4,6 +4,7 @@ import MapView, { Marker, Region } from "react-native-maps"
 import { Ionicons } from "@expo/vector-icons"
 import * as Location from "expo-location"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { brandColors, brandRadius, brandShadow, brandTypography } from "../app/brand-tokens"
 import { PublicMapItem, PublicParcelStatusItem } from "../app/types"
 import { computeRegionBbox, computeRegionZoom } from "../app/map-viewport"
@@ -111,6 +112,7 @@ export function PublicMapScreen({
   const onLoadParcelsRef = useRef(onLoadParcels)
   const lastParcelsRequestKeyRef = useRef("")
   const insets = useSafeAreaInsets()
+  const tabBarHeight = useAppBottomTabBarHeight()
   const ownSurveyIdSet = useMemo(() => new Set(ownSurveyIds), [ownSurveyIds])
   const targetRegion = useMemo(() => computeRegionFromItems(items), [items])
   const selectedItemIsOwnSurvey = selectedItem ? ownSurveyIdSet.has(selectedItem.survey_id) : false
@@ -367,7 +369,7 @@ export function PublicMapScreen({
         ) : null}
       </View>
 
-      <View style={[screenStyles.bottomDock, { bottom: Math.max(12, insets.bottom + 10) }]}>
+      <View style={[screenStyles.bottomDock, { bottom: Math.max(12, Math.max(tabBarHeight, insets.bottom) + 10) }]}>
         {showEmptyDock ? (
           <AppCard variant="panelElevated" padding={14} style={screenStyles.emptyDockBubble}>
             <Text style={screenStyles.emptyDockText}>No public items found</Text>
@@ -393,7 +395,7 @@ export function PublicMapScreen({
         <AppCard
           variant="panelElevated"
           padding={14}
-          style={[screenStyles.reportCard, { bottom: Math.max(84, insets.bottom + 62) }]}
+          style={[screenStyles.reportCard, { bottom: Math.max(84, Math.max(tabBarHeight, insets.bottom) + 62) }]}
         >
           <AppSectionHeader
             title={`Survey ${selectedItem.survey_id}`}

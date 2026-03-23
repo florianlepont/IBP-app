@@ -14,8 +14,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native"
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs"
 import { useHeaderHeight } from "@react-navigation/elements"
+import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { Ionicons } from "@expo/vector-icons"
 import MapView, { Marker, Region } from "react-native-maps"
 import * as Location from "expo-location"
@@ -293,7 +293,7 @@ export function SurveyFormScreen({
   const identitySectionLayoutRef = useRef({ y: 0, height: 0 })
   const scrollY = useRef(new Animated.Value(0)).current
   const { height: viewportHeight } = useWindowDimensions()
-  const tabBarHeight = useBottomTabBarHeight()
+  const tabBarHeight = useAppBottomTabBarHeight()
   const headerHeight = useHeaderHeight()
   const insets = useSafeAreaInsets()
   const [activeStep, setActiveStep] = useState<WizardStep>("identity")

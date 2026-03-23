@@ -55,6 +55,11 @@ jest.mock("expo-location", () => ({}))
 
 jest.mock("@react-navigation/bottom-tabs", () => ({
   useBottomTabBarHeight: () => 0,
+  BottomTabBarHeightContext: undefined,
+}))
+
+jest.mock("../app/useAppBottomTabBarHeight", () => ({
+  useAppBottomTabBarHeight: () => 0,
 }))
 
 jest.mock("@react-navigation/elements", () => ({
