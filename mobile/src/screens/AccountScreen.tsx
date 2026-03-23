@@ -5,20 +5,19 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { BlurView } from "expo-blur"
-import {
-  brandColors,
-  brandRadius,
-  brandShadow,
-  brandSpacing,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
 import { AuthUser } from "../app/types"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { AppStatusChip } from "../ui/AppStatusChip"
 
 type UpdateProfileInput = {
   first_name: string
@@ -41,89 +40,7 @@ type AccountScreenProps = {
   onLogout: () => Promise<void>
 }
 
-type ActionButtonVariant = "neutral" | "primary" | "danger"
-type Tone = "neutral" | "success" | "warning" | "danger"
 type PhotoMenuAnchor = { x: number; y: number; width: number; height: number }
-
-type ActionButtonProps = {
-  label: string
-  icon: keyof typeof Ionicons.glyphMap
-  variant?: ActionButtonVariant
-  disabled?: boolean
-  compact?: boolean
-  large?: boolean
-  onPress: () => void
-}
-
-function ActionButton({
-  label,
-  icon,
-  variant = "neutral",
-  disabled = false,
-  compact = false,
-  large = false,
-  onPress,
-}: ActionButtonProps) {
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={[
-        styles.actionButton,
-        compact ? styles.actionButtonCompact : null,
-        large ? styles.actionButtonLarge : null,
-        variant === "primary" ? styles.actionButtonPrimary : null,
-        variant === "danger" ? styles.actionButtonDanger : null,
-        disabled ? styles.actionButtonDisabled : null,
-      ]}
-    >
-      <Ionicons
-        name={icon}
-        size={large ? 18 : 16}
-        color={
-          disabled
-            ? brandColors.textSecondary
-            : variant === "primary"
-              ? brandColors.white
-              : variant === "danger"
-                ? brandColors.terracotta
-                : brandColors.forest
-        }
-      />
-      <Text
-        style={[
-          styles.actionButtonText,
-          compact ? styles.actionButtonTextCompact : null,
-          large ? styles.actionButtonTextLarge : null,
-          variant === "primary" ? styles.actionButtonTextPrimary : null,
-          variant === "danger" ? styles.actionButtonTextDanger : null,
-          disabled ? styles.actionButtonTextDisabled : null,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-function StatusChip({ label, tone = "neutral" }: { label: string; tone?: Tone }) {
-  return (
-    <View
-      style={[
-        styles.statusChip,
-        tone === "success"
-          ? styles.statusChipSuccess
-          : tone === "warning"
-            ? styles.statusChipWarning
-            : tone === "danger"
-              ? styles.statusChipDanger
-              : null,
-      ]}
-    >
-      <Text style={styles.statusChipText}>{label}</Text>
-    </View>
-  )
-}
 
 function ProfileField({
   label,
@@ -143,19 +60,18 @@ function ProfileField({
   keyboardType?: "default" | "email-address"
 }) {
   return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        style={styles.fieldInput}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={brandColors.textSecondary}
-        autoCapitalize={autoCapitalize}
-        autoCorrect={autoCorrect}
-        keyboardType={keyboardType}
-      />
-    </View>
+    <AppField
+      label={label}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      autoCapitalize={autoCapitalize}
+      autoCorrect={autoCorrect}
+      keyboardType={keyboardType}
+      containerStyle={styles.fieldGroup}
+      labelStyle={styles.fieldLabel}
+      inputStyle={styles.fieldInput}
+    />
   )
 }
 
@@ -401,7 +317,7 @@ export function AccountScreen({
       </Modal>
 
       <View style={styles.screen}>
-        <View style={styles.accountSummaryCard}>
+        <AppCard variant="panelElevated" padding={14} style={styles.accountSummaryCard}>
           <View style={styles.identityRow}>
             <Pressable
               ref={avatarButtonRef}
@@ -428,39 +344,39 @@ export function AccountScreen({
               <Text style={styles.identityName}>{heroName}</Text>
               <Text style={styles.identityMeta}>{heroSubtitle}</Text>
               <View style={styles.heroChipRow}>
-                <StatusChip label={roleLabel} />
+                <AppStatusChip label={roleLabel} />
                 {currentUser?.email_change_required ? (
-                  <StatusChip label="Email pending" tone="warning" />
+                  <AppStatusChip label="Email pending" tone="warning" />
                 ) : null}
               </View>
             </View>
           </View>
 
           <View style={styles.summaryFooterRow}>
-            <ActionButton
+            <AppButton
               label="Logout"
-              icon="log-out-outline"
+              leadingIcon="log-out-outline"
               variant="danger"
               onPress={() => void onLogout()}
-              compact
+              size="sm"
             />
           </View>
-        </View>
+        </AppCard>
 
-        <View style={styles.panel}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionHeaderCopy}>
-              <Text style={styles.sectionTitle}>Profile fields</Text>
-              <Text style={styles.sectionBody}>
-                Edit the synced identity shown across the app and shared survey data.
-              </Text>
-            </View>
-            {isProfileDirty ? (
-              <StatusChip label="Unsaved changes" tone="warning" />
-            ) : (
-              <StatusChip label="Up to date" tone="success" />
-            )}
-          </View>
+        <AppCard variant="panelElevated" padding={14} style={styles.panel}>
+          <AppSectionHeader
+            title="Profile fields"
+            subtitle="Edit the synced identity shown across the app and shared survey data."
+            trailing={
+              isProfileDirty ? (
+                <AppStatusChip label="Unsaved changes" tone="warning" />
+              ) : (
+                <AppStatusChip label="Up to date" tone="success" />
+              )
+            }
+            titleStyle={styles.sectionTitle}
+            subtitleStyle={styles.sectionBody}
+          />
 
           <View style={styles.twoColumnRow}>
             <View style={styles.halfField}>
@@ -500,11 +416,9 @@ export function AccountScreen({
             keyboardType="email-address"
           />
 
-          <ActionButton
+          <AppButton
             label={profileUpdating ? "Saving profile..." : "Save profile"}
-            icon={profileUpdating ? "hourglass-outline" : "save-outline"}
-            variant="primary"
-            large
+            leadingIcon={profileUpdating ? "hourglass-outline" : "save-outline"}
             onPress={() =>
               void onSaveProfile({
                 first_name: firstName,
@@ -514,28 +428,30 @@ export function AccountScreen({
               })
             }
             disabled={profileUpdating || !isProfileDirty}
+            size="lg"
           />
-        </View>
+        </AppCard>
 
         {currentUser?.email_change_required ? (
-          <View style={[styles.panel, styles.pendingEmailPanel]}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderCopy}>
-                <Text style={styles.sectionTitle}>Confirm pending email</Text>
-                <Text style={styles.sectionBody}>
-                  A confirmation step is required before the new email becomes active on the
-                  account.
-                </Text>
-              </View>
-              <StatusChip label="Pending" tone="warning" />
-            </View>
+          <AppCard
+            variant="panelElevated"
+            padding={14}
+            style={[styles.panel, styles.pendingEmailPanel]}
+          >
+            <AppSectionHeader
+              title="Confirm pending email"
+              subtitle="A confirmation step is required before the new email becomes active on the account."
+              trailing={<AppStatusChip label="Pending" tone="warning" />}
+              titleStyle={styles.sectionTitle}
+              subtitleStyle={styles.sectionBody}
+            />
 
-            <View style={styles.pendingEmailNotice}>
-              <Ionicons name="mail-open-outline" size={18} color={brandColors.ochre} />
-              <Text style={styles.pendingEmailNoticeText}>
-                Pending email: {currentUser.email_change_pending_to ?? "unknown"}
-              </Text>
-            </View>
+            <AppNotice
+              tone="warning"
+              icon="mail-open-outline"
+              message={`Pending email: ${currentUser.email_change_pending_to ?? "unknown"}`}
+              style={styles.pendingEmailNotice}
+            />
 
             <ProfileField
               label="Confirmation token"
@@ -546,14 +462,13 @@ export function AccountScreen({
               autoCorrect={false}
             />
 
-            <ActionButton
+            <AppButton
               label="Confirm pending email"
-              icon="checkmark-circle-outline"
-              variant="primary"
+              leadingIcon="checkmark-circle-outline"
               onPress={() => void onConfirmEmailChange(emailConfirmToken)}
               disabled={profileUpdating || emailConfirmToken.trim().length === 0}
             />
-          </View>
+          </AppCard>
         ) : null}
       </View>
     </>
@@ -668,13 +583,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(62, 74, 54, 0.16)",
   },
   accountSummaryCard: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panel,
-    padding: 14,
     gap: 10,
-    ...brandShadow.card,
   },
   identityRow: {
     flexDirection: "row",
@@ -725,30 +634,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
   },
-  statusChip: {
-    borderRadius: brandRadius.pill,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  statusChipSuccess: {
-    borderColor: "#BBD09B",
-    backgroundColor: brandColors.successSoft,
-  },
-  statusChipWarning: {
-    borderColor: "#E7C281",
-    backgroundColor: "#F7E6CA",
-  },
-  statusChipDanger: {
-    borderColor: "#E4A595",
-    backgroundColor: brandColors.errorSoft,
-  },
-  statusChipText: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
-  },
   summaryFooterRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -756,26 +641,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   panel: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panel,
-    padding: 14,
     gap: 10,
-    ...brandShadow.card,
   },
   pendingEmailPanel: {
     backgroundColor: "#FBF6EC",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 4,
   },
   sectionTitle: {
     ...brandTypography.sectionTitle,
@@ -785,58 +654,6 @@ const styles = StyleSheet.create({
   },
   sectionBody: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: brandRadius.pill,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  actionButtonCompact: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  actionButtonLarge: {
-    minHeight: 54,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  actionButtonPrimary: {
-    borderColor: brandColors.forest,
-    backgroundColor: brandColors.forest,
-  },
-  actionButtonDanger: {
-    borderColor: "#E4A595",
-    backgroundColor: brandColors.errorSoft,
-  },
-  actionButtonDisabled: {
-    opacity: 0.48,
-  },
-  actionButtonText: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
-  },
-  actionButtonTextCompact: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  actionButtonTextLarge: {
-    ...brandTypography.button,
-  },
-  actionButtonTextPrimary: {
-    color: brandColors.white,
-  },
-  actionButtonTextDanger: {
-    color: brandColors.terracotta,
-  },
-  actionButtonTextDisabled: {
     color: brandColors.textSecondary,
   },
   twoColumnRow: {
@@ -856,27 +673,10 @@ const styles = StyleSheet.create({
     color: brandColors.forest,
   },
   fieldInput: {
-    borderRadius: brandRadius.field,
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    backgroundColor: brandColors.inputFill,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: brandColors.textPrimary,
-    ...brandTypography.input,
   },
   pendingEmailNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 18,
-    backgroundColor: "#F7E6CA",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  pendingEmailNoticeText: {
-    flex: 1,
-    ...brandTypography.sectionBody,
-    color: brandColors.textPrimary,
+    marginTop: 2,
   },
 })

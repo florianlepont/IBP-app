@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native"
@@ -60,6 +59,13 @@ import { IgnCadastreTileOverlay } from "../components/IgnCadastreTileOverlay"
 import { ParcelOverlayPolygons } from "../components/ParcelOverlayPolygons"
 import { useParcelStatuses } from "../hooks/useParcelStatuses"
 import { getLocalSurveyDraft, LocalAttachment, LocalSurvey } from "../storage"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppChoiceChip } from "../ui/AppChoiceChip"
+import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { AppStatusChip, AppStatusChipTone } from "../ui/AppStatusChip"
 
 type SurveyDetailScreenProps = {
   apiUrl: string
@@ -100,7 +106,7 @@ const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   J: "triangle-outline",
 }
 
-const asFiniteNumber = (value: unknown): number | null => {
+export const asFiniteNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string") {
     const parsed = Number(value)
@@ -109,7 +115,7 @@ const asFiniteNumber = (value: unknown): number | null => {
   return null
 }
 
-const resolveDisplayCoordinates = (
+export const resolveDisplayCoordinates = (
   displayLocation?: { lat?: unknown; lng?: unknown } | null,
 ): { lat: number; lng: number } | null => {
   if (!displayLocation) return null
@@ -119,7 +125,6 @@ const resolveDisplayCoordinates = (
   return { lat, lng }
 }
 
-type ActionButtonVariant = "neutral" | "primary" | "danger" | "success"
 type DisplayedScores = {
   ibp_total: number
   ibp_peuplement_gestion: number
@@ -138,7 +143,8 @@ type HeroMode = "map" | "photo"
 
 const FACTOR_ORDER: FactorKey[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER)
-const isFactorKey = (value: string): value is FactorKey => FACTOR_KEYS.has(value as FactorKey)
+export const isFactorKey = (value: string): value is FactorKey =>
+  FACTOR_KEYS.has(value as FactorKey)
 const DEFAULT_FRANCE_REGION: Region = {
   latitude: 46.603354,
   longitude: 1.888334,
@@ -146,89 +152,12 @@ const DEFAULT_FRANCE_REGION: Region = {
   longitudeDelta: 3.8,
 }
 
-type ActionButtonProps = {
-  label: string
-  icon: keyof typeof Ionicons.glyphMap
-  variant: ActionButtonVariant
-  onPress: () => void
-}
-
-function ActionButton({ label, icon, variant, onPress }: ActionButtonProps) {
-  return (
-    <Pressable
-      style={[
-        styles.actionButton,
-        variant === "neutral"
-          ? styles.actionButtonNeutral
-          : variant === "primary"
-            ? styles.actionButtonPrimary
-            : variant === "danger"
-              ? styles.actionButtonDanger
-              : styles.actionButtonSuccess,
-      ]}
-      onPress={onPress}
-    >
-      <Ionicons
-        name={icon}
-        size={15}
-        color={
-          variant === "neutral"
-            ? brandColors.forest
-            : variant === "primary"
-              ? brandColors.white
-              : variant === "danger"
-                ? brandColors.terracotta
-                : brandColors.forest
-        }
-      />
-      <Text
-        style={[
-          styles.actionButtonText,
-          variant === "primary"
-            ? styles.actionButtonTextPrimary
-            : variant === "danger"
-              ? styles.actionButtonTextDanger
-              : null,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-type SurfaceChipTone = "neutral" | "success" | "warning" | "danger"
-
-type SurfaceChipProps = {
-  label: string
-  active?: boolean
-  tone?: SurfaceChipTone
-  onPress?: () => void
-}
-
-function SurfaceChip({ label, active = false, tone = "neutral", onPress }: SurfaceChipProps) {
-  return (
-    <Pressable
-      disabled={!onPress}
-      onPress={onPress}
-      style={[
-        styles.filterChip,
-        tone === "success"
-          ? styles.filterChipSuccess
-          : tone === "warning"
-            ? styles.filterChipWarning
-            : tone === "danger"
-              ? styles.filterChipDanger
-              : null,
-        active ? styles.filterChipActive : null,
-        !onPress ? styles.filterChipStatic : null,
-      ]}
-    >
-      <Text style={[styles.filterChipText, active ? styles.filterChipTextActive : null]}>
-        {label}
-      </Text>
-    </Pressable>
-  )
+const resolveSyncTone = (
+  syncDisplay: ReturnType<typeof resolveSurveySyncDisplay>,
+): AppStatusChipTone => {
+  if (syncDisplay === "sync") return "success"
+  if (syncDisplay === "sync_error" || syncDisplay === "sync_blocked") return "danger"
+  return "neutral"
 }
 
 export function SurveyDetailScreen({
@@ -644,26 +573,35 @@ export function SurveyDetailScreen({
           <View style={styles.detailHeroAccentOrb} />
           {isRenamingSite ? (
             <View style={styles.detailRenameRow}>
-              <TextInput
-                style={styles.detailRenameInput}
+              <AppField
+                label="Survey name"
                 value={siteNameInput}
                 onChangeText={setSiteNameInput}
                 autoFocus
                 placeholder="Survey name"
                 placeholderTextColor="#D7E3C0"
+                containerStyle={styles.detailRenameField}
+                labelStyle={styles.detailRenameLabel}
+                inputStyle={styles.detailRenameInput}
               />
-              <Pressable style={styles.detailRenameSaveButton} onPress={handleSaveSiteRename}>
-                <Text style={styles.detailRenameSaveButtonText}>Save</Text>
-              </Pressable>
-              <Pressable
-                style={styles.detailRenameCancelButton}
+              <AppButton
+                label="Save"
+                size="sm"
+                onPress={handleSaveSiteRename}
+                style={styles.detailRenameSaveButton}
+                labelStyle={styles.detailRenameSaveButtonText}
+              />
+              <AppButton
+                label="Cancel"
+                variant="secondary"
+                size="sm"
                 onPress={() => {
                   setIsRenamingSite(false)
                   setSiteNameInput(activeSiteName)
                 }}
-              >
-                <Text style={styles.detailRenameCancelButtonText}>Cancel</Text>
-              </Pressable>
+                style={styles.detailRenameCancelButton}
+                labelStyle={styles.detailRenameCancelButtonText}
+              />
             </View>
           ) : shouldShowCompressedHero ? (
             <View style={styles.detailHeroCompactHeader}>
@@ -700,10 +638,14 @@ export function SurveyDetailScreen({
                   <Text style={styles.detailHeroEyebrow}>Survey detail</Text>
                   <Text style={styles.detailSurveyTitle}>{activeSiteName}</Text>
                   <View style={styles.detailHeroStatusRow}>
-                    <View style={[styles.detailHeroStatusPill, styles.detailHeroStatusPillNeutral]}>
-                      <Text style={styles.detailHeroStatusPillText}>{workflowStatusLabel}</Text>
-                    </View>
-                    <View
+                    <AppStatusChip
+                      label={workflowStatusLabel}
+                      style={[styles.detailHeroStatusPill, styles.detailHeroStatusPillNeutral]}
+                      labelStyle={styles.detailHeroStatusPillText}
+                    />
+                    <AppStatusChip
+                      label={syncDisplayLabel}
+                      tone={resolveSyncTone(syncDisplay)}
                       style={[
                         styles.detailHeroStatusPill,
                         syncDisplay === "sync"
@@ -712,14 +654,13 @@ export function SurveyDetailScreen({
                             ? styles.detailHeroStatusPillDanger
                             : styles.detailHeroStatusPillNeutral,
                       ]}
-                    >
-                      <Text style={styles.detailHeroStatusPillText}>{syncDisplayLabel}</Text>
-                    </View>
-                    <View style={[styles.detailHeroStatusPill, styles.detailHeroStatusPillNeutral]}>
-                      <Text style={styles.detailHeroStatusPillText}>
-                        {selectedSurvey.visibility === "public" ? "Public" : "Private"}
-                      </Text>
-                    </View>
+                      labelStyle={styles.detailHeroStatusPillText}
+                    />
+                    <AppStatusChip
+                      label={selectedSurvey.visibility === "public" ? "Public" : "Private"}
+                      style={[styles.detailHeroStatusPill, styles.detailHeroStatusPillNeutral]}
+                      labelStyle={styles.detailHeroStatusPillText}
+                    />
                   </View>
                 </Pressable>
 
@@ -945,17 +886,17 @@ export function SurveyDetailScreen({
       ) : null}
 
       <View style={styles.filterChipsRow}>
-        <SurfaceChip
+        <AppChoiceChip
           label="Summary"
           active={surveyDetailTab === "summary"}
           onPress={() => setSurveyDetailTab("summary")}
         />
-        <SurfaceChip
+        <AppChoiceChip
           label="Events"
           active={surveyDetailTab === "events"}
           onPress={() => setSurveyDetailTab("events")}
         />
-        <SurfaceChip
+        <AppChoiceChip
           label="Debug"
           active={surveyDetailTab === "debug"}
           onPress={() => setSurveyDetailTab("debug")}
@@ -965,17 +906,19 @@ export function SurveyDetailScreen({
       {surveyDetailTab === "summary" ? (
         <View style={styles.detailSection}>
           {selectedSurvey.status === "submitted" ? (
-            <View style={styles.submittedReadonlyBanner}>
-              <View style={styles.submittedReadonlyBannerHeader}>
-                <Ionicons name="checkmark-done-circle" size={16} color={brandColors.forest} />
-                <Text style={styles.submittedReadonlyBannerTitle}>Survey submitted</Text>
-              </View>
-              <Text style={styles.submittedReadonlyBannerText}>This record is now read-only.</Text>
-            </View>
+            <AppNotice
+              tone="success"
+              icon="checkmark-done-circle-outline"
+              title="Survey submitted"
+              message="This record is now read-only."
+              style={styles.submittedReadonlyBanner}
+            />
           ) : null}
 
           {selectedSurvey.status !== "submitted" ? (
-            <View
+            <AppCard
+              variant="panelElevated"
+              padding={18}
               style={[styles.deadlineCard, isDraftNearDeadline ? styles.deadlineCardWarning : null]}
             >
               <Text style={styles.deadlineLabel}>Submission window</Text>
@@ -991,30 +934,32 @@ export function SurveyDetailScreen({
               {isDraftNearDeadline ? (
                 <Text style={styles.warningText}>Less than 24h left before survey expiration.</Text>
               ) : null}
-            </View>
+            </AppCard>
           ) : null}
 
-          <View style={styles.detailMetadataCard}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderCopy}>
-                <Text style={styles.detailTitle}>Context and parcels</Text>
-                <Text style={styles.panelBody}>
-                  Region version and vegetation stage used by the scoring rules.
-                </Text>
-              </View>
-              {canEditSurvey ? (
-                <Pressable style={styles.detailParcelsEditButton} onPress={handleOpenParcels}>
-                  <Ionicons name="map-outline" size={14} color={brandColors.forest} />
-                  <Text style={styles.detailParcelsEditButtonText}>Edit parcels</Text>
-                </Pressable>
-              ) : null}
-            </View>
+          <AppCard variant="panelElevated" padding={18} style={styles.detailMetadataCard}>
+            <AppSectionHeader
+              title="Context and parcels"
+              subtitle="Region version and vegetation stage used by the scoring rules."
+              trailing={
+                canEditSurvey ? (
+                  <AppButton
+                    label="Edit parcels"
+                    variant="secondary"
+                    size="sm"
+                    leadingIcon="map-outline"
+                    onPress={handleOpenParcels}
+                    style={styles.detailParcelsEditButton}
+                  />
+                ) : null
+              }
+            />
 
             {canEditSurvey ? (
               <>
                 <View style={styles.filterChipsRow}>
                   {REGION_OPTIONS.map((option) => (
-                    <SurfaceChip
+                    <AppChoiceChip
                       key={`detail-region-${option.value}`}
                       label={option.label}
                       active={activeRegion === option.value}
@@ -1026,7 +971,7 @@ export function SurveyDetailScreen({
                 </View>
                 <View style={styles.filterChipsRow}>
                   {VEGETATION_STAGE_OPTIONS_BY_REGION[activeRegion].map((option) => (
-                    <SurfaceChip
+                    <AppChoiceChip
                       key={`detail-stage-${option.value}`}
                       label={option.label}
                       active={activeVegetationStage === option.value}
@@ -1039,21 +984,25 @@ export function SurveyDetailScreen({
               </>
             ) : (
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryItem}>Region: {activeRegionLabel}</Text>
-                <Text style={styles.summaryItem}>Vegetation: {activeVegetationLabel}</Text>
+                <AppStatusChip
+                  label={`Region: ${activeRegionLabel}`}
+                  style={styles.summaryItem}
+                  labelStyle={styles.summaryItemLabel}
+                />
+                <AppStatusChip
+                  label={`Vegetation: ${activeVegetationLabel}`}
+                  style={styles.summaryItem}
+                  labelStyle={styles.summaryItemLabel}
+                />
               </View>
             )}
-          </View>
+          </AppCard>
 
-          <View style={styles.factorTilesCard}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderCopy}>
-                <Text style={styles.detailTitle}>IBP scoring</Text>
-                <Text style={styles.panelBody}>
-                  Open factors to update observations and live scores.
-                </Text>
-              </View>
-            </View>
+          <AppCard variant="panelElevated" padding={18} style={styles.factorTilesCard}>
+            <AppSectionHeader
+              title="IBP scoring"
+              subtitle="Open factors to update observations and live scores."
+            />
             {showFactorLoadingHint ? <Text style={styles.rowMeta}>Loading factors...</Text> : null}
             {displayedScores ? (
               <>
@@ -1166,25 +1115,21 @@ export function SurveyDetailScreen({
             ) : (
               <Text style={styles.rowMeta}>Canonical factors not loaded yet.</Text>
             )}
-          </View>
+          </AppCard>
 
-          <View style={styles.actionPanel}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderCopy}>
-                <Text style={styles.detailTitle}>Actions</Text>
-                <Text style={styles.panelBody}>
-                  Visibility, deletion and sync recovery controls.
-                </Text>
-              </View>
-            </View>
+          <AppCard variant="panelElevated" padding={18} style={styles.actionPanel}>
+            <AppSectionHeader
+              title="Actions"
+              subtitle="Visibility, deletion and sync recovery controls."
+            />
 
             <View style={styles.actionButtonsRow}>
-              <ActionButton
+              <AppButton
                 label={selectedSurvey.visibility === "public" ? "Set private" : "Set public"}
-                icon={
+                leadingIcon={
                   selectedSurvey.visibility === "public" ? "lock-closed-outline" : "globe-outline"
                 }
-                variant="neutral"
+                variant="secondary"
                 onPress={() =>
                   void onToggleVisibility(
                     selectedSurvey.id,
@@ -1192,9 +1137,9 @@ export function SurveyDetailScreen({
                   )
                 }
               />
-              <ActionButton
+              <AppButton
                 label="Delete survey"
-                icon="trash-outline"
+                leadingIcon="trash-outline"
                 variant="danger"
                 onPress={() => onDeleteSurvey(selectedSurvey.id)}
               />
@@ -1202,39 +1147,39 @@ export function SurveyDetailScreen({
 
             {selectedSurvey.sync_state === "failed" ? (
               <View style={styles.actionButtonsRow}>
-                <ActionButton
+                <AppButton
                   label="Retry now"
-                  icon="refresh-outline"
-                  variant="primary"
+                  leadingIcon="refresh-outline"
                   onPress={() => void onRetrySurvey(selectedSurvey.id)}
                 />
-                <ActionButton
+                <AppButton
                   label="Discard local change"
-                  icon="close-circle-outline"
+                  leadingIcon="close-circle-outline"
                   variant="danger"
                   onPress={() => void onDiscardSurvey(selectedSurvey.id)}
                 />
               </View>
             ) : null}
-          </View>
+          </AppCard>
         </View>
       ) : null}
 
       {surveyDetailTab === "events" ? (
         <View style={styles.detailSection}>
-          <View style={styles.eventsCard}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderCopy}>
-                <Text style={styles.detailTitle}>Survey events</Text>
-                <Text style={styles.panelBody}>Sync and workflow history for this record.</Text>
-              </View>
-              <ActionButton
-                label="Reload"
-                icon="refresh-outline"
-                variant="neutral"
-                onPress={() => void onLoadSurveyEvents(selectedSurvey.id)}
-              />
-            </View>
+          <AppCard variant="panelElevated" padding={18} style={styles.eventsCard}>
+            <AppSectionHeader
+              title="Survey events"
+              subtitle="Sync and workflow history for this record."
+              trailing={
+                <AppButton
+                  label="Reload"
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon="refresh-outline"
+                  onPress={() => void onLoadSurveyEvents(selectedSurvey.id)}
+                />
+              }
+            />
             {eventsLoadingSurveyId === selectedSurvey.id ? (
               <Text style={styles.rowMeta}>Loading events...</Text>
             ) : null}
@@ -1251,14 +1196,17 @@ export function SurveyDetailScreen({
                 ) : null}
               </View>
             ))}
-          </View>
+          </AppCard>
         </View>
       ) : null}
 
       {surveyDetailTab === "debug" ? (
         <View style={styles.detailSection}>
-          <View style={styles.debugCard}>
-            <Text style={styles.detailTitle}>Debug snapshot</Text>
+          <AppCard variant="panelElevated" padding={18} style={styles.debugCard}>
+            <AppSectionHeader
+              title="Debug snapshot"
+              subtitle="Local and synced state for this survey."
+            />
             <Text style={styles.rowMeta}>id: {selectedSurvey.id}</Text>
             <Text style={styles.rowMeta}>updated: {selectedSurvey.updated_at}</Text>
             <Text style={styles.rowMeta}>created: {formatDateTime(detailCreatedAt)}</Text>
@@ -1280,15 +1228,23 @@ export function SurveyDetailScreen({
             {selectedSurvey.last_sync_error_at ? (
               <Text style={styles.rowMeta}>error at: {selectedSurvey.last_sync_error_at}</Text>
             ) : null}
-          </View>
+          </AppCard>
 
           <View style={styles.debugAttachmentBlock}>
-            <Text style={styles.debugSectionTitle}>Image debug</Text>
+            <AppSectionHeader
+              title="Image debug"
+              subtitle="Local attachment payloads and sync metadata."
+            />
             {selectedSurveyAttachments.length === 0 ? (
               <Text style={styles.rowMeta}>No local attachment found.</Text>
             ) : (
               selectedSurveyAttachments.map((attachment, index) => (
-                <View key={`debug-attachment-${attachment.id}`} style={styles.debugAttachmentCard}>
+                <AppCard
+                  key={`debug-attachment-${attachment.id}`}
+                  variant="panelElevated"
+                  padding={14}
+                  style={styles.debugAttachmentCard}
+                >
                   {attachment.local_uri ? (
                     <Image
                       source={{ uri: attachment.local_uri }}
@@ -1329,7 +1285,7 @@ export function SurveyDetailScreen({
                   <Text style={styles.rowMeta}>
                     last_sync_error_at: {attachment.last_sync_error_at ?? "null"}
                   </Text>
-                </View>
+                </AppCard>
               ))
             )}
           </View>
@@ -1456,23 +1412,24 @@ const styles = StyleSheet.create({
     color: brandColors.white,
   },
   detailRenameRow: {
-    flex: 1,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     flexWrap: "wrap",
     gap: 8,
   },
-  detailRenameInput: {
+  detailRenameField: {
     flex: 1,
-    minWidth: 160,
-    borderRadius: brandRadius.field,
+    minWidth: 200,
+  },
+  detailRenameLabel: {
+    color: "#D7E3C0",
+  },
+  detailRenameInput: {
+    minHeight: 46,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)",
     backgroundColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
     color: brandColors.white,
-    ...brandTypography.input,
   },
   detailRenameSaveButton: {
     borderRadius: brandRadius.pill,
@@ -1850,12 +1807,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   summaryItem: {
-    ...brandTypography.meta,
     color: brandColors.forest,
-    borderRadius: brandRadius.pill,
     backgroundColor: brandColors.panelMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  },
+  summaryItemLabel: {
+    color: brandColors.forest,
   },
   scoreHeroCard: {
     borderRadius: 24,
