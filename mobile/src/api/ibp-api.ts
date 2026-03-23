@@ -91,6 +91,26 @@ export async function refreshAuthTokens(
   })
 }
 
+export async function verifyEmail(apiUrl: string, token: string): Promise<void> {
+  await apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/auth/verify-email",
+    method: "POST",
+    json: { token },
+    expectJson: false,
+  })
+}
+
+export async function resendVerificationEmail(apiUrl: string, email: string): Promise<void> {
+  await apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/auth/resend-verification",
+    method: "POST",
+    json: { email },
+    expectJson: false,
+  })
+}
+
 export async function logoutSession(apiUrl: string, accessToken: string): Promise<void> {
   await apiRequest<void>({
     baseUrl: apiUrl,

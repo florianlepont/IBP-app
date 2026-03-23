@@ -7,6 +7,8 @@ import {
   logoutSession,
   refreshAuthTokens,
   registerWithCredentials,
+  resendVerificationEmail,
+  verifyEmail,
 } from "../api/ibp-api"
 import {
   clearStoredAuthSession,
@@ -54,6 +56,7 @@ export function useAuthSession({
   const [sessionRestoring, setSessionRestoring] = useState(true)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState<string>("Not logged in")
+  const [pendingEmailVerification, setPendingEmailVerification] = useState<string | null>(null)
 
   const setProfileFromUser = useCallback((user: AuthUser): void => {
     setCurrentUser(user)
@@ -276,6 +279,11 @@ export function useAuthSession({
       })
       reportStatus("auth", "success", "Logged in")
     } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        setPendingEmailVerification(email.trim().toLowerCase())
+        reportStatus("auth", "idle", "")
+        return
+      }
       reportStatus("auth", "error", `Login error: ${(error as Error).message}`)
     }
   }, [apiUrl, email, password, reportStatus, setProfileFromUser])
@@ -292,11 +300,25 @@ export function useAuthSession({
         accessToken: payload.access_token,
         refreshToken: payload.refresh_token,
       })
-      reportStatus("auth", "success", "Account created and logged in")
+      setPendingEmailVerification(email.trim().toLowerCase())
+      reportStatus("auth", "idle", "")
     } catch (error) {
       reportStatus("auth", "error", `Registration error: ${(error as Error).message}`)
     }
   }, [apiUrl, displayName, email, password, reportStatus, setProfileFromUser])
+
+  const handleVerifyEmail = useCallback(
+    async (token: string): Promise<void> => {
+      await verifyEmail(apiUrl, token)
+      setPendingEmailVerification(null)
+    },
+    [apiUrl],
+  )
+
+  const handleResendVerification = useCallback(async (): Promise<void> => {
+    if (!pendingEmailVerification) return
+    await resendVerificationEmail(apiUrl, pendingEmailVerification)
+  }, [apiUrl, pendingEmailVerification])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
@@ -317,6 +339,9 @@ export function useAuthSession({
     currentUser,
     profile,
     isAuthenticated: Boolean(accessToken || refreshToken),
+    pendingEmailVerification,
+    handleVerifyEmail,
+    handleResendVerification,
     setProfileFromUser,
     clearSession,
     refreshSessionTokens,

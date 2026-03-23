@@ -14,6 +14,7 @@ import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
 import { AuthGateScreen } from "./src/screens/AuthGateScreen"
+import { EmailVerificationScreen } from "./src/screens/EmailVerificationScreen"
 
 export default function App() {
   const auth = useAuthenticationState()
@@ -109,7 +110,14 @@ export default function App() {
         edges={surveySync.isAuthenticated ? ["top", "left", "right"] : ["left", "right"]}
       >
         <View style={styles.appLayout}>
-          {!surveySync.isAuthenticated ? (
+          {surveySync.pendingEmailVerification ? (
+            <EmailVerificationScreen
+              email={surveySync.pendingEmailVerification}
+              onVerify={surveySync.handleVerifyEmail}
+              onResend={surveySync.handleResendVerification}
+              onBack={() => surveySync.handleLogout()}
+            />
+          ) : !surveySync.isAuthenticated ? (
             <AuthGateScreen
               apiUrl={auth.apiUrl}
               onApiUrlChange={auth.handleApiUrlChange}
