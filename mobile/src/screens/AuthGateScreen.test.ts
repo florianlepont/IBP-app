@@ -40,7 +40,7 @@ jest.mock("react-native", () => {
     View: mockComponent("View"),
     Platform: {
       OS: "ios",
-      select: <T,>(options: { ios?: T; android?: T; default?: T }): T | undefined =>
+      select: <T>(options: { ios?: T; android?: T; default?: T }): T | undefined =>
         options.ios ?? options.default,
     },
     Keyboard: {

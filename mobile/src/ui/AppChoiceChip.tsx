@@ -1,9 +1,5 @@
 import { Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from "react-native"
-import {
-  brandComponentTokens,
-  brandRadius,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandComponentTokens, brandRadius, brandTypography } from "../app/brand-tokens"
 
 export type AppChoiceChipTone = "neutral" | "success" | "warning" | "danger"
 

@@ -85,11 +85,9 @@ describe("AuthService", () => {
     expect(result.user.email).toBe("user@example.com")
     expect(typeof result.access_token).toBe("string")
     expect(typeof result.refresh_token).toBe("string")
-    expect(db.query).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining("FROM users"),
-      ["user@example.com"],
-    )
+    expect(db.query).toHaveBeenNthCalledWith(1, expect.stringContaining("FROM users"), [
+      "user@example.com",
+    ])
     expect(db.query).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining("UPDATE users SET password_hash"),
@@ -153,9 +151,7 @@ describe("AuthService", () => {
 
   it("maps unique constraint errors to an account-exists conflict during register", async () => {
     const { service, db } = buildService()
-    db.query
-      .mockResolvedValueOnce({ rows: [] })
-      .mockRejectedValueOnce({ code: "23505" })
+    db.query.mockResolvedValueOnce({ rows: [] }).mockRejectedValueOnce({ code: "23505" })
 
     await expect(service.register("dup@example.com", "Secret123!", "Dup")).rejects.toBeInstanceOf(
       ConflictException,
@@ -248,19 +244,17 @@ describe("AuthService", () => {
       }),
       release: jest.fn(),
     }
-    db.query
-      .mockResolvedValueOnce({ rows: [AUTH_USER] })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: sessionId,
-            user_id: AUTH_USER.id,
-            refresh_token_hash: createHash("sha256").update(refreshToken).digest("hex"),
-            expires_at: new Date(Date.now() + 60_000).toISOString(),
-            revoked_at: null,
-          },
-        ],
-      })
+    db.query.mockResolvedValueOnce({ rows: [AUTH_USER] }).mockResolvedValueOnce({
+      rows: [
+        {
+          id: sessionId,
+          user_id: AUTH_USER.id,
+          refresh_token_hash: createHash("sha256").update(refreshToken).digest("hex"),
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+          revoked_at: null,
+        },
+      ],
+    })
     db.connect.mockResolvedValue(client)
 
     const result = await service.refresh(refreshToken)
@@ -304,11 +298,9 @@ describe("AuthService", () => {
     await service.logout(AUTH_USER.id)
     await service.cleanupExpiredSessions()
 
-    expect(db.query).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining("UPDATE auth_sessions"),
-      [AUTH_USER.id],
-    )
+    expect(db.query).toHaveBeenNthCalledWith(1, expect.stringContaining("UPDATE auth_sessions"), [
+      AUTH_USER.id,
+    ])
     expect(logSpy).toHaveBeenCalledWith("Cleaned up 3 expired auth sessions")
   })
 })

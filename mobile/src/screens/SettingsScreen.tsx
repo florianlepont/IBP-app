@@ -77,10 +77,7 @@ export function SettingsScreen({
       </AppCard>
 
       <AppCard variant="soft" style={screenStyles.section}>
-        <AppSectionHeader
-          title="Debug"
-          subtitle="Actions destructives reservees au debug local."
-        />
+        <AppSectionHeader title="Debug" subtitle="Actions destructives reservees au debug local." />
         <View style={screenStyles.buttonStack}>
           <AppButton
             label="Debug: Clear IBP DB"
