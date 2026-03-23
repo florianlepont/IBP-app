@@ -21,7 +21,7 @@ import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService } from "../database/database.service"
 import { CadastreProviderService } from "./cadastre-provider.service"
 import { IbpRulesService } from "./ibp-rules.service"
-import { extensionFromMime } from "../common/file.utils"
+import { extensionFromMime, isAllowedMimeType } from "../common/file.utils"
 import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
 import { mapSyncError } from "./sync-error.utils"
 import {
@@ -806,6 +806,10 @@ export class SurveysService {
 
     if ((body.size_bytes ?? 0) > 25 * 1024 * 1024) {
       throw new BadRequestException("size_bytes exceeds V1 max size (25MB)")
+    }
+
+    if (!isAllowedMimeType(body.mime_type)) {
+      throw new BadRequestException(`Unsupported file type: ${body.mime_type}`)
     }
 
     const attachmentId = randomUUID()
