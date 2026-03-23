@@ -1328,11 +1328,12 @@ async function uploadFileViaApi(
   accessToken: string,
 ): Promise<Response> {
   const form = new FormData()
-  form.append("file", {
+  const file = {
     uri: payload.local_uri,
     type: payload.mime_type,
     name: `attachment-${payload.local_attachment_id}`,
-  } as any)
+  } as unknown as Blob
+  form.append("file", file)
 
   return fetch(uploadTarget, {
     method: "PUT",

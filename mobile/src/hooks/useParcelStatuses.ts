@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Region } from "react-native-maps"
 import { fetchPublicParcelStatuses } from "../api/ibp-api"
 import { computeRegionBbox, computeRegionZoom } from "../app/map-viewport"
@@ -22,6 +22,8 @@ export function useParcelStatuses({
   const [items, setItems] = useState<PublicParcelStatusItem[]>([])
   const [loading, setLoading] = useState(false)
   const requestRef = useRef(0)
+  const bbox = useMemo(() => computeRegionBbox(region), [region])
+  const zoom = useMemo(() => computeRegionZoom(region), [region])
 
   useEffect(() => {
     if (!enabled) {
@@ -34,9 +36,6 @@ export function useParcelStatuses({
       const requestId = requestRef.current + 1
       requestRef.current = requestId
       setLoading(true)
-
-      const bbox = computeRegionBbox(region)
-      const zoom = computeRegionZoom(region)
 
       void fetchPublicParcelStatuses(apiUrl, {
         bbox,
@@ -65,16 +64,7 @@ export function useParcelStatuses({
     return () => {
       clearTimeout(timer)
     }
-  }, [
-    apiUrl,
-    enabled,
-    year,
-    debounceMs,
-    region.latitude,
-    region.longitude,
-    region.latitudeDelta,
-    region.longitudeDelta,
-  ])
+  }, [apiUrl, bbox, debounceMs, enabled, year, zoom])
 
   return {
     items,

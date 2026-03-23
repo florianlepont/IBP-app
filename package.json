@@ -18,7 +18,9 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json}\" --ignore-path .prettierignore",
     "test": "echo \"Tests not configured yet\"",
     "test:coverage:api": "npm --workspace api run test:unit:coverage && npm --workspace api run test:e2e:coverage",
-    "test:coverage:mobile": "npm --workspace mobile run test:unit:coverage"
+    "test:coverage:mobile": "npm --workspace mobile run test:unit:coverage",
+    "android": "npm --prefix mobile run android",
+    "ios": "npm --prefix mobile run ios"
   },
   "dependencies": {
     "expo": "54.0.33",

@@ -37,7 +37,7 @@ export async function loadStoredAuthSession(): Promise<StoredAuthSession | null>
 }
 
 export async function saveStoredAuthSession(session: StoredAuthSession): Promise<void> {
-  if (!session.refreshToken.trim()) {
+  if (!session?.refreshToken?.trim()) {
     await SecureStore.deleteItemAsync(SESSION_KEY)
     return
   }

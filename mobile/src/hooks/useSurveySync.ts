@@ -80,6 +80,7 @@ export function useSurveySync({
     profile,
     isAuthenticated,
     pendingEmailVerification,
+    devVerificationToken,
     setProfileFromUser,
     clearSession,
     refreshSessionTokens,
@@ -88,6 +89,7 @@ export function useSurveySync({
     handleLogin,
     handleRegister,
     handleLogout,
+    handleCancelEmailVerification,
     handleVerifyEmail,
     handleResendVerification,
   } = useAuthSession({
@@ -337,7 +339,14 @@ export function useSurveySync({
       return
     }
     void handleLoadCanonicalDetails(selectedSurveyId, { silent: true })
-  }, [selectedSurveyId, accessToken, surveys, surveyDetails, detailsLoadingSurveyId])
+  }, [
+    selectedSurveyId,
+    accessToken,
+    surveys,
+    surveyDetails,
+    detailsLoadingSurveyId,
+    handleLoadCanonicalDetails,
+  ])
 
   useEffect(() => {
     if (!selectedSurveyId || !accessToken) {
@@ -353,13 +362,21 @@ export function useSurveySync({
       return
     }
     void handleLoadSurveyEvents(selectedSurveyId, { silent: true })
-  }, [selectedSurveyId, accessToken, surveyDetailTab, surveyEvents, eventsLoadingSurveyId])
+  }, [
+    selectedSurveyId,
+    accessToken,
+    surveyDetailTab,
+    surveyEvents,
+    eventsLoadingSurveyId,
+    handleLoadSurveyEvents,
+  ])
 
   return {
     accessToken,
     sessionRestoring,
     isAuthenticated,
     pendingEmailVerification,
+    devVerificationToken,
     currentUser,
     profile,
     profileUpdating,
@@ -373,6 +390,7 @@ export function useSurveySync({
     handleLogin,
     handleRegister,
     handleLogout,
+    handleCancelEmailVerification,
     handleVerifyEmail,
     handleResendVerification,
     handleLoadMyProfile,

@@ -131,12 +131,7 @@ export function PublicMapScreen({
   useEffect(() => {
     setMapRegion(targetRegion)
     mapRef.current?.animateToRegion(targetRegion, 520)
-  }, [
-    targetRegion.latitude,
-    targetRegion.longitude,
-    targetRegion.latitudeDelta,
-    targetRegion.longitudeDelta,
-  ])
+  }, [targetRegion])
 
   useEffect(() => {
     onLoadParcelsRef.current = onLoadParcels

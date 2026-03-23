@@ -15,6 +15,7 @@ export type LoginResponse = {
   access_token: string
   refresh_token: string
   user: AuthUser
+  email_verification_token_dev?: string
 }
 
 export type RefreshResponse = {

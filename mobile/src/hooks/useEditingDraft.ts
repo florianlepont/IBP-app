@@ -30,6 +30,10 @@ export function useEditingDraft({
   const autosaveInFlightRef = useRef(false)
   const autosaveSignatureRef = useRef("")
   const createDraftBootstrappingRef = useRef(false)
+  const refreshLocalSurveys = surveyList.refreshLocalSurveys
+  const refreshLocalAttachments = surveyList.refreshLocalAttachments
+  const setSelectedSurveyId = surveyList.setSelectedSurveyId
+  const surveys = surveyList.surveys
 
   useEffect(() => {
     if (!editingSurveyId) {
@@ -63,7 +67,7 @@ export function useEditingDraft({
             ...surveyForm.draftInput,
             visibility: editingSurveyVisibility,
           })
-          await surveyList.refreshLocalSurveys()
+          await refreshLocalSurveys()
           autosaveSignatureRef.current = draftSignature
         } catch (error) {
           onStatusChange(`Autosave error: ${(error as Error).message}`)
@@ -79,7 +83,7 @@ export function useEditingDraft({
         autosaveTimerRef.current = null
       }
     }
-  }, [editingSurveyId, editingSurveyVisibility, surveyForm.draftInput])
+  }, [editingSurveyId, editingSurveyVisibility, onStatusChange, refreshLocalSurveys, surveyForm.draftInput])
 
   const handleOpenCreateSurvey = (): void => {
     if (autosaveTimerRef.current) {
@@ -109,11 +113,11 @@ export function useEditingDraft({
     void (async () => {
       try {
         const created = await createLocalDraft(initialDraftInput)
-        await surveyList.refreshLocalSurveys()
-        await surveyList.refreshLocalAttachments()
+        await refreshLocalSurveys()
+        await refreshLocalAttachments()
         autosaveSignatureRef.current = JSON.stringify(initialDraftInput)
         setEditingSurveyId(created.id)
-        surveyList.setSelectedSurveyId(created.id)
+        setSelectedSurveyId(created.id)
         onStatusChange(`Draft ${created.id} initialized.`)
       } catch (error) {
         onStatusChange(`Draft bootstrap error: ${(error as Error).message}`)
@@ -127,29 +131,29 @@ export function useEditingDraft({
     try {
       const draftInput = surveyForm.buildDraftInput()
       if (editingSurveyId) {
-        const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId)
+        const current = surveys.find((survey) => survey.id === editingSurveyId)
         await updateLocalDraft({
           survey_id: editingSurveyId,
           ...draftInput,
           visibility: current?.visibility ?? "private",
         })
 
-        await surveyList.refreshLocalSurveys()
-        await surveyList.refreshLocalAttachments()
+        await refreshLocalSurveys()
+        await refreshLocalAttachments()
         autosaveSignatureRef.current = ""
         setEditingSurveyId(null)
         setFormMode("create")
-        surveyList.setSelectedSurveyId(editingSurveyId)
+        setSelectedSurveyId(editingSurveyId)
         onStatusChange(`Local IBP draft ${editingSurveyId} saved`)
         return true
       }
 
       const created = await createLocalDraft(draftInput)
-      await surveyList.refreshLocalSurveys()
-      await surveyList.refreshLocalAttachments()
+      await refreshLocalSurveys()
+      await refreshLocalAttachments()
       setEditingSurveyId(null)
       setFormMode("create")
-      surveyList.setSelectedSurveyId(created.id)
+      setSelectedSurveyId(created.id)
       onStatusChange("Local IBP draft created with raw observations")
       return true
     } catch (error) {
@@ -159,7 +163,7 @@ export function useEditingDraft({
   }
 
   const handleStartEditSurvey = async (surveyId: string): Promise<boolean> => {
-    const current = surveyList.surveys.find((survey) => survey.id === surveyId)
+    const current = surveys.find((survey) => survey.id === surveyId)
     if (current?.status === "submitted") {
       onStatusChange(`Survey ${surveyId} is submitted and read-only`)
       return false
@@ -181,7 +185,7 @@ export function useEditingDraft({
       surveyForm.applyDraftToForm(draft)
       setEditingSurveyId(surveyId)
       setFormMode("edit")
-      surveyList.setSelectedSurveyId(surveyId)
+      setSelectedSurveyId(surveyId)
       onStatusChange(`Editing survey ${surveyId}`)
       return true
     } catch (error) {
@@ -197,7 +201,7 @@ export function useEditingDraft({
     }
 
     try {
-      const current = surveyList.surveys.find((survey) => survey.id === editingSurveyId)
+      const current = surveys.find((survey) => survey.id === editingSurveyId)
       const draftInput = surveyForm.buildDraftInput()
       await updateLocalDraft({
         survey_id: editingSurveyId,
@@ -205,8 +209,8 @@ export function useEditingDraft({
         visibility: current?.visibility ?? "private",
       })
 
-      await surveyList.refreshLocalSurveys()
-      await surveyList.refreshLocalAttachments()
+      await refreshLocalSurveys()
+      await refreshLocalAttachments()
       autosaveSignatureRef.current = ""
       setEditingSurveyId(null)
       setFormMode("create")

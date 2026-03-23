@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   buildAttachmentCountBySurvey,
   buildAttachmentsBySurvey,
@@ -29,15 +29,15 @@ export function useSurveyList() {
   const [attachmentFilter, setAttachmentFilter] = useState<SurveyAttachmentFilter>("all")
   const [sortMode, setSortMode] = useState<SurveySort>("updated_desc")
 
-  const refreshLocalSurveys = async (): Promise<void> => {
+  const refreshLocalSurveys = useCallback(async (): Promise<void> => {
     const rows = await listLocalSurveys()
     setSurveys(rows)
-  }
+  }, [])
 
-  const refreshLocalAttachments = async (): Promise<void> => {
+  const refreshLocalAttachments = useCallback(async (): Promise<void> => {
     const rows = await listLocalAttachments()
     setAttachments(rows)
-  }
+  }, [])
 
   const attachmentsBySurvey = useMemo(() => buildAttachmentsBySurvey(attachments), [attachments])
   const attachmentCountBySurvey = useMemo(
@@ -90,7 +90,7 @@ export function useSurveyList() {
     [selectedSurvey, attachmentsBySurvey],
   )
 
-  const resetFilters = (): void => {
+  const resetFilters = useCallback((): void => {
     setSurveyQuery("")
     setSurveyFromDate("")
     setSurveyToDate("")
@@ -100,15 +100,15 @@ export function useSurveyList() {
     setBlockedFilter("all")
     setAttachmentFilter("all")
     setSortMode("updated_desc")
-  }
+  }, [])
 
-  const openSurvey = (surveyId: string): void => {
+  const openSurvey = useCallback((surveyId: string): void => {
     setSelectedSurveyId(surveyId)
-  }
+  }, [])
 
-  const closeSurvey = (): void => {
+  const closeSurvey = useCallback((): void => {
     setSelectedSurveyId(null)
-  }
+  }, [])
 
   return {
     surveys,

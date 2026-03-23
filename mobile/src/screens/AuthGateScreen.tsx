@@ -3,6 +3,8 @@ import {
   Image,
   ImageSourcePropType,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -435,7 +437,10 @@ export function AuthGateScreen({
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={authStyles.screen}>
+      <KeyboardAvoidingView
+        style={authStyles.screen}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <HeroSection
           height={heroHeight}
           topInset={insets.top}
@@ -455,10 +460,18 @@ export function AuthGateScreen({
               {panelBody}
             </ScrollView>
           ) : (
-            <View style={[authStyles.panelContent, authStyles.panelContentFixed]}>{panelBody}</View>
+            <ScrollView
+              style={authStyles.panelScroll}
+              contentContainerStyle={[authStyles.panelContent, authStyles.panelContentFixed]}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+            >
+              {panelBody}
+            </ScrollView>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </TouchableWithoutFeedback>
   )
 }

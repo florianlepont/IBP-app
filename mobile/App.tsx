@@ -13,8 +13,7 @@ import { useAuthenticationState } from "./src/hooks/useAuthenticationState"
 import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
-import { AuthGateScreen } from "./src/screens/AuthGateScreen"
-import { EmailVerificationScreen } from "./src/screens/EmailVerificationScreen"
+import { PreAuthNavigator } from "./src/app/PreAuthNavigator"
 
 export default function App() {
   const auth = useAuthenticationState()
@@ -24,6 +23,9 @@ export default function App() {
 
   const surveyForm = useSurveyForm()
   const surveyList = useSurveyList()
+  const refreshLocalSurveys = surveyList.refreshLocalSurveys
+  const refreshLocalAttachments = surveyList.refreshLocalAttachments
+  const openSurvey = surveyList.openSurvey
   const ownSurveyIds = useMemo(
     () => surveyList.surveys.map((survey) => survey.id),
     [surveyList.surveys],
@@ -59,10 +61,11 @@ export default function App() {
       setFormMode("create")
     },
   })
+  const setStatus = surveySync.setStatus
 
   const publicMapExplorer = usePublicMapExplorer({
     apiUrl: auth.apiUrl,
-    onStatusChange: surveySync.setStatus,
+    onStatusChange: setStatus,
   })
 
   const editing = useEditingDraft({
@@ -72,53 +75,46 @@ export default function App() {
     setFormMode,
     surveyForm,
     surveyList,
-    onStatusChange: surveySync.setStatus,
+    onStatusChange: setStatus,
     onCloseSurveyDetail: closeSurveyDetailSelection,
   })
 
   const draftPatcher = useSurveyDraftPatcher({
     surveyList,
-    onStatusChange: surveySync.setStatus,
+    onStatusChange: setStatus,
   })
 
   const gpsCapture = useGpsCapture({
     surveyForm,
-    onStatusChange: surveySync.setStatus,
+    onStatusChange: setStatus,
     onAlert: (title, message) => Alert.alert(title, message),
   })
 
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
       await initLocalDb()
-      await surveyList.refreshLocalSurveys()
-      await surveyList.refreshLocalAttachments()
+      await refreshLocalSurveys()
+      await refreshLocalAttachments()
     }
 
-    bootstrap().catch((error) => surveySync.setStatus(`Init error: ${(error as Error).message}`))
-  }, [])
+    bootstrap().catch((error) => setStatus(`Init error: ${(error as Error).message}`))
+  }, [refreshLocalAttachments, refreshLocalSurveys, setStatus])
 
   const handleOpenSurvey = (surveyId: string): void => {
-    surveyList.openSurvey(surveyId)
+    openSurvey(surveyId)
     setSurveyDetailTab("summary")
-    surveySync.setStatus(`Survey ${surveyId} opened`)
+    setStatus(`Survey ${surveyId} opened`)
   }
 
   return (
     <SafeAreaProvider>
       <SafeAreaView
         style={styles.container}
-        edges={surveySync.isAuthenticated ? ["top", "left", "right"] : ["left", "right"]}
+        edges={surveySync.isAuthenticated && !surveySync.pendingEmailVerification ? ["top", "left", "right"] : ["left", "right"]}
       >
         <View style={styles.appLayout}>
-          {surveySync.pendingEmailVerification ? (
-            <EmailVerificationScreen
-              email={surveySync.pendingEmailVerification}
-              onVerify={surveySync.handleVerifyEmail}
-              onResend={surveySync.handleResendVerification}
-              onBack={() => surveySync.handleLogout()}
-            />
-          ) : !surveySync.isAuthenticated ? (
-            <AuthGateScreen
+          {!surveySync.isAuthenticated || surveySync.pendingEmailVerification ? (
+            <PreAuthNavigator
               apiUrl={auth.apiUrl}
               onApiUrlChange={auth.handleApiUrlChange}
               email={auth.email}
@@ -129,9 +125,14 @@ export default function App() {
               onDisplayNameChange={auth.setDisplayName}
               onLogin={surveySync.handleLogin}
               onRegister={surveySync.handleRegister}
+              status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
               logoSource={require("./assets/logo-app.png")}
               heroMartenSource={require("./assets/auth/marten.png")}
-              status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
+              pendingEmailVerification={surveySync.pendingEmailVerification}
+              devVerificationToken={surveySync.devVerificationToken}
+              onVerifyEmail={surveySync.handleVerifyEmail}
+              onResendVerification={surveySync.handleResendVerification}
+              onCancelEmailVerification={surveySync.handleCancelEmailVerification}
             />
           ) : (
             <AuthenticatedAppNavigation

@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   Button,
   Keyboard,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -288,7 +291,7 @@ export function SurveyFormScreen({
   const fullscreenMapReadyRef = useRef(false)
   const pendingInlineRegionRef = useRef<Region | null>(null)
   const pendingFullscreenRegionRef = useRef<Region | null>(null)
-  const scrollRef = useRef<any>(null)
+  const scrollRef = useRef<ScrollView | null>(null)
   const scrollOffsetRef = useRef(0)
   const identityScrollBeforeFocusRef = useRef(0)
   const onCaptureGpsLocationRef = useRef(onCaptureGpsLocation)
@@ -335,38 +338,59 @@ export function SurveyFormScreen({
     onCaptureGpsLocationRef.current = onCaptureGpsLocation
   }, [onCaptureGpsLocation])
 
-  const animateParcelMapRegion = (
-    mapRef: React.MutableRefObject<MapView | null>,
-    mapReadyRef: React.MutableRefObject<boolean>,
-    pendingRegionRef: React.MutableRefObject<Region | null>,
-    nextRegion: Region,
-    duration = 420,
-  ): void => {
-    if (!mapReadyRef.current || !mapRef.current) {
-      pendingRegionRef.current = nextRegion
-      return
-    }
+  const animateParcelMapRegion = useCallback(
+    (
+      mapRef: typeof inlineMapRef,
+      mapReadyRef: typeof inlineMapReadyRef,
+      pendingRegionRef: typeof pendingInlineRegionRef,
+      nextRegion: Region,
+      duration = 420,
+    ): void => {
+      if (!mapReadyRef.current || !mapRef.current) {
+        pendingRegionRef.current = nextRegion
+        return
+      }
 
-    pendingRegionRef.current = null
-    mapRef.current.animateToRegion(nextRegion, duration)
-  }
+      pendingRegionRef.current = null
+      mapRef.current.animateToRegion(nextRegion, duration)
+    },
+    [],
+  )
 
-  const syncParcelMapsToRegion = (nextRegion: Region, duration = 420): void => {
-    animateParcelMapRegion(
-      inlineMapRef,
-      inlineMapReadyRef,
-      pendingInlineRegionRef,
-      nextRegion,
-      duration,
-    )
-    animateParcelMapRegion(
-      fullscreenMapRef,
-      fullscreenMapReadyRef,
-      pendingFullscreenRegionRef,
-      nextRegion,
-      duration,
-    )
-  }
+  const syncParcelMapsToRegion = useCallback(
+    (nextRegion: Region, duration = 420): void => {
+      animateParcelMapRegion(
+        inlineMapRef,
+        inlineMapReadyRef,
+        pendingInlineRegionRef,
+        nextRegion,
+        duration,
+      )
+      animateParcelMapRegion(
+        fullscreenMapRef,
+        fullscreenMapReadyRef,
+        pendingFullscreenRegionRef,
+        nextRegion,
+        duration,
+      )
+    },
+    [animateParcelMapRegion],
+  )
+
+  const scrollWizardTo = useCallback((y: number, animated = true): void => {
+    scrollRef.current?.scrollTo?.({ y, animated })
+  }, [])
+
+  const centerParcelMapsOnLocation = useCallback(
+    (location: GpsCaptureResult): void => {
+      const nextRegion = buildFocusedMapRegion(location)
+      setMapRegion((current) =>
+        areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion,
+      )
+      syncParcelMapsToRegion(nextRegion, 420)
+    },
+    [syncParcelMapsToRegion],
+  )
 
   const handleInlineMapReady = (): void => {
     inlineMapReadyRef.current = true
@@ -393,7 +417,7 @@ export function SurveyFormScreen({
     const nextRegion = buildFocusedMapRegion({ lat: parsedLat, lng: parsedLng })
     setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion))
     syncParcelMapsToRegion(nextRegion, 420)
-  }, [hasGpsCoordinates, parsedLat, parsedLng, gpsLocation.collected_at])
+  }, [gpsLocation.collected_at, hasGpsCoordinates, parsedLat, parsedLng, syncParcelMapsToRegion])
 
   const factorProgress = useMemo(
     () =>
@@ -513,6 +537,16 @@ export function SurveyFormScreen({
   const bottomActionClearance = Math.max(tabBarHeight, minimumTabBarHeight) + brandSpacing.xs
   const scrollContentBottomPadding =
     keyboardHeight > 0 ? keyboardHeight + 72 : bottomActionClearance
+  const scrollIdentitySectionAboveKeyboard = useCallback(
+    (keyboardFrameHeight = keyboardHeight): void => {
+      const visibleTop = heroTopOffset + collapsedHeroHeight + brandSpacing.md
+      const visibleBottom = viewportHeight - keyboardFrameHeight - brandSpacing.lg
+      const { y, height } = identitySectionLayoutRef.current
+      const targetY = Math.max(y - visibleTop, y + height - visibleBottom, 0)
+      scrollWizardTo(targetY)
+    },
+    [collapsedHeroHeight, heroTopOffset, keyboardHeight, scrollWizardTo, viewportHeight],
+  )
 
   const heroHeight = scrollY.interpolate({
     inputRange: [0, collapseDistance],
@@ -617,7 +651,7 @@ export function SurveyFormScreen({
           "Current position unavailable. Open the full-screen map to retry or browse manually.",
         )
       })
-  }, [activeStep, autoLocateRequested, hasGpsCoordinates])
+  }, [activeStep, autoLocateRequested, centerParcelMapsOnLocation, hasGpsCoordinates])
 
   useEffect(() => {
     if (!hasGpsCoordinates) {
@@ -694,7 +728,7 @@ export function SurveyFormScreen({
       showSubscription.remove()
       hideSubscription.remove()
     }
-  }, [activeStep, isIdentityInputFocused, viewportHeight])
+  }, [activeStep, isIdentityInputFocused, scrollIdentitySectionAboveKeyboard])
 
   const handlePersistSurvey = (): void => {
     if (screen === "edit") {
@@ -702,20 +736,6 @@ export function SurveyFormScreen({
       return
     }
     void onCreateDraft()
-  }
-
-  const scrollWizardTo = (y: number, animated = true): void => {
-    const scrollable = scrollRef.current as {
-      scrollTo?: (options: { y: number; animated?: boolean }) => void
-      getNode?: () => { scrollTo?: (options: { y: number; animated?: boolean }) => void }
-    } | null
-
-    if (!scrollable) {
-      return
-    }
-
-    scrollable.scrollTo?.({ y, animated })
-    scrollable.getNode?.().scrollTo?.({ y, animated })
   }
 
   const openWizardStep = (nextStep: WizardStep): void => {
@@ -753,12 +773,6 @@ export function SurveyFormScreen({
       return
     }
     openWizardStep("factors")
-  }
-
-  const centerParcelMapsOnLocation = (location: GpsCaptureResult): void => {
-    const nextRegion = buildFocusedMapRegion(location)
-    setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion))
-    syncParcelMapsToRegion(nextRegion, 420)
   }
 
   const handleLocateParcelsMap = (): void => {
@@ -801,14 +815,6 @@ export function SurveyFormScreen({
     setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion))
   }
 
-  const scrollIdentitySectionAboveKeyboard = (keyboardFrameHeight = keyboardHeight): void => {
-    const visibleTop = heroTopOffset + collapsedHeroHeight + brandSpacing.md
-    const visibleBottom = viewportHeight - keyboardFrameHeight - brandSpacing.lg
-    const { y, height } = identitySectionLayoutRef.current
-    const targetY = Math.max(y - visibleTop, y + height - visibleBottom, 0)
-    scrollWizardTo(targetY)
-  }
-
   const parcelMapHelperText = useMemo(() => {
     if (isAutoLocatingParcels) {
       return "Centering on your current position..."
@@ -833,7 +839,7 @@ export function SurveyFormScreen({
     if (activeStep === "identity" && keyboardHeight === 0 && !isIdentityInputFocused) {
       scrollWizardTo(0)
     }
-  }, [activeStep, keyboardHeight, isIdentityInputFocused])
+  }, [activeStep, keyboardHeight, isIdentityInputFocused, scrollWizardTo])
 
   useEffect(() => {
     if (hasGpsCoordinates) {
@@ -855,7 +861,7 @@ export function SurveyFormScreen({
       return
     }
     syncParcelMapsToRegion(mapRegion, 0)
-  }, [isParcelMapFullscreenVisible, mapRegion])
+  }, [isParcelMapFullscreenVisible, mapRegion, syncParcelMapsToRegion])
 
   return (
     <View style={screenStyles.container}>
@@ -951,7 +957,7 @@ export function SurveyFormScreen({
         contentInsetAdjustmentBehavior="never"
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: false,
-          listener: (event: any) => {
+          listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
             scrollOffsetRef.current = event.nativeEvent.contentOffset.y
           },
         })}

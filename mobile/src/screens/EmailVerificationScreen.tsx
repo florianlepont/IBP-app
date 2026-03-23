@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
+  BackHandler,
   Keyboard,
   Pressable,
   StyleSheet,
@@ -8,7 +9,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useNavigation } from "@react-navigation/native"
 import {
   brandColors,
   brandRadius,
@@ -19,23 +20,53 @@ import {
 
 type EmailVerificationScreenProps = {
   email: string
+  devToken?: string
   onVerify: (token: string) => Promise<void>
   onResend: () => Promise<void>
-  onBack: () => void
+  onBack: () => void | Promise<void>
 }
 
 export function EmailVerificationScreen({
   email,
+  devToken,
   onVerify,
   onResend,
   onBack,
 }: EmailVerificationScreenProps) {
-  const insets = useSafeAreaInsets()
-  const [token, setToken] = useState("")
+  const navigation = useNavigation()
+  const verificationSucceeded = useRef(false)
+  const [token, setToken] = useState(devToken ?? "")
+
+  // Sync if devToken arrives after mount (login → auto-resend path)
+  useEffect(() => {
+    if (devToken && !token) {
+      setToken(devToken)
+    }
+  }, [devToken, token])
   const [submitting, setSubmitting] = useState(false)
   const [resending, setResending] = useState(false)
   const [error, setError] = useState("")
   const [resendSuccess, setResendSuccess] = useState(false)
+
+  // Call onBack (cancel) when the screen is removed — unless verification succeeded.
+  // This handles both the native header back button and the iOS swipe-back gesture.
+  useEffect(() => {
+    return navigation.addListener("beforeRemove", () => {
+      if (!verificationSucceeded.current) {
+        void onBack()
+      }
+    })
+  }, [navigation, onBack])
+
+  // Android hardware back button
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      void onBack()
+      navigation.goBack()
+      return true
+    })
+    return () => sub.remove()
+  }, [navigation, onBack])
 
   const handleVerify = async (): Promise<void> => {
     const trimmed = token.trim()
@@ -49,6 +80,7 @@ export function EmailVerificationScreen({
       setError("")
       setSubmitting(true)
       await onVerify(trimmed)
+      verificationSucceeded.current = true
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -72,14 +104,16 @@ export function EmailVerificationScreen({
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={[styles.screen, { paddingTop: insets.top + brandSpacing.lg }]}>
-        <View style={styles.header}>
-          <Pressable onPress={onBack} style={styles.backButton} testID="verify-back">
-            <Text style={styles.backText}>← Back to sign in</Text>
-          </Pressable>
-        </View>
-
+      <View style={styles.screen}>
         <View style={styles.content}>
+          {devToken ? (
+            <View style={styles.devBanner}>
+              <Text style={styles.devBannerLabel}>DEV — token pré-rempli</Text>
+              <Text style={styles.devBannerToken} numberOfLines={1} ellipsizeMode="middle">
+                {devToken}
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.title}>Verify your email</Text>
           <Text style={styles.subtitle}>
             We sent a verification code to <Text style={styles.emailHighlight}>{email}</Text>
@@ -137,23 +171,12 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: brandColors.canvas,
-    paddingHorizontal: brandSpacing.lg,
-  },
-  header: {
-    marginBottom: brandSpacing.lg,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    paddingRight: 12,
-  },
-  backText: {
-    ...brandTypography.label,
-    color: brandColors.forest,
   },
   content: {
     flex: 1,
     gap: 20,
+    paddingHorizontal: brandSpacing.lg,
+    paddingTop: brandSpacing.lg,
   },
   title: {
     ...brandTypography.sectionTitle,
@@ -238,5 +261,24 @@ const styles = StyleSheet.create({
   resendText: {
     ...brandTypography.meta,
     color: brandColors.forest,
+  },
+  devBanner: {
+    backgroundColor: "#FFF3CD",
+    borderWidth: 1,
+    borderColor: "#FFCB47",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  devBannerLabel: {
+    ...brandTypography.meta,
+    color: "#7A5800",
+    fontWeight: "700",
+  },
+  devBannerToken: {
+    ...brandTypography.meta,
+    color: "#7A5800",
+    fontFamily: "monospace",
   },
 })
