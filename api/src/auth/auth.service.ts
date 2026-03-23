@@ -81,7 +81,12 @@ export class AuthService {
     email: string,
     password: string,
     displayName: string,
-  ): Promise<{ access_token: string; refresh_token: string; user: AuthenticatedUser; email_verification_token_dev?: string }> {
+  ): Promise<{
+    access_token: string
+    refresh_token: string
+    user: AuthenticatedUser
+    email_verification_token_dev?: string
+  }> {
     const normalizedEmail = email.trim().toLowerCase()
 
     if (!normalizedEmail || !password) {
@@ -184,10 +189,7 @@ export class AuthService {
       id: string
       display_name: string
       email_verified: boolean
-    }>(
-      `SELECT id, display_name, email_verified FROM users WHERE email = $1`,
-      [normalizedEmail],
-    )
+    }>(`SELECT id, display_name, email_verified FROM users WHERE email = $1`, [normalizedEmail])
 
     const user = result.rows[0]
 
@@ -296,9 +298,7 @@ export class AuthService {
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async cleanupExpiredSessions(): Promise<void> {
-    const result = await this.db.query(
-      `DELETE FROM auth_sessions WHERE expires_at < NOW()`,
-    )
+    const result = await this.db.query(`DELETE FROM auth_sessions WHERE expires_at < NOW()`)
     this.logger.log(`Cleaned up ${result.rowCount} expired auth sessions`)
   }
 
