@@ -30,7 +30,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -75,7 +75,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-submit-invalid-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -110,7 +110,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-submit-no-parcel-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -156,7 +156,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-submit-expired-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -211,7 +211,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-submit-valid-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -276,7 +276,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-submit-readonly-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -344,7 +344,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-submit-visibility-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -432,7 +432,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-visibility-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -503,7 +503,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-public-map-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -651,7 +651,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-parcel-history-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -753,7 +753,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-parcel-status-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -837,7 +837,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-raw-full-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -903,7 +903,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-canonical-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -959,7 +959,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-attachment-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1076,7 +1076,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-survey-delete-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1136,7 +1136,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-batch-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1203,7 +1203,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-delete-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1260,7 +1260,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-attachment-delete-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1370,7 +1370,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-conflict-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1435,7 +1435,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-changes-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1517,7 +1517,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-changes-fallback-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1600,7 +1600,7 @@ describe("Surveys idempotency (e2e)", () => {
     const email = `e2e-sync-changes-fallback-cursor-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")
-      .send({ email, password: "demo123" })
+      .send({ email, password: "demo1234" })
       .expect(201)
 
     const accessToken = login.body.access_token as string

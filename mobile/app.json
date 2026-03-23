@@ -4,6 +4,7 @@
     "slug": "ibp-app",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/logo-app.png",
     "platforms": ["ios", "android"],
     "assetBundlePatterns": ["**/*"],
     "plugins": [

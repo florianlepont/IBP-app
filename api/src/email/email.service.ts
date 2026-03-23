@@ -8,6 +8,13 @@ type EmailChangeMessage = {
   expiresAtIso: string
 }
 
+type EmailVerificationMessage = {
+  toEmail: string
+  displayName: string
+  token: string
+  expiresAtIso: string
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name)
@@ -40,6 +47,44 @@ export class EmailService {
       port,
       secure,
       auth: { user, pass },
+    })
+  }
+
+  async sendEmailVerification(message: EmailVerificationMessage): Promise<void> {
+    const confirmUrl = this.buildVerifyUrl(message.token)
+    const expiresAtDate = new Date(message.expiresAtIso)
+    const expiresAtText = Number.isNaN(expiresAtDate.getTime())
+      ? message.expiresAtIso
+      : expiresAtDate.toUTCString()
+    const subject = "Verify your IBP account email"
+    const greetingName = message.displayName?.trim() || "IBP user"
+    const lines = [
+      `Hello ${greetingName},`,
+      "",
+      "Welcome to IBP! Please verify your email address to activate your account.",
+      `Verification token: ${message.token}`,
+      `Token expires at: ${expiresAtText}`,
+    ]
+
+    if (confirmUrl) {
+      lines.push(`Verification link: ${confirmUrl}`)
+    }
+
+    lines.push("", "If you did not create an IBP account, please ignore this email.")
+    const text = lines.join("\n")
+
+    if (!this.smtpEnabled || !this.transporter) {
+      this.logger.log(
+        `[DEV EMAIL] to=${message.toEmail} subject="${subject}" token=${message.token}`,
+      )
+      return
+    }
+
+    await this.transporter.sendMail({
+      from: this.fromAddress,
+      to: message.toEmail,
+      subject,
+      text,
     })
   }
 
@@ -81,12 +126,15 @@ export class EmailService {
     })
   }
 
+  private buildVerifyUrl(token: string): string | null {
+    const template = process.env.EMAIL_VERIFY_URL_TEMPLATE?.trim()
+    if (!template) return null
+    return template.replace("{token}", encodeURIComponent(token))
+  }
+
   private buildConfirmUrl(token: string): string | null {
     const template = process.env.EMAIL_CHANGE_CONFIRM_URL_TEMPLATE?.trim()
-    if (!template) {
-      return null
-    }
-
+    if (!template) return null
     return template.replace("{token}", encodeURIComponent(token))
   }
 }
