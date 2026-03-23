@@ -1,5 +1,9 @@
 import { Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from "react-native"
-import { brandComponentTokens, brandRadius, brandTypography } from "../app/brand-tokens"
+import {
+  brandComponentTokens,
+  brandRadius,
+  brandTypography,
+} from "../app/brand-tokens"
 
 export type AppChoiceChipTone = "neutral" | "success" | "warning" | "danger"
 
@@ -20,20 +24,31 @@ export function AppChoiceChip({
   style,
   labelStyle,
 }: AppChoiceChipProps) {
+  const isInteractive = typeof onPress === "function"
+
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={!onPress}
+      disabled={!isInteractive}
       onPress={onPress}
       style={[
         styles.base,
+        isInteractive ? styles.interactive : styles.static,
         styles[tone],
         active ? styles.active : null,
-        !onPress ? styles.static : null,
         style,
       ]}
     >
-      <Text style={[styles.label, active ? styles.labelActive : null, labelStyle]}>{label}</Text>
+      <Text
+        style={[
+          styles.label,
+          !isInteractive ? styles.labelStatic : null,
+          active ? styles.labelActive : null,
+          labelStyle,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   )
 }
@@ -46,6 +61,15 @@ const styles = StyleSheet.create({
     backgroundColor: brandComponentTokens.choiceChip.background,
     paddingHorizontal: 10,
     paddingVertical: 7,
+  },
+  interactive: {
+    borderColor: brandComponentTokens.choiceChip.interactiveBorder,
+    backgroundColor: brandComponentTokens.choiceChip.interactiveBackground,
+    shadowColor: "#000000",
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   neutral: {},
   success: {
@@ -62,11 +86,14 @@ const styles = StyleSheet.create({
     backgroundColor: brandComponentTokens.choiceChip.activeBackground,
   },
   static: {
-    opacity: 0.92,
+    opacity: 0.76,
   },
   label: {
     ...brandTypography.meta,
     color: brandComponentTokens.choiceChip.text,
+  },
+  labelStatic: {
+    color: brandComponentTokens.choiceChip.staticText,
   },
   labelActive: {
     color: brandComponentTokens.choiceChip.activeText,
