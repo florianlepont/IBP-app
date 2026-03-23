@@ -1,15 +1,18 @@
 import { useState } from "react"
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native"
+import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import {
   brandColors,
-  brandRadius,
   brandShadow,
   brandSpacing,
   brandTypography,
 } from "../app/brand-tokens"
 import { FACTOR_INPUT_HINTS_BY_FACTOR, FACTOR_TITLES, HELP_BY_FACTOR } from "../app/constants"
 import { FactorField, FactorKey, FactorRetainedScore } from "../app/types"
+import { AppCard } from "../ui/AppCard"
+import { AppField } from "../ui/AppField"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { AppStatusChip } from "../ui/AppStatusChip"
 
 type FactorDetailScreenProps = {
   factor: FactorKey
@@ -52,33 +55,39 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
         </View>
       </View>
 
-      <View style={detailStyles.panel}>
-        <Text style={detailStyles.panelTitle}>Observations</Text>
-        <Text style={detailStyles.panelBody}>
-          Inputs update the draft immediately and recompute the retained score as you type.
-        </Text>
+      <AppCard variant="panelElevated" padding={18} style={detailStyles.panel}>
+        <AppSectionHeader
+          title="Observations"
+          subtitle="Inputs update the draft immediately and recompute the retained score as you type."
+          trailing={
+            retainedScore ? (
+              <AppStatusChip label={retainedScore.selected_class} tone="success" />
+            ) : (
+              <AppStatusChip label="Pending" tone="warning" />
+            )
+          }
+          titleStyle={detailStyles.panelTitle}
+          subtitleStyle={detailStyles.panelBody}
+        />
         <View style={detailStyles.fieldsList}>
           {fields.map((field) => (
-            <View key={`${factor}-${field.label}`} style={detailStyles.fieldBlock}>
-              <Text style={detailStyles.fieldLabel}>
-                {humanizeFieldLabel(field.label)}
-                {field.required ? " *" : ""}
-              </Text>
-              <TextInput
-                style={detailStyles.input}
-                value={field.value}
-                onChangeText={field.onChange}
-                keyboardType="numeric"
-                placeholder="Enter a numeric value"
-                placeholderTextColor={brandColors.textSecondary}
-              />
-              {field.error ? <Text style={detailStyles.errorText}>{field.error}</Text> : null}
-            </View>
+            <AppField
+              key={`${factor}-${field.label}`}
+              label={`${humanizeFieldLabel(field.label)}${field.required ? " *" : ""}`}
+              value={field.value}
+              onChangeText={field.onChange}
+              keyboardType="numeric"
+              placeholder="Enter a numeric value"
+              error={field.error}
+              containerStyle={detailStyles.fieldBlock}
+              labelStyle={detailStyles.fieldLabel}
+              inputStyle={detailStyles.input}
+            />
           ))}
         </View>
-      </View>
+      </AppCard>
 
-      <View style={detailStyles.panel}>
+      <AppCard variant="panelElevated" padding={18} style={detailStyles.panel}>
         <Pressable
           style={detailStyles.panelToggle}
           onPress={() => setCaptureHelpExpanded((current) => !current)}
@@ -105,7 +114,7 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
             ))}
           </View>
         ) : null}
-      </View>
+      </AppCard>
     </View>
   )
 }
@@ -222,13 +231,7 @@ const detailStyles = StyleSheet.create({
     color: "#D7E3C0",
   },
   panel: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panel,
-    padding: 18,
     gap: 12,
-    ...brandShadow.card,
   },
   panelTitle: {
     ...brandTypography.sectionTitle,
@@ -284,17 +287,7 @@ const detailStyles = StyleSheet.create({
     color: brandColors.textPrimary,
   },
   input: {
-    borderWidth: 1,
-    borderColor: brandColors.inputBorder,
-    borderRadius: brandRadius.field,
-    backgroundColor: brandColors.inputFill,
-    color: brandColors.textPrimary,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    ...brandTypography.input,
-  },
-  errorText: {
-    ...brandTypography.meta,
-    color: brandColors.terracotta,
   },
 })

@@ -11,7 +11,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native"
@@ -48,6 +47,12 @@ import {
 import { IgnCadastreTileOverlay } from "../components/IgnCadastreTileOverlay"
 import { ParcelOverlayPolygons } from "../components/ParcelOverlayPolygons"
 import { useParcelStatuses } from "../hooks/useParcelStatuses"
+import { AppButton } from "../ui/AppButton"
+import { AppCard } from "../ui/AppCard"
+import { AppChoiceChip } from "../ui/AppChoiceChip"
+import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
 
 type SurveyFormScreenProps = {
   apiUrl: string
@@ -173,18 +178,7 @@ function WizardChip({
   active: boolean
   onPress: () => void
 }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[screenStyles.choiceChip, active ? screenStyles.choiceChipActive : null]}
-    >
-      <Text
-        style={[screenStyles.choiceChipText, active ? screenStyles.choiceChipTextActive : null]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
+  return <AppChoiceChip label={label} active={active} onPress={onPress} />
 }
 
 function FactorTile({
@@ -1014,18 +1008,16 @@ export function SurveyFormScreen({
               identitySectionLayoutRef.current = event.nativeEvent.layout
             }}
           >
-            <View style={screenStyles.panel}>
-              <View style={screenStyles.panelHeader}>
-                <Text style={screenStyles.panelTitle}>Survey identity</Text>
-                <Text style={screenStyles.panelBody}>
-                  Give the draft a name that will stay readable in lists, sync logs, and parcel
-                  detail screens.
-                </Text>
-              </View>
+            <AppCard variant="panelElevated" style={screenStyles.panel}>
+              <AppSectionHeader
+                title="Survey identity"
+                subtitle="Give the draft a name that will stay readable in lists, sync logs, and parcel detail screens."
+                titleStyle={screenStyles.panelTitle}
+                subtitleStyle={screenStyles.panelBody}
+              />
 
-              <Text style={screenStyles.label}>Site name *</Text>
-              <TextInput
-                style={screenStyles.input}
+              <AppField
+                label="Site name *"
                 value={siteName}
                 onChangeText={setSiteName}
                 onFocus={() => {
@@ -1039,36 +1031,31 @@ export function SurveyFormScreen({
                   setIsIdentityInputFocused(false)
                 }}
                 placeholder="Ex: Foret de Rambouillet"
-                placeholderTextColor={brandColors.textSecondary}
+                error={formErrors.siteName}
+                inputStyle={screenStyles.input}
               />
-              {formErrors.siteName ? (
-                <Text style={screenStyles.errorText}>{formErrors.siteName}</Text>
-              ) : null}
-            </View>
+            </AppCard>
 
-            <Pressable
+            <AppButton
+              label="Continue to parcels"
               disabled={!identityReady}
-              style={[
-                screenStyles.primaryButton,
-                !identityReady ? screenStyles.primaryButtonDisabled : null,
-              ]}
+              style={screenStyles.primaryButton}
               onPress={handleOpenParcelsStep}
-            >
-              <Text style={screenStyles.primaryButtonText}>Continue to parcels</Text>
-            </Pressable>
+            />
           </View>
         ) : null}
 
         {activeStep === "parcels" ? (
           <>
-            <View style={screenStyles.panel}>
+            <AppCard variant="panelElevated" style={screenStyles.panel}>
               <View style={screenStyles.parcelHeaderRow}>
-                <View style={screenStyles.panelHeaderCompact}>
-                  <Text style={screenStyles.panelTitle}>Parcel selection</Text>
-                  <Text style={screenStyles.panelBody}>
-                    Centered on your position when available. Zoom in, then tap parcels.
-                  </Text>
-                </View>
+                <AppSectionHeader
+                  title="Parcel selection"
+                  subtitle="Centered on your position when available. Zoom in, then tap parcels."
+                  style={screenStyles.panelHeaderCompact}
+                  titleStyle={screenStyles.panelTitle}
+                  subtitleStyle={screenStyles.panelBody}
+                />
                 <View style={screenStyles.selectionCountPill}>
                   <Text style={screenStyles.selectionCountPillText}>
                     {selectedParcelIds.length} selected
@@ -1129,34 +1116,26 @@ export function SurveyFormScreen({
               ) : null}
 
               {isResolvingGpsAddress ? (
-                <View style={screenStyles.infoCard}>
-                  <View style={screenStyles.infoCardHeader}>
-                    <Ionicons name="navigate-outline" size={15} color={brandColors.forest} />
-                    <Text style={screenStyles.infoCardTitle}>Local address</Text>
-                  </View>
-                  <Text style={screenStyles.infoCardBody}>Looking up...</Text>
-                </View>
+                <AppNotice tone="info" icon="navigate-outline" title="Local address" message="Looking up..." />
               ) : null}
 
               {resolvedGpsAddress ? (
-                <View style={screenStyles.infoCard}>
-                  <View style={screenStyles.infoCardHeader}>
-                    <Ionicons name="location-outline" size={15} color={brandColors.forest} />
-                    <Text style={screenStyles.infoCardTitle}>Local address</Text>
-                  </View>
-                  <Text style={screenStyles.infoCardBody}>{resolvedGpsAddress}</Text>
-                </View>
+                <AppNotice
+                  tone="info"
+                  icon="location-outline"
+                  title="Local address"
+                  message={resolvedGpsAddress}
+                />
               ) : null}
-            </View>
+            </AppCard>
 
-            <View style={screenStyles.panel}>
-              <View style={screenStyles.panelHeader}>
-                <Text style={screenStyles.panelTitle}>Scoring context</Text>
-                <Text style={screenStyles.panelBody}>
-                  Region version and vegetation stage directly affect the IBP scoring thresholds, so
-                  set them before opening factors.
-                </Text>
-              </View>
+            <AppCard variant="panelElevated" style={screenStyles.panel}>
+              <AppSectionHeader
+                title="Scoring context"
+                subtitle="Region version and vegetation stage directly affect the IBP scoring thresholds, so set them before opening factors."
+                titleStyle={screenStyles.panelTitle}
+                subtitleStyle={screenStyles.panelBody}
+              />
 
               <Text style={screenStyles.label}>Region version *</Text>
               <View style={screenStyles.choiceRow}>
@@ -1181,7 +1160,7 @@ export function SurveyFormScreen({
                   />
                 ))}
               </View>
-            </View>
+            </AppCard>
 
             <View style={screenStyles.actionRow}>
               <Pressable
@@ -1190,12 +1169,11 @@ export function SurveyFormScreen({
               >
                 <Text style={screenStyles.secondaryButtonText}>Back</Text>
               </Pressable>
-              <Pressable
+              <AppButton
+                label="Continue to factors"
                 style={screenStyles.primaryButtonWide}
                 onPress={() => setActiveStep("factors")}
-              >
-                <Text style={screenStyles.primaryButtonText}>Continue to factors</Text>
-              </Pressable>
+              />
             </View>
 
             <Modal
@@ -1337,13 +1315,13 @@ export function SurveyFormScreen({
               </Text>
             </View>
 
-            <View style={screenStyles.panel}>
-              <View style={screenStyles.panelHeader}>
-                <Text style={screenStyles.panelTitle}>Factor scoring</Text>
-                <Text style={screenStyles.panelBody}>
-                  Open each factor to enter observations and update the score live.
-                </Text>
-              </View>
+            <AppCard variant="panelElevated" style={screenStyles.panel}>
+              <AppSectionHeader
+                title="Factor scoring"
+                subtitle="Open each factor to enter observations and update the score live."
+                titleStyle={screenStyles.panelTitle}
+                subtitleStyle={screenStyles.panelBody}
+              />
 
               <View style={screenStyles.factorGrid}>
                 {FACTOR_ORDER.map((factor) => (
@@ -1358,7 +1336,7 @@ export function SurveyFormScreen({
                   />
                 ))}
               </View>
-            </View>
+            </AppCard>
 
             <View style={screenStyles.actionRow}>
               <Pressable
@@ -1367,9 +1345,7 @@ export function SurveyFormScreen({
               >
                 <Text style={screenStyles.secondaryButtonText}>Back</Text>
               </Pressable>
-              <Pressable style={screenStyles.primaryButtonWide} onPress={handlePersistSurvey}>
-                <Text style={screenStyles.primaryButtonText}>{persistLabel}</Text>
-              </Pressable>
+              <AppButton label={persistLabel} style={screenStyles.primaryButtonWide} onPress={handlePersistSurvey} />
             </View>
           </>
         ) : null}

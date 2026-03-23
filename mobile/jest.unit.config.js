@@ -4,6 +4,9 @@ module.exports = {
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
+  moduleNameMapper: {
+    '^@expo/vector-icons$': '<rootDir>/test/vector-icons.mock.ts',
+  },
   collectCoverageFrom: [
     '<rootDir>/App.tsx',
     '<rootDir>/src/**/*.{ts,tsx}',
