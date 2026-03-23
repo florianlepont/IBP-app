@@ -85,6 +85,7 @@ export function UiPrimitivesScreen() {
             <AppButton
               label="Danger"
               variant="danger"
+              size="sm"
               leadingIcon="trash-outline"
               onPress={() => undefined}
             />
@@ -92,7 +93,14 @@ export function UiPrimitivesScreen() {
               label="Disabled"
               variant="secondary"
               disabled
+              size="sm"
               leadingIcon="ban-outline"
+              onPress={() => undefined}
+            />
+            <AppButton
+              iconOnly
+              accessibilityLabel="Validate"
+              leadingIcon="checkmark-outline"
               onPress={() => undefined}
             />
           </View>
@@ -130,6 +138,10 @@ export function UiPrimitivesScreen() {
               onPress={() => setSelectedChip("debug")}
             />
           </View>
+          <Text style={screenStyles.meta}>
+            Les chips interactifs sont plus blancs et plus contrastes. Les chips statiques restent
+            plus mats pour eviter toute ambiguite.
+          </Text>
           <View style={screenStyles.chipRow}>
             <AppChoiceChip label="Success tone" tone="success" />
             <AppChoiceChip label="Warning tone" tone="warning" />
