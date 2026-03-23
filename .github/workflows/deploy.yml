@@ -1,0 +1,109 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "infra/docker-compose.freebox.yml"
+      - ".github/workflows/deploy.yml"
+
+jobs:
+  # ── Gate: CI must pass first ──────────────────────────────────────────────
+  quality:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+
+  test-api:
+    name: Tests — API
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ibp
+          POSTGRES_USER: ibp
+          POSTGRES_PASSWORD: ibp
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ibp
+      POSTGRES_USER: ibp
+      POSTGRES_PASSWORD: ibp
+      OBJECT_STORAGE_MODE: local
+      OBJECT_STORAGE_BUCKET: ibp-surveys
+      ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
+      ACCESS_TOKEN_SECRET: ci-access-secret
+      REFRESH_TOKEN_SECRET: ci-refresh-secret
+      ACCESS_TOKEN_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN: 7d
+      AUTH_DEV_EXPOSE_EMAIL_TOKEN: true
+      AUTH_LOGIN_OR_CREATE_ENABLED: true
+      SMTP_ENABLED: false
+      DEBUG_DATA_RESET_ENABLED: true
+      CADASTRE_PROVIDER: synthetic
+      CADASTRE_PROVIDER_ALLOW_FALLBACK: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+        working-directory: api
+      - run: npm run test:e2e
+        working-directory: api
+
+  # ── Deploy on Freebox VM (self-hosted runner) ─────────────────────────────
+  deploy:
+    name: Deploy → Freebox
+    needs: [quality, test-api]
+    runs-on: [self-hosted, freebox]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image (arm64 native)
+        run: |
+          docker build -t ibp-api:latest ./api
+
+      - name: Restart API container
+        run: |
+          docker compose \
+            -f infra/docker-compose.freebox.yml \
+            --env-file "$HOME/.env.freebox" \
+            up -d --no-deps --pull never api
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/v1/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "API is healthy (attempt $i)"
+              exit 0
+            fi
+            echo "Waiting for API... (attempt $i, status: $STATUS)"
+            sleep 5
+          done
+          echo "API did not become healthy in time"
+          docker logs ibp-api --tail 50
+          exit 1
