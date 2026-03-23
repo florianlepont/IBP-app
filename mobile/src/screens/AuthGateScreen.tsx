@@ -360,8 +360,8 @@ export function AuthGateScreen({
     if (!displayName.trim()) {
       return "Enter a display name."
     }
-    if (password.length < 6) {
-      return "Password must contain at least 6 characters."
+    if (password.length < 8) {
+      return "Password must contain at least 8 characters."
     }
     if (password !== confirmPassword) {
       return "Passwords do not match."
