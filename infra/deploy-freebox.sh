@@ -2,7 +2,7 @@
 # Deploy ibp-api to Freebox Ultra VM
 set -e
 
-VM="freebox@192.168.1.194"
+VM="freebox@192.168.1.106"
 IMAGE="ibp-api:latest"
 
 echo "→ Building image (linux/arm64)..."

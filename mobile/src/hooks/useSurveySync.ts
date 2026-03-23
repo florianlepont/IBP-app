@@ -46,10 +46,11 @@ export function useSurveySync({
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null)
   const detailAutoLoadCooldownUntilRef = useRef<Record<string, number>>({})
 
-  const clearSurveySessionState = useCallback((): void => {
+  const clearSurveySessionState = useCallback(async (): Promise<void> => {
     setSurveyDetails({})
     setSurveyEvents({})
     detailAutoLoadCooldownUntilRef.current = {}
+    await clearLocalIbpData()
   }, [])
 
   const reportStatus = useCallback(
