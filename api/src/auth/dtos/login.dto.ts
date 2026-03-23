@@ -5,7 +5,7 @@ export class LoginDto {
   email!: string
 
   @IsString()
-  @MinLength(1)
+  @MinLength(8)
   password!: string
 
   @IsOptional()
