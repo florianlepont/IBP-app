@@ -34,9 +34,15 @@ jest.mock("react-native", () => {
     Pressable: mockComponent("Pressable"),
     Image: mockComponent("Image"),
     ImageBackground: mockComponent("ImageBackground"),
+    KeyboardAvoidingView: mockComponent("KeyboardAvoidingView"),
     ScrollView: mockComponent("ScrollView"),
     TouchableWithoutFeedback: mockComponent("TouchableWithoutFeedback"),
     View: mockComponent("View"),
+    Platform: {
+      OS: "ios",
+      select: <T,>(options: { ios?: T; android?: T; default?: T }): T | undefined =>
+        options.ios ?? options.default,
+    },
     Keyboard: {
       dismiss: jest.fn(),
     },
