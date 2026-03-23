@@ -12,6 +12,7 @@ import { fileURLToPath } from "url"
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, "..")
 const OUT_DIR = join(ROOT, "docs", "specs")
+const PRESERVED_MANUAL_FILES = new Set(["ibp-form-spec.md", "user-stories.md"])
 
 const TOKEN = process.env.NOTION_TOKEN
 const DATABASE_ID = "3243fb182ac68095b4ade58d48b78478"
@@ -156,10 +157,12 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true })
 
-  // Clear existing spec files
+  // Clear existing generated spec files while preserving manual docs kept in docs/specs/.
   try {
     for (const f of readdirSync(OUT_DIR)) {
-      if (f.endsWith(".md")) unlinkSync(join(OUT_DIR, f))
+      if (!f.endsWith(".md")) continue
+      if (PRESERVED_MANUAL_FILES.has(f)) continue
+      unlinkSync(join(OUT_DIR, f))
     }
   } catch {}
 

@@ -23,7 +23,7 @@ Field surveyors use the app to fill in the 10 IBP factors, attach photos, link s
 ├── api/            # NestJS backend (REST API + migrations)
 ├── mobile/         # Expo mobile app (iOS + Android)
 ├── infra/          # Local Docker services
-└── specifications/ # Product and technical documents
+└── docs/           # Product, design, technical and reference documents
 ```
 
 ---
@@ -164,12 +164,13 @@ npm --workspace mobile run start
 
 Key documents to get oriented:
 
-- [Technical Architecture V1](specifications/technical/technical-architecture-v1.md)
-- [API Contract V1](specifications/technical/api-contract-v1.md)
-- [Data Contract V1](specifications/technical/data-contract-v1.md)
-- [IBP Form Spec](specifications/epics/ibp_form_spec.md)
+- [Docs Index](docs/README.md)
+- [Technical Architecture V1](docs/technical/technical-architecture-v1.md)
+- [API Contract V1](docs/technical/api-contract-v1.md)
+- [Data Contract V1](docs/technical/data-contract-v1.md)
+- [IBP Form Spec](docs/specs/ibp-form-spec.md)
 
-Detailed feature specs and implementation notes live in `specifications/`.
+Detailed feature specs and implementation notes live in `docs/`.
 
 ---
 
