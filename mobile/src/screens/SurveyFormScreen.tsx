@@ -248,7 +248,7 @@ function FactorTile({
   )
 }
 
-const toAddressLabel = (item: Record<string, unknown>): string => {
+export const toAddressLabel = (item: Record<string, unknown>): string => {
   const streetNumber = typeof item.streetNumber === "string" ? item.streetNumber.trim() : ""
   const street = typeof item.street === "string" ? item.street.trim() : ""
   const postalCode = typeof item.postalCode === "string" ? item.postalCode.trim() : ""

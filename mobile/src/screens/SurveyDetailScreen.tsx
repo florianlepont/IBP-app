@@ -100,7 +100,7 @@ const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   J: "triangle-outline",
 }
 
-const asFiniteNumber = (value: unknown): number | null => {
+export const asFiniteNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string") {
     const parsed = Number(value)
@@ -109,7 +109,7 @@ const asFiniteNumber = (value: unknown): number | null => {
   return null
 }
 
-const resolveDisplayCoordinates = (
+export const resolveDisplayCoordinates = (
   displayLocation?: { lat?: unknown; lng?: unknown } | null,
 ): { lat: number; lng: number } | null => {
   if (!displayLocation) return null
@@ -138,7 +138,8 @@ type HeroMode = "map" | "photo"
 
 const FACTOR_ORDER: FactorKey[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER)
-const isFactorKey = (value: string): value is FactorKey => FACTOR_KEYS.has(value as FactorKey)
+export const isFactorKey = (value: string): value is FactorKey =>
+  FACTOR_KEYS.has(value as FactorKey)
 const DEFAULT_FRANCE_REGION: Region = {
   latitude: 46.603354,
   longitude: 1.888334,
