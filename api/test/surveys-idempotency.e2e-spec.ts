@@ -747,9 +747,9 @@ describe("Surveys idempotency (e2e)", () => {
   })
 
   it("exposes parcel study status on /v1/public/parcels/status", async () => {
-    const runSeed = Date.now() % 800
-    const baseLat = 43.6045 + runSeed / 100000
-    const baseLng = 1.444 + runSeed / 100000
+    const runSeed = Date.now()
+    const baseLat = 43.6045 + (runSeed % 80000) / 10000000
+    const baseLng = 1.444 + (runSeed % 80000) / 10000000
     const email = `e2e-parcel-status-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/auth/login")

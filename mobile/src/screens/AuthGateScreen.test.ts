@@ -66,7 +66,7 @@ describe("AuthGateScreen", () => {
           onApiUrlChange: jest.fn(),
           email: "demo@ibp.local",
           onEmailChange: jest.fn(),
-          password: "demo123",
+          password: "demo1234",
           onPasswordChange: jest.fn(),
           displayName: "",
           onDisplayNameChange: jest.fn(),
@@ -98,7 +98,7 @@ describe("AuthGateScreen", () => {
           onApiUrlChange: jest.fn(),
           email: "new-user@ibp.local",
           onEmailChange: jest.fn(),
-          password: "demo123",
+          password: "demo1234",
           onPasswordChange: jest.fn(),
           displayName: "New User",
           onDisplayNameChange: jest.fn(),
@@ -116,7 +116,7 @@ describe("AuthGateScreen", () => {
 
     const confirmPasswordInput = component!.root.findByProps({ testID: "auth-confirm-password" })
     await act(async () => {
-      confirmPasswordInput.props.onChangeText("demo123")
+      confirmPasswordInput.props.onChangeText("demo1234")
     })
 
     const submitButton = component!.root.findByProps({ testID: "auth-submit" })
