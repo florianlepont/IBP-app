@@ -378,9 +378,7 @@ export function SurveyFormScreen({
   const centerParcelMapsOnLocation = useCallback(
     (location: GpsCaptureResult): void => {
       const nextRegion = buildFocusedMapRegion(location)
-      setMapRegion((current) =>
-        areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion,
-      )
+      setMapRegion((current) => (areRegionsNearlyEqual(current, nextRegion) ? current : nextRegion))
       syncParcelMapsToRegion(nextRegion, 420)
     },
     [syncParcelMapsToRegion],
@@ -1116,7 +1114,12 @@ export function SurveyFormScreen({
               ) : null}
 
               {isResolvingGpsAddress ? (
-                <AppNotice tone="info" icon="navigate-outline" title="Local address" message="Looking up..." />
+                <AppNotice
+                  tone="info"
+                  icon="navigate-outline"
+                  title="Local address"
+                  message="Looking up..."
+                />
               ) : null}
 
               {resolvedGpsAddress ? (
@@ -1345,7 +1348,11 @@ export function SurveyFormScreen({
               >
                 <Text style={screenStyles.secondaryButtonText}>Back</Text>
               </Pressable>
-              <AppButton label={persistLabel} style={screenStyles.primaryButtonWide} onPress={handlePersistSurvey} />
+              <AppButton
+                label={persistLabel}
+                style={screenStyles.primaryButtonWide}
+                onPress={handlePersistSurvey}
+              />
             </View>
           </>
         ) : null}

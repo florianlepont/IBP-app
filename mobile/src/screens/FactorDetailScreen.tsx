@@ -1,12 +1,7 @@
 import { useState } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import {
-  brandColors,
-  brandShadow,
-  brandSpacing,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandColors, brandShadow, brandSpacing, brandTypography } from "../app/brand-tokens"
 import { FACTOR_INPUT_HINTS_BY_FACTOR, FACTOR_TITLES, HELP_BY_FACTOR } from "../app/constants"
 import { FactorField, FactorKey, FactorRetainedScore } from "../app/types"
 import { AppCard } from "../ui/AppCard"

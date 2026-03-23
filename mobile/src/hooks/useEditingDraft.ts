@@ -83,7 +83,13 @@ export function useEditingDraft({
         autosaveTimerRef.current = null
       }
     }
-  }, [editingSurveyId, editingSurveyVisibility, onStatusChange, refreshLocalSurveys, surveyForm.draftInput])
+  }, [
+    editingSurveyId,
+    editingSurveyVisibility,
+    onStatusChange,
+    refreshLocalSurveys,
+    surveyForm.draftInput,
+  ])
 
   const handleOpenCreateSurvey = (): void => {
     if (autosaveTimerRef.current) {
