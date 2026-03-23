@@ -110,7 +110,11 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView
         style={styles.container}
-        edges={surveySync.isAuthenticated && !surveySync.pendingEmailVerification ? ["top", "left", "right"] : ["left", "right"]}
+        edges={
+          surveySync.isAuthenticated && !surveySync.pendingEmailVerification
+            ? ["top", "left", "right"]
+            : ["left", "right"]
+        }
       >
         <View style={styles.appLayout}>
           {!surveySync.isAuthenticated || surveySync.pendingEmailVerification ? (

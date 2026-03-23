@@ -36,7 +36,9 @@ jest.mock("@react-navigation/native-stack", () => {
         children,
       }: {
         name: string
-        children?: ((input: { route: { params: { email: string; devToken?: string } } }) => unknown) | React.ReactNode
+        children?:
+          | ((input: { route: { params: { email: string; devToken?: string } } }) => unknown)
+          | React.ReactNode
       }) => {
         const content =
           typeof children === "function"

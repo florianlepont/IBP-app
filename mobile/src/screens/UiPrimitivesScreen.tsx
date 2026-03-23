@@ -47,8 +47,8 @@ export function UiPrimitivesScreen() {
         <Text style={screenStyles.eyebrow}>UI PRIMITIVES</Text>
         <Text style={screenStyles.heroTitle}>Showcase de la charte actuelle</Text>
         <Text style={screenStyles.heroBody}>
-          Cet ecran sert a visualiser rapidement les primitives, les tokens principaux et leur
-          rendu dans l&apos;app sans passer par plusieurs ecrans metier.
+          Cet ecran sert a visualiser rapidement les primitives, les tokens principaux et leur rendu
+          dans l&apos;app sans passer par plusieurs ecrans metier.
         </Text>
       </AppCard>
 
@@ -106,8 +106,7 @@ export function UiPrimitivesScreen() {
           </View>
         </View>
         <Text style={screenStyles.meta}>
-          Primary = {brandComponentTokens.button.primaryBackground} · Secondary outline =
-          {" "}
+          Primary = {brandComponentTokens.button.primaryBackground} · Secondary outline ={" "}
           {brandComponentTokens.button.secondaryBorder}
         </Text>
       </AppCard>
@@ -160,7 +159,12 @@ export function UiPrimitivesScreen() {
         <AppSectionHeader
           title="Champs"
           subtitle="AppField avec etat standard puis etat erreur."
-          trailing={<AppStatusChip label={hasError ? "Error" : "Idle"} tone={hasError ? "danger" : "success"} />}
+          trailing={
+            <AppStatusChip
+              label={hasError ? "Error" : "Idle"}
+              tone={hasError ? "danger" : "success"}
+            />
+          }
           titleStyle={screenStyles.sectionTitle}
           subtitleStyle={screenStyles.meta}
         />
@@ -226,9 +230,7 @@ export function UiPrimitivesScreen() {
       <View style={screenStyles.cardGrid}>
         <AppCard variant="surface" style={screenStyles.gridCard}>
           <Text style={screenStyles.cardTitle}>Surface</Text>
-          <Text style={screenStyles.cardBody}>
-            Carte elevee claire, bord doux et ombre legere.
-          </Text>
+          <Text style={screenStyles.cardBody}>Carte elevee claire, bord doux et ombre legere.</Text>
         </AppCard>
         <AppCard variant="panelElevated" style={screenStyles.gridCard}>
           <Text style={screenStyles.cardTitle}>Panel Elevated</Text>
@@ -284,8 +286,7 @@ export function UiPrimitivesScreen() {
           ))}
         </View>
         <Text style={screenStyles.meta}>
-          Semantic surfaces: canvas {brandSemanticColors.backgroundCanvas}, elevated
-          {" "}
+          Semantic surfaces: canvas {brandSemanticColors.backgroundCanvas}, elevated{" "}
           {brandSemanticColors.surfaceElevated}, soft {brandSemanticColors.surfaceSoft}.
         </Text>
       </AppCard>

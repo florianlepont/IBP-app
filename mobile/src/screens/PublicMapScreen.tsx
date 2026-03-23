@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native"
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native"
 import MapView, { Marker, Region } from "react-native-maps"
 import { Ionicons } from "@expo/vector-icons"
 import * as Location from "expo-location"
@@ -700,14 +693,12 @@ const screenStyles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 8,
   },
-  reportCancelButton: {
-  },
+  reportCancelButton: {},
   reportCancelButtonText: {
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
-  reportSubmitButton: {
-  },
+  reportSubmitButton: {},
   reportSubmitButtonDisabled: {
     borderColor: "#A6ABA3",
     backgroundColor: "#A6ABA3",

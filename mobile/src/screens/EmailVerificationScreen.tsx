@@ -139,9 +139,7 @@ export function EmailVerificationScreen({
               testID="verify-submit"
             />
 
-            {error ? (
-              <AppNotice tone="danger" message={error} icon="alert-circle-outline" />
-            ) : null}
+            {error ? <AppNotice tone="danger" message={error} icon="alert-circle-outline" /> : null}
             {resendSuccess && !error ? (
               <AppNotice
                 tone="success"

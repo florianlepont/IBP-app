@@ -1,6 +1,7 @@
 jest.mock("react-native", () => {
   const ReactRef = require("react") as typeof import("react")
-  const mockComponent = (name: string) =>
+  const mockComponent =
+    (name: string) =>
     ({ children, ...props }: { children?: React.ReactNode }) =>
       ReactRef.createElement(name, props, children)
 
@@ -21,7 +22,7 @@ jest.mock("react-native", () => {
     Modal: mockComponent("Modal"),
     Platform: {
       OS: "ios",
-      select: <T,>(options: { ios?: T; android?: T; default?: T }): T | undefined =>
+      select: <T>(options: { ios?: T; android?: T; default?: T }): T | undefined =>
         options.ios ?? options.default,
     },
     Pressable: mockComponent("Pressable"),

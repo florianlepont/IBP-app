@@ -91,18 +91,16 @@ describe("UsersService", () => {
 
   it("patches profile fields and sends an email change confirmation when needed", async () => {
     const { service, db, emailService } = buildService()
-    db.query
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({
-        rows: [
-          buildUserRow({
-            display_name: "Algernon",
-            pending_email: "next@example.com",
-            email_change_token: "change-token",
-            email_change_expires_at: new Date(Date.now() + 60_000).toISOString(),
-          }),
-        ],
-      })
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 }).mockResolvedValueOnce({
+      rows: [
+        buildUserRow({
+          display_name: "Algernon",
+          pending_email: "next@example.com",
+          email_change_token: "change-token",
+          email_change_expires_at: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      ],
+    })
 
     const result = await service.patchMe(AUTH_USER, {
       display_name: "Algernon",
