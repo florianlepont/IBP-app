@@ -1,25 +1,19 @@
 import { Controller, Get, Query } from "@nestjs/common"
 import { SurveysService } from "./surveys.service"
+import { PublicMapItemsQueryDto } from "./dtos/public-map-items-query.dto"
+import { PublicParcelStatusesQueryDto } from "./dtos/public-parcel-statuses-query.dto"
 
 @Controller("public")
 export class PublicController {
   constructor(private readonly surveysService: SurveysService) {}
 
   @Get("map-items")
-  async getMapItems(
-    @Query("from") from?: string,
-    @Query("to") to?: string,
-    @Query("region") region?: string,
-  ) {
-    return this.surveysService.getPublicMapItems({ from, to, region })
+  async getMapItems(@Query() query: PublicMapItemsQueryDto) {
+    return this.surveysService.getPublicMapItems(query)
   }
 
   @Get("parcels/status")
-  async getParcelStatuses(
-    @Query("bbox") bbox?: string,
-    @Query("zoom") zoom?: string,
-    @Query("year") year?: string,
-  ) {
-    return this.surveysService.getPublicParcelStatuses({ bbox, zoom, year })
+  async getParcelStatuses(@Query() query: PublicParcelStatusesQueryDto) {
+    return this.surveysService.getPublicParcelStatuses(query)
   }
 }
