@@ -174,48 +174,78 @@ Detailed feature specs and implementation notes live in `docs/`.
 
 ---
 
-## Deployment roadmap
+## Delivery Traceability Snapshot
 
-### Step 1 — Secure the API before production
+Audit baseline: `2026-03-23`.
 
-- [x] Disable `DEBUG_DATA_RESET_ENABLED` in production (default changed to `false`)
-- [x] Disable `AUTH_DEV_EXPOSE_EMAIL_TOKEN` in production (auto-disabled when `NODE_ENV=production`)
-- [ ] Replace `ACCESS_TOKEN_SECRET` and `REFRESH_TOKEN_SECRET` with strong secrets (see `api/.env.production.example`)
-- [ ] Configure SMTP for email confirmation (see `api/.env.production.example` for Brevo)
-- [x] Add rate limiting on auth endpoints (5 req/min on login and register)
-- [x] Restrict CORS to the production domain (`CORS_ORIGIN` variable)
+Status legend:
+- `Delivered`: implemented end-to-end in the current app/API.
+- `Partial`: meaningful implementation exists, but one or more important acceptance criteria are still missing.
+- `Missing`: no meaningful implementation found yet.
 
-### Step 2 — Infrastructure (OVH VPS)
+Notes:
+- This is a working implementation snapshot, not a contractual release checklist.
+- Epic D currently contains duplicate user-story IDs in the source specs (`US-D1`, `US-D2`, `US-D3` each appear twice). The list below preserves the source wording to avoid rewriting spec identifiers here.
+- Epic H is intentionally omitted from this trace because it is explicitly V2 in the current product spec set.
 
-- [ ] Create an OVH VPS (Value, 2 GB RAM, ~€3.50/month)
-- [ ] Install Node.js 20 + PM2 on the server
-- [ ] Install and configure PostgreSQL
-- [ ] Configure OVH Object Storage (S3-compatible) for attachments
-- [ ] Obtain a domain name and configure DNS
-- [ ] Set up HTTPS with Certbot (Let's Encrypt)
-- [ ] Deploy the API via git + `npm run build` + `pm2 start`
+### [Epic A - Access and Security](specs/epic-a-access-and-security.md)
 
-### Step 3 — GDPR & legal
+- `US-A1` `Delivered` - Email/password login, error feedback, and persistent session restore are implemented.
+- `US-A2` `Delivered` - Logout is implemented and returns the app to the auth flow.
+- `US-A3` `Delivered` - Sign up exists with email validation, password rules, auto-login, and email verification handling.
+- `US-A4` `Missing` - No Apple/Google or other third-party login provider is implemented.
+- `US-A5` `Delivered` - Profile editing exists for first name, last name, display name, and profile picture via camera or gallery.
 
-- [ ] Write a privacy policy (CNIL templates for associations)
-- [ ] Write legal notices
-- [ ] Verify account deletion endpoint (right to erasure)
-- [ ] Maintain a data processing register (internal document)
+### [Epic B - Survey Preparation](specs/epic-b-survey-preparation.md)
 
-### Step 4 — Mobile app (stores)
+- `US-B1` `Partial` - Survey list, offline visibility, completion rate, and core filters exist, but parcel/year/version are not surfaced clearly and filtering is still incomplete versus the spec.
+- `US-B2` `Partial` - Survey detail, deadline, completion rate, and edit access for editable drafts exist, but previous parcel surveys, score comparison, and submitted-survey update flow are missing.
+- `US-B3` `Delivered` - Visibility toggle and survey deletion are implemented from survey detail.
+- `US-B4` `Partial` - High-zoom parcel boundaries and studied/not-studied status exist, but opening latest survey/history directly from a studied parcel is not delivered yet.
+- `US-B5` `Partial` - Explore includes the public map, filters, and parcel status layer, but it is still marker-centric and does not yet expose parcel-first analysis/history as described by the spec.
 
-- [ ] Create an Expo EAS account (`eas login`)
-- [ ] Configure `eas.json` for iOS and Android builds
-- [ ] Apple Developer Program ($99/year — required for iOS)
-- [ ] Google Play Console ($25 one-time — required for Android)
-- [ ] Add privacy policy link in the app settings
-- [ ] Production build: `eas build --platform all`
-- [ ] Store submission: `eas submit`
+### [Epic C - IBP Survey Data Entry](specs/epic-c-ibp-survey-data-entry.md)
 
-### Step 5 — Continuous updates
+- `US-C1` `Partial` - Guided flow across factors `A` to `J` exists, but the form model remains simplified compared with the detailed IBP functional spec and some metadata/field fidelity is still missing.
+- `US-C2` `Delivered` - Draft creation, local persistence, offline availability, autosave behavior, and near-expiration warning are in place.
+- `US-C3` `Partial` - Photos can be added, previewed, removed, and synchronized, but the explicit `10 photos max` rule is not clearly enforced in the current code.
+- `US-C4` `Delivered` - Parcel selection by map, multi-parcel linkage, current-location centering, and submit blocking on invalid linkage are implemented.
+- `US-C5` `Partial` - Submit, expiration, read-only state, and automatic synchronization exist, but explicit blocking reasons and the full submission UX expected by the spec are not complete.
+- `US-C6` `Partial` - Contextual pedagogical help exists inside factor detail views, but it remains lightweight compared with the richer help expected by the spec.
+- `US-C7` `Delivered` - Private/public choice exists with `private` as default and later visibility changes from survey detail.
+- `US-C8` `Partial` - Parcel versioning is implemented server-side and surfaced partially, but previous scores/history are not available inside the survey flow as required.
+- `US-C9` `Missing` - No species recognition or suggestion flow exists for Factor A photo capture.
 
-- [ ] Configure EAS Update for JS-only updates (no store re-submission)
-- [ ] Document the deployment process (`git push` → rebuild → `pm2 reload`)
+### [Epic D - Offline and Synchronization](specs/epic-d-offline-and-synchronization.md)
+
+- `US-D1` `Missing` - Offline map mode with downloaded basemap/parcels and explicit offline indicator is not implemented.
+- `US-D1` `Partial` - Offline draft work and queued actions are implemented, but reusable offline cadastral map context is still limited.
+- `US-D2` `Partial` - Automatic synchronization on reconnect is implemented, but the parcel-history downsync expected by comparison views is still missing.
+- `US-D2` `Missing` - Downloading an area for offline use is not implemented.
+- `US-D3` `Partial` - Parcel/version conflict handling exists in the backend and the app can retry or discard, but the conflict UX/details are still thinner than the spec target.
+- `US-D3` `Missing` - Warning when a parcel is not available offline is not implemented.
+- `US-D4` `Missing` - No basemap selector for Satellite/Map switching is implemented.
+
+### [Epic E - Data Quality and Trust](specs/epic-e-data-quality-and-trust.md)
+
+- `US-E1` `Partial` - Survey events and timestamps exist, but the dedicated moderation interface described by the spec is not present.
+- `US-E2` `Partial` - Text search and some filters exist, but parcel/year/version search coverage is incomplete.
+- `US-E3` `Partial` - Suspicious-content reporting exists with required reason and moderator review, but the report entry point is not yet aligned with the spec detail-page flow.
+
+### [Epic F - Participatory Experience and Gamification](specs/epic-f-participatory-experience-and-gamification.md)
+
+- `US-F1` `Delivered` - A France-wide public map of public IBP surveys exists with date/region filters and anonymized public payloads.
+- `US-F2` `Partial` - The contributor profile exists, but points, validated-survey counters, and activity history are not implemented.
+- `US-F3` `Missing` - No leaderboard exists.
+- `US-F4` `Missing` - No badges or milestones system exists.
+- `US-F5` `Missing` - No rare-species scan, scoring, or anti-abuse flow exists.
+
+### [Epic G - IBP Information, Association Visibility and Donation](specs/epic-g-ibp-information-association-visibility-and-donation.md)
+
+- `US-G1` `Partial` - The app includes factor-level educational hints, but not the broader in-app IBP information section required by the spec.
+- `US-G2` `Missing` - No dedicated Etats-Sauvages mission/impact section exists.
+- `US-G3` `Missing` - No donation CTA or donation conversion flow exists.
+
 
 ---
 
