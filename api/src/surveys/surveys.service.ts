@@ -796,6 +796,15 @@ export class SurveysService {
   }> {
     await this.getSurveyForUserOrThrow(surveyId, user.id)
 
+    const countResult = await this.db.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
+      [surveyId],
+    )
+    const currentCount = parseInt(countResult.rows[0]?.count ?? "0", 10)
+    if (currentCount >= 10) {
+      throw new BadRequestException("Survey already has the maximum of 10 attachments")
+    }
+
     if (!body?.mime_type || typeof body.mime_type !== "string") {
       throw new BadRequestException("mime_type is required")
     }
