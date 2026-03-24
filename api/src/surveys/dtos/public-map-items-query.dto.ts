@@ -13,6 +13,6 @@ export class PublicMapItemsQueryDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(8)
+  @MaxLength(64)
   region?: string
 }
