@@ -796,6 +796,15 @@ export class SurveysService {
   }> {
     await this.getSurveyForUserOrThrow(surveyId, user.id)
 
+    const countResult = await this.db.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
+      [surveyId],
+    )
+    const currentCount = parseInt(countResult.rows[0]?.count ?? "0", 10)
+    if (currentCount >= 10) {
+      throw new BadRequestException("Survey already has the maximum of 10 attachments")
+    }
+
     if (!body?.mime_type || typeof body.mime_type !== "string") {
       throw new BadRequestException("mime_type is required")
     }
@@ -1068,9 +1077,15 @@ export class SurveysService {
       filters.push(`submitted_at::date <= $${values.length}::date`)
     }
 
+    let deptCondition = ""
     if (input?.region && input.region.trim().length > 0) {
-      values.push(input.region.trim())
-      filters.push(`region_version = $${values.length}`)
+      values.push(`${input.region.trim().toUpperCase()}%`)
+      deptCondition = `AND EXISTS (
+        SELECT 1 FROM survey_parcels sp2
+        JOIN parcels p2 ON p2.parcel_id = sp2.parcel_id
+        WHERE sp2.survey_id = s.id
+          AND p2.commune_code LIKE $${values.length}
+      )`
     }
 
     const result = await this.db.query<PublicMapDbRow>(
@@ -1087,6 +1102,7 @@ export class SurveysService {
        LEFT JOIN parcels p
          ON p.parcel_id = sp.parcel_id
        WHERE ${filters.map((filter) => `s.${filter}`).join(" AND ")}
+       ${deptCondition}
        GROUP BY s.id, s.region_version, s.scores, s.submitted_at
        ORDER BY s.submitted_at DESC
        LIMIT 500`,
