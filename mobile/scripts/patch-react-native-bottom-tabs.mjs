@@ -37,8 +37,9 @@ const updated = source
   private func configureTransparentAppearance(tabBar: UITabBar, props: TabViewProps) {`,
     `#if !os(macOS)
   private func shouldUseSystemTabBarAppearance(props: TabViewProps) -> Bool {
+    // selectedActiveTintColor is intentionally excluded: it is applied via SwiftUI
+    // .tint() modifier separately and is compatible with Liquid Glass on iOS 26.
     props.barTintColor == nil &&
-      props.selectedActiveTintColor == nil &&
       props.inactiveTintColor == nil &&
       props.fontSize == nil &&
       props.fontFamily == nil &&

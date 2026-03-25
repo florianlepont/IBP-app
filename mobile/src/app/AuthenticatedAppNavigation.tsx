@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react"
-import { Platform, Pressable, ScrollView, View } from "react-native"
+import { Animated, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native"
 import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeBottomTabNavigator } from "@bottom-tabs/react-navigation"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import Constants, { ExecutionEnvironment } from "expo-constants"
+import { BlurView } from "expo-blur"
 import type { SearchBarCommands } from "react-native-screens"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors } from "./brand-tokens"
+import { useAppBottomTabBarHeight } from "./useAppBottomTabBarHeight"
 import { styles } from "./styles"
 import {
   FactorKey,
@@ -111,7 +113,10 @@ const baseStackScreenOptions = {
   headerBackButtonDisplayMode: "minimal" as const,
   contentStyle: { backgroundColor: brandColors.canvas },
   ...(Platform.OS === "ios"
-    ? {}
+    ? {
+        headerTransparent: true,
+        headerBlurEffect: "systemMaterial" as const,
+      }
     : {
         headerStyle: { backgroundColor: brandColors.canvas },
         headerShadowVisible: false,
@@ -170,6 +175,7 @@ const JS_TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMa
 
 const nativeTabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList } }) => ({
   title: TAB_TITLES[route.name],
+  tabBarActiveTintColor: brandColors.forest,
   tabBarIcon: ({ focused }: { focused: boolean }) => {
     if (Platform.OS === "ios") {
       return focused ? IOS_TAB_ICONS[route.name].focused : IOS_TAB_ICONS[route.name].unfocused
@@ -270,6 +276,142 @@ function FloatingSurveyActions({
   )
 }
 
+// ─── Floating search trigger (native nav only) ───────────────────────────────
+
+function SearchFloatingButton({ onPress }: { onPress: () => void }) {
+  const insets = useSafeAreaInsets()
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={[searchFloatStyles.button, { top: insets.top + 12 }]}
+    >
+      <BlurView intensity={60} tint="systemMaterial" style={searchFloatStyles.blur}>
+        <Ionicons name="search-outline" size={18} color={brandColors.forest} />
+      </BlurView>
+    </Pressable>
+  )
+}
+
+const searchFloatStyles = StyleSheet.create({
+  button: {
+    position: "absolute",
+    right: 16,
+    zIndex: 10,
+  },
+  blur: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+})
+
+// ─── Bottom search bar (native nav only) ─────────────────────────────────────
+
+function BottomSearchBar({
+  value,
+  onChangeText,
+  onClose,
+}: {
+  value: string
+  onChangeText: (text: string) => void
+  onClose: () => void
+}) {
+  const tabBarHeight = useAppBottomTabBarHeight()
+  const inputRef = useRef<TextInput>(null)
+  const slideY = useRef(new Animated.Value(80)).current
+
+  useEffect(() => {
+    Animated.spring(slideY, {
+      toValue: 0,
+      useNativeDriver: true,
+      damping: 20,
+      stiffness: 300,
+    }).start(() => inputRef.current?.focus())
+  }, [])
+
+  const handleClose = () => {
+    Keyboard.dismiss()
+    Animated.spring(slideY, {
+      toValue: 80,
+      useNativeDriver: true,
+      damping: 20,
+      stiffness: 300,
+    }).start(onClose)
+  }
+
+  return (
+    <Animated.View
+      style={[
+        bottomSearchStyles.wrapper,
+        { bottom: tabBarHeight, transform: [{ translateY: slideY }] },
+      ]}
+    >
+      <BlurView intensity={80} tint="systemMaterial" style={bottomSearchStyles.blur}>
+        <View style={bottomSearchStyles.field}>
+          <Ionicons name="search" size={15} color="rgba(60,60,67,0.5)" />
+          <TextInput
+            ref={inputRef}
+            style={bottomSearchStyles.input}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder="Search surveys"
+            placeholderTextColor="rgba(60,60,67,0.35)"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+        </View>
+        <Pressable onPress={handleClose} hitSlop={10}>
+          <Text style={bottomSearchStyles.cancel}>Cancel</Text>
+        </Pressable>
+      </BlurView>
+    </Animated.View>
+  )
+}
+
+const bottomSearchStyles = StyleSheet.create({
+  wrapper: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+  },
+  blur: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(0,0,0,0.12)",
+    overflow: "hidden",
+  },
+  field: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(118,118,128,0.12)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  input: {
+    flex: 1,
+    fontSize: 17,
+    color: brandColors.textPrimary,
+    padding: 0,
+  },
+  cancel: {
+    fontSize: 17,
+    color: brandColors.forest,
+  },
+})
+
 // ─── Surveys stack ────────────────────────────────────────────────────────────
 
 type SurveysTabNavigatorProps = Omit<
@@ -336,32 +478,7 @@ function SurveysTabNavigator({
           headerLargeTitle: false,
           ...(useNativeNav
             ? {
-                headerSearchBarOptions: {
-                  ref: searchBarRef,
-                  placeholder: "Search surveys",
-                  autoCapitalize: "none",
-                  hideWhenScrolling: false,
-                  hideNavigationBar: false,
-                  obscureBackground: false,
-                  onChangeText: (event) => surveyList.setSurveyQuery(event.nativeEvent.text),
-                  onCancelButtonPress: () => {
-                    surveyList.setSurveyQuery("")
-                    setIsSurveySearchOpen(false)
-                  },
-                  onClose: () => {
-                    surveyList.setSurveyQuery("")
-                    setIsSurveySearchOpen(false)
-                  },
-                },
-                headerRight: () => (
-                  <HeaderIconButton
-                    icon="search-outline"
-                    onPress={() => {
-                      setIsSurveySearchOpen(true)
-                      requestAnimationFrame(() => searchBarRef.current?.focus())
-                    }}
-                  />
-                ),
+                headerShown: false,
               }
             : {
                 headerShown: isSurveySearchActive,
@@ -421,6 +538,19 @@ function SurveysTabNavigator({
                 navigation.navigate("surveyDetail")
               }}
             />
+            {useNativeNav && !isSurveySearchOpen && (
+              <SearchFloatingButton onPress={() => setIsSurveySearchOpen(true)} />
+            )}
+            {useNativeNav && isSurveySearchOpen && (
+              <BottomSearchBar
+                value={surveyList.surveyQuery}
+                onChangeText={surveyList.setSurveyQuery}
+                onClose={() => {
+                  surveyList.setSurveyQuery("")
+                  setIsSurveySearchOpen(false)
+                }}
+              />
+            )}
             {!useNativeNav && (
               <FloatingSurveyActions
                 searchOpen={isSurveySearchOpen}
