@@ -36,7 +36,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - .env.freebox
+      - /home/freebox/.env.freebox
     environment:
       NODE_ENV: production
       PORT: 3000
