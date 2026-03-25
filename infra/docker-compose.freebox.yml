@@ -45,13 +45,6 @@ services:
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: ibp-tunnel
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
-    depends_on:
-      - api
 
 volumes:
   ibp_postgres_data:
