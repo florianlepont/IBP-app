@@ -115,11 +115,26 @@ jobs:
         run: npm run test:e2e
         working-directory: api
 
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'api/**'
+
   build:
     name: Build & push Docker image
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [quality, test-unit-api, test-unit-mobile, test-e2e-api]
+    needs: [quality, test-unit-api, test-unit-mobile, test-e2e-api, changes]
+    if: needs.changes.outputs.api == 'true'
     permissions:
       contents: read
       packages: write
