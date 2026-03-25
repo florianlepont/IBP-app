@@ -26,7 +26,8 @@ jobs:
         run: |
           docker compose \
             -f infra/docker-compose.freebox.yml \
-            up -d --no-deps --pull never api
+            --env-file /home/freebox/.env.freebox \
+            up -d --no-deps --pull never api postgres minio
 
       - name: Health check
         run: |
