@@ -16,19 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pull base image
+      - name: Pull API image
         run: |
-          for i in 1 2 3; do
-            docker pull node:22-alpine && break
-            echo "Pull attempt $i failed, retrying..."
-            sleep 10
-          done
-
-      - name: Build image (arm64 native)
-        env:
-          DOCKER_BUILDKIT: 0
-        run: |
-          docker build -t ibp-api:latest ./api
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull ghcr.io/florianlepont/ibp-app:latest
+          docker tag ghcr.io/florianlepont/ibp-app:latest ibp-api:latest
 
       - name: Restart API container
         run: |
