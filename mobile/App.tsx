@@ -9,17 +9,31 @@ import { useSurveyForm } from "./src/hooks/useSurveyForm"
 import { useSurveyList } from "./src/hooks/useSurveyList"
 import { usePublicMapExplorer } from "./src/hooks/usePublicMapExplorer"
 import { useSurveySync } from "./src/hooks/useSurveySync"
-import { useAuthenticationState } from "./src/hooks/useAuthenticationState"
 import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
 import { PreAuthNavigator } from "./src/app/PreAuthNavigator"
+import { loadStoredApiUrl, saveStoredApiUrl } from "./src/app/api-url-storage"
+import { DEFAULT_API_URL } from "./src/app/constants"
 
 export default function App() {
-  const auth = useAuthenticationState()
+  const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL)
   const [formMode, setFormMode] = useState<FormMode>("create")
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>("summary")
+
+  useEffect(() => {
+    void loadStoredApiUrl()
+      .then((stored) => {
+        if (stored) setApiUrl(stored)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const handleApiUrlChange = (value: string): void => {
+    setApiUrl(value)
+    void saveStoredApiUrl(value).catch(() => undefined)
+  }
 
   const surveyForm = useSurveyForm()
   const surveyList = useSurveyList()
@@ -45,10 +59,7 @@ export default function App() {
   }
 
   const surveySync = useSurveySync({
-    apiUrl: auth.apiUrl,
-    email: auth.email,
-    password: auth.password,
-    displayName: auth.displayName,
+    apiUrl,
     surveys: surveyList.surveys,
     selectedSurveyId: surveyList.selectedSurveyId,
     surveyDetailTab,
@@ -64,7 +75,7 @@ export default function App() {
   const setStatus = surveySync.setStatus
 
   const publicMapExplorer = usePublicMapExplorer({
-    apiUrl: auth.apiUrl,
+    apiUrl,
     onStatusChange: setStatus,
   })
 
@@ -110,37 +121,21 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView
         style={styles.container}
-        edges={
-          surveySync.isAuthenticated && !surveySync.pendingEmailVerification
-            ? ["top", "left", "right"]
-            : ["left", "right"]
-        }
+        edges={surveySync.isAuthenticated ? ["top", "left", "right"] : ["left", "right"]}
       >
         <View style={styles.appLayout}>
-          {!surveySync.isAuthenticated || surveySync.pendingEmailVerification ? (
+          {!surveySync.isAuthenticated ? (
             <PreAuthNavigator
-              apiUrl={auth.apiUrl}
-              onApiUrlChange={auth.handleApiUrlChange}
-              email={auth.email}
-              onEmailChange={auth.setEmail}
-              password={auth.password}
-              onPasswordChange={auth.setPassword}
-              displayName={auth.displayName}
-              onDisplayNameChange={auth.setDisplayName}
+              apiUrl={apiUrl}
+              onApiUrlChange={handleApiUrlChange}
               onLogin={surveySync.handleLogin}
-              onRegister={surveySync.handleRegister}
               status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
               logoSource={require("./assets/logo-app.png")}
               heroMartenSource={require("./assets/auth/marten.png")}
-              pendingEmailVerification={surveySync.pendingEmailVerification}
-              devVerificationToken={surveySync.devVerificationToken}
-              onVerifyEmail={surveySync.handleVerifyEmail}
-              onResendVerification={surveySync.handleResendVerification}
-              onCancelEmailVerification={surveySync.handleCancelEmailVerification}
             />
           ) : (
             <AuthenticatedAppNavigation
-              apiUrl={auth.apiUrl}
+              apiUrl={apiUrl}
               formMode={formMode}
               editingSurveyId={editingSurveyId}
               surveyDetailTab={surveyDetailTab}
@@ -159,7 +154,7 @@ export default function App() {
               onSaveSurveyEdits={editing.handleSaveSurveyEdits}
               onCreateDraft={editing.handleCreateDraft}
               onCaptureGpsLocation={gpsCapture.handleCaptureGpsLocation}
-              onApiUrlChange={auth.handleApiUrlChange}
+              onApiUrlChange={handleApiUrlChange}
               onCloseSurveyDetailSelection={closeSurveyDetailSelection}
             />
           )}

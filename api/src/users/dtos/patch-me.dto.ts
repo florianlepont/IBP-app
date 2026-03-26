@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
+import { IsOptional, IsString, MaxLength, MinLength } from "class-validator"
 
 export class PatchMeDto {
   @IsOptional()
@@ -16,10 +16,6 @@ export class PatchMeDto {
   @MinLength(1)
   @MaxLength(100)
   display_name?: string
-
-  @IsOptional()
-  @IsEmail()
-  email?: string
 
   @IsOptional()
   @IsString()

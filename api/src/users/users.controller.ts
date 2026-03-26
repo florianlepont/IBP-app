@@ -5,7 +5,6 @@ import {
   Get,
   HttpCode,
   Patch,
-  Post,
   Put,
   Res,
   StreamableFile,
@@ -21,7 +20,6 @@ import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { UsersService } from "./users.service"
 import { PatchMeDto } from "./dtos/patch-me.dto"
-import { ConfirmEmailChangeDto } from "./dtos/confirm-email-change.dto"
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -36,12 +34,6 @@ export class UsersController {
   @Patch("me")
   patchMe(@CurrentUser() user: AuthenticatedUser, @Body() body: PatchMeDto) {
     return this.usersService.patchMe(user, body)
-  }
-
-  @Post("me/email/confirm")
-  @HttpCode(200)
-  confirmEmailChange(@CurrentUser() user: AuthenticatedUser, @Body() body: ConfirmEmailChangeDto) {
-    return this.usersService.confirmEmailChange(user, body.token ?? "")
   }
 
   @Put("me/profile-picture")
