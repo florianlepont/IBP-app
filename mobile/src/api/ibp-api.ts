@@ -62,6 +62,20 @@ export async function patchMyProfile(
   })
 }
 
+export async function changeMyEmail(
+  apiUrl: string,
+  accessToken: string,
+  email: string,
+): Promise<void> {
+  return apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/me/email",
+    method: "PATCH",
+    token: accessToken,
+    json: { email },
+  })
+}
+
 export async function uploadMyProfilePicture(
   apiUrl: string,
   accessToken: string,

@@ -6,6 +6,7 @@ import {
 import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import { dirname, join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
+import { Auth0ManagementService } from "../auth/auth0-management.service"
 import { extensionFromMime } from "../common/file.utils"
 import { DatabaseService } from "../database/database.service"
 
@@ -37,7 +38,10 @@ export type PatchMeBody = {
 export class UsersService {
   private readonly uploadsRootDir: string
 
-  constructor(private readonly db: DatabaseService) {
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly auth0Management: Auth0ManagementService,
+  ) {
     this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
   }
 
@@ -235,6 +239,21 @@ export class UsersService {
     )
 
     return result.rows[0] ?? null
+  }
+
+  async changeEmail(user: AuthenticatedUser, newEmail: string): Promise<void> {
+    if (newEmail === user.email) {
+      throw new BadRequestException("New email is the same as current email")
+    }
+
+    // Update on Auth0 first (sends verification email)
+    await this.auth0Management.updateEmail(user.auth0_sub, newEmail)
+
+    // Update in our DB
+    await this.db.query(`UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2`, [
+      newEmail,
+      user.id,
+    ])
   }
 
   private storagePathForKey(storageKey: string): string {

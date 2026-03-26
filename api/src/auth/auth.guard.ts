@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common"
 import { Request } from "express"
 import * as jwt from "jsonwebtoken"
-import jwksClient from "jwks-rsa"
+import { JwksClient } from "jwks-rsa"
 import { DatabaseService } from "../database/database.service"
 import { AuthenticatedUser } from "./auth.types"
 
@@ -10,10 +10,10 @@ const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE ?? ""
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly jwks: ReturnType<typeof jwksClient>
+  private readonly jwks: JwksClient
 
   constructor(private readonly db: DatabaseService) {
-    this.jwks = jwksClient({
+    this.jwks = new JwksClient({
       jwksUri: `https://${AUTH0_DOMAIN}/.well-known/jwks.json`,
       cache: true,
       cacheMaxAge: 10 * 60 * 1000,
@@ -35,7 +35,8 @@ export class AuthGuard implements CanActivate {
       const user = await this.getOrProvisionUser(payload, token)
       request.user = user
       return true
-    } catch {
+    } catch (err) {
+      console.error("[AuthGuard] Token validation failed:", err)
       throw new UnauthorizedException()
     }
   }
@@ -75,7 +76,7 @@ export class AuthGuard implements CanActivate {
     if (!auth0Sub) throw new Error("Missing sub claim")
 
     const existing = await this.db.query<AuthenticatedUser>(
-      `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url
+      `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
        FROM users WHERE auth0_sub = $1`,
       [auth0Sub],
     )
@@ -84,15 +85,28 @@ export class AuthGuard implements CanActivate {
       return existing.rows[0]
     }
 
-    // First login: fetch user info from Auth0 and create DB record
+    // First login: fetch user info from Auth0 and create or link DB record
     const userInfo = await this.fetchUserInfo(rawToken)
     const email = userInfo.email ?? `user+${auth0Sub.replace(/[^a-zA-Z0-9]/g, "")}@unknown`
     const displayName = userInfo.nickname ?? userInfo.name ?? email.split("@")[0]
 
+    // Check if a user with this email already exists (migration case)
+    const byEmail = await this.db.query<AuthenticatedUser>(
+      `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url
+       FROM users WHERE email = $1`,
+      [email],
+    )
+
+    if (byEmail.rows.length > 0) {
+      // Link existing user to Auth0
+      await this.db.query(`UPDATE users SET auth0_sub = $1 WHERE email = $2`, [auth0Sub, email])
+      return byEmail.rows[0]
+    }
+
     const inserted = await this.db.query<AuthenticatedUser>(
       `INSERT INTO users (id, auth0_sub, email, display_name, first_name, last_name, role)
        VALUES (gen_random_uuid(), $1, $2, $3, '', '', 'contributor')
-       RETURNING id, email, role, first_name, last_name, display_name, profile_picture_url`,
+       RETURNING id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url`,
       [auth0Sub, email, displayName],
     )
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native"
+import { Image, Linking, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { BlurView } from "expo-blur"
 import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
@@ -16,6 +16,9 @@ type UpdateProfileInput = {
   display_name: string
 }
 
+const AUTH0_RESET_PASSWORD_URL =
+  "https://dev-zocy4q27tkkmjkmd.eu.auth0.com/u/reset-password/request/Username-Password-Authentication"
+
 type AccountScreenProps = {
   accessToken: string
   currentUser: AuthUser | null
@@ -23,6 +26,7 @@ type AccountScreenProps = {
   profileUpdating: boolean
   apiUrl: string
   onSaveProfile: (input: UpdateProfileInput) => Promise<void>
+  onChangeEmail: (newEmail: string) => Promise<void>
   onPickProfilePictureFromLibrary: () => Promise<void>
   onTakeProfilePictureFromCamera: () => Promise<void>
   onRemoveProfilePicture: () => Promise<void>
@@ -84,6 +88,7 @@ export function AccountScreen({
   profileUpdating,
   apiUrl,
   onSaveProfile,
+  onChangeEmail,
   onPickProfilePictureFromLibrary,
   onTakeProfilePictureFromCamera,
   onRemoveProfilePicture,
@@ -97,6 +102,8 @@ export function AccountScreen({
   const [displayName, setDisplayName] = useState("")
   const [photoMenuVisible, setPhotoMenuVisible] = useState(false)
   const [photoMenuAnchor, setPhotoMenuAnchor] = useState<PhotoMenuAnchor | null>(null)
+  const [emailEditing, setEmailEditing] = useState(false)
+  const [newEmail, setNewEmail] = useState("")
 
   useEffect(() => {
     setFirstName(currentUser?.first_name ?? "")
@@ -383,6 +390,59 @@ export function AccountScreen({
             autoCapitalize="words"
           />
 
+          {emailEditing ? (
+            <View style={styles.emailEditBlock}>
+              <AppField
+                label="New email"
+                value={newEmail}
+                onChangeText={setNewEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                autoFocus
+                containerStyle={styles.fieldGroup}
+                labelStyle={styles.fieldLabel}
+                inputStyle={styles.fieldInput}
+              />
+              <View style={styles.emailEditActions}>
+                <AppButton
+                  label="Cancel"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => { setEmailEditing(false); setNewEmail("") }}
+                />
+                <AppButton
+                  label={profileUpdating ? "Saving..." : "Save email"}
+                  size="sm"
+                  disabled={profileUpdating || !newEmail.includes("@")}
+                  onPress={() => void onChangeEmail(newEmail).then(() => { setEmailEditing(false); setNewEmail("") })}
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.emailRow}>
+              <View style={styles.emailInfo}>
+                <Text style={styles.emailLabel}>Email</Text>
+                <View style={styles.emailValueRow}>
+                  <Ionicons name="lock-closed-outline" size={13} color={brandColors.textSecondary} />
+                  <Text style={styles.emailValue}>{currentUser?.email ?? "—"}</Text>
+                </View>
+              </View>
+              <Pressable onPress={() => { setNewEmail(currentUser?.email ?? ""); setEmailEditing(true) }}>
+                <Text style={styles.emailManageLink}>Change →</Text>
+              </Pressable>
+            </View>
+          )}
+
+          <Pressable
+            style={styles.passwordRow}
+            onPress={() => void Linking.openURL(AUTH0_RESET_PASSWORD_URL)}
+          >
+            <Ionicons name="key-outline" size={15} color={brandColors.forest} />
+            <Text style={styles.passwordLink}>Change password</Text>
+            <Ionicons name="open-outline" size={13} color={brandColors.textSecondary} />
+          </Pressable>
+
           <AppButton
             label={profileUpdating ? "Saving profile..." : "Save profile"}
             leadingIcon={profileUpdating ? "hourglass-outline" : "save-outline"}
@@ -588,6 +648,53 @@ const styles = StyleSheet.create({
   halfField: {
     flex: 1,
     minWidth: 140,
+  },
+  emailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  emailInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  emailLabel: {
+    ...brandTypography.label,
+    color: brandColors.forest,
+  },
+  emailValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  emailValue: {
+    ...brandTypography.sectionBody,
+    color: brandColors.textSecondary,
+  },
+  emailManageLink: {
+    ...brandTypography.meta,
+    color: brandColors.forest,
+    fontWeight: "600",
+  },
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  passwordLink: {
+    flex: 1,
+    ...brandTypography.sectionBody,
+    color: brandColors.forest,
+  },
+  emailEditBlock: {
+    gap: 10,
+  },
+  emailEditActions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
   },
   fieldGroup: {
     gap: 6,

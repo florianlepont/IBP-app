@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Platform, Pressable, ScrollView, View } from "react-native"
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native"
 import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -534,12 +534,14 @@ function AccountTabNavigator({
         })}
       >
         {() => (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
           <ScrollView
             style={styles.mainScroll}
             contentContainerStyle={styles.content}
-            scrollEnabled={false}
-            bounces={false}
-            alwaysBounceVertical={false}
+            keyboardShouldPersistTaps="handled"
           >
             <AccountScreen
               accessToken={surveySync.accessToken}
@@ -548,12 +550,14 @@ function AccountTabNavigator({
               profileUpdating={surveySync.profileUpdating}
               apiUrl={apiUrl}
               onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
+              onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
               onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
               onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
               onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
               onLogout={surveySync.handleLogout}
             />
           </ScrollView>
+          </KeyboardAvoidingView>
         )}
       </AccountStack.Screen>
       <AccountStack.Screen name="settings" options={{ title: "Settings" }}>
