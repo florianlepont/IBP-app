@@ -107,3 +107,23 @@ Acceptance criteria
 - Profile picture upload supports camera and gallery selection.
 
 - Display name is used in community surfaces (for example leaderboard) while keeping personal identity controls.
+
+### US-A6 - Forgot Password
+
+**Release:** MVP
+
+A contributor can reset their password from the login screen by receiving a secure, single-use link by email, valid for 24 hours.
+
+As a contributor, I want to reset my password from the login screen so that I can regain access to my account if I have forgotten it.
+
+Acceptance criteria
+
+- A "Forgot password?" link is visible on the login screen.
+
+- After entering my email address, I receive an email containing a secure reset link.
+
+- The reset link expires after 24 hours and is single-use.
+
+- If the email address is not recognised, a message informs me.
+
+- After a successful reset, I am redirected to the login screen.
