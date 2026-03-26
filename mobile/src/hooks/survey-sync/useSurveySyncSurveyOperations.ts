@@ -16,7 +16,7 @@ import {
   syncPending,
   updateSurveyVisibility,
 } from "../../storage"
-import { AUTH_REQUIRED_ERROR } from "../useAuthSession"
+import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
 import { formatSubmitReadinessError, guessMimeType, isUnauthorizedResultMessage } from "./utils"
 
 type UseSurveySyncSurveyOperationsParams = {

@@ -4,16 +4,13 @@ import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from "../app/t
 import { loadSurveyDetail, loadSurveyEvents, resetIbpData, resetUserData } from "../api/ibp-api"
 import { clearLocalIbpData, LocalSurvey } from "../storage"
 import { createInitialOperationStatus, updateOperationStatus } from "./operation-status"
-import { AUTH_REQUIRED_ERROR, useAuthSession } from "./useAuthSession"
+import { AUTH_REQUIRED_ERROR, useAuth0Session } from "./useAuth0Session"
 import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
 import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
 import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
 
 type UseSurveySyncParams = {
   apiUrl: string
-  email: string
-  password: string
-  displayName: string
   surveys: LocalSurvey[]
   selectedSurveyId: string | null
   surveyDetailTab: SurveyDetailTab
@@ -26,9 +23,6 @@ type UseSurveySyncParams = {
 
 export function useSurveySync({
   apiUrl,
-  email,
-  password,
-  displayName,
   surveys,
   selectedSurveyId,
   surveyDetailTab,
@@ -92,11 +86,8 @@ export function useSurveySync({
     handleCancelEmailVerification,
     handleVerifyEmail,
     handleResendVerification,
-  } = useAuthSession({
+  } = useAuth0Session({
     apiUrl,
-    email,
-    password,
-    displayName,
     reportStatus,
     onSessionCleared: clearSurveySessionState,
   })
@@ -104,7 +95,6 @@ export function useSurveySync({
   const {
     profileUpdating,
     handleUpdateProfile,
-    handleConfirmEmailChange,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,
@@ -395,7 +385,6 @@ export function useSurveySync({
     handleResendVerification,
     handleLoadMyProfile,
     handleUpdateProfile,
-    handleConfirmEmailChange,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,

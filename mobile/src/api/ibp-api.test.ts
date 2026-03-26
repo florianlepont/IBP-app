@@ -5,7 +5,6 @@ jest.mock("./client", () => ({
 }))
 
 import {
-  confirmMyEmail,
   createSurveyReport,
   deleteMyProfilePicture,
   fetchPublicMapItems,
@@ -13,94 +12,16 @@ import {
   getMyProfile,
   loadSurveyDetail,
   loadSurveyEvents,
-  loginWithCredentials,
-  logoutSession,
   patchMyProfile,
-  refreshAuthTokens,
-  registerWithCredentials,
-  resendVerificationEmail,
   resetIbpData,
   resetUserData,
   uploadMyProfilePicture,
-  verifyEmail,
 } from "./ibp-api"
 
 describe("ibp-api", () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockApiRequest.mockResolvedValue({})
-  })
-
-  it("builds auth requests with the expected payloads", async () => {
-    await loginWithCredentials("https://api.example.com", "user@example.com", "secret", {
-      createIfMissing: false,
-    })
-    await registerWithCredentials("https://api.example.com", "user@example.com", "secret", "User")
-    await refreshAuthTokens("https://api.example.com", "refresh-token")
-    await verifyEmail("https://api.example.com", "verify-token")
-    await resendVerificationEmail("https://api.example.com", "user@example.com")
-    await logoutSession("https://api.example.com", "access-token")
-
-    expect(mockApiRequest.mock.calls).toEqual([
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/auth/login",
-          method: "POST",
-          json: {
-            email: "user@example.com",
-            password: "secret",
-            create_if_missing: false,
-          },
-        },
-      ],
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/auth/register",
-          method: "POST",
-          json: {
-            email: "user@example.com",
-            password: "secret",
-            display_name: "User",
-          },
-        },
-      ],
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/auth/refresh",
-          method: "POST",
-          json: { refresh_token: "refresh-token" },
-        },
-      ],
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/auth/verify-email",
-          method: "POST",
-          json: { token: "verify-token" },
-          expectJson: false,
-        },
-      ],
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/auth/resend-verification",
-          method: "POST",
-          json: { email: "user@example.com" },
-        },
-      ],
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/auth/logout",
-          method: "POST",
-          token: "access-token",
-          expectJson: false,
-        },
-      ],
-    ])
   })
 
   it("builds authenticated profile and debug requests", async () => {
@@ -111,10 +32,8 @@ describe("ibp-api", () => {
       first_name: "Flo",
       last_name: "Lepont",
       display_name: "Algernon",
-      email: "florian@example.com",
       profile_picture_url: null,
     })
-    await confirmMyEmail("https://api.example.com", "access-token", "confirm-token")
     await uploadMyProfilePicture("https://api.example.com", "access-token", formData)
     await deleteMyProfilePicture("https://api.example.com", "access-token")
     await resetIbpData("https://api.example.com", "access-token")
@@ -143,18 +62,8 @@ describe("ibp-api", () => {
             first_name: "Flo",
             last_name: "Lepont",
             display_name: "Algernon",
-            email: "florian@example.com",
             profile_picture_url: null,
           },
-        },
-      ],
-      [
-        {
-          baseUrl: "https://api.example.com",
-          path: "/me/email/confirm",
-          method: "POST",
-          token: "access-token",
-          json: { token: "confirm-token" },
         },
       ],
       [

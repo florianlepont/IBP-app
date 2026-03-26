@@ -1,4 +1,30 @@
 PODS:
+  - A0Auth0 (5.4.0):
+    - Auth0 (= 2.16.2)
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - Auth0 (2.16.2):
+    - JWTDecode (= 3.3.0)
+    - SimpleKeychain (= 1.3.0)
   - EXConstants (18.0.13):
     - ExpoModulesCore
   - EXImageLoader (6.0.0):
@@ -76,6 +102,7 @@ PODS:
   - hermes-engine (0.81.5):
     - hermes-engine/Pre-built (= 0.81.5)
   - hermes-engine/Pre-built (0.81.5)
+  - JWTDecode (3.3.0)
   - RCTDeprecation (0.81.5)
   - RCTRequired (0.81.5)
   - RCTTypeSafety (0.81.5):
@@ -1845,9 +1872,11 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - SimpleKeychain (1.3.0)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
+  - A0Auth0 (from `../../node_modules/react-native-auth0`)
   - EXConstants (from `../../node_modules/expo-constants/ios`)
   - EXImageLoader (from `../../node_modules/expo-image-loader/ios`)
   - Expo (from `../../node_modules/expo`)
@@ -1935,7 +1964,15 @@ DEPENDENCIES:
   - RNScreens (from `../../node_modules/react-native-screens`)
   - Yoga (from `../../node_modules/react-native/ReactCommon/yoga`)
 
+SPEC REPOS:
+  trunk:
+    - Auth0
+    - JWTDecode
+    - SimpleKeychain
+
 EXTERNAL SOURCES:
+  A0Auth0:
+    :path: "../../node_modules/react-native-auth0"
   EXConstants:
     :path: "../../node_modules/expo-constants/ios"
   EXImageLoader:
@@ -2109,6 +2146,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  A0Auth0: 71c7977feaed4fca1146a34302589a978983707e
+  Auth0: f08ad1b74d49ffe806175845ef326d9a7674b34c
   EXConstants: fce59a631a06c4151602843667f7cfe35f81e271
   EXImageLoader: 189e3476581efe3ad4d1d3fb4735b7179eb26f05
   Expo: aadbcc8c6c14ff3105a9154f1683cb1424ff0d2a
@@ -2125,6 +2164,7 @@ SPEC CHECKSUMS:
   ExpoSQLite: 7eedbe476870a5f18d6b89c817c4ac6f299830ad
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
+  JWTDecode: 1ca6f765844457d0dd8690436860fecee788f631
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990
   RCTRequired: 8f3cfc90cc25cf6e420ddb3e7caaaabc57df6043
   RCTTypeSafety: 16a4144ca3f959583ab019b57d5633df10b5e97c
@@ -2193,6 +2233,7 @@ SPEC CHECKSUMS:
   ReactNativeDependencies: 71ce9c28beb282aa720ea7b46980fff9669f428a
   RNGestureHandler: 2914750df066d89bf9d8f48a10ad5f0051108ac3
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
+  SimpleKeychain: 9c0f3ca8458fed74e01db864d181c5cbe278603e
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
 
 PODFILE CHECKSUM: 6a7083c4f27d134f6754e98cfc376dba404ae15a

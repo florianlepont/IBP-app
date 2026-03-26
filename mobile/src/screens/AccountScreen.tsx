@@ -7,7 +7,6 @@ import { AuthUser } from "../app/types"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
-import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip } from "../ui/AppStatusChip"
 
@@ -15,7 +14,6 @@ type UpdateProfileInput = {
   first_name: string
   last_name: string
   display_name: string
-  email: string
 }
 
 type AccountScreenProps = {
@@ -28,7 +26,6 @@ type AccountScreenProps = {
   onPickProfilePictureFromLibrary: () => Promise<void>
   onTakeProfilePictureFromCamera: () => Promise<void>
   onRemoveProfilePicture: () => Promise<void>
-  onConfirmEmailChange: (token: string) => Promise<void>
   onLogout: () => Promise<void>
 }
 
@@ -41,7 +38,6 @@ function ProfileField({
   placeholder,
   autoCapitalize,
   autoCorrect,
-  keyboardType,
 }: {
   label: string
   value: string
@@ -49,7 +45,6 @@ function ProfileField({
   placeholder?: string
   autoCapitalize?: "none" | "sentences" | "words" | "characters"
   autoCorrect?: boolean
-  keyboardType?: "default" | "email-address"
 }) {
   return (
     <AppField
@@ -59,7 +54,6 @@ function ProfileField({
       placeholder={placeholder}
       autoCapitalize={autoCapitalize}
       autoCorrect={autoCorrect}
-      keyboardType={keyboardType}
       containerStyle={styles.fieldGroup}
       labelStyle={styles.fieldLabel}
       inputStyle={styles.fieldInput}
@@ -93,7 +87,6 @@ export function AccountScreen({
   onPickProfilePictureFromLibrary,
   onTakeProfilePictureFromCamera,
   onRemoveProfilePicture,
-  onConfirmEmailChange,
   onLogout,
 }: AccountScreenProps) {
   const avatarButtonRef = useRef<View | null>(null)
@@ -102,8 +95,6 @@ export function AccountScreen({
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [displayName, setDisplayName] = useState("")
-  const [profileEmail, setProfileEmail] = useState("")
-  const [emailConfirmToken, setEmailConfirmToken] = useState("")
   const [photoMenuVisible, setPhotoMenuVisible] = useState(false)
   const [photoMenuAnchor, setPhotoMenuAnchor] = useState<PhotoMenuAnchor | null>(null)
 
@@ -111,8 +102,6 @@ export function AccountScreen({
     setFirstName(currentUser?.first_name ?? "")
     setLastName(currentUser?.last_name ?? "")
     setDisplayName(currentUser?.display_name ?? "")
-    setProfileEmail(currentUser?.email ?? "")
-    setEmailConfirmToken(currentUser?.email_change_token_dev ?? "")
   }, [currentUser])
 
   useEffect(() => {
@@ -144,15 +133,13 @@ export function AccountScreen({
     const baseFirstName = (currentUser?.first_name ?? "").trim()
     const baseLastName = (currentUser?.last_name ?? "").trim()
     const baseDisplayName = (currentUser?.display_name ?? "").trim()
-    const baseEmail = (currentUser?.email ?? "").trim().toLowerCase()
 
     return (
       firstName.trim() !== baseFirstName ||
       lastName.trim() !== baseLastName ||
-      displayName.trim() !== baseDisplayName ||
-      profileEmail.trim().toLowerCase() !== baseEmail
+      displayName.trim() !== baseDisplayName
     )
-  }, [currentUser, firstName, lastName, displayName, profileEmail])
+  }, [currentUser, firstName, lastName, displayName])
 
   const heroName =
     displayName.trim() ||
@@ -337,9 +324,6 @@ export function AccountScreen({
               <Text style={styles.identityMeta}>{heroSubtitle}</Text>
               <View style={styles.heroChipRow}>
                 <AppStatusChip label={roleLabel} />
-                {currentUser?.email_change_required ? (
-                  <AppStatusChip label="Email pending" tone="warning" />
-                ) : null}
               </View>
             </View>
           </View>
@@ -398,15 +382,6 @@ export function AccountScreen({
             placeholder="Field identity shown to others"
             autoCapitalize="words"
           />
-          <ProfileField
-            label="Email"
-            value={profileEmail}
-            onChangeText={setProfileEmail}
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-          />
 
           <AppButton
             label={profileUpdating ? "Saving profile..." : "Save profile"}
@@ -416,52 +391,12 @@ export function AccountScreen({
                 first_name: firstName,
                 last_name: lastName,
                 display_name: displayName,
-                email: profileEmail,
               })
             }
             disabled={profileUpdating || !isProfileDirty}
             size="lg"
           />
         </AppCard>
-
-        {currentUser?.email_change_required ? (
-          <AppCard
-            variant="panelElevated"
-            padding={14}
-            style={[styles.panel, styles.pendingEmailPanel]}
-          >
-            <AppSectionHeader
-              title="Confirm pending email"
-              subtitle="A confirmation step is required before the new email becomes active on the account."
-              trailing={<AppStatusChip label="Pending" tone="warning" />}
-              titleStyle={styles.sectionTitle}
-              subtitleStyle={styles.sectionBody}
-            />
-
-            <AppNotice
-              tone="warning"
-              icon="mail-open-outline"
-              message={`Pending email: ${currentUser.email_change_pending_to ?? "unknown"}`}
-              style={styles.pendingEmailNotice}
-            />
-
-            <ProfileField
-              label="Confirmation token"
-              value={emailConfirmToken}
-              onChangeText={setEmailConfirmToken}
-              placeholder="Paste confirmation token"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <AppButton
-              label="Confirm pending email"
-              leadingIcon="checkmark-circle-outline"
-              onPress={() => void onConfirmEmailChange(emailConfirmToken)}
-              disabled={profileUpdating || emailConfirmToken.trim().length === 0}
-            />
-          </AppCard>
-        ) : null}
       </View>
     </>
   )
@@ -635,9 +570,6 @@ const styles = StyleSheet.create({
   panel: {
     gap: 10,
   },
-  pendingEmailPanel: {
-    backgroundColor: "#FBF6EC",
-  },
   sectionTitle: {
     ...brandTypography.sectionTitle,
     fontSize: 20,
@@ -667,8 +599,5 @@ const styles = StyleSheet.create({
   fieldInput: {
     paddingHorizontal: 14,
     paddingVertical: 12,
-  },
-  pendingEmailNotice: {
-    marginTop: 2,
   },
 })

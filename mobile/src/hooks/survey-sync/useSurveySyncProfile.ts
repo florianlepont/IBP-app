@@ -1,20 +1,18 @@
 import { useCallback, useState } from "react"
 import * as ImagePicker from "expo-image-picker"
 import {
-  confirmMyEmail,
   deleteMyProfilePicture,
   patchMyProfile,
   uploadMyProfilePicture,
 } from "../../api/ibp-api"
 import { AuthUser } from "../../app/types"
-import { AUTH_REQUIRED_ERROR } from "../useAuthSession"
+import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
 import { guessMimeType } from "./utils"
 
 export type UpdateProfileInput = {
   first_name: string
   last_name: string
   display_name: string
-  email: string
   profile_picture_url?: string | null
 }
 
@@ -51,7 +49,6 @@ export function useSurveySyncProfile({
         first_name: input.first_name.trim(),
         last_name: input.last_name.trim(),
         display_name: input.display_name.trim(),
-        email: input.email.trim().toLowerCase(),
         ...(Object.prototype.hasOwnProperty.call(input, "profile_picture_url")
           ? { profile_picture_url: input.profile_picture_url ?? null }
           : {}),
@@ -61,23 +58,13 @@ export function useSurveySyncProfile({
         setStatus("Display name is required")
         return
       }
-      if (!payload.email || !payload.email.includes("@")) {
-        setStatus("A valid email is required")
-        return
-      }
 
       try {
         setProfileUpdating(true)
         const user = await withAuthRetry((token) => patchMyProfile(apiUrl, token, payload))
 
         setProfileFromUser(user)
-        if (user.email_change_required) {
-          setStatus(
-            `Profile updated. Email confirmation required for ${user.email_change_pending_to ?? "pending email"}`,
-          )
-        } else {
-          setStatus("Profile updated")
-        }
+        setStatus("Profile updated")
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
           await clearSession()
@@ -85,33 +72,6 @@ export function useSurveySyncProfile({
           return
         }
         setStatus(`Profile update error: ${(error as Error).message}`)
-      } finally {
-        setProfileUpdating(false)
-      }
-    },
-    [apiUrl, clearSession, setProfileFromUser, setStatus, withAuthRetry],
-  )
-
-  const handleConfirmEmailChange = useCallback(
-    async (token: string): Promise<void> => {
-      if (!token.trim()) {
-        setStatus("Email confirmation token is required")
-        return
-      }
-
-      try {
-        setProfileUpdating(true)
-        const user = await withAuthRetry((access) => confirmMyEmail(apiUrl, access, token.trim()))
-
-        setProfileFromUser(user)
-        setStatus("Email address confirmed")
-      } catch (error) {
-        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-          await clearSession()
-          setStatus("Login required before confirming email")
-          return
-        }
-        setStatus(`Email confirmation error: ${(error as Error).message}`)
       } finally {
         setProfileUpdating(false)
       }
@@ -151,7 +111,6 @@ export function useSurveySyncProfile({
           first_name: baseUser.first_name,
           last_name: baseUser.last_name,
           display_name: baseUser.display_name,
-          email: baseUser.email,
           profile_picture_url: uploadResponse,
         })
         setStatus("Profile picture uploaded")
@@ -239,7 +198,6 @@ export function useSurveySyncProfile({
         first_name: baseUser.first_name,
         last_name: baseUser.last_name,
         display_name: baseUser.display_name,
-        email: baseUser.email,
         profile_picture_url: null,
       })
       setStatus("Profile picture removed")
@@ -266,7 +224,6 @@ export function useSurveySyncProfile({
   return {
     profileUpdating,
     handleUpdateProfile,
-    handleConfirmEmailChange,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,

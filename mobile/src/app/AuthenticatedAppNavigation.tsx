@@ -551,7 +551,6 @@ function AccountTabNavigator({
               onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
               onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
               onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
-              onConfirmEmailChange={surveySync.handleConfirmEmailChange}
               onLogout={surveySync.handleLogout}
             />
           </ScrollView>
