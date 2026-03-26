@@ -1,5 +1,6 @@
 export type AuthenticatedUser = {
   id: string
+  auth0_sub: string
   email: string
   role: "contributor" | "moderator" | "admin"
   first_name: string

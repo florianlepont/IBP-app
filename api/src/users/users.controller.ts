@@ -20,6 +20,7 @@ import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { UsersService } from "./users.service"
 import { PatchMeDto } from "./dtos/patch-me.dto"
+import { ChangeEmailDto } from "./dtos/change-email.dto"
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -34,6 +35,12 @@ export class UsersController {
   @Patch("me")
   patchMe(@CurrentUser() user: AuthenticatedUser, @Body() body: PatchMeDto) {
     return this.usersService.patchMe(user, body)
+  }
+
+  @Patch("me/email")
+  @HttpCode(204)
+  changeEmail(@CurrentUser() user: AuthenticatedUser, @Body() body: ChangeEmailDto) {
+    return this.usersService.changeEmail(user, body.email)
   }
 
   @Put("me/profile-picture")

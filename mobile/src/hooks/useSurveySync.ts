@@ -95,6 +95,7 @@ export function useSurveySync({
   const {
     profileUpdating,
     handleUpdateProfile,
+    handleChangeEmail,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,
@@ -385,6 +386,7 @@ export function useSurveySync({
     handleResendVerification,
     handleLoadMyProfile,
     handleUpdateProfile,
+    handleChangeEmail,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react"
 import * as ImagePicker from "expo-image-picker"
 import {
+  changeMyEmail,
   deleteMyProfilePicture,
   patchMyProfile,
   uploadMyProfilePicture,
@@ -221,9 +222,31 @@ export function useSurveySyncProfile({
     withAuthRetry,
   ])
 
+  const handleChangeEmail = useCallback(
+    async (newEmail: string): Promise<void> => {
+      try {
+        setProfileUpdating(true)
+        await withAuthRetry((token) => changeMyEmail(apiUrl, token, newEmail))
+        await handleLoadMyProfile({ silent: true })
+        setStatus("Email updated. Check your inbox to verify the new address.")
+      } catch (error) {
+        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+          await clearSession()
+          setStatus("Login required")
+          return
+        }
+        setStatus(`Email change error: ${(error as Error).message}`)
+      } finally {
+        setProfileUpdating(false)
+      }
+    },
+    [apiUrl, clearSession, handleLoadMyProfile, setStatus, withAuthRetry],
+  )
+
   return {
     profileUpdating,
     handleUpdateProfile,
+    handleChangeEmail,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,

@@ -8,7 +8,7 @@ import { OperationScope, OperationState } from "./operation-status"
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 
 const AUTH0_DOMAIN = "dev-zocy4q27tkkmjkmd.eu.auth0.com"
-const AUTH0_CLIENT_ID = "3zFJonqG9TqC3nRMZDwymHIM85C09Gy1"
+const AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
 const AUTH0_AUDIENCE = "https://api.ibp-app"
 
 const auth0 = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
