@@ -244,6 +244,10 @@ export class UsersService {
     return result.rows[0] ?? null
   }
 
+  async sendPasswordReset(user: AuthenticatedUser): Promise<void> {
+    await this.auth0Management.sendPasswordResetEmail(user.email)
+  }
+
   async changeEmail(user: AuthenticatedUser, newEmail: string): Promise<void> {
     if (newEmail === user.email) {
       throw new BadRequestException("New email is the same as current email")

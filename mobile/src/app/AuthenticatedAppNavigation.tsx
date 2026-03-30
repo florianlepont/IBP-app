@@ -551,6 +551,7 @@ function AccountTabNavigator({
                 apiUrl={apiUrl}
                 onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
                 onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
+                onPasswordReset={() => surveySync.handlePasswordReset()}
                 onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
                 onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
                 onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
