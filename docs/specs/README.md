@@ -11,3 +11,4 @@ Auto-generated from Notion. Do not edit manually.
 - [Epic E - Data Quality and Trust](epic-e-data-quality-and-trust.md) — 3 US *(V1)*
 - [Epic F - Participatory Experience and Gamification](epic-f-participatory-experience-and-gamification.md) — 5 US *(V1)*
 - [ Epic D - Offline and Synchronization](epic-d-offline-and-synchronization.md) — 7 US *(MVP)*
+- [Epic I - Workshops & Training "Ma Forêt Vivante"](epic-i-workshops-training-ma-foret-vivante.md) — 5 US *(V1)*
