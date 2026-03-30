@@ -38,8 +38,8 @@ describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
   async function loginAsNewUser(): Promise<{ accessToken: string; refreshToken: string }> {
     const email = `e2e-val-${Date.now()}-${Math.random().toString(36).slice(2)}@ibp.local`
     const res = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
     return {
       accessToken: res.body.access_token as string,

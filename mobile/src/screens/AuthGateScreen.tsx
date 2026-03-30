@@ -112,8 +112,7 @@ export function AuthGateScreen({
   const [submitting, setSubmitting] = useState(false)
 
   const normalizedStatus = status.trim().toLowerCase()
-  const feedbackMessage =
-    normalizedStatus && !normalizedStatus.includes("logged in") ? status : ""
+  const feedbackMessage = normalizedStatus && !normalizedStatus.includes("logged in") ? status : ""
   const feedbackTone: "error" | "status" =
     normalizedStatus.includes("error") || normalizedStatus.includes("failed") ? "error" : "status"
 

@@ -538,25 +538,25 @@ function AccountTabNavigator({
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ flex: 1 }}
           >
-          <ScrollView
-            style={styles.mainScroll}
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <AccountScreen
-              accessToken={surveySync.accessToken}
-              currentUser={surveySync.currentUser}
-              profile={surveySync.profile}
-              profileUpdating={surveySync.profileUpdating}
-              apiUrl={apiUrl}
-              onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
-              onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
-              onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
-              onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
-              onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
-              onLogout={surveySync.handleLogout}
-            />
-          </ScrollView>
+            <ScrollView
+              style={styles.mainScroll}
+              contentContainerStyle={styles.content}
+              keyboardShouldPersistTaps="handled"
+            >
+              <AccountScreen
+                accessToken={surveySync.accessToken}
+                currentUser={surveySync.currentUser}
+                profile={surveySync.profile}
+                profileUpdating={surveySync.profileUpdating}
+                apiUrl={apiUrl}
+                onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
+                onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
+                onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
+                onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
+                onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
+                onLogout={surveySync.handleLogout}
+              />
+            </ScrollView>
           </KeyboardAvoidingView>
         )}
       </AccountStack.Screen>

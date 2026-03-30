@@ -29,8 +29,8 @@ describe("Epic E - Search and Reports (e2e)", () => {
   it("filters my surveys by query/date/status via GET /v1/surveys", async () => {
     const email = `e2e-epic-e2-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -144,7 +144,7 @@ describe("Epic E - Search and Reports (e2e)", () => {
   it("supports reporting and moderator review workflow via /v1/reports", async () => {
     const ownerEmail = `e2e-epic-e3-owner-${Date.now()}@ibp.local`
     const ownerLogin = await request(app.getHttpServer())
-      .post("/v1/auth/login")
+      .post("/v1/debug/test-token")
       .send({ email: ownerEmail, password: "demo1234" })
       .expect(201)
     const ownerToken = ownerLogin.body.access_token as string
@@ -157,14 +157,14 @@ describe("Epic E - Search and Reports (e2e)", () => {
 
     const reporterEmail = `e2e-epic-e3-reporter-${Date.now()}@ibp.local`
     const reporterLogin = await request(app.getHttpServer())
-      .post("/v1/auth/login")
+      .post("/v1/debug/test-token")
       .send({ email: reporterEmail, password: "demo1234" })
       .expect(201)
     const reporterToken = reporterLogin.body.access_token as string
 
     const moderatorEmail = `e2e-epic-e3-moderator-${Date.now()}@ibp.local`
     const moderatorLogin = await request(app.getHttpServer())
-      .post("/v1/auth/login")
+      .post("/v1/debug/test-token")
       .send({ email: moderatorEmail, password: "demo1234" })
       .expect(201)
     const moderatorToken = moderatorLogin.body.access_token as string

@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Image, Linking, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native"
+import {
+  Image,
+  Linking,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { BlurView } from "expo-blur"
 import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
@@ -409,13 +418,21 @@ export function AccountScreen({
                   label="Cancel"
                   variant="secondary"
                   size="sm"
-                  onPress={() => { setEmailEditing(false); setNewEmail("") }}
+                  onPress={() => {
+                    setEmailEditing(false)
+                    setNewEmail("")
+                  }}
                 />
                 <AppButton
                   label={profileUpdating ? "Saving..." : "Save email"}
                   size="sm"
                   disabled={profileUpdating || !newEmail.includes("@")}
-                  onPress={() => void onChangeEmail(newEmail).then(() => { setEmailEditing(false); setNewEmail("") })}
+                  onPress={() =>
+                    void onChangeEmail(newEmail).then(() => {
+                      setEmailEditing(false)
+                      setNewEmail("")
+                    })
+                  }
                 />
               </View>
             </View>
@@ -424,11 +441,20 @@ export function AccountScreen({
               <View style={styles.emailInfo}>
                 <Text style={styles.emailLabel}>Email</Text>
                 <View style={styles.emailValueRow}>
-                  <Ionicons name="lock-closed-outline" size={13} color={brandColors.textSecondary} />
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={13}
+                    color={brandColors.textSecondary}
+                  />
                   <Text style={styles.emailValue}>{currentUser?.email ?? "—"}</Text>
                 </View>
               </View>
-              <Pressable onPress={() => { setNewEmail(currentUser?.email ?? ""); setEmailEditing(true) }}>
+              <Pressable
+                onPress={() => {
+                  setNewEmail(currentUser?.email ?? "")
+                  setEmailEditing(true)
+                }}
+              >
                 <Text style={styles.emailManageLink}>Change →</Text>
               </Pressable>
             </View>

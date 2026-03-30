@@ -17,11 +17,7 @@ jest.mock("@react-navigation/native-stack", () => {
     createNativeStackNavigator: () => ({
       Navigator: ({ children }: { children?: React.ReactNode }) =>
         ReactRef.createElement("Stack.Navigator", {}, children),
-      Screen: ({
-        children,
-      }: {
-        children?: (args: Record<string, unknown>) => React.ReactNode
-      }) =>
+      Screen: ({ children }: { children?: (args: Record<string, unknown>) => React.ReactNode }) =>
         ReactRef.createElement(
           "Stack.Screen",
           {},
