@@ -244,6 +244,10 @@ export class UsersService {
     return result.rows[0] ?? null
   }
 
+  async sendPasswordReset(user: AuthenticatedUser): Promise<void> {
+    await this.auth0Management.sendPasswordResetEmail(user.email)
+  }
+
   async changeEmail(user: AuthenticatedUser, newEmail: string): Promise<void> {
     if (newEmail === user.email) {
       throw new BadRequestException("New email is the same as current email")
@@ -253,10 +257,21 @@ export class UsersService {
     await this.auth0Management.updateEmail(user.auth0_sub, newEmail)
 
     // Update in our DB
-    await this.db.query(`UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2`, [
-      newEmail,
-      user.id,
-    ])
+    try {
+      await this.db.query(`UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2`, [
+        newEmail,
+        user.id,
+      ])
+    } catch (err: unknown) {
+      const isUniqueViolation =
+        typeof err === "object" && err !== null && (err as { code?: string }).code === "23505"
+      if (isUniqueViolation) {
+        // Rollback Auth0 email change
+        await this.auth0Management.updateEmail(user.auth0_sub, user.email).catch(() => undefined)
+        throw new BadRequestException("Email already taken")
+      }
+      throw err
+    }
   }
 
   private storagePathForKey(storageKey: string): string {

@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, InternalServerErrorException } from "@
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN ?? ""
 const AUTH0_MGMT_CLIENT_ID = process.env.AUTH0_MGMT_CLIENT_ID ?? ""
 const AUTH0_MGMT_CLIENT_SECRET = process.env.AUTH0_MGMT_CLIENT_SECRET ?? ""
+const AUTH0_APP_CLIENT_ID = process.env.AUTH0_APP_CLIENT_ID ?? ""
 
 @Injectable()
 export class Auth0ManagementService {
@@ -59,6 +60,22 @@ export class Auth0ManagementService {
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { message?: string }
       throw new InternalServerErrorException(body.message ?? "Failed to update email on Auth0")
+    }
+  }
+
+  async sendPasswordResetEmail(email: string): Promise<void> {
+    const response = await fetch(`https://${AUTH0_DOMAIN}/dbconnections/change_password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: AUTH0_APP_CLIENT_ID,
+        email,
+        connection: "Username-Password-Authentication",
+      }),
+    })
+
+    if (!response.ok) {
+      throw new InternalServerErrorException("Failed to send password reset email")
     }
   }
 }

@@ -2,8 +2,9 @@ import { useState } from "react"
 import {
   Image,
   ImageSourcePropType,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -128,11 +129,9 @@ export function AuthGateScreen({
   const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
 
   return (
-    <ScrollView
-      style={authStyles.screen}
-      contentContainerStyle={authStyles.screenContent}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
+    <KeyboardAvoidingView
+      style={[authStyles.screen, authStyles.screenContent]}
+      behavior={Platform.OS === "ios" ? "height" : undefined}
     >
       <HeroSection
         height={heroHeight}
@@ -169,7 +168,7 @@ export function AuthGateScreen({
           <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
         </View>
       </View>
-    </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 

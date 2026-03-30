@@ -76,6 +76,15 @@ export async function changeMyEmail(
   })
 }
 
+export async function requestPasswordReset(apiUrl: string, accessToken: string): Promise<void> {
+  return apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/me/password-reset",
+    method: "POST",
+    token: accessToken,
+  })
+}
+
 export async function uploadMyProfilePicture(
   apiUrl: string,
   accessToken: string,

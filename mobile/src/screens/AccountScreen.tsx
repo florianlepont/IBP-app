@@ -1,14 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native"
+import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { BlurView } from "expo-blur"
 import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
@@ -16,7 +7,6 @@ import { AuthUser } from "../app/types"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
-import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip } from "../ui/AppStatusChip"
 
 type UpdateProfileInput = {
@@ -24,9 +14,6 @@ type UpdateProfileInput = {
   last_name: string
   display_name: string
 }
-
-const AUTH0_RESET_PASSWORD_URL =
-  "https://dev-zocy4q27tkkmjkmd.eu.auth0.com/u/reset-password/request/Username-Password-Authentication"
 
 type AccountScreenProps = {
   accessToken: string
@@ -36,6 +23,7 @@ type AccountScreenProps = {
   apiUrl: string
   onSaveProfile: (input: UpdateProfileInput) => Promise<void>
   onChangeEmail: (newEmail: string) => Promise<void>
+  onPasswordReset: () => Promise<void>
   onPickProfilePictureFromLibrary: () => Promise<void>
   onTakeProfilePictureFromCamera: () => Promise<void>
   onRemoveProfilePicture: () => Promise<void>
@@ -98,6 +86,7 @@ export function AccountScreen({
   apiUrl,
   onSaveProfile,
   onChangeEmail,
+  onPasswordReset,
   onPickProfilePictureFromLibrary,
   onTakeProfilePictureFromCamera,
   onRemoveProfilePicture,
@@ -312,11 +301,12 @@ export function AccountScreen({
       </Modal>
 
       <View style={styles.screen}>
-        <AppCard variant="panelElevated" padding={14} style={styles.accountSummaryCard}>
+        {/* Identity card */}
+        <AppCard variant="panelElevated" padding={12} style={styles.identityCard}>
           <View style={styles.identityRow}>
             <Pressable
               ref={avatarButtonRef}
-              style={styles.avatarHeroButton}
+              style={styles.avatarButton}
               onPress={openPhotoActions}
               disabled={profileUpdating}
             >
@@ -326,49 +316,46 @@ export function AccountScreen({
                     uri: profilePictureUri,
                     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
                   }}
-                  style={styles.avatarHeroImage}
+                  style={styles.avatarImage}
                 />
               ) : (
-                <View style={styles.avatarHeroFallback}>
-                  <Text style={styles.avatarHeroFallbackText}>{initials || "A"}</Text>
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarFallbackText}>{initials || "A"}</Text>
                 </View>
               )}
             </Pressable>
 
             <View style={styles.identityCopy}>
-              <Text style={styles.identityName}>{heroName}</Text>
-              <Text style={styles.identityMeta}>{heroSubtitle}</Text>
-              <View style={styles.heroChipRow}>
+              <Text style={styles.identityName} numberOfLines={1}>
+                {heroName}
+              </Text>
+              <Text style={styles.identityMeta} numberOfLines={1}>
+                {heroSubtitle}
+              </Text>
+              <View style={styles.identityFooter}>
                 <AppStatusChip label={roleLabel} />
+                <AppButton
+                  label="Logout"
+                  leadingIcon="log-out-outline"
+                  variant="danger"
+                  onPress={() => void onLogout()}
+                  size="sm"
+                />
               </View>
             </View>
           </View>
-
-          <View style={styles.summaryFooterRow}>
-            <AppButton
-              label="Logout"
-              leadingIcon="log-out-outline"
-              variant="danger"
-              onPress={() => void onLogout()}
-              size="sm"
-            />
-          </View>
         </AppCard>
 
-        <AppCard variant="panelElevated" padding={14} style={styles.panel}>
-          <AppSectionHeader
-            title="Profile fields"
-            subtitle="Edit the synced identity shown across the app and shared survey data."
-            trailing={
-              isProfileDirty ? (
-                <AppStatusChip label="Unsaved changes" tone="warning" />
-              ) : (
-                <AppStatusChip label="Up to date" tone="success" />
-              )
-            }
-            titleStyle={styles.sectionTitle}
-            subtitleStyle={styles.sectionBody}
-          />
+        {/* Profile fields card */}
+        <AppCard variant="panelElevated" padding={12} style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Profile</Text>
+            {isProfileDirty ? (
+              <AppStatusChip label="Unsaved" tone="warning" />
+            ) : (
+              <AppStatusChip label="Saved" tone="success" />
+            )}
+          </View>
 
           <View style={styles.twoColumnRow}>
             <View style={styles.halfField}>
@@ -437,36 +424,29 @@ export function AccountScreen({
               </View>
             </View>
           ) : (
-            <View style={styles.emailRow}>
-              <View style={styles.emailInfo}>
-                <Text style={styles.emailLabel}>Email</Text>
-                <View style={styles.emailValueRow}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={13}
-                    color={brandColors.textSecondary}
-                  />
-                  <Text style={styles.emailValue}>{currentUser?.email ?? "—"}</Text>
-                </View>
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => {
+                setNewEmail(currentUser?.email ?? "")
+                setEmailEditing(true)
+              }}
+            >
+              <View style={styles.settingsRowContent}>
+                <Text style={styles.settingsRowLabel}>Email</Text>
+                <Text style={styles.settingsRowValue} numberOfLines={1}>
+                  {currentUser?.email ?? "—"}
+                </Text>
               </View>
-              <Pressable
-                onPress={() => {
-                  setNewEmail(currentUser?.email ?? "")
-                  setEmailEditing(true)
-                }}
-              >
-                <Text style={styles.emailManageLink}>Change →</Text>
-              </Pressable>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
+            </Pressable>
           )}
 
-          <Pressable
-            style={styles.passwordRow}
-            onPress={() => void Linking.openURL(AUTH0_RESET_PASSWORD_URL)}
-          >
-            <Ionicons name="key-outline" size={15} color={brandColors.forest} />
-            <Text style={styles.passwordLink}>Change password</Text>
-            <Ionicons name="open-outline" size={13} color={brandColors.textSecondary} />
+          <Pressable style={styles.settingsRow} onPress={() => void onPasswordReset()}>
+            <View style={styles.settingsRowContent}>
+              <Text style={styles.settingsRowLabel}>Password</Text>
+              <Text style={styles.settingsRowValue}>Send reset email</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
           </Pressable>
 
           <AppButton
@@ -490,7 +470,8 @@ export function AccountScreen({
 
 const styles = StyleSheet.create({
   screen: {
-    gap: brandSpacing.md,
+    flex: 1,
+    gap: brandSpacing.sm,
   },
   photoMenuOverlay: {
     flex: 1,
@@ -595,127 +576,108 @@ const styles = StyleSheet.create({
     marginLeft: 56,
     backgroundColor: "rgba(62, 74, 54, 0.16)",
   },
-  accountSummaryCard: {
-    gap: 10,
+  identityCard: {
+    gap: 0,
   },
   identityRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  avatarHeroButton: {
-    width: 104,
-    height: 104,
-    borderRadius: 28,
+  avatarButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panelMuted,
+    flexShrink: 0,
   },
-  avatarHeroImage: {
+  avatarImage: {
     width: "100%",
     height: "100%",
   },
-  avatarHeroFallback: {
+  avatarFallback: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: brandColors.panelMuted,
   },
-  avatarHeroFallbackText: {
-    fontSize: 32,
-    lineHeight: 36,
+  avatarFallbackText: {
+    fontSize: 26,
+    lineHeight: 30,
     fontWeight: "900",
     color: brandColors.forest,
   },
   identityCopy: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   identityName: {
     ...brandTypography.sectionTitle,
-    fontSize: 22,
-    lineHeight: 24,
+    fontSize: 18,
+    lineHeight: 22,
     color: brandColors.forest,
   },
   identityMeta: {
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
-  heroChipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  summaryFooterRow: {
+  identityFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 12,
+    justifyContent: "space-between",
+    marginTop: 2,
   },
   panel: {
-    gap: 10,
+    flex: 1,
+    gap: 8,
   },
-  sectionTitle: {
+  panelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  panelTitle: {
     ...brandTypography.sectionTitle,
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 20,
     color: brandColors.forest,
-  },
-  sectionBody: {
-    ...brandTypography.meta,
-    color: brandColors.textSecondary,
   },
   twoColumnRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
   halfField: {
     flex: 1,
-    minWidth: 140,
+    minWidth: 120,
   },
-  emailRow: {
+  settingsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    backgroundColor: brandColors.inputFill,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     gap: 8,
   },
-  emailInfo: {
+  settingsRowContent: {
     flex: 1,
-    gap: 4,
+    gap: 1,
   },
-  emailLabel: {
+  settingsRowLabel: {
     ...brandTypography.label,
     color: brandColors.forest,
   },
-  emailValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  emailValue: {
+  settingsRowValue: {
     ...brandTypography.sectionBody,
     color: brandColors.textSecondary,
   },
-  emailManageLink: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
-    fontWeight: "600",
-  },
-  passwordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  passwordLink: {
-    flex: 1,
-    ...brandTypography.sectionBody,
-    color: brandColors.forest,
-  },
   emailEditBlock: {
-    gap: 10,
+    gap: 8,
   },
   emailEditActions: {
     flexDirection: "row",
@@ -723,7 +685,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   fieldGroup: {
-    gap: 6,
+    gap: 4,
   },
   fieldLabel: {
     ...brandTypography.label,
@@ -731,6 +693,6 @@ const styles = StyleSheet.create({
   },
   fieldInput: {
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
 })
