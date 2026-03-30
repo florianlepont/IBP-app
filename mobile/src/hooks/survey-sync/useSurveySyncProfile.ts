@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react"
+import { Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import {
   changeMyEmail,
@@ -228,7 +229,9 @@ export function useSurveySyncProfile({
       try {
         setProfileUpdating(true)
         await withAuthRetry((token) => changeMyEmail(apiUrl, token, newEmail))
-        await handleLoadMyProfile({ silent: true })
+        if (currentUser) {
+          setProfileFromUser({ ...currentUser, email: newEmail })
+        }
         setStatus("Email updated. Check your inbox to verify the new address.")
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
@@ -236,12 +239,14 @@ export function useSurveySyncProfile({
           setStatus("Login required")
           return
         }
-        setStatus(`Email change error: ${(error as Error).message}`)
+        const message = (error as Error).message
+        setStatus(`Email change error: ${message}`)
+        Alert.alert("Error", message, [{ text: "OK" }])
       } finally {
         setProfileUpdating(false)
       }
     },
-    [apiUrl, clearSession, handleLoadMyProfile, setStatus, withAuthRetry],
+    [apiUrl, clearSession, currentUser, setProfileFromUser, setStatus, withAuthRetry],
   )
 
   const handlePasswordReset = useCallback(async (): Promise<void> => {
@@ -249,17 +254,24 @@ export function useSurveySyncProfile({
       setProfileUpdating(true)
       await withAuthRetry((token) => requestPasswordReset(apiUrl, token))
       setStatus("Password reset email sent. Check your inbox.")
+      Alert.alert(
+        "Password reset",
+        `A reset link has been sent to ${currentUser?.email ?? "your email address"}. Check your inbox.`,
+        [{ text: "OK" }],
+      )
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession()
         setStatus("Login required")
         return
       }
-      setStatus(`Error: ${(error as Error).message}`)
+      const message = (error as Error).message
+      setStatus(`Error: ${message}`)
+      Alert.alert("Error", `Could not send password reset email: ${message}`, [{ text: "OK" }])
     } finally {
       setProfileUpdating(false)
     }
-  }, [apiUrl, clearSession, setStatus, withAuthRetry])
+  }, [apiUrl, clearSession, currentUser, setStatus, withAuthRetry])
 
   return {
     profileUpdating,
