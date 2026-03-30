@@ -4,6 +4,7 @@ import {
   changeMyEmail,
   deleteMyProfilePicture,
   patchMyProfile,
+  requestPasswordReset,
   uploadMyProfilePicture,
 } from "../../api/ibp-api"
 import { AuthUser } from "../../app/types"
@@ -243,10 +244,28 @@ export function useSurveySyncProfile({
     [apiUrl, clearSession, handleLoadMyProfile, setStatus, withAuthRetry],
   )
 
+  const handlePasswordReset = useCallback(async (): Promise<void> => {
+    try {
+      setProfileUpdating(true)
+      await withAuthRetry((token) => requestPasswordReset(apiUrl, token))
+      setStatus("Password reset email sent. Check your inbox.")
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession()
+        setStatus("Login required")
+        return
+      }
+      setStatus(`Error: ${(error as Error).message}`)
+    } finally {
+      setProfileUpdating(false)
+    }
+  }, [apiUrl, clearSession, setStatus, withAuthRetry])
+
   return {
     profileUpdating,
     handleUpdateProfile,
     handleChangeEmail,
+    handlePasswordReset,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,

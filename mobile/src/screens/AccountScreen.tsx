@@ -1,14 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native"
+import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { BlurView } from "expo-blur"
 import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
@@ -25,9 +16,6 @@ type UpdateProfileInput = {
   display_name: string
 }
 
-const AUTH0_RESET_PASSWORD_URL =
-  "https://dev-zocy4q27tkkmjkmd.eu.auth0.com/u/reset-password/request/Username-Password-Authentication"
-
 type AccountScreenProps = {
   accessToken: string
   currentUser: AuthUser | null
@@ -36,6 +24,7 @@ type AccountScreenProps = {
   apiUrl: string
   onSaveProfile: (input: UpdateProfileInput) => Promise<void>
   onChangeEmail: (newEmail: string) => Promise<void>
+  onPasswordReset: () => Promise<void>
   onPickProfilePictureFromLibrary: () => Promise<void>
   onTakeProfilePictureFromCamera: () => Promise<void>
   onRemoveProfilePicture: () => Promise<void>
@@ -98,6 +87,7 @@ export function AccountScreen({
   apiUrl,
   onSaveProfile,
   onChangeEmail,
+  onPasswordReset,
   onPickProfilePictureFromLibrary,
   onTakeProfilePictureFromCamera,
   onRemoveProfilePicture,
@@ -460,13 +450,9 @@ export function AccountScreen({
             </View>
           )}
 
-          <Pressable
-            style={styles.passwordRow}
-            onPress={() => void Linking.openURL(AUTH0_RESET_PASSWORD_URL)}
-          >
+          <Pressable style={styles.passwordRow} onPress={() => void onPasswordReset()}>
             <Ionicons name="key-outline" size={15} color={brandColors.forest} />
             <Text style={styles.passwordLink}>Change password</Text>
-            <Ionicons name="open-outline" size={13} color={brandColors.textSecondary} />
           </Pressable>
 
           <AppButton
