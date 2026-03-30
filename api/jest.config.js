@@ -7,7 +7,7 @@ module.exports = {
   moduleFileExtensions: ["ts", "js", "json"],
   testTimeout: 15000,
   setupFiles: ["<rootDir>/test/setup-env.js"],
-  transformIgnorePatterns: ["node_modules/(?!(jose|jwks-rsa)/)"],
+  moduleNameMapper: { "^jwks-rsa$": "<rootDir>/test/__mocks__/jwks-rsa.js" },
   collectCoverageFrom: ["<rootDir>/src/**/*.ts", "!<rootDir>/src/**/*.d.ts"],
   coverageDirectory: "<rootDir>/coverage/e2e",
   coverageReporters: ["text", "text-summary", "json-summary", "lcov"],
