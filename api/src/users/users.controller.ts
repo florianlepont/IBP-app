@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Patch,
+  Post,
   Put,
   Res,
   StreamableFile,
@@ -41,6 +42,12 @@ export class UsersController {
   @HttpCode(204)
   changeEmail(@CurrentUser() user: AuthenticatedUser, @Body() body: ChangeEmailDto) {
     return this.usersService.changeEmail(user, body.email)
+  }
+
+  @Post("me/password-reset")
+  @HttpCode(204)
+  passwordReset(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.sendPasswordReset(user)
   }
 
   @Put("me/profile-picture")
