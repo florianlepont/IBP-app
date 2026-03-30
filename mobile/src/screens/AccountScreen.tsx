@@ -427,32 +427,29 @@ export function AccountScreen({
               </View>
             </View>
           ) : (
-            <View style={styles.emailRow}>
-              <View style={styles.emailInfo}>
-                <Text style={styles.emailLabel}>Email</Text>
-                <View style={styles.emailValueRow}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={13}
-                    color={brandColors.textSecondary}
-                  />
-                  <Text style={styles.emailValue}>{currentUser?.email ?? "—"}</Text>
-                </View>
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => {
+                setNewEmail(currentUser?.email ?? "")
+                setEmailEditing(true)
+              }}
+            >
+              <View style={styles.settingsRowContent}>
+                <Text style={styles.settingsRowLabel}>Email</Text>
+                <Text style={styles.settingsRowValue} numberOfLines={1}>
+                  {currentUser?.email ?? "—"}
+                </Text>
               </View>
-              <Pressable
-                onPress={() => {
-                  setNewEmail(currentUser?.email ?? "")
-                  setEmailEditing(true)
-                }}
-              >
-                <Text style={styles.emailManageLink}>Change →</Text>
-              </Pressable>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
+            </Pressable>
           )}
 
-          <Pressable style={styles.passwordRow} onPress={() => void onPasswordReset()}>
-            <Ionicons name="key-outline" size={15} color={brandColors.forest} />
-            <Text style={styles.passwordLink}>Change password</Text>
+          <Pressable style={styles.settingsRow} onPress={() => void onPasswordReset()}>
+            <View style={styles.settingsRowContent}>
+              <Text style={styles.settingsRowLabel}>Password</Text>
+              <Text style={styles.settingsRowValue}>Send reset email</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
           </Pressable>
 
           <AppButton
@@ -661,44 +658,26 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 140,
   },
-  emailRow: {
+  settingsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    backgroundColor: brandColors.inputFill,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     gap: 8,
   },
-  emailInfo: {
+  settingsRowContent: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
-  emailLabel: {
+  settingsRowLabel: {
     ...brandTypography.label,
     color: brandColors.forest,
   },
-  emailValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  emailValue: {
+  settingsRowValue: {
     ...brandTypography.sectionBody,
     color: brandColors.textSecondary,
-  },
-  emailManageLink: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
-    fontWeight: "600",
-  },
-  passwordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  passwordLink: {
-    flex: 1,
-    ...brandTypography.sectionBody,
-    color: brandColors.forest,
   },
   emailEditBlock: {
     gap: 10,
