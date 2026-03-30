@@ -131,7 +131,7 @@ export function AuthGateScreen({
   return (
     <KeyboardAvoidingView
       style={[authStyles.screen, authStyles.screenContent]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "height" : undefined}
     >
       <HeroSection
         height={heroHeight}
