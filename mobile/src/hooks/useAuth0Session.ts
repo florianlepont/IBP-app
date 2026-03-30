@@ -25,11 +25,7 @@ type UseAuth0SessionParams = {
   onSessionCleared?: () => void | Promise<void>
 }
 
-export function useAuth0Session({
-  apiUrl,
-  reportStatus,
-  onSessionCleared,
-}: UseAuth0SessionParams) {
+export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseAuth0SessionParams) {
   const [accessToken, setAccessToken] = useState("")
   const [sessionRestoring, setSessionRestoring] = useState(true)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)

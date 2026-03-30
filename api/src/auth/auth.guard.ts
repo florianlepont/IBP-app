@@ -31,6 +31,11 @@ export class AuthGuard implements CanActivate {
 
     const token = header.slice(7)
     try {
+      if (process.env.NODE_ENV === "test") {
+        const user = await this.verifyTestToken(token)
+        request.user = user
+        return true
+      }
       const payload = await this.verifyToken(token)
       const user = await this.getOrProvisionUser(payload, token)
       request.user = user
@@ -39,6 +44,21 @@ export class AuthGuard implements CanActivate {
       console.error("[AuthGuard] Token validation failed:", err)
       throw new UnauthorizedException()
     }
+  }
+
+  private async verifyTestToken(token: string): Promise<AuthenticatedUser> {
+    const secret = process.env.ACCESS_TOKEN_SECRET
+    if (!secret) throw new Error("ACCESS_TOKEN_SECRET not set")
+    const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as jwt.JwtPayload
+    const userId = payload.sub
+    if (!userId) throw new Error("Missing sub in test token")
+    const result = await this.db.query<AuthenticatedUser>(
+      `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
+       FROM users WHERE id = $1`,
+      [userId],
+    )
+    if (result.rows.length === 0) throw new Error("Test user not found")
+    return result.rows[0]
   }
 
   private verifyToken(token: string): Promise<jwt.JwtPayload> {

@@ -204,4 +204,3 @@ export async function createSurveyReport(
 }
 
 export type { PatchProfilePayload, ResetIbpDataResponse, ResetUserDataResponse }
-

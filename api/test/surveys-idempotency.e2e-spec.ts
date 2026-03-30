@@ -29,8 +29,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("accepts same id+sync_version replay and rejects older sync_version", async () => {
     const email = `e2e-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -74,8 +74,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("rejects submit when IBP factors are incomplete", async () => {
     const email = `e2e-submit-invalid-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -109,8 +109,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("rejects submit when parcel linkage is missing", async () => {
     const email = `e2e-submit-no-parcel-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -155,8 +155,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("marks survey as expired when submit is attempted after deadline", async () => {
     const email = `e2e-submit-expired-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -210,8 +210,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("submits valid IBP survey and returns computed scores", async () => {
     const email = `e2e-submit-valid-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -275,8 +275,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("rejects non-visibility PATCH fields after submit", async () => {
     const email = `e2e-submit-readonly-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -343,8 +343,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("toggles visibility after submit via PATCH /v1/surveys/:id/visibility and writes visibility_changed event", async () => {
     const email = `e2e-submit-visibility-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -431,8 +431,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("processes survey visibility_update operation via POST /v1/sync", async () => {
     const email = `e2e-sync-visibility-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -502,8 +502,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("exposes submitted+public surveys on /v1/public/map-items and removes them after public -> private", async () => {
     const email = `e2e-public-map-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -650,8 +650,8 @@ describe("Surveys idempotency (e2e)", () => {
     const baseLng = 2.191 + runSeed / 100000
     const email = `e2e-parcel-history-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -752,8 +752,8 @@ describe("Surveys idempotency (e2e)", () => {
     const baseLng = 1.444 + (runSeed % 80000) / 10000000
     const email = `e2e-parcel-status-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -836,8 +836,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("submits a full raw-observation payload A..J and computes exact scores", async () => {
     const email = `e2e-raw-full-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -902,8 +902,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("exposes canonical factor_results on survey detail endpoint", async () => {
     const email = `e2e-canonical-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -958,8 +958,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("creates and soft-deletes a survey attachment", async () => {
     const email = `e2e-attachment-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1075,8 +1075,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("soft-deletes survey via DELETE /v1/surveys/:id and records deleted event", async () => {
     const email = `e2e-survey-delete-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1135,8 +1135,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("processes mixed operations via POST /v1/sync", async () => {
     const email = `e2e-sync-batch-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1202,8 +1202,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("processes survey delete operation via POST /v1/sync", async () => {
     const email = `e2e-sync-delete-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1259,8 +1259,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("processes attachment delete operation via POST /v1/sync", async () => {
     const email = `e2e-sync-attachment-delete-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1369,8 +1369,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("returns sync_version_conflict details in POST /v1/sync result", async () => {
     const email = `e2e-sync-conflict-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1434,8 +1434,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("returns incremental changes via GET /v1/sync/changes with cursor", async () => {
     const email = `e2e-sync-changes-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1516,8 +1516,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("returns surveys without events via GET /v1/sync/changes fallback", async () => {
     const email = `e2e-sync-changes-fallback-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
@@ -1599,8 +1599,8 @@ describe("Surveys idempotency (e2e)", () => {
   it("returns surveys without events even when cursor is newer than survey.updated_at", async () => {
     const email = `e2e-sync-changes-fallback-cursor-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
 
     const accessToken = login.body.access_token as string
