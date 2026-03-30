@@ -23,7 +23,14 @@ type UserPictureRow = {
   profile_picture_mime_type: string | null
 }
 
-export type MeResponse = AuthenticatedUser & {
+export type MeResponse = {
+  id: string
+  email: string
+  role: "contributor" | "moderator" | "admin"
+  first_name: string
+  last_name: string
+  display_name: string
+  profile_picture_url: string | null
   updated_at: string
 }
 
