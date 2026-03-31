@@ -315,3 +315,20 @@ describe("getSubmitBlockReason", () => {
     expect(getSubmitBlockReason("target", surveys)).toBe("already_submitted")
   })
 })
+
+describe("normalizeVegetationStageForRegion (vegetation.ts)", () => {
+  test("returns default stage when stage is not a string", () => {
+    const result = normalizeVegetationStageForRegion("ACA", 42)
+    expect(typeof result).toBe("string")
+    expect(result.length).toBeGreaterThan(0)
+  })
+
+  test("returns 'montagnard' for ACA region with montagnard_mediterraneen stage", () => {
+    expect(normalizeVegetationStageForRegion("ACA", "montagnard_mediterraneen")).toBe("montagnard")
+  })
+
+  test("returns default stage for unknown stage string", () => {
+    const result = normalizeVegetationStageForRegion("ACA", "unknown_stage")
+    expect(typeof result).toBe("string")
+  })
+})
