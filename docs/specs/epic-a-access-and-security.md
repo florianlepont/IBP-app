@@ -68,7 +68,7 @@ Acceptance criteria
 
 ### US-A4 - Extended login 
 
-**Release:** V1
+**Release:** MVP
 
 A contributor can sign in using third-party providers (Apple, Google, etc.) in addition to username/password, with clear UX for first-time account linking, errors, and session persistence.
 
