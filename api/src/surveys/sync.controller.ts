@@ -2,18 +2,18 @@ import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from "@nestjs
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { SurveysService } from "./surveys.service"
+import { SurveysSyncService } from "./surveys-sync.service"
 import { SyncBatchBody } from "./surveys.types"
 
 @Controller("sync")
 @UseGuards(AuthGuard)
 export class SyncController {
-  constructor(private readonly surveysService: SurveysService) {}
+  constructor(private readonly syncService: SurveysSyncService) {}
 
   @Post()
   @HttpCode(200)
   async syncBatch(@CurrentUser() user: AuthenticatedUser, @Body() body: SyncBatchBody) {
-    return this.surveysService.syncBatch(user, body)
+    return this.syncService.syncBatch(user, body)
   }
 
   @Get("changes")
@@ -24,7 +24,7 @@ export class SyncController {
   ) {
     const parsedLimit =
       typeof limit === "string" && limit.trim().length > 0 ? Number(limit) : undefined
-    return this.surveysService.getSyncChanges(
+    return this.syncService.getSyncChanges(
       user,
       cursor,
       Number.isFinite(parsedLimit) ? parsedLimit : undefined,

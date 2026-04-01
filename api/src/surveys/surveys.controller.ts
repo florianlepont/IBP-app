@@ -19,6 +19,7 @@ import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { SurveysService } from "./surveys.service"
+import { SurveysAttachmentsService } from "./surveys-attachments.service"
 import { SurveyUpsertDto } from "./dtos/survey-upsert.dto"
 import { SurveyPatchDto } from "./dtos/survey-patch.dto"
 import { SurveyVisibilityPatchDto } from "./dtos/survey-visibility-patch.dto"
@@ -27,7 +28,10 @@ import { CreateAttachmentDto } from "./dtos/create-attachment.dto"
 @Controller("surveys")
 @UseGuards(AuthGuard)
 export class SurveysController {
-  constructor(private readonly surveysService: SurveysService) {}
+  constructor(
+    private readonly surveysService: SurveysService,
+    private readonly attachmentsService: SurveysAttachmentsService,
+  ) {}
 
   @Get()
   async list(
@@ -86,12 +90,12 @@ export class SurveysController {
     @Param("id") id: string,
     @Body() body: CreateAttachmentDto,
   ) {
-    return this.surveysService.createAttachment(user, id, body)
+    return this.attachmentsService.createAttachment(user, id, body)
   }
 
   @Get(":id/attachments")
   async listAttachments(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.surveysService.listAttachments(user, id)
+    return this.attachmentsService.listAttachments(user, id)
   }
 
   @Put(":id/attachments/:attachmentId/upload")
@@ -109,7 +113,7 @@ export class SurveysController {
     @UploadedFile()
     file?: { buffer: Buffer; mimetype?: string; size?: number; originalname?: string },
   ) {
-    return this.surveysService.uploadAttachment(user, id, attachmentId, token, file)
+    return this.attachmentsService.uploadAttachment(user, id, attachmentId, token, file)
   }
 
   @Delete(":id/attachments/:attachmentId")
@@ -119,7 +123,7 @@ export class SurveysController {
     @Param("id") id: string,
     @Param("attachmentId") attachmentId: string,
   ) {
-    await this.surveysService.deleteAttachment(user, id, attachmentId)
+    await this.attachmentsService.deleteAttachment(user, id, attachmentId)
   }
 
   @Get(":id/events")
