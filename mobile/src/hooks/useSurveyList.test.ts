@@ -27,7 +27,7 @@ jest.mock("../app/survey-logic", () => ({
 import React from "react"
 import { useSurveyList } from "./useSurveyList"
 
-function buildHook() {
+function useBuildHook() {
   return useSurveyList()
 }
 
@@ -66,7 +66,7 @@ describe("useSurveyList", () => {
 
   describe("hook initialization", () => {
     test("returns all expected properties", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook).toHaveProperty("surveys")
       expect(hook).toHaveProperty("attachments")
       expect(hook).toHaveProperty("selectedSurveyId")
@@ -84,7 +84,7 @@ describe("useSurveyList", () => {
     })
 
     test("calls survey-logic functions during useMemo initialization", () => {
-      buildHook()
+      useBuildHook()
       expect(mockBuildAttachmentsBySurvey).toHaveBeenCalledWith([])
       expect(mockBuildAttachmentCountBySurvey).toHaveBeenCalledWith([])
       expect(mockComputeSurveyStats).toHaveBeenCalledWith([])
@@ -92,12 +92,12 @@ describe("useSurveyList", () => {
     })
 
     test("selectedSurvey is null when selectedSurveyId is null", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.selectedSurvey).toBeNull()
     })
 
     test("selectedSurveyAttachments is empty array when no survey selected", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.selectedSurveyAttachments).toEqual([])
     })
   })
@@ -108,7 +108,7 @@ describe("useSurveyList", () => {
     test("calls listLocalSurveys", async () => {
       const rows = [{ id: "s1" }, { id: "s2" }]
       mockListLocalSurveys.mockResolvedValue(rows)
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.refreshLocalSurveys()
 
@@ -122,7 +122,7 @@ describe("useSurveyList", () => {
     test("calls listLocalAttachments", async () => {
       const rows = [{ id: "a1", survey_id: "s1" }]
       mockListLocalAttachments.mockResolvedValue(rows)
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.refreshLocalAttachments()
 
@@ -134,7 +134,7 @@ describe("useSurveyList", () => {
 
   describe("resetFilters", () => {
     test("resets all filter states to defaults", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSurveyQuery = hook.setSurveyQuery as jest.Mock
       const setStatusFilter = hook.setStatusFilter as jest.Mock
       const setSortMode = hook.setSortMode as jest.Mock
@@ -151,7 +151,7 @@ describe("useSurveyList", () => {
 
   describe("openSurvey", () => {
     test("sets selectedSurveyId to the given surveyId", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedSurveyId = hook.setSelectedSurveyId as jest.Mock
 
       hook.openSurvey("survey-123")
@@ -162,7 +162,7 @@ describe("useSurveyList", () => {
 
   describe("closeSurvey", () => {
     test("sets selectedSurveyId to null", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedSurveyId = hook.setSelectedSurveyId as jest.Mock
 
       hook.closeSurvey()
@@ -175,7 +175,7 @@ describe("useSurveyList", () => {
 
   describe("visibleSurveys", () => {
     test("passes filter state to filterAndSortSurveys", () => {
-      buildHook()
+      useBuildHook()
       expect(mockFilterAndSortSurveys).toHaveBeenCalledWith(
         [],
         expect.objectContaining({

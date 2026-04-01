@@ -21,7 +21,7 @@ const DEFAULT_PARAMS = {
   onStatusChange: jest.fn(),
 }
 
-function buildHook(overrides: Record<string, unknown> = {}) {
+function useBuildHook(overrides: Record<string, unknown> = {}) {
   return usePublicMapExplorer({ ...DEFAULT_PARAMS, ...overrides } as never)
 }
 
@@ -55,7 +55,7 @@ describe("usePublicMapExplorer", () => {
 
   describe("hook initialization", () => {
     test("returns all expected properties", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook).toHaveProperty("items")
       expect(hook).toHaveProperty("loading")
       expect(hook).toHaveProperty("fromDate")
@@ -68,7 +68,7 @@ describe("usePublicMapExplorer", () => {
     })
 
     test("initializes with empty state", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.items).toEqual([])
       expect(hook.loading).toBe(false)
       expect(hook.fromDate).toBe("")
@@ -83,7 +83,7 @@ describe("usePublicMapExplorer", () => {
       const items = [{ id: "m1" }, { id: "m2" }]
       mockFetchPublicMapItems.mockResolvedValue({ items })
       const onStatusChange = jest.fn()
-      const hook = buildHook({ onStatusChange })
+      const hook = useBuildHook({ onStatusChange })
 
       await hook.loadPublicMap()
 
@@ -97,7 +97,7 @@ describe("usePublicMapExplorer", () => {
     test("handles non-array items in response without throwing", async () => {
       mockFetchPublicMapItems.mockResolvedValue({ items: null })
       const onStatusChange = jest.fn()
-      const hook = buildHook({ onStatusChange })
+      const hook = useBuildHook({ onStatusChange })
 
       await hook.loadPublicMap()
 
@@ -108,7 +108,7 @@ describe("usePublicMapExplorer", () => {
     test("calls onStatusChange with error message on failure", async () => {
       mockFetchPublicMapItems.mockRejectedValue(new Error("Network error"))
       const onStatusChange = jest.fn()
-      const hook = buildHook({ onStatusChange })
+      const hook = useBuildHook({ onStatusChange })
 
       await hook.loadPublicMap()
 
@@ -119,13 +119,13 @@ describe("usePublicMapExplorer", () => {
 
     test("completes without throwing (setLoading called via finally)", async () => {
       mockFetchPublicMapItems.mockResolvedValue({ items: [] })
-      const hook = buildHook()
+      const hook = useBuildHook()
       await expect(hook.loadPublicMap()).resolves.toBeUndefined()
     })
 
     test("still resolves on error (finally block runs)", async () => {
       mockFetchPublicMapItems.mockRejectedValue(new Error("fail"))
-      const hook = buildHook()
+      const hook = useBuildHook()
       await expect(hook.loadPublicMap()).resolves.toBeUndefined()
     })
   })
@@ -134,7 +134,7 @@ describe("usePublicMapExplorer", () => {
 
   describe("loadPublicParcels", () => {
     test("returns early when bbox is empty", async () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.loadPublicParcels({ bbox: "", zoom: 10 })
 
@@ -142,7 +142,7 @@ describe("usePublicMapExplorer", () => {
     })
 
     test("returns early when bbox is whitespace only", async () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.loadPublicParcels({ bbox: "   ", zoom: 10 })
 
@@ -152,7 +152,7 @@ describe("usePublicMapExplorer", () => {
     test("calls fetchPublicParcelStatuses with correct params on success", async () => {
       const parcelItems = [{ id: "p1" }]
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: parcelItems })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.loadPublicParcels({ bbox: "0,0,1,1", zoom: 14 })
 
@@ -164,7 +164,7 @@ describe("usePublicMapExplorer", () => {
 
     test("handles non-array items in response without throwing", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: undefined })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.loadPublicParcels({ bbox: "0,0,1,1", zoom: 10 })).resolves.toBeUndefined()
     })
@@ -172,7 +172,7 @@ describe("usePublicMapExplorer", () => {
     test("calls onStatusChange with error message on failure", async () => {
       mockFetchPublicParcelStatuses.mockRejectedValue(new Error("Parcel fetch failed"))
       const onStatusChange = jest.fn()
-      const hook = buildHook({ onStatusChange })
+      const hook = useBuildHook({ onStatusChange })
 
       await hook.loadPublicParcels({ bbox: "0,0,1,1", zoom: 10 })
 
@@ -183,7 +183,7 @@ describe("usePublicMapExplorer", () => {
 
     test("resolves successfully with valid bbox and zoom", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.loadPublicParcels({ bbox: "0,0,1,1", zoom: 10 })).resolves.toBeUndefined()
     })

@@ -48,7 +48,7 @@ jest.mock("../app/number-utils", () => ({
 import React from "react"
 import { useSurveyForm } from "./useSurveyForm"
 
-function buildHook() {
+function useBuildHook() {
   return useSurveyForm()
 }
 
@@ -87,7 +87,7 @@ describe("useSurveyForm", () => {
 
   describe("hook initialization", () => {
     test("returns all expected properties", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook).toHaveProperty("siteName")
       expect(hook).toHaveProperty("regionVersion")
       expect(hook).toHaveProperty("vegetationStage")
@@ -103,35 +103,35 @@ describe("useSurveyForm", () => {
     })
 
     test("calls computeRetainedScoresFromRawFactors on render", () => {
-      buildHook()
+      useBuildHook()
       expect(mockComputeRetainedScores).toHaveBeenCalled()
     })
 
     test("factorSections has all 10 factors", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(Object.keys(hook.factorSections)).toEqual([
         "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
       ])
     })
 
     test("factorSections A has one field with required error when empty", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.factorSections.A).toHaveLength(1)
       expect(hook.factorSections.A[0].error).toContain("required")
     })
 
     test("factorSections H uses oneOfError (shows required error when empty)", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.factorSections.H[0].error).toContain("required")
     })
 
     test("formErrors.siteName is set when siteName is empty", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.formErrors.siteName).toContain("required")
     })
 
     test("draftInput has expected shape", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.draftInput).toHaveProperty("site_name")
       expect(hook.draftInput).toHaveProperty("region_version")
       expect(hook.draftInput).toHaveProperty("vegetation_stage")
@@ -145,14 +145,14 @@ describe("useSurveyForm", () => {
   describe("draftInput.factors (buildFactorsPayload)", () => {
     test("returns empty object when parseFiniteNumberInput returns null for all", () => {
       mockParseFinite.mockReturnValue(null)
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.draftInput.factors).toEqual({})
     })
 
     test("includes all factors when inputs parse to 2 (valid for all constraints)", () => {
       // 2: integer, >= 0, <= 100, in [0, 2, 5]
       mockParseFinite.mockReturnValue(2)
-      const hook = buildHook()
+      const hook = useBuildHook()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const payload = hook.draftInput.factors as any
       expect(payload).toHaveProperty("A")
@@ -171,7 +171,7 @@ describe("useSurveyForm", () => {
 
     test("excludes factor H when class_score is not in [0, 2, 5]", () => {
       mockParseFinite.mockReturnValue(3)
-      const hook = buildHook()
+      const hook = useBuildHook()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const payload = hook.draftInput.factors as any
       expect(payload).not.toHaveProperty("H")
@@ -180,7 +180,7 @@ describe("useSurveyForm", () => {
 
     test("excludes factor B when one of its two fields is null", () => {
       mockParseFinite.mockReturnValue(null)
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook.draftInput.factors).not.toHaveProperty("B")
     })
   })
@@ -189,7 +189,7 @@ describe("useSurveyForm", () => {
 
   describe("buildDraftInput", () => {
     test("returns the computed draftInput object", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const result = hook.buildDraftInput()
       expect(result).toHaveProperty("site_name")
       expect(result).toHaveProperty("region_version", "ACA")
@@ -201,48 +201,48 @@ describe("useSurveyForm", () => {
 
   describe("applyDraftToForm", () => {
     test("applies site_name from draft", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSiteName = hook.setSiteName as jest.Mock
       hook.applyDraftToForm({ site_name: "My Forest" })
       expect(setSiteName).toHaveBeenCalledWith("My Forest")
     })
 
     test("uses 'ACA' region version for unknown values", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       hook.applyDraftToForm({ region_version: "UNKNOWN", vegetation_stage: "collineen" })
       expect(mockNormalizeVegetationStage).toHaveBeenCalledWith("ACA", "collineen")
     })
 
     test("uses 'M' region version when specified", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       hook.applyDraftToForm({ region_version: "M", vegetation_stage: "montagnard" })
       expect(mockNormalizeVegetationStage).toHaveBeenCalledWith("M", "montagnard")
     })
 
     test("falls back to DEFAULT_SURVEY_FORM.siteName when site_name is missing", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSiteName = hook.setSiteName as jest.Mock
       hook.applyDraftToForm({})
       expect(setSiteName).toHaveBeenCalledWith("")
     })
 
     test("handles null draft without throwing (asObject returns {})", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() => hook.applyDraftToForm(null)).not.toThrow()
     })
 
     test("handles non-object draft (string) without throwing", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() => hook.applyDraftToForm("not-an-object")).not.toThrow()
     })
 
     test("handles array draft without throwing (asObject returns {})", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() => hook.applyDraftToForm([1, 2, 3])).not.toThrow()
     })
 
     test("normalizes parcel_ids: trims, uppercases, deduplicates, skips non-strings", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.applyDraftToForm({
         parcel_ids: ["  abc  ", "DEF", "abc", 123, null, ""],
@@ -251,7 +251,7 @@ describe("useSurveyForm", () => {
     })
 
     test("applies numeric factor values (converted to strings via toTextNum)", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() =>
         hook.applyDraftToForm({
           factors: {
@@ -264,14 +264,14 @@ describe("useSurveyForm", () => {
     })
 
     test("handles parcel_ids that is not an array", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.applyDraftToForm({ parcel_ids: "not-an-array" })
       expect(setSelectedParcelIds).toHaveBeenCalledWith([])
     })
 
     test("applies full draft with all factors", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() =>
         hook.applyDraftToForm({
           site_name: "Site A",
@@ -299,20 +299,20 @@ describe("useSurveyForm", () => {
 
   describe("resetSurveyForm", () => {
     test("resets siteName to default", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSiteName = hook.setSiteName as jest.Mock
       hook.resetSurveyForm()
       expect(setSiteName).toHaveBeenCalledWith("") // DEFAULT_SURVEY_FORM.siteName
     })
 
     test("calls defaultVegetationStageForRegion to reset vegetationStage", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       hook.resetSurveyForm()
       expect(mockDefaultVegetationStage).toHaveBeenCalled()
     })
 
     test("resets selectedParcelIds to empty array", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.resetSurveyForm()
       expect(setSelectedParcelIds).toHaveBeenCalledWith([])
@@ -323,7 +323,7 @@ describe("useSurveyForm", () => {
 
   describe("handleRegionChange", () => {
     test("calls normalizeVegetationStageForRegion with the new region", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       hook.handleRegionChange("M")
       const setVegetationStage = hook.setVegetationStage as jest.Mock
       expect(setVegetationStage).toHaveBeenCalledWith(expect.any(Function))
@@ -333,7 +333,7 @@ describe("useSurveyForm", () => {
     })
 
     test("calls normalizeVegetationStageForRegion with ACA region", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       hook.handleRegionChange("ACA")
       const setVegetationStage = hook.setVegetationStage as jest.Mock
       const updater = setVegetationStage.mock.calls[0][0]
@@ -346,7 +346,7 @@ describe("useSurveyForm", () => {
 
   describe("applyGpsLocation", () => {
     test("calls setGpsLocation with formatted lat/lng strings", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() =>
         hook.applyGpsLocation({
           lat: 48.8566,
@@ -361,21 +361,21 @@ describe("useSurveyForm", () => {
 
   describe("toggleParcelSelection", () => {
     test("does nothing when parcelId is whitespace only", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.toggleParcelSelection("   ")
       expect(setSelectedParcelIds).not.toHaveBeenCalled()
     })
 
     test("calls setSelectedParcelIds with an updater function", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.toggleParcelSelection("abc")
       expect(setSelectedParcelIds).toHaveBeenCalledWith(expect.any(Function))
     })
 
     test("updater adds normalized parcelId when not present", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.toggleParcelSelection("  abc  ")
       const updater = setSelectedParcelIds.mock.calls[0][0]
@@ -384,7 +384,7 @@ describe("useSurveyForm", () => {
     })
 
     test("updater removes parcelId when already present", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.toggleParcelSelection("abc")
       const updater = setSelectedParcelIds.mock.calls[0][0]
@@ -392,7 +392,7 @@ describe("useSurveyForm", () => {
     })
 
     test("does nothing when parcelId is empty string", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const setSelectedParcelIds = hook.setSelectedParcelIds as jest.Mock
       hook.toggleParcelSelection("")
       expect(setSelectedParcelIds).not.toHaveBeenCalled()
@@ -403,23 +403,23 @@ describe("useSurveyForm", () => {
 
   describe("factorSections onChange callbacks", () => {
     test("factorA onChange calls setFactorA with new value", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       // The onChange is a closure, ensure it doesn't throw
       expect(() => hook.factorSections.A[0].onChange("5")).not.toThrow()
     })
 
     test("factorB onChange does not throw for strata_count", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() => hook.factorSections.B[0].onChange("3")).not.toThrow()
     })
 
     test("factorH onChange does not throw", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(() => hook.factorSections.H[0].onChange("2")).not.toThrow()
     })
 
     test("all factor onChange callbacks can be invoked without throwing", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       const keys = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"] as const
       for (const key of keys) {
         for (const field of hook.factorSections[key]) {
@@ -439,7 +439,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorA: { native_genus_count: "abc" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.A[0].error).toContain("must be a number")
     })
@@ -451,7 +451,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorA: { native_genus_count: "1.5" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.A[0].error).toContain("must be an integer")
     })
@@ -463,7 +463,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorA: { native_genus_count: "-1" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.A[0].error).toContain(">= 0")
     })
@@ -475,7 +475,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorG: { open_flowering_percent: "101" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.G[0].error).toContain("<= 100")
     })
@@ -487,7 +487,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorA: { native_genus_count: "3" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.A[0].error).toBeNull()
     })
@@ -499,7 +499,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorH: { class_score: "2" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.H[0].error).toBeNull()
     })
@@ -511,7 +511,7 @@ describe("useSurveyForm", () => {
         ...saved,
         factorH: { class_score: "3" },
       }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.factorSections.H[0].error).toContain("must be one of")
     })
@@ -520,7 +520,7 @@ describe("useSurveyForm", () => {
       const mockConstants = jest.requireMock("../app/constants")
       const saved = mockConstants.DEFAULT_SURVEY_FORM
       mockConstants.DEFAULT_SURVEY_FORM = { ...saved, siteName: "Mon site" }
-      const hook = buildHook()
+      const hook = useBuildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
       expect(hook.formErrors.siteName).toBeNull()
     })

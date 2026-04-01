@@ -6,7 +6,6 @@ import {
   NativeSyntheticEvent,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -36,10 +35,7 @@ import {
 } from "../app/formatters"
 import {
   brandColors,
-  brandRadius,
-  brandShadow,
   brandSpacing,
-  brandTypography,
 } from "../app/brand-tokens"
 import {
   formatSurveySyncDisplayLabel,
