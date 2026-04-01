@@ -33,7 +33,7 @@ jest.mock("expo-network", () => ({
 import React from "react"
 import { useSurveySyncNetwork } from "./useSurveySyncNetwork"
 
-function buildHook(overrides: Record<string, unknown> = {}) {
+function useBuildHook(overrides: Record<string, unknown> = {}) {
   const params = {
     apiUrl: "http://localhost:3000",
     accessToken: "access-token",
@@ -73,7 +73,7 @@ describe("useSurveySyncNetwork", () => {
   describe("handleSync", () => {
     test("calls syncPending and refreshes data on success", async () => {
       mockSyncPending.mockResolvedValue({ synced: 2, failed: 0, pulled_surveys: 1, pulled_attachments: 0 })
-      const { handleSync, setStatus, refreshLocalSurveys, refreshLocalAttachments } = buildHook()
+      const { handleSync, setStatus, refreshLocalSurveys, refreshLocalAttachments } = useBuildHook()
 
       await handleSync()
 
@@ -84,7 +84,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("calls clearSession on AUTH_REQUIRED error", async () => {
-      const { handleSync, clearSession, setStatus } = buildHook({
+      const { handleSync, clearSession, setStatus } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -95,7 +95,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("sets error status on generic error", async () => {
-      const { handleSync, setStatus } = buildHook({
+      const { handleSync, setStatus } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Network timeout")),
       })
 
@@ -109,7 +109,7 @@ describe("useSurveySyncNetwork", () => {
     test("pulls changes and sets status on success", async () => {
       mockPullRemoteChanges.mockResolvedValue({ surveys: 3, attachments: 1, pages: 2 })
       const { handlePullChanges, setStatus, refreshLocalSurveys, refreshLocalAttachments } =
-        buildHook()
+        useBuildHook()
 
       await handlePullChanges()
 
@@ -119,7 +119,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("calls clearSession on AUTH_REQUIRED", async () => {
-      const { handlePullChanges, clearSession } = buildHook({
+      const { handlePullChanges, clearSession } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -129,7 +129,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("sets error status on generic error", async () => {
-      const { handlePullChanges, setStatus } = buildHook({
+      const { handlePullChanges, setStatus } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Connection refused")),
       })
 
@@ -141,7 +141,7 @@ describe("useSurveySyncNetwork", () => {
 
   describe("handleReportSurvey", () => {
     test("returns error and sets status when surveyId is empty", async () => {
-      const { handleReportSurvey, setStatus } = buildHook()
+      const { handleReportSurvey, setStatus } = useBuildHook()
 
       const result = await handleReportSurvey("", "spam")
 
@@ -150,7 +150,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("returns error when reason is empty", async () => {
-      const { handleReportSurvey, setStatus } = buildHook()
+      const { handleReportSurvey, setStatus } = useBuildHook()
 
       const result = await handleReportSurvey("survey-1", "")
 
@@ -160,7 +160,7 @@ describe("useSurveySyncNetwork", () => {
 
     test("returns ok:true and sets status on successful report", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey, setStatus } = buildHook()
+      const { handleReportSurvey, setStatus } = useBuildHook()
 
       const result = await handleReportSurvey("survey-1", "This is spam content")
 
@@ -170,7 +170,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("calls clearSession and returns ok:false on AUTH_REQUIRED", async () => {
-      const { handleReportSurvey, clearSession } = buildHook({
+      const { handleReportSurvey, clearSession } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -181,7 +181,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("returns ok:false and sets error status on generic failure", async () => {
-      const { handleReportSurvey, setStatus } = buildHook({
+      const { handleReportSurvey, setStatus } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Report failed")),
       })
 
@@ -193,7 +193,7 @@ describe("useSurveySyncNetwork", () => {
 
     test("trims surveyId and reason before sending", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey } = buildHook()
+      const { handleReportSurvey } = useBuildHook()
 
       const result = await handleReportSurvey("  survey-1  ", "  spam  ")
 
@@ -203,7 +203,7 @@ describe("useSurveySyncNetwork", () => {
 
   describe("maybeAutoSync", () => {
     test("does nothing when lastOnlineState is not true", async () => {
-      const { maybeAutoSync, withAuthRetry } = buildHook()
+      const { maybeAutoSync, withAuthRetry } = useBuildHook()
       // lastOnlineStateRef starts as null (from useRef spy)
       await maybeAutoSync("startup")
       expect(withAuthRetry).not.toHaveBeenCalled()

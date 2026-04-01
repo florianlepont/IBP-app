@@ -8,7 +8,7 @@ import {
   UploadTargetResponse,
   SyncBatchResult,
 } from "./types"
-import { MAX_RETRY_COUNT, FACTOR_KEYS, LEGACY_DEFAULT_FACTOR_VALUES } from "./db"
+import { FACTOR_KEYS, LEGACY_DEFAULT_FACTOR_VALUES } from "./db"
 
 export const isFilledValue = (value: unknown): boolean => {
   if (value === null || value === undefined) return false

@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -22,10 +21,7 @@ import * as Location from "expo-location"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   brandColors,
-  brandRadius,
-  brandShadow,
   brandSpacing,
-  brandTypography,
 } from "../app/brand-tokens"
 import { FACTOR_TITLES, REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from "../app/constants"
 import { computeIbpTotalsFromRetainedScores } from "../app/ibp-scoring"
@@ -49,7 +45,6 @@ import { ParcelOverlayPolygons } from "../components/ParcelOverlayPolygons"
 import { useParcelStatuses } from "../hooks/useParcelStatuses"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
-import { AppChoiceChip } from "../ui/AppChoiceChip"
 import { AppField } from "../ui/AppField"
 import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"

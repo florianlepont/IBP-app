@@ -94,7 +94,7 @@ const DEFAULT_PARAMS = {
   onStopEditing: jest.fn(),
 }
 
-function buildHook(overrides: Record<string, unknown> = {}) {
+function useBuildHook(overrides: Record<string, unknown> = {}) {
   return useSurveySync({ ...DEFAULT_PARAMS, ...overrides } as never)
 }
 
@@ -165,7 +165,7 @@ describe("useSurveySync", () => {
 
   describe("hook initialization", () => {
     test("returns all expected properties", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook).toHaveProperty("accessToken")
       expect(hook).toHaveProperty("isAuthenticated")
       expect(hook).toHaveProperty("status")
@@ -179,14 +179,14 @@ describe("useSurveySync", () => {
     })
 
     test("calls useAuth0Session with correct params", () => {
-      buildHook()
+      useBuildHook()
       expect(mockUseAuth0Session).toHaveBeenCalledWith(
         expect.objectContaining({ apiUrl: "http://localhost:3000" }),
       )
     })
 
     test("calls sub-hooks on initialization", () => {
-      buildHook()
+      useBuildHook()
       expect(mockUseSurveySyncProfile).toHaveBeenCalled()
       expect(mockUseSurveySyncNetwork).toHaveBeenCalled()
       expect(mockUseSurveySyncSurveyOperations).toHaveBeenCalled()
@@ -198,7 +198,7 @@ describe("useSurveySync", () => {
   describe("clearSurveySessionState (via onSessionCleared callback)", () => {
     test("calls clearLocalIbpData", async () => {
       mockClearLocalIbpData.mockResolvedValue(undefined)
-      buildHook()
+      useBuildHook()
       const { onSessionCleared } = mockUseAuth0Session.mock.calls[0][0]
       await onSessionCleared()
       expect(mockClearLocalIbpData).toHaveBeenCalled()
@@ -219,7 +219,7 @@ describe("useSurveySync", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       }) as any)
 
-      const hook = buildHook()
+      const hook = useBuildHook()
       hook.setStatus("Hello")
 
       // setters[1] = setOperationStatus (2nd useState call = operationStatus)
@@ -249,7 +249,7 @@ describe("useSurveySync", () => {
         capturedEffects.push(fn as () => void)
       })
 
-      buildHook()
+      useBuildHook()
 
       // Execute all captured effects — with selectedSurveyId=null, both should early-return
       expect(() => capturedEffects.forEach((fn) => fn())).not.toThrow()
@@ -268,7 +268,7 @@ describe("useSurveySync", () => {
 
       // selectedSurveyId="s1" and accessToken="token-abc" (from mockAuth0Session)
       // surveys=[] (default) → selectedSurvey not found → returns early at line 313
-      buildHook({ selectedSurveyId: "s1" })
+      useBuildHook({ selectedSurveyId: "s1" })
       expect(() => capturedEffects.forEach((fn) => fn())).not.toThrow()
 
       useEffectSpy.mockRestore()
@@ -278,7 +278,7 @@ describe("useSurveySync", () => {
 
   describe("setStatus", () => {
     test("calling setStatus invokes reportStatus with session scope", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       // get the setStatusText mock (first useState call → ["Ready", setStatusText])
       // setStatus("Foo") → reportStatus("session", "idle", "Foo") → setStatusText("Foo")
       expect(() => hook.setStatus("test message")).not.toThrow()
@@ -292,7 +292,7 @@ describe("useSurveySync", () => {
       const detail = { id: "s1", status: "submitted" }
       mockLoadSurveyDetail.mockResolvedValue(detail)
 
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleLoadCanonicalDetails("s1")
 
       expect(mockLoadSurveyDetail).toHaveBeenCalledWith(
@@ -304,14 +304,14 @@ describe("useSurveySync", () => {
 
     test("silent mode skips status updates", async () => {
       mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadCanonicalDetails("s1", { silent: true })).resolves.toBeUndefined()
     })
 
     test("non-silent mode calls setStatus on success", async () => {
       mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadCanonicalDetails("s1")).resolves.toBeUndefined()
     })
@@ -319,7 +319,7 @@ describe("useSurveySync", () => {
     test("AUTH_REQUIRED error calls clearSession", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("AUTH_REQUIRED"))
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.handleLoadCanonicalDetails("s1")
 
@@ -328,7 +328,7 @@ describe("useSurveySync", () => {
 
     test("generic error sets status message", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("Network error"))
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadCanonicalDetails("s1")).resolves.toBeUndefined()
     })
@@ -336,14 +336,14 @@ describe("useSurveySync", () => {
     test("silent mode on AUTH_REQUIRED skips status", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("AUTH_REQUIRED"))
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadCanonicalDetails("s1", { silent: true })).resolves.toBeUndefined()
     })
 
     test("silent mode on generic error skips status", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("Server error"))
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadCanonicalDetails("s1", { silent: true })).resolves.toBeUndefined()
     })
@@ -354,7 +354,7 @@ describe("useSurveySync", () => {
   describe("handleLoadSurveyEvents", () => {
     test("calls loadSurveyEvents via withAuthRetry on success", async () => {
       mockLoadSurveyEvents.mockResolvedValue({ items: [{ id: "e1" }] })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.handleLoadSurveyEvents("s1")
 
@@ -367,7 +367,7 @@ describe("useSurveySync", () => {
 
     test("silent mode on success skips status updates", async () => {
       mockLoadSurveyEvents.mockResolvedValue({ items: [] })
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadSurveyEvents("s1", { silent: true })).resolves.toBeUndefined()
     })
@@ -375,7 +375,7 @@ describe("useSurveySync", () => {
     test("AUTH_REQUIRED error calls clearSession", async () => {
       mockLoadSurveyEvents.mockRejectedValue(new Error("AUTH_REQUIRED"))
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await hook.handleLoadSurveyEvents("s1")
 
@@ -384,7 +384,7 @@ describe("useSurveySync", () => {
 
     test("generic error sets status message", async () => {
       mockLoadSurveyEvents.mockRejectedValue(new Error("Connection lost"))
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadSurveyEvents("s1")).resolves.toBeUndefined()
     })
@@ -392,7 +392,7 @@ describe("useSurveySync", () => {
     test("silent mode on AUTH_REQUIRED skips status", async () => {
       mockLoadSurveyEvents.mockRejectedValue(new Error("AUTH_REQUIRED"))
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
 
       await expect(hook.handleLoadSurveyEvents("s1", { silent: true })).resolves.toBeUndefined()
     })
@@ -402,7 +402,7 @@ describe("useSurveySync", () => {
 
   describe("handleDebugResetIbpData", () => {
     test("calls Alert.alert with correct title", async () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetIbpData()
       expect(mockAlert).toHaveBeenCalledWith(
         "Debug reset IBP data",
@@ -412,7 +412,7 @@ describe("useSurveySync", () => {
     })
 
     test("Alert buttons include Cancel and Reset", async () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetIbpData()
       const buttons = mockAlert.mock.calls[0][2]
       const texts = buttons.map((b: Record<string, unknown>) => b.text)
@@ -423,7 +423,7 @@ describe("useSurveySync", () => {
     test("Reset button onPress calls withAuthRetry and clearLocalIbpData", async () => {
       mockResetIbpData.mockResolvedValue({ surveys_deleted: 1, attachments_deleted: 0, events_deleted: 0 })
       mockClearLocalIbpData.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetIbpData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -438,7 +438,7 @@ describe("useSurveySync", () => {
     test("Reset button handles AUTH_REQUIRED error", async () => {
       mockResetIbpData.mockRejectedValue(new Error("AUTH_REQUIRED"))
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetIbpData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -451,7 +451,7 @@ describe("useSurveySync", () => {
 
     test("Reset button handles generic error without throwing", async () => {
       mockResetIbpData.mockRejectedValue(new Error("Server error"))
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetIbpData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -466,7 +466,7 @@ describe("useSurveySync", () => {
       mockResetIbpData.mockResolvedValue({ surveys_deleted: 0, attachments_deleted: 0, events_deleted: 0 })
       mockClearLocalIbpData.mockResolvedValue(undefined)
       const onStopEditing = jest.fn()
-      const hook = buildHook({ editingSurveyId: "survey-1", onStopEditing })
+      const hook = useBuildHook({ editingSurveyId: "survey-1", onStopEditing })
       await hook.handleDebugResetIbpData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -487,7 +487,7 @@ describe("useSurveySync", () => {
 
   describe("handleDebugResetUserData", () => {
     test("calls Alert.alert with correct title", async () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetUserData()
       expect(mockAlert).toHaveBeenCalledWith(
         "Debug reset user data",
@@ -500,7 +500,7 @@ describe("useSurveySync", () => {
       mockResetUserData.mockResolvedValue({ users_deleted: 1, surveys_deleted: 0, attachments_deleted: 0 })
       mockClearLocalIbpData.mockResolvedValue(undefined)
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetUserData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -517,7 +517,7 @@ describe("useSurveySync", () => {
     test("Reset button handles AUTH_REQUIRED error", async () => {
       mockResetUserData.mockRejectedValue(new Error("AUTH_REQUIRED"))
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetUserData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -530,7 +530,7 @@ describe("useSurveySync", () => {
 
     test("Reset button handles generic error without throwing", async () => {
       mockResetUserData.mockRejectedValue(new Error("Timeout"))
-      const hook = buildHook()
+      const hook = useBuildHook()
       await hook.handleDebugResetUserData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(
@@ -546,7 +546,7 @@ describe("useSurveySync", () => {
       mockClearLocalIbpData.mockResolvedValue(undefined)
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
       const onStopEditing = jest.fn()
-      const hook = buildHook({ editingSurveyId: "survey-x", onStopEditing })
+      const hook = useBuildHook({ editingSurveyId: "survey-x", onStopEditing })
       await hook.handleDebugResetUserData()
 
       const resetButton = mockAlert.mock.calls[0][2].find(

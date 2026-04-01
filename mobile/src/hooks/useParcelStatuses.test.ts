@@ -25,7 +25,7 @@ import { useParcelStatuses } from "./useParcelStatuses"
 
 const MOCK_REGION = { latitude: 48, longitude: 2, latitudeDelta: 0.1, longitudeDelta: 0.1 }
 
-function buildHook(overrides: Record<string, unknown> = {}) {
+function useBuildHook(overrides: Record<string, unknown> = {}) {
   return useParcelStatuses({
     apiUrl: "http://localhost:3000",
     region: MOCK_REGION as never,
@@ -78,19 +78,19 @@ describe("useParcelStatuses", () => {
 
   describe("hook initialization", () => {
     test("returns items and loading", () => {
-      const hook = buildHook()
+      const hook = useBuildHook()
       expect(hook).toHaveProperty("items")
       expect(hook).toHaveProperty("loading")
     })
 
     test("computes bbox and zoom from region via useMemo", () => {
-      buildHook()
+      useBuildHook()
       expect(mockComputeRegionBbox).toHaveBeenCalledWith(MOCK_REGION)
       expect(mockComputeRegionZoom).toHaveBeenCalledWith(MOCK_REGION)
     })
 
     test("captures an effect for side effects", () => {
-      buildHook()
+      useBuildHook()
       expect(capturedEffect).not.toBeNull()
     })
   })
@@ -99,15 +99,15 @@ describe("useParcelStatuses", () => {
 
   describe("when disabled", () => {
     test("effect does not schedule a fetch", () => {
-      buildHook({ enabled: false })
+      useBuildHook({ enabled: false })
       capturedEffect?.()
       jest.runAllTimers()
       expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
     })
 
     test("effect calls setItems([]) and setLoading(false)", () => {
-      const hook = buildHook({ enabled: false })
-      const setItems = hook.items // items from useState spy
+      const hook = useBuildHook({ enabled: false })
+      const _setItems = hook.items // items from useState spy
       // we can verify through the effect that state setters are called
       // (they are jest.fn() from useStateSpy, captured in order of useState calls)
       capturedEffect?.()
@@ -121,7 +121,7 @@ describe("useParcelStatuses", () => {
   describe("when enabled", () => {
     test("effect schedules fetch after debounce (default 400ms)", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      buildHook()
+      useBuildHook()
       capturedEffect?.()
 
       // Before debounce: not yet called
@@ -141,7 +141,7 @@ describe("useParcelStatuses", () => {
 
     test("effect respects custom debounceMs", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      buildHook({ debounceMs: 200 })
+      useBuildHook({ debounceMs: 200 })
       capturedEffect?.()
 
       jest.runAllTimers()
@@ -153,7 +153,7 @@ describe("useParcelStatuses", () => {
 
     test("passes year to fetchPublicParcelStatuses when provided", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      buildHook({ year: 2023 })
+      useBuildHook({ year: 2023 })
       capturedEffect?.()
       jest.advanceTimersByTime(400)
       await Promise.resolve()
@@ -168,7 +168,7 @@ describe("useParcelStatuses", () => {
     test("handles successful fetch with valid items array", async () => {
       const items = [{ id: "p1" }, { id: "p2" }]
       mockFetchPublicParcelStatuses.mockResolvedValue({ items })
-      buildHook()
+      useBuildHook()
       capturedEffect?.()
       jest.advanceTimersByTime(400)
       await Promise.resolve()
@@ -180,7 +180,7 @@ describe("useParcelStatuses", () => {
 
     test("handles successful fetch with non-array items (defaults to [])", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: null })
-      buildHook()
+      useBuildHook()
       capturedEffect?.()
       jest.advanceTimersByTime(400)
       await Promise.resolve()
@@ -192,7 +192,7 @@ describe("useParcelStatuses", () => {
 
     test("handles fetch error gracefully", async () => {
       mockFetchPublicParcelStatuses.mockRejectedValue(new Error("fetch failed"))
-      buildHook()
+      useBuildHook()
       capturedEffect?.()
       jest.advanceTimersByTime(400)
       await Promise.resolve()
@@ -207,7 +207,7 @@ describe("useParcelStatuses", () => {
 
   describe("cleanup", () => {
     test("effect returns a cleanup function (covers cleanup code path)", () => {
-      buildHook()
+      useBuildHook()
       const cleanup = capturedEffect?.() as (() => void) | undefined
       expect(typeof cleanup).toBe("function")
       // Calling cleanup should not throw (clearTimeout on the scheduled timer)
