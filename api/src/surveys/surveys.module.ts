@@ -5,12 +5,20 @@ import { ParcelsController } from "./parcels.controller"
 import { PublicController } from "./public.controller"
 import { SurveysController } from "./surveys.controller"
 import { SurveysService } from "./surveys.service"
+import { SurveysAttachmentsService } from "./surveys-attachments.service"
+import { SurveysSyncService } from "./surveys-sync.service"
 import { IbpRulesService } from "./ibp-rules.service"
 import { SyncController } from "./sync.controller"
 
 @Module({
   imports: [AuthModule],
   controllers: [SurveysController, SyncController, PublicController, ParcelsController],
-  providers: [SurveysService, IbpRulesService, CadastreProviderService],
+  providers: [
+    SurveysService,
+    SurveysAttachmentsService,
+    SurveysSyncService,
+    IbpRulesService,
+    CadastreProviderService,
+  ],
 })
 export class SurveysModule {}
