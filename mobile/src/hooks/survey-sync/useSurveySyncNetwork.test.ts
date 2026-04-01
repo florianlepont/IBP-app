@@ -25,7 +25,9 @@ jest.mock("../useAuth0Session", () => ({
 }))
 
 jest.mock("expo-network", () => ({
-  getNetworkStateAsync: jest.fn().mockResolvedValue({ isConnected: true, isInternetReachable: true }),
+  getNetworkStateAsync: jest
+    .fn()
+    .mockResolvedValue({ isConnected: true, isInternetReachable: true }),
   addNetworkStateListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
   NetworkStateType: { WIFI: "WIFI", NONE: "NONE", CELLULAR: "CELLULAR" },
 }))
@@ -72,7 +74,12 @@ describe("useSurveySyncNetwork", () => {
 
   describe("handleSync", () => {
     test("calls syncPending and refreshes data on success", async () => {
-      mockSyncPending.mockResolvedValue({ synced: 2, failed: 0, pulled_surveys: 1, pulled_attachments: 0 })
+      mockSyncPending.mockResolvedValue({
+        synced: 2,
+        failed: 0,
+        pulled_surveys: 1,
+        pulled_attachments: 0,
+      })
       const { handleSync, setStatus, refreshLocalSurveys, refreshLocalAttachments } = useBuildHook()
 
       await handleSync()

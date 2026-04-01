@@ -30,15 +30,12 @@ jest.mock("../app/constants", () => ({
     factorI: { type_count: "" },
     factorJ: { type_count: "" },
   },
-  normalizeVegetationStageForRegion: (...args: unknown[]) =>
-    mockNormalizeVegetationStage(...args),
-  defaultVegetationStageForRegion: (...args: unknown[]) =>
-    mockDefaultVegetationStage(...args),
+  normalizeVegetationStageForRegion: (...args: unknown[]) => mockNormalizeVegetationStage(...args),
+  defaultVegetationStageForRegion: (...args: unknown[]) => mockDefaultVegetationStage(...args),
 }))
 
 jest.mock("../app/ibp-scoring", () => ({
-  computeRetainedScoresFromRawFactors: (...args: unknown[]) =>
-    mockComputeRetainedScores(...args),
+  computeRetainedScoresFromRawFactors: (...args: unknown[]) => mockComputeRetainedScores(...args),
 }))
 
 jest.mock("../app/number-utils", () => ({
@@ -68,9 +65,7 @@ describe("useSurveyForm", () => {
       .spyOn(React, "useState")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest
-      .spyOn(React, "useCallback")
-      .mockImplementation((fn) => fn as never)
+    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
     useMemoSpy = jest
       .spyOn(React, "useMemo")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,7 +105,16 @@ describe("useSurveyForm", () => {
     test("factorSections has all 10 factors", () => {
       const hook = useBuildHook()
       expect(Object.keys(hook.factorSections)).toEqual([
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
       ])
     })
 

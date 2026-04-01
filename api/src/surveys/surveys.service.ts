@@ -5,10 +5,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common"
-import {
-  DeleteObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { randomUUID } from "crypto"
 import { rm } from "fs/promises"
 import { join } from "path"
@@ -239,9 +236,7 @@ export class SurveysService {
     const versionNumber =
       versionNumberRaw ?? (parcelId ? await this.getDefaultVersionNumber(parcelId, body.id) : null)
     const previousSurveyId =
-      normalizePreviousSurveyId(body.previous_survey_id) ??
-      existing?.previous_survey_id ??
-      null
+      normalizePreviousSurveyId(body.previous_survey_id) ?? existing?.previous_survey_id ?? null
 
     if (!existing) {
       const createdAt = now.toISOString()

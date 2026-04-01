@@ -1,10 +1,5 @@
 import { Platform, StyleSheet } from "react-native"
-import {
-  brandColors,
-  brandRadius,
-  brandShadow,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandColors, brandRadius, brandShadow, brandTypography } from "../app/brand-tokens"
 
 export const screenStyles = StyleSheet.create({
   container: {

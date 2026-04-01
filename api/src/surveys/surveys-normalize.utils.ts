@@ -103,7 +103,9 @@ export function toFiniteNumber(value: unknown): number | null {
   return null
 }
 
-export function normalizeCentroid(value: Record<string, unknown>): { lat: number; lng: number } | null {
+export function normalizeCentroid(
+  value: Record<string, unknown>,
+): { lat: number; lng: number } | null {
   const lat = toFiniteNumber(value.lat)
   const lng = toFiniteNumber(value.lng)
   if (lat === null || lng === null) {

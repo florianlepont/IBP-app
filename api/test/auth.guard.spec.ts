@@ -71,9 +71,7 @@ describe("AuthGuard", () => {
     const result = await guard.canActivate(context)
 
     expect(result).toBe(true)
-    expect(
-      (context as unknown as { request: { user: unknown } }).request.user,
-    ).toEqual(AUTH_USER)
+    expect((context as unknown as { request: { user: unknown } }).request.user).toEqual(AUTH_USER)
   })
 
   it("throws UnauthorizedException when user is not found in DB", async () => {
@@ -81,14 +79,18 @@ describe("AuthGuard", () => {
     db.query.mockResolvedValueOnce({ rows: [] })
     const token = makeToken("unknown-id")
 
-    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(UnauthorizedException)
+    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
   })
 
   it("throws UnauthorizedException when token is signed with wrong secret", async () => {
     const { guard } = buildGuard()
     const token = makeToken(AUTH_USER.id, "wrong-secret")
 
-    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(UnauthorizedException)
+    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
   })
 
   it("throws UnauthorizedException when ACCESS_TOKEN_SECRET is not set", async () => {
@@ -96,6 +98,8 @@ describe("AuthGuard", () => {
     const { guard } = buildGuard()
     const token = makeToken(AUTH_USER.id)
 
-    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(UnauthorizedException)
+    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
   })
 })

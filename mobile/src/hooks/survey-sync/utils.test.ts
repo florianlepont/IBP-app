@@ -28,31 +28,56 @@ describe("isUnauthorizedResultMessage", () => {
     expect(isUnauthorizedResultMessage("auth_required")).toBe(true))
   test("does not match '4010' (digits around 401)", () =>
     expect(isUnauthorizedResultMessage("error 4010")).toBe(false))
-  test("does not match '1401'", () =>
-    expect(isUnauthorizedResultMessage("error 1401")).toBe(false))
+  test("does not match '1401'", () => expect(isUnauthorizedResultMessage("error 1401")).toBe(false))
   test("does not match unrelated message", () =>
     expect(isUnauthorizedResultMessage("Network error")).toBe(false))
 })
 
 describe("isOnlineNetworkState", () => {
   test("returns true when connected and reachable", () => {
-    expect(isOnlineNetworkState({ isConnected: true, isInternetReachable: true, type: "WIFI" as never })).toBe(true)
+    expect(
+      isOnlineNetworkState({ isConnected: true, isInternetReachable: true, type: "WIFI" as never }),
+    ).toBe(true)
   })
 
   test("returns true when connected and reachable is undefined (treats as reachable)", () => {
-    expect(isOnlineNetworkState({ isConnected: true, isInternetReachable: undefined, type: "WIFI" as never })).toBe(true)
+    expect(
+      isOnlineNetworkState({
+        isConnected: true,
+        isInternetReachable: undefined,
+        type: "WIFI" as never,
+      }),
+    ).toBe(true)
   })
 
   test("returns false when not connected", () => {
-    expect(isOnlineNetworkState({ isConnected: false, isInternetReachable: false, type: "NONE" as never })).toBe(false)
+    expect(
+      isOnlineNetworkState({
+        isConnected: false,
+        isInternetReachable: false,
+        type: "NONE" as never,
+      }),
+    ).toBe(false)
   })
 
   test("returns false when connected but not reachable", () => {
-    expect(isOnlineNetworkState({ isConnected: true, isInternetReachable: false, type: "WIFI" as never })).toBe(false)
+    expect(
+      isOnlineNetworkState({
+        isConnected: true,
+        isInternetReachable: false,
+        type: "WIFI" as never,
+      }),
+    ).toBe(false)
   })
 
   test("returns false when isConnected is undefined", () => {
-    expect(isOnlineNetworkState({ isConnected: undefined, isInternetReachable: true, type: "NONE" as never })).toBe(false)
+    expect(
+      isOnlineNetworkState({
+        isConnected: undefined,
+        isInternetReachable: true,
+        type: "NONE" as never,
+      }),
+    ).toBe(false)
   })
 })
 
@@ -87,12 +112,18 @@ describe("formatSubmitReadinessError", () => {
   })
 
   test("includes missing region_version", () => {
-    const msg = formatSubmitReadinessError("s1", makeReadiness({ missing_fields: ["region_version"] }))
+    const msg = formatSubmitReadinessError(
+      "s1",
+      makeReadiness({ missing_fields: ["region_version"] }),
+    )
     expect(msg).toContain("region version")
   })
 
   test("includes missing vegetation_stage", () => {
-    const msg = formatSubmitReadinessError("s1", makeReadiness({ missing_fields: ["vegetation_stage"] }))
+    const msg = formatSubmitReadinessError(
+      "s1",
+      makeReadiness({ missing_fields: ["vegetation_stage"] }),
+    )
     expect(msg).toContain("vegetation stage")
   })
 
@@ -102,10 +133,13 @@ describe("formatSubmitReadinessError", () => {
   })
 
   test("combines multiple missing fields with separator", () => {
-    const msg = formatSubmitReadinessError("s1", makeReadiness({
-      missing_factors: ["A1"],
-      missing_fields: ["region_version"],
-    }))
+    const msg = formatSubmitReadinessError(
+      "s1",
+      makeReadiness({
+        missing_factors: ["A1"],
+        missing_fields: ["region_version"],
+      }),
+    )
     expect(msg).toContain("|")
   })
 })

@@ -75,9 +75,7 @@ describe("useSurveySyncProfile", () => {
       .spyOn(React, "useState")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest
-      .spyOn(React, "useCallback")
-      .mockImplementation((fn) => fn as never)
+    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
   })
 
   afterEach(() => {
@@ -92,10 +90,16 @@ describe("useSurveySyncProfile", () => {
       mockPatchMyProfile.mockResolvedValue({ ...AUTH_USER, display_name: "New Name" })
       const { handleUpdateProfile, setStatus, setProfileFromUser } = useBuildHook()
 
-      await handleUpdateProfile({ first_name: "User", last_name: "Example", display_name: "New Name" })
+      await handleUpdateProfile({
+        first_name: "User",
+        last_name: "Example",
+        display_name: "New Name",
+      })
 
       expect(setStatus).toHaveBeenCalledWith("Profile updated")
-      expect(setProfileFromUser).toHaveBeenCalledWith(expect.objectContaining({ display_name: "New Name" }))
+      expect(setProfileFromUser).toHaveBeenCalledWith(
+        expect.objectContaining({ display_name: "New Name" }),
+      )
     })
 
     test("rejects blank display_name without calling API", async () => {
@@ -131,7 +135,11 @@ describe("useSurveySyncProfile", () => {
       mockPatchMyProfile.mockResolvedValue(AUTH_USER)
       const { handleUpdateProfile } = useBuildHook()
 
-      await handleUpdateProfile({ first_name: "  User  ", last_name: "  Ex  ", display_name: "  Name  " })
+      await handleUpdateProfile({
+        first_name: "  User  ",
+        last_name: "  Ex  ",
+        display_name: "  Name  ",
+      })
 
       expect(mockPatchMyProfile).toHaveBeenCalledWith(
         "http://localhost:3000",
@@ -251,7 +259,9 @@ describe("useSurveySyncProfile", () => {
 
   describe("handleTakeProfilePictureFromCamera", () => {
     test("sets status when camera permission is denied", async () => {
-      ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: false })
+      ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: false,
+      })
       const { handleTakeProfilePictureFromCamera, setStatus } = useBuildHook()
 
       await handleTakeProfilePictureFromCamera()

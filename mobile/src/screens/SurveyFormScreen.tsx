@@ -19,10 +19,7 @@ import { Ionicons } from "@expo/vector-icons"
 import MapView, { Marker, Region } from "react-native-maps"
 import * as Location from "expo-location"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import {
-  brandColors,
-  brandSpacing,
-} from "../app/brand-tokens"
+import { brandColors, brandSpacing } from "../app/brand-tokens"
 import { FACTOR_TITLES, REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from "../app/constants"
 import { computeIbpTotalsFromRetainedScores } from "../app/ibp-scoring"
 import {
@@ -1193,4 +1190,3 @@ export function SurveyFormScreen({
     </View>
   )
 }
-
