@@ -47,9 +47,7 @@ describe("useSurveyList", () => {
       .spyOn(React, "useState")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest
-      .spyOn(React, "useCallback")
-      .mockImplementation((fn) => fn as never)
+    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
     useMemoSpy = jest
       .spyOn(React, "useMemo")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

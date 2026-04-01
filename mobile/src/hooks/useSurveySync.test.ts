@@ -143,15 +143,11 @@ describe("useSurveySync", () => {
       .spyOn(React, "useState")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest
-      .spyOn(React, "useCallback")
-      .mockImplementation((fn) => fn as never)
+    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
     useRefSpy = jest
       .spyOn(React, "useRef")
       .mockImplementation((initial: unknown) => ({ current: initial }) as never)
-    useEffectSpy = jest
-      .spyOn(React, "useEffect")
-      .mockImplementation(() => undefined)
+    useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation(() => undefined)
   })
 
   afterEach(() => {
@@ -295,11 +291,7 @@ describe("useSurveySync", () => {
       const hook = useBuildHook()
       await hook.handleLoadCanonicalDetails("s1")
 
-      expect(mockLoadSurveyDetail).toHaveBeenCalledWith(
-        "http://localhost:3000",
-        "token-abc",
-        "s1",
-      )
+      expect(mockLoadSurveyDetail).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
     })
 
     test("silent mode skips status updates", async () => {
@@ -358,11 +350,7 @@ describe("useSurveySync", () => {
 
       await hook.handleLoadSurveyEvents("s1")
 
-      expect(mockLoadSurveyEvents).toHaveBeenCalledWith(
-        "http://localhost:3000",
-        "token-abc",
-        "s1",
-      )
+      expect(mockLoadSurveyEvents).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
     })
 
     test("silent mode on success skips status updates", async () => {
@@ -421,7 +409,11 @@ describe("useSurveySync", () => {
     })
 
     test("Reset button onPress calls withAuthRetry and clearLocalIbpData", async () => {
-      mockResetIbpData.mockResolvedValue({ surveys_deleted: 1, attachments_deleted: 0, events_deleted: 0 })
+      mockResetIbpData.mockResolvedValue({
+        surveys_deleted: 1,
+        attachments_deleted: 0,
+        events_deleted: 0,
+      })
       mockClearLocalIbpData.mockResolvedValue(undefined)
       const hook = useBuildHook()
       await hook.handleDebugResetIbpData()
@@ -463,7 +455,11 @@ describe("useSurveySync", () => {
     })
 
     test("Reset button calls onStopEditing when editingSurveyId is set", async () => {
-      mockResetIbpData.mockResolvedValue({ surveys_deleted: 0, attachments_deleted: 0, events_deleted: 0 })
+      mockResetIbpData.mockResolvedValue({
+        surveys_deleted: 0,
+        attachments_deleted: 0,
+        events_deleted: 0,
+      })
       mockClearLocalIbpData.mockResolvedValue(undefined)
       const onStopEditing = jest.fn()
       const hook = useBuildHook({ editingSurveyId: "survey-1", onStopEditing })
@@ -497,7 +493,11 @@ describe("useSurveySync", () => {
     })
 
     test("Reset button onPress calls withAuthRetry and clearSession", async () => {
-      mockResetUserData.mockResolvedValue({ users_deleted: 1, surveys_deleted: 0, attachments_deleted: 0 })
+      mockResetUserData.mockResolvedValue({
+        users_deleted: 1,
+        surveys_deleted: 0,
+        attachments_deleted: 0,
+      })
       mockClearLocalIbpData.mockResolvedValue(undefined)
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
       const hook = useBuildHook()
@@ -542,7 +542,11 @@ describe("useSurveySync", () => {
     })
 
     test("Reset button calls onStopEditing when editingSurveyId is set", async () => {
-      mockResetUserData.mockResolvedValue({ users_deleted: 0, surveys_deleted: 0, attachments_deleted: 0 })
+      mockResetUserData.mockResolvedValue({
+        users_deleted: 0,
+        surveys_deleted: 0,
+        attachments_deleted: 0,
+      })
       mockClearLocalIbpData.mockResolvedValue(undefined)
       mockAuth0Session.clearSession.mockResolvedValue(undefined)
       const onStopEditing = jest.fn()

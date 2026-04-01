@@ -131,9 +131,9 @@ describe("Auth0ManagementService", () => {
       const service = buildService()
       global.fetch = jest.fn().mockResolvedValueOnce({ ok: false, status: 400 })
 
-      await expect(
-        service.sendPasswordResetEmail("user@example.com"),
-      ).rejects.toBeInstanceOf(InternalServerErrorException)
+      await expect(service.sendPasswordResetEmail("user@example.com")).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      )
     })
 
     it("sends the correct email in the request body", async () => {

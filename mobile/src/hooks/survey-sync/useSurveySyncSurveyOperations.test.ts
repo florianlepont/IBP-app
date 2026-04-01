@@ -59,7 +59,9 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     editingSurveyId: null,
     surveys: [],
     clearSession: jest.fn().mockResolvedValue(undefined),
-    refreshSessionTokens: jest.fn().mockResolvedValue({ accessToken: "new-token", refreshToken: "" }),
+    refreshSessionTokens: jest
+      .fn()
+      .mockResolvedValue({ accessToken: "new-token", refreshToken: "" }),
     withAuthRetry: jest.fn((fn: (token: string) => unknown) => fn("token")),
     refreshLocalSurveys: jest.fn().mockResolvedValue(undefined),
     refreshLocalAttachments: jest.fn().mockResolvedValue(undefined),
@@ -156,8 +158,19 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("marks survey expired when readiness check returns expired", async () => {
       mockGetSubmitBlockReason.mockReturnValue(null)
-      mockGetLocalSurveyDraft.mockResolvedValue({ region_version: "ACA", vegetation_stage: "planitiaire", factors: {}, parcel_ids: [], expires_at: "2020-01-01" })
-      mockEvaluateSubmitReadiness.mockReturnValue({ ready: false, expired: true, missing_factors: [], missing_fields: [] })
+      mockGetLocalSurveyDraft.mockResolvedValue({
+        region_version: "ACA",
+        vegetation_stage: "planitiaire",
+        factors: {},
+        parcel_ids: [],
+        expires_at: "2020-01-01",
+      })
+      mockEvaluateSubmitReadiness.mockReturnValue({
+        ready: false,
+        expired: true,
+        missing_factors: [],
+        missing_fields: [],
+      })
       mockMarkSurveyExpiredLocally.mockResolvedValue(undefined)
       const { handleSubmitSurvey, refreshLocalSurveys } = useBuildHook()
       await handleSubmitSurvey("survey-1")
@@ -167,8 +180,19 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("submits successfully and updates status", async () => {
       mockGetSubmitBlockReason.mockReturnValue(null)
-      mockGetLocalSurveyDraft.mockResolvedValue({ region_version: "ACA", vegetation_stage: "planitiaire", factors: {}, parcel_ids: ["p1"], expires_at: null })
-      mockEvaluateSubmitReadiness.mockReturnValue({ ready: true, expired: false, missing_factors: [], missing_fields: [] })
+      mockGetLocalSurveyDraft.mockResolvedValue({
+        region_version: "ACA",
+        vegetation_stage: "planitiaire",
+        factors: {},
+        parcel_ids: ["p1"],
+        expires_at: null,
+      })
+      mockEvaluateSubmitReadiness.mockReturnValue({
+        ready: true,
+        expired: false,
+        missing_factors: [],
+        missing_fields: [],
+      })
       mockSubmitSurvey.mockResolvedValue({ ok: true, message: "Submitted" })
       const { handleSubmitSurvey, setStatus, refreshLocalSurveys } = useBuildHook()
       await handleSubmitSurvey("survey-1")
@@ -178,8 +202,19 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("calls clearSession on AUTH_REQUIRED during submit", async () => {
       mockGetSubmitBlockReason.mockReturnValue(null)
-      mockGetLocalSurveyDraft.mockResolvedValue({ region_version: "ACA", vegetation_stage: "planitiaire", factors: {}, parcel_ids: ["p1"], expires_at: null })
-      mockEvaluateSubmitReadiness.mockReturnValue({ ready: true, expired: false, missing_factors: [], missing_fields: [] })
+      mockGetLocalSurveyDraft.mockResolvedValue({
+        region_version: "ACA",
+        vegetation_stage: "planitiaire",
+        factors: {},
+        parcel_ids: ["p1"],
+        expires_at: null,
+      })
+      mockEvaluateSubmitReadiness.mockReturnValue({
+        ready: true,
+        expired: false,
+        missing_factors: [],
+        missing_fields: [],
+      })
       const { handleSubmitSurvey, clearSession } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
@@ -189,8 +224,19 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("sets error status on generic submit error", async () => {
       mockGetSubmitBlockReason.mockReturnValue(null)
-      mockGetLocalSurveyDraft.mockResolvedValue({ region_version: "ACA", vegetation_stage: "planitiaire", factors: {}, parcel_ids: ["p1"], expires_at: null })
-      mockEvaluateSubmitReadiness.mockReturnValue({ ready: true, expired: false, missing_factors: [], missing_fields: [] })
+      mockGetLocalSurveyDraft.mockResolvedValue({
+        region_version: "ACA",
+        vegetation_stage: "planitiaire",
+        factors: {},
+        parcel_ids: ["p1"],
+        expires_at: null,
+      })
+      mockEvaluateSubmitReadiness.mockReturnValue({
+        ready: true,
+        expired: false,
+        missing_factors: [],
+        missing_fields: [],
+      })
       const { handleSubmitSurvey, setStatus } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Network error")),
       })
@@ -240,14 +286,22 @@ describe("useSurveySyncSurveyOperations", () => {
 
   describe("handleToggleVisibility", () => {
     test("sets status on success", async () => {
-      mockUpdateSurveyVisibility.mockResolvedValue({ ok: true, message: "Visibility updated", synced: false })
+      mockUpdateSurveyVisibility.mockResolvedValue({
+        ok: true,
+        message: "Visibility updated",
+        synced: false,
+      })
       const { handleToggleVisibility, setStatus } = useBuildHook()
       await handleToggleVisibility("survey-1", "public")
       expect(setStatus).toHaveBeenCalledWith("Visibility updated")
     })
 
     test("sets warning status when result is not ok", async () => {
-      mockUpdateSurveyVisibility.mockResolvedValue({ ok: false, message: "Conflict", synced: false })
+      mockUpdateSurveyVisibility.mockResolvedValue({
+        ok: false,
+        message: "Conflict",
+        synced: false,
+      })
       const { handleToggleVisibility, setStatus } = useBuildHook()
       await handleToggleVisibility("survey-1", "public")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Conflict"))
@@ -264,7 +318,11 @@ describe("useSurveySyncSurveyOperations", () => {
     })
 
     test("calls clearSession when token refresh fails on 401", async () => {
-      mockUpdateSurveyVisibility.mockResolvedValue({ ok: false, message: "401 error", synced: false })
+      mockUpdateSurveyVisibility.mockResolvedValue({
+        ok: false,
+        message: "401 error",
+        synced: false,
+      })
       const { handleToggleVisibility, clearSession } = useBuildHook({
         refreshSessionTokens: jest.fn().mockResolvedValue(null),
       })
@@ -309,14 +367,18 @@ describe("useSurveySyncSurveyOperations", () => {
     })
 
     test("sets status when permission denied", async () => {
-      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({ granted: false })
+      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: false,
+      })
       const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
       expect(setStatus).toHaveBeenCalledWith("Media library permission is required")
     })
 
     test("sets status when picker cancelled", async () => {
-      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true })
+      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: true,
+      })
       ;(ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({ canceled: true })
       const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
@@ -324,10 +386,21 @@ describe("useSurveySyncSurveyOperations", () => {
     })
 
     test("queues attachment and sets status on success", async () => {
-      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true })
+      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: true,
+      })
       ;(ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
         canceled: false,
-        assets: [{ uri: "file://photo.jpg", mimeType: "image/jpeg", fileName: "photo.jpg", fileSize: 100000, width: 100, height: 100 }],
+        assets: [
+          {
+            uri: "file://photo.jpg",
+            mimeType: "image/jpeg",
+            fileName: "photo.jpg",
+            fileSize: 100000,
+            width: 100,
+            height: 100,
+          },
+        ],
       })
       mockQueueLocalAttachment.mockResolvedValue(undefined)
       const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
@@ -341,7 +414,9 @@ describe("useSurveySyncSurveyOperations", () => {
 
   describe("handleQueueAttachmentFromCamera", () => {
     test("sets status when camera permission denied", async () => {
-      ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: false })
+      ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: false,
+      })
       const { handleQueueAttachmentFromCamera, setStatus } = useBuildHook()
       await handleQueueAttachmentFromCamera("survey-1")
       expect(setStatus).toHaveBeenCalledWith("Camera permission is required")
@@ -376,7 +451,12 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("removes locally and syncs when queued_delete is true", async () => {
       mockQueueDeleteAttachment.mockResolvedValue({ removed_local: true, queued_delete: true })
-      mockSyncPending.mockResolvedValue({ synced: 1, failed: 0, pulled_surveys: 0, pulled_attachments: 0 })
+      mockSyncPending.mockResolvedValue({
+        synced: 1,
+        failed: 0,
+        pulled_surveys: 0,
+        pulled_attachments: 0,
+      })
       const { handleDeleteAttachment, setStatus } = useBuildHook()
       await handleDeleteAttachment("survey-1", "att-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("synced"))

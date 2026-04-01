@@ -164,7 +164,10 @@ describe("UsersService", () => {
     it("throws BadRequestException when file buffer is empty", async () => {
       const { service } = buildService()
       await expect(
-        service.uploadProfilePicture(AUTH_USER, { buffer: Buffer.alloc(0), mimetype: "image/jpeg" }),
+        service.uploadProfilePicture(AUTH_USER, {
+          buffer: Buffer.alloc(0),
+          mimetype: "image/jpeg",
+        }),
       ).rejects.toBeInstanceOf(BadRequestException)
     })
 
@@ -296,7 +299,9 @@ describe("UsersService", () => {
       const { service, db } = buildService()
       db.query.mockResolvedValueOnce({ rows: [] })
 
-      await expect(service.removeProfilePicture(AUTH_USER)).rejects.toBeInstanceOf(NotFoundException)
+      await expect(service.removeProfilePicture(AUTH_USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      )
     })
 
     it("removes file and clears picture url when storage key exists", async () => {

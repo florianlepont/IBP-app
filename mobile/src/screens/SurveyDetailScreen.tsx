@@ -33,10 +33,7 @@ import {
   isLessThan24HoursRemaining,
   resolveSubmissionDeadline,
 } from "../app/formatters"
-import {
-  brandColors,
-  brandSpacing,
-} from "../app/brand-tokens"
+import { brandColors, brandSpacing } from "../app/brand-tokens"
 import {
   formatSurveySyncDisplayLabel,
   formatSurveyWorkflowStatusLabel,
@@ -1291,4 +1288,3 @@ export function SurveyDetailScreen({
     </ScrollView>
   )
 }
-

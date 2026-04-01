@@ -60,7 +60,10 @@ export const isLegacyDefaultFactorValue = (factorKey: string, rawValue: unknown)
   return expectedKeys.every((key) => typeof value[key] === "number" && value[key] === expected[key])
 }
 
-export const computeCompletionRate = (status: string, payload: SurveyQueuePayload | null): number => {
+export const computeCompletionRate = (
+  status: string,
+  payload: SurveyQueuePayload | null,
+): number => {
   if (status === "submitted") return 100
   if (!payload) return 0
 
@@ -113,7 +116,9 @@ export function isSurveyDeleteQueuePayload(payload: unknown): payload is SurveyD
   )
 }
 
-export function isSurveyVisibilityQueuePayload(payload: unknown): payload is SurveyVisibilityQueuePayload {
+export function isSurveyVisibilityQueuePayload(
+  payload: unknown,
+): payload is SurveyVisibilityQueuePayload {
   if (!payload || typeof payload !== "object") return false
   const kind = (payload as { kind?: string }).kind
   const surveyId = (payload as { survey_id?: string }).survey_id
@@ -125,7 +130,9 @@ export function isSurveyVisibilityQueuePayload(payload: unknown): payload is Sur
   )
 }
 
-export function isAttachmentDeleteQueuePayload(payload: unknown): payload is AttachmentDeleteQueuePayload {
+export function isAttachmentDeleteQueuePayload(
+  payload: unknown,
+): payload is AttachmentDeleteQueuePayload {
   if (!payload || typeof payload !== "object") return false
   return (
     (payload as { kind?: string }).kind === "attachment_delete" &&
@@ -143,7 +150,9 @@ export function isAttachmentQueuePayload(payload: unknown): payload is Attachmen
   )
 }
 
-export function toUploadTarget(data: Record<string, unknown> | undefined): UploadTargetResponse | null {
+export function toUploadTarget(
+  data: Record<string, unknown> | undefined,
+): UploadTargetResponse | null {
   if (!data) return null
 
   const attachmentId = data.attachment_id

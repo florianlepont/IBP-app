@@ -37,9 +37,7 @@ describe("usePublicMapExplorer", () => {
       .spyOn(React, "useState")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest
-      .spyOn(React, "useCallback")
-      .mockImplementation((fn) => fn as never)
+    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
     useRefSpy = jest
       .spyOn(React, "useRef")
       .mockImplementation((initial: unknown) => ({ current: initial }) as never)
@@ -112,9 +110,7 @@ describe("usePublicMapExplorer", () => {
 
       await hook.loadPublicMap()
 
-      expect(onStatusChange).toHaveBeenCalledWith(
-        expect.stringContaining("Network error"),
-      )
+      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("Network error"))
     })
 
     test("completes without throwing (setLoading called via finally)", async () => {
@@ -176,9 +172,7 @@ describe("usePublicMapExplorer", () => {
 
       await hook.loadPublicParcels({ bbox: "0,0,1,1", zoom: 10 })
 
-      expect(onStatusChange).toHaveBeenCalledWith(
-        expect.stringContaining("Parcel fetch failed"),
-      )
+      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("Parcel fetch failed"))
     })
 
     test("resolves successfully with valid bbox and zoom", async () => {

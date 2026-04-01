@@ -63,7 +63,9 @@ describe("useParcelStatuses", () => {
     useEffectSpy = jest
       .spyOn(React, "useEffect")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation((fn) => { capturedEffect = fn as any })
+      .mockImplementation((fn) => {
+        capturedEffect = fn as any
+      })
   })
 
   afterEach(() => {
