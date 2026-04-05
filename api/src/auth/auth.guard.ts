@@ -108,7 +108,7 @@ export class AuthGuard implements CanActivate {
     // First login: fetch user info from Auth0 and create or link DB record
     const userInfo = await this.fetchUserInfo(rawToken)
     const email = userInfo.email ?? `user+${auth0Sub.replace(/[^a-zA-Z0-9]/g, "")}@unknown`
-    const displayName = userInfo.nickname ?? userInfo.name ?? email.split("@")[0]
+    const displayName = email.split("@")[0]
 
     // Check if a user with this email already exists (migration case)
     const byEmail = await this.db.query<AuthenticatedUser>(
