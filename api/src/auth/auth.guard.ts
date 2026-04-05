@@ -83,7 +83,7 @@ export class AuthGuard implements CanActivate {
             publicKey,
             {
               audience: AUTH0_AUDIENCE,
-              issuer: AUTH0_ACCEPTED_ISSUERS,
+              issuer: AUTH0_ACCEPTED_ISSUERS as [string, ...string[]],
               algorithms: ["RS256"],
             },
             (verifyErr, verified) => {
