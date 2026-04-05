@@ -1,6 +1,15 @@
 import * as SQLite from "expo-sqlite"
 
-export const dbPromise = SQLite.openDatabaseAsync("ibp-local.db")
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null
+
+export function getDb(): Promise<SQLite.SQLiteDatabase> {
+  if (!dbPromise) {
+    dbPromise = SQLite.openDatabaseAsync("ibp-local.db")
+  }
+
+  return dbPromise
+}
+
 export const MAX_RETRY_COUNT = 8
 export const FACTOR_KEYS: Array<"A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"> = [
   "A",
@@ -28,7 +37,7 @@ export const LEGACY_DEFAULT_FACTOR_VALUES: Record<string, Record<string, number>
 }
 
 export async function initLocalDb(): Promise<void> {
-  const db = await dbPromise
+  const db = await getDb()
 
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS local_surveys (
