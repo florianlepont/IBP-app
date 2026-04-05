@@ -25,7 +25,8 @@
       "expo-secure-store"
     ],
     "ios": {
-      "bundleIdentifier": "com.anonymous.ibp-app"
+      "bundleIdentifier": "com.anonymous.ibp-app",
+      "associatedDomains": ["webcredentials:auth-ibp.algernon.ovh"]
     }
   }
 }

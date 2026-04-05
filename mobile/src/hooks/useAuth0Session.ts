@@ -7,7 +7,7 @@ import { OperationScope, OperationState } from "./operation-status"
 
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 
-const AUTH0_DOMAIN = "dev-zocy4q27tkkmjkmd.eu.auth0.com"
+const AUTH0_DOMAIN = "auth-ibp.algernon.ovh"
 const AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
 const AUTH0_AUDIENCE = "https://api.ibp-app"
 
