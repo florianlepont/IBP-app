@@ -13,7 +13,8 @@ import {
   SurveyVisibilityFilter,
   SurveySyncFilter,
 } from "../app/types"
-import { listLocalAttachments, listLocalSurveys, LocalAttachment, LocalSurvey } from "../storage"
+import { listLocalAttachments, listLocalSurveys } from "../storage/surveys"
+import type { LocalAttachment, LocalSurvey } from "../storage/types"
 
 export function useSurveyList() {
   const [surveys, setSurveys] = useState<LocalSurvey[]>([])

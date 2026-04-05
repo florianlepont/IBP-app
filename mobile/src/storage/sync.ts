@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite"
-import { dbPromise, MAX_RETRY_COUNT } from "./db"
+import { getDb, MAX_RETRY_COUNT } from "./db"
 import {
   QueueRow,
   SurveyQueuePayload,
@@ -643,7 +643,7 @@ export async function syncPending(
   apiUrl: string,
   accessToken: string,
 ): Promise<{ synced: number; failed: number; pulled_surveys: number; pulled_attachments: number }> {
-  const db = await dbPromise
+  const db = await getDb()
   const nowIso = new Date().toISOString()
 
   const queueRows = await db.getAllAsync<QueueRow>(
@@ -940,7 +940,7 @@ export async function pullRemoteChanges(
   accessToken: string,
   options?: { maxPages?: number; limit?: number },
 ): Promise<{ surveys: number; attachments: number; pages: number; has_more: boolean }> {
-  const db = await dbPromise
+  const db = await getDb()
   const maxPages = Math.max(1, Math.min(10, options?.maxPages ?? 5))
   const limit = Math.max(1, Math.min(200, options?.limit ?? 50))
 
@@ -995,7 +995,7 @@ export async function submitSurvey(
   accessToken: string,
   surveyId: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const db = await dbPromise
+  const db = await getDb()
 
   const response = await fetch(`${apiUrl}/surveys/${surveyId}/submit`, {
     method: "POST",
@@ -1080,7 +1080,7 @@ export async function updateSurveyVisibility(
   queued: boolean
   synced: boolean
 }> {
-  const db = await dbPromise
+  const db = await getDb()
   const queued = await queueSurveyVisibilityChange(db, surveyId, visibility)
   if (!queued.changed) {
     return {

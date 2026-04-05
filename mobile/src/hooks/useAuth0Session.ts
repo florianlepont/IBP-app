@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Auth0 from "react-native-auth0"
 import { ApiError } from "../api/client"
 import { getMyProfile } from "../api/ibp-api"
@@ -10,8 +10,6 @@ export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 const AUTH0_DOMAIN = "auth-ibp.algernon.ovh"
 const AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
 const AUTH0_AUDIENCE = "https://api.ibp-app"
-
-const auth0 = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
 
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
@@ -30,6 +28,15 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [sessionRestoring, setSessionRestoring] = useState(true)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState("Not logged in")
+  const auth0Ref = useRef<Auth0 | null>(null)
+
+  const getAuth0 = useCallback((): Auth0 => {
+    if (!auth0Ref.current) {
+      auth0Ref.current = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
+    }
+
+    return auth0Ref.current
+  }, [])
 
   const setProfileFromUser = useCallback((user: AuthUser): void => {
     setCurrentUser(user)
@@ -46,7 +53,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
     try {
-      const credentials = await auth0.credentialsManager.getCredentials()
+      const credentials = await getAuth0().credentialsManager.getCredentials()
       if (credentials?.accessToken) {
         setAccessToken(credentials.accessToken)
         return credentials.accessToken
@@ -55,7 +62,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     } catch {
       return null
     }
-  }, [])
+  }, [getAuth0])
 
   const withAuthRetry = useCallback(
     async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
@@ -106,6 +113,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       try {
         if (active) setSessionRestoring(true)
 
+        const auth0 = getAuth0()
         const hasCredentials = await auth0.credentialsManager.hasValidCredentials()
         if (!hasCredentials) {
           if (active) {
@@ -151,11 +159,12 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     return () => {
       active = false
     }
-  }, [apiUrl, clearSession, reportStatus, setProfileFromUser])
+  }, [apiUrl, clearSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogin = useCallback(async (): Promise<void> => {
     try {
       reportStatus("auth", "running", "Logging in...")
+      const auth0 = getAuth0()
       const credentials = await auth0.webAuth.authorize({
         scope: "openid profile email offline_access",
         audience: AUTH0_AUDIENCE,
@@ -164,7 +173,21 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
 
-      const user = await getMyProfile(apiUrl, credentials.accessToken)
+      let user: AuthUser
+      try {
+        user = await getMyProfile(apiUrl, credentials.accessToken)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          reportStatus(
+            "auth",
+            "error",
+            "Login Auth0 reussi, mais l'API a refuse le token (401 Unauthorized). Verifie l'URL d'API et la config Auth0 de l'API.",
+          )
+          return
+        }
+        throw error
+      }
+
       setProfileFromUser(user)
       reportStatus("auth", "success", "Logged in")
     } catch (error) {
@@ -176,18 +199,19 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
       reportStatus("auth", "error", `Login error: ${message}`)
     }
-  }, [apiUrl, reportStatus, setProfileFromUser])
+  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
+      const auth0 = getAuth0()
       await auth0.webAuth.clearSession()
     } catch {
       // Continue with local logout even if Auth0 session clearing fails
     }
-    await auth0.credentialsManager.clearCredentials()
+    await getAuth0().credentialsManager.clearCredentials()
     await clearSession()
     reportStatus("auth", "success", "Logged out")
-  }, [clearSession, reportStatus])
+  }, [clearSession, getAuth0, reportStatus])
 
   const refreshSessionTokens = useCallback(async (): Promise<{
     accessToken: string

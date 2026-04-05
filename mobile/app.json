@@ -22,7 +22,13 @@
           "locationWhenInUsePermission": "Allow IBP App to access your location to center the map and help parcel selection."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "react-native-auth0",
+        {
+          "domain": "auth-ibp.algernon.ovh"
+        }
+      ]
     ],
     "ios": {
       "bundleIdentifier": "fr.etats-sauvages.ibp-app"
