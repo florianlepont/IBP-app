@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react"
 import { Alert } from "react-native"
+import { useCallback, useState } from "react"
 import * as ImagePicker from "expo-image-picker"
 import {
   changeMyEmail,
@@ -240,6 +240,10 @@ export function useSurveySyncProfile({
           return
         }
         const message = (error as Error).message
+        if (message === "Email already taken") {
+          Alert.alert("Email already taken", "This email address is already associated with another account.")
+          return
+        }
         setStatus(`Email change error: ${message}`)
         Alert.alert("Error", message, [{ text: "OK" }])
       } finally {
