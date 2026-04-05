@@ -53,7 +53,7 @@ jest.mock("../api/ibp-api", () => ({
   resetUserData: (...args: unknown[]) => mockResetUserData(...args),
 }))
 
-jest.mock("../storage", () => ({
+jest.mock("../storage/surveys", () => ({
   clearLocalIbpData: (...args: unknown[]) => mockClearLocalIbpData(...args),
 }))
 

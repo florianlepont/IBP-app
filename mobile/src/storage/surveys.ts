@@ -1,4 +1,4 @@
-import { dbPromise } from "./db"
+import { getDb } from "./db"
 import {
   LocalSurvey,
   LocalAttachment,
@@ -22,7 +22,7 @@ import {
 } from "./utils"
 
 export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> {
-  const db = await dbPromise
+  const db = await getDb()
 
   const id = `survey-${Date.now()}`
   const now = new Date().toISOString()
@@ -82,7 +82,7 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
 }
 
 export async function queueLocalAttachment(input: LocalAttachmentInput): Promise<LocalAttachment> {
-  const db = await dbPromise
+  const db = await getDb()
   const now = new Date().toISOString()
 
   const survey = await db.getFirstAsync<{ id: string }>(
@@ -152,7 +152,7 @@ export async function queueDeleteAttachment(
   removed_local: boolean
   remote_attachment_id: string | null
 }> {
-  const db = await dbPromise
+  const db = await getDb()
   const now = new Date().toISOString()
 
   const attachment = await db.getFirstAsync<{
@@ -215,7 +215,7 @@ export async function queueDeleteAttachment(
 }
 
 export async function queueDeleteSurvey(surveyId: string): Promise<{ queued_delete: boolean }> {
-  const db = await dbPromise
+  const db = await getDb()
   const now = new Date().toISOString()
 
   const survey = await db.getFirstAsync<Pick<LocalSurvey, "id" | "sync_state">>(
@@ -251,7 +251,7 @@ export async function queueDeleteSurvey(surveyId: string): Promise<{ queued_dele
 }
 
 export async function getLocalSurveyDraft(surveyId: string): Promise<SurveyQueuePayload | null> {
-  const db = await dbPromise
+  const db = await getDb()
   const row = await db.getFirstAsync<{
     id: string
     site_name: string
@@ -286,7 +286,7 @@ export async function getLocalSurveyDraft(surveyId: string): Promise<SurveyQueue
 }
 
 export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSurvey> {
-  const db = await dbPromise
+  const db = await getDb()
   const now = new Date().toISOString()
 
   const existing = await db.getFirstAsync<{
@@ -389,7 +389,7 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
 }
 
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
-  const db = await dbPromise
+  const db = await getDb()
   const rows = await db.getAllAsync<
     Omit<LocalSurvey, "completion_rate"> & {
       payload_json: string | null
@@ -410,7 +410,7 @@ export async function listLocalSurveys(): Promise<LocalSurvey[]> {
 }
 
 export async function listLocalAttachments(surveyId?: string): Promise<LocalAttachment[]> {
-  const db = await dbPromise
+  const db = await getDb()
   if (surveyId) {
     return db.getAllAsync<LocalAttachment>(
       `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at
@@ -429,7 +429,7 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
 }
 
 export async function clearLocalIbpData(): Promise<void> {
-  const db = await dbPromise
+  const db = await getDb()
   await db.runAsync(`DELETE FROM sync_queue`)
   await db.runAsync(`DELETE FROM local_attachments`)
   await db.runAsync(`DELETE FROM local_surveys`)
@@ -437,7 +437,7 @@ export async function clearLocalIbpData(): Promise<void> {
 }
 
 export async function hasPendingSyncWork(): Promise<boolean> {
-  const db = await dbPromise
+  const db = await getDb()
   const nowIso = new Date().toISOString()
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) AS count
@@ -450,7 +450,7 @@ export async function hasPendingSyncWork(): Promise<boolean> {
 }
 
 export async function retrySurveyNow(surveyId: string): Promise<{ queued: number }> {
-  const db = await dbPromise
+  const db = await getDb()
   const now = new Date().toISOString()
 
   const updatedQueue = await db.runAsync(
@@ -497,7 +497,7 @@ export async function retrySurveyNow(surveyId: string): Promise<{ queued: number
 export async function discardSurveyLocalChanges(
   surveyId: string,
 ): Promise<{ removed_queue: number }> {
-  const db = await dbPromise
+  const db = await getDb()
   const now = new Date().toISOString()
 
   const removedQueue = await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ?`, [surveyId])
@@ -529,7 +529,7 @@ export async function discardSurveyLocalChanges(
 }
 
 export async function markSurveyExpiredLocally(surveyId: string): Promise<void> {
-  const db = await dbPromise
+  const db = await getDb()
   const nowIso = new Date().toISOString()
   await db.runAsync(
     `UPDATE local_surveys
