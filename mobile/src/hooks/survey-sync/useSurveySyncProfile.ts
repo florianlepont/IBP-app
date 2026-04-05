@@ -240,10 +240,6 @@ export function useSurveySyncProfile({
           return
         }
         const message = (error as Error).message
-        if (message === "Email already taken") {
-          Alert.alert("Email already taken", "This email address is already associated with another account.")
-          return
-        }
         setStatus(`Email change error: ${message}`)
         Alert.alert("Error", message, [{ text: "OK" }])
       } finally {
