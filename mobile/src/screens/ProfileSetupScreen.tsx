@@ -11,12 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import {
-  brandColors,
-  brandRadius,
-  brandSpacing,
-  brandTypography,
-} from "../app/brand-tokens"
+import { brandColors, brandRadius, brandSpacing, brandTypography } from "../app/brand-tokens"
 import { AppButton } from "../ui/AppButton"
 import { AppField } from "../ui/AppField"
 
