@@ -12,7 +12,7 @@ const mockBuildAttachmentCountBySurvey = jest.fn()
 const mockComputeSurveyStats = jest.fn()
 const mockFilterAndSortSurveys = jest.fn()
 
-jest.mock("../storage", () => ({
+jest.mock("../storage/surveys", () => ({
   listLocalSurveys: (...args: unknown[]) => mockListLocalSurveys(...args),
   listLocalAttachments: (...args: unknown[]) => mockListLocalAttachments(...args),
 }))
