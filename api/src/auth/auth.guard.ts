@@ -6,19 +6,27 @@ import { DatabaseService } from "../database/database.service"
 import { AuthenticatedUser } from "./auth.types"
 
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN ?? ""
+const AUTH0_PUBLIC_DOMAIN = process.env.AUTH0_PUBLIC_DOMAIN?.trim() || AUTH0_DOMAIN
 const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE ?? ""
+const AUTH0_JWKS_DOMAINS = Array.from(new Set([AUTH0_PUBLIC_DOMAIN, AUTH0_DOMAIN].filter(Boolean)))
+const AUTH0_ACCEPTED_ISSUERS = Array.from(
+  new Set(AUTH0_JWKS_DOMAINS.map((domain) => `https://${domain}/`)),
+)
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly jwks: JwksClient
+  private readonly jwksClients: JwksClient[]
 
   constructor(private readonly db: DatabaseService) {
-    this.jwks = new JwksClient({
-      jwksUri: `https://${AUTH0_DOMAIN}/.well-known/jwks.json`,
-      cache: true,
-      cacheMaxAge: 10 * 60 * 1000,
-      rateLimit: true,
-    })
+    this.jwksClients = AUTH0_JWKS_DOMAINS.map(
+      (domain) =>
+        new JwksClient({
+          jwksUri: `https://${domain}/.well-known/jwks.json`,
+          cache: true,
+          cacheMaxAge: 10 * 60 * 1000,
+          rateLimit: true,
+        }),
+    )
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -68,24 +76,42 @@ export class AuthGuard implements CanActivate {
         return reject(new Error("Missing kid in token header"))
       }
 
-      this.jwks.getSigningKey(decoded.header.kid, (err, key) => {
-        if (err || !key) return reject(err ?? new Error("No signing key found"))
-
-        jwt.verify(
-          token,
-          key.getPublicKey(),
-          {
-            audience: AUTH0_AUDIENCE,
-            issuer: `https://${AUTH0_DOMAIN}/`,
-            algorithms: ["RS256"],
-          },
-          (verifyErr, verified) => {
-            if (verifyErr) return reject(verifyErr)
-            resolve(verified as jwt.JwtPayload)
-          },
-        )
-      })
+      void this.getSigningKey(decoded.header.kid)
+        .then((publicKey) => {
+          jwt.verify(
+            token,
+            publicKey,
+            {
+              audience: AUTH0_AUDIENCE,
+              issuer: AUTH0_ACCEPTED_ISSUERS as [string, ...string[]],
+              algorithms: ["RS256"],
+            },
+            (verifyErr, verified) => {
+              if (verifyErr) return reject(verifyErr)
+              resolve(verified as jwt.JwtPayload)
+            },
+          )
+        })
+        .catch(reject)
     })
+  }
+
+  private async getSigningKey(kid: string): Promise<string> {
+    if (this.jwksClients.length === 0) {
+      throw new Error("Auth0 JWKS domain is not configured")
+    }
+
+    let lastError: unknown = null
+    for (const client of this.jwksClients) {
+      try {
+        const key = await client.getSigningKey(kid)
+        return key.getPublicKey()
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    throw lastError ?? new Error("No signing key found")
   }
 
   private async getOrProvisionUser(
@@ -108,7 +134,7 @@ export class AuthGuard implements CanActivate {
     // First login: fetch user info from Auth0 and create or link DB record
     const userInfo = await this.fetchUserInfo(rawToken)
     const email = userInfo.email ?? `user+${auth0Sub.replace(/[^a-zA-Z0-9]/g, "")}@unknown`
-    const displayName = userInfo.nickname ?? userInfo.name ?? email.split("@")[0]
+    const displayName = email.split("@")[0]
 
     // Check if a user with this email already exists (migration case)
     const byEmail = await this.db.query<AuthenticatedUser>(
@@ -136,7 +162,7 @@ export class AuthGuard implements CanActivate {
   private async fetchUserInfo(
     token: string,
   ): Promise<{ email?: string; name?: string; nickname?: string }> {
-    const response = await fetch(`https://${AUTH0_DOMAIN}/userinfo`, {
+    const response = await fetch(`https://${AUTH0_PUBLIC_DOMAIN}/userinfo`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!response.ok) throw new Error("Failed to fetch Auth0 userinfo")

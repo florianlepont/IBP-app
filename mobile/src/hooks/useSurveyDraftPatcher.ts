@@ -1,4 +1,4 @@
-import { getLocalSurveyDraft, updateLocalDraft } from "../storage"
+import { getLocalSurveyDraft, updateLocalDraft } from "../storage/surveys"
 import { DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from "../app/constants"
 import { RegionVersion, VegetationStage } from "../app/types"
 import { useSurveyList } from "./useSurveyList"
