@@ -536,20 +536,23 @@ function AccountTabNavigator({
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={styles.accountScreenWrap}
           >
-            <AccountScreen
-              accessToken={surveySync.accessToken}
-              currentUser={surveySync.currentUser}
-              profile={surveySync.profile}
-              profileUpdating={surveySync.profileUpdating}
-              apiUrl={apiUrl}
-              onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
-              onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
-              onPasswordReset={() => surveySync.handlePasswordReset()}
-              onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
-              onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
-              onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
-              onLogout={surveySync.handleLogout}
-            />
+            <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
+              <AccountScreen
+                accessToken={surveySync.accessToken}
+                currentUser={surveySync.currentUser}
+                profile={surveySync.profile}
+                profileUpdating={surveySync.profileUpdating}
+                apiUrl={apiUrl}
+                onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
+                onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
+                onPasswordReset={() => surveySync.handlePasswordReset()}
+                onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
+                onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
+                onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
+                onDeleteAccount={() => surveySync.handleDeleteAccount()}
+                onLogout={surveySync.handleLogout}
+              />
+            </ScrollView>
           </KeyboardAvoidingView>
         )}
       </AccountStack.Screen>

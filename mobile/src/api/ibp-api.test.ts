@@ -6,6 +6,7 @@ jest.mock("./client", () => ({
 
 import {
   createSurveyReport,
+  deleteMyAccount,
   deleteMyProfilePicture,
   fetchPublicMapItems,
   fetchPublicParcelStatuses,
@@ -36,6 +37,7 @@ describe("ibp-api", () => {
     })
     await uploadMyProfilePicture("https://api.example.com", "access-token", formData)
     await deleteMyProfilePicture("https://api.example.com", "access-token")
+    await deleteMyAccount("https://api.example.com", "access-token")
     await resetIbpData("https://api.example.com", "access-token")
     await resetUserData("https://api.example.com", "access-token")
     await createSurveyReport("https://api.example.com", "access-token", {
@@ -79,6 +81,15 @@ describe("ibp-api", () => {
         {
           baseUrl: "https://api.example.com",
           path: "/me/profile-picture",
+          method: "DELETE",
+          token: "access-token",
+          expectJson: false,
+        },
+      ],
+      [
+        {
+          baseUrl: "https://api.example.com",
+          path: "/me",
           method: "DELETE",
           token: "access-token",
           expectJson: false,

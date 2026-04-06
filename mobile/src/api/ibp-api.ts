@@ -109,6 +109,16 @@ export async function deleteMyProfilePicture(apiUrl: string, accessToken: string
   })
 }
 
+export async function deleteMyAccount(apiUrl: string, accessToken: string): Promise<void> {
+  await apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/me",
+    method: "DELETE",
+    token: accessToken,
+    expectJson: false,
+  })
+}
+
 export async function loadSurveyDetail(
   apiUrl: string,
   accessToken: string,

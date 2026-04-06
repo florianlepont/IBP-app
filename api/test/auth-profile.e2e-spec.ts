@@ -3,9 +3,11 @@ import { INestApplication } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
 import request = require("supertest")
 import { AppModule } from "../src/app.module"
+import { DatabaseService } from "../src/database/database.service"
 
 describe("Auth + profile (e2e)", () => {
   let app: INestApplication
+  let db: DatabaseService
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -15,6 +17,7 @@ describe("Auth + profile (e2e)", () => {
     app = moduleFixture.createNestApplication()
     app.setGlobalPrefix("v1")
     await app.init()
+    db = app.get(DatabaseService)
   })
 
   afterAll(async () => {
@@ -80,5 +83,80 @@ describe("Auth + profile (e2e)", () => {
       .get("/v1/me/profile-picture")
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(404)
+  })
+
+  it("deletes the account, anonymises submitted surveys, and rejects the old token afterwards", async () => {
+    const email = `e2e-delete-${Date.now()}@ibp.local`
+    const login = await request(app.getHttpServer())
+      .post("/v1/debug/test-token")
+      .send({ email })
+      .expect(201)
+
+    const accessToken = login.body.access_token as string
+    const user = await db
+      .query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])
+      .then((result) => result.rows[0])
+
+    const submittedSurveyId = `submitted-${Date.now()}`
+    const draftSurveyId = `draft-${Date.now()}`
+    const submittedEventId = `event-submitted-${Date.now()}`
+    const draftEventId = `event-draft-${Date.now()}`
+
+    await db.query(
+      `INSERT INTO surveys (
+         id, user_id, site_name, status, visibility, factors, factor_results, scores, location,
+         created_at, updated_at, submitted_at, expires_at, sync_version
+       )
+       VALUES
+         ($1, $2, 'Submitted survey', 'submitted', 'public', '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, NOW(), NOW(), NOW(), NOW() + interval '7 days', 1),
+         ($3, $2, 'Draft survey', 'draft', 'private', '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, NOW(), NOW(), NULL, NOW() + interval '7 days', 1)`,
+      [submittedSurveyId, user.id, draftSurveyId],
+    )
+
+    await db.query(
+      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
+       VALUES
+         ($1, $2, $3, 'submitted', '{}'::jsonb),
+         ($4, $5, $3, 'created', '{}'::jsonb)`,
+      [submittedEventId, submittedSurveyId, user.id, draftEventId, draftSurveyId],
+    )
+
+    await request(app.getHttpServer())
+      .delete("/v1/me")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(204)
+
+    const deletedUser = await db.query<{ id: string }>(`SELECT id FROM users WHERE id = $1`, [user.id])
+    expect(deletedUser.rows).toHaveLength(0)
+
+    const retainedSurvey = await db.query<{ user_id: string | null }>(
+      `SELECT user_id FROM surveys WHERE id = $1`,
+      [submittedSurveyId],
+    )
+    expect(retainedSurvey.rows).toHaveLength(1)
+    expect(retainedSurvey.rows[0].user_id).toBeNull()
+
+    const retainedEvent = await db.query<{ actor_id: string | null }>(
+      `SELECT actor_id FROM survey_events WHERE id = $1`,
+      [submittedEventId],
+    )
+    expect(retainedEvent.rows).toHaveLength(1)
+    expect(retainedEvent.rows[0].actor_id).toBeNull()
+
+    const removedDraftSurvey = await db.query<{ id: string }>(`SELECT id FROM surveys WHERE id = $1`, [
+      draftSurveyId,
+    ])
+    expect(removedDraftSurvey.rows).toHaveLength(0)
+
+    const removedDraftEvent = await db.query<{ id: string }>(
+      `SELECT id FROM survey_events WHERE id = $1`,
+      [draftEventId],
+    )
+    expect(removedDraftEvent.rows).toHaveLength(0)
+
+    await request(app.getHttpServer())
+      .get("/v1/me")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(401)
   })
 })
