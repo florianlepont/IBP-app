@@ -15,6 +15,7 @@ import { brandColors, brandRadius, brandSpacing, brandTypography } from "../app/
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
 
 type AuthGateScreenProps = {
   apiUrl: string
@@ -114,8 +115,17 @@ export function AuthGateScreen({
 
   const normalizedStatus = status.trim().toLowerCase()
   const feedbackMessage = normalizedStatus && !normalizedStatus.includes("logged in") ? status : ""
-  const feedbackTone: "error" | "status" =
-    normalizedStatus.includes("error") || normalizedStatus.includes("failed") ? "error" : "status"
+  const feedbackIndicatesError = [
+    "error",
+    "failed",
+    "unauthorized",
+    "forbidden",
+    "denied",
+    "refuse",
+    "refus",
+  ].some((pattern) => normalizedStatus.includes(pattern))
+  const feedbackTone: "danger" | "success" =
+    feedbackIndicatesError ? "danger" : "success"
 
   const handleLogin = async (): Promise<void> => {
     try {
@@ -159,9 +169,14 @@ export function AuthGateScreen({
             />
 
             {feedbackMessage ? (
-              <Text style={feedbackTone === "error" ? authStyles.errorText : authStyles.statusText}>
-                {feedbackMessage}
-              </Text>
+              <AppNotice
+                tone={feedbackTone}
+                icon={
+                  feedbackTone === "danger" ? "alert-circle-outline" : "information-circle-outline"
+                }
+                title={feedbackTone === "danger" ? "Login issue" : "Status"}
+                message={feedbackMessage}
+              />
             ) : null}
           </View>
 
@@ -293,21 +308,5 @@ const authStyles = StyleSheet.create({
   hint: {
     ...brandTypography.meta,
     color: brandColors.textSecondary,
-  },
-  errorText: {
-    borderRadius: 16,
-    backgroundColor: brandColors.errorSoft,
-    color: "#6B2E1C",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    ...brandTypography.sectionBody,
-  },
-  statusText: {
-    borderRadius: 16,
-    backgroundColor: brandColors.successSoft,
-    color: brandColors.forest,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    ...brandTypography.sectionBody,
   },
 })

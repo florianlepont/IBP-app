@@ -2,19 +2,47 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Auth0 from "react-native-auth0"
 import { ApiError } from "../api/client"
 import { getMyProfile } from "../api/ibp-api"
+import {
+  AUTH0_AUDIENCE,
+  AUTH0_CLIENT_ID,
+  AUTH0_DOMAIN,
+  buildApiTokenRejectedMessage,
+  buildAuth0UnauthorizedMessage,
+} from "../app/auth0-config"
 import { AuthUser } from "../app/types"
 import { OperationScope, OperationState } from "./operation-status"
 
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 
-const AUTH0_DOMAIN = "auth-ibp.algernon.ovh"
-const AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
-const AUTH0_AUDIENCE = "https://api.ibp-app"
-
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
   if (error instanceof Error) return /401|unauthorized|auth_required/i.test(error.message)
   return false
+}
+
+function extractLoginErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  if (error && typeof error === "object") {
+    const candidate = error as { description?: unknown; details?: unknown; message?: unknown }
+    if (typeof candidate.description === "string" && candidate.description.trim().length > 0) {
+      return candidate.description
+    }
+    if (typeof candidate.details === "string" && candidate.details.trim().length > 0) {
+      return candidate.details
+    }
+    if (typeof candidate.message === "string" && candidate.message.trim().length > 0) {
+      return candidate.message
+    }
+  }
+
+  return "Unknown login error"
 }
 
 type UseAuth0SessionParams = {
@@ -178,11 +206,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          reportStatus(
-            "auth",
-            "error",
-            "Login Auth0 reussi, mais l'API a refuse le token (401 Unauthorized). Verifie l'URL d'API et la config Auth0 de l'API.",
-          )
+          reportStatus("auth", "error", buildApiTokenRejectedMessage(apiUrl))
           return
         }
         throw error
@@ -191,10 +215,14 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       setProfileFromUser(user)
       reportStatus("auth", "success", "Logged in")
     } catch (error) {
-      const message = (error as Error).message ?? ""
+      const message = extractLoginErrorMessage(error)
       // User cancelled the login flow
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
         reportStatus("auth", "idle", "")
+        return
+      }
+      if (/unauthorized/i.test(message)) {
+        reportStatus("auth", "error", buildAuth0UnauthorizedMessage(apiUrl))
         return
       }
       reportStatus("auth", "error", `Login error: ${message}`)
