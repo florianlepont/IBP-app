@@ -33,6 +33,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     ports:
       - "3000:3000"
     env_file:
@@ -43,8 +45,11 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       OBJECT_STORAGE_MODE: minio
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-ibp-media}
       OBJECT_STORAGE_ENDPOINT: http://minio:9000
       OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio}
+      OBJECT_STORAGE_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
 
 
 volumes:

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Alert, View } from "react-native"
+import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
-import { initLocalDb } from "./src/storage"
+import { initLocalDb } from "./src/storage/db"
 import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
 import { styles } from "./src/app/styles"
 import { SurveyDetailTab } from "./src/app/types"
@@ -18,6 +19,7 @@ import { DEFAULT_API_URL } from "./src/app/constants"
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL)
+  const [profileSetupSkipped, setProfileSetupSkipped] = useState(false)
   const [formMode, setFormMode] = useState<FormMode>("create")
   const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>("summary")
@@ -132,6 +134,22 @@ export default function App() {
               status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
               logoSource={require("./assets/logo-app.png")}
               heroMartenSource={require("./assets/auth/marten.png")}
+            />
+          ) : !profileSetupSkipped &&
+            surveySync.currentUser &&
+            !surveySync.currentUser.first_name &&
+            !surveySync.currentUser.last_name ? (
+            <ProfileSetupScreen
+              saving={surveySync.profileUpdating}
+              logoSource={require("./assets/logo-app.png")}
+              onSave={async (firstName, lastName) => {
+                await surveySync.handleUpdateProfile({
+                  first_name: firstName,
+                  last_name: lastName,
+                  display_name: [firstName, lastName].filter(Boolean).join(" "),
+                })
+              }}
+              onSkip={() => setProfileSetupSkipped(true)}
             />
           ) : (
             <AuthenticatedAppNavigation

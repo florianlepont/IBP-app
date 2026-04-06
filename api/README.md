@@ -19,6 +19,11 @@ Email confirmation can run in two modes:
 
 To hide `email_change_token_dev` outside local dev, keep `NODE_ENV` different from `development` (or set `AUTH_DEV_EXPOSE_EMAIL_TOKEN=false`).
 
+Auth0 configuration:
+- `AUTH0_DOMAIN`: tenant Auth0 domain used by the backend for management API calls.
+- `AUTH0_PUBLIC_DOMAIN`: optional public/custom Auth0 domain used by the mobile login flow. Set this when the app authenticates through a custom domain so JWT issuer validation matches the issued tokens.
+- `AUTH0_AUDIENCE`: API identifier expected in access tokens.
+
 Cadastre resolution mode:
 - `CADASTRE_PROVIDER=synthetic` (default, offline-safe).
 - `CADASTRE_PROVIDER=ign` to resolve real parcel metadata through IGN reverse geocoding (`CADASTRE_IGN_REVERSE_URL`).

@@ -1,19 +1,47 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Auth0 from "react-native-auth0"
 import { ApiError } from "../api/client"
 import { getMyProfile } from "../api/ibp-api"
-import { auth0Config } from "../app/auth0-config"
+import {
+  AUTH0_AUDIENCE,
+  AUTH0_CLIENT_ID,
+  AUTH0_DOMAIN,
+  buildApiTokenRejectedMessage,
+  buildAuth0UnauthorizedMessage,
+} from "../app/auth0-config"
 import { AuthUser } from "../app/types"
 import { OperationScope, OperationState } from "./operation-status"
 
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
-
-const auth0 = new Auth0({ domain: auth0Config.domain, clientId: auth0Config.clientId })
-
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
   if (error instanceof Error) return /401|unauthorized|auth_required/i.test(error.message)
   return false
+}
+
+function extractLoginErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  if (error && typeof error === "object") {
+    const candidate = error as { description?: unknown; details?: unknown; message?: unknown }
+    if (typeof candidate.description === "string" && candidate.description.trim().length > 0) {
+      return candidate.description
+    }
+    if (typeof candidate.details === "string" && candidate.details.trim().length > 0) {
+      return candidate.details
+    }
+    if (typeof candidate.message === "string" && candidate.message.trim().length > 0) {
+      return candidate.message
+    }
+  }
+
+  return "Unknown login error"
 }
 
 type UseAuth0SessionParams = {
@@ -27,6 +55,15 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [sessionRestoring, setSessionRestoring] = useState(true)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState("Not logged in")
+  const auth0Ref = useRef<Auth0 | null>(null)
+
+  const getAuth0 = useCallback((): Auth0 => {
+    if (!auth0Ref.current) {
+      auth0Ref.current = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
+    }
+
+    return auth0Ref.current
+  }, [])
 
   const setProfileFromUser = useCallback((user: AuthUser): void => {
     setCurrentUser(user)
@@ -43,7 +80,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
     try {
-      const credentials = await auth0.credentialsManager.getCredentials()
+      const credentials = await getAuth0().credentialsManager.getCredentials()
       if (credentials?.accessToken) {
         setAccessToken(credentials.accessToken)
         return credentials.accessToken
@@ -52,7 +89,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     } catch {
       return null
     }
-  }, [])
+  }, [getAuth0])
 
   const withAuthRetry = useCallback(
     async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
@@ -103,6 +140,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       try {
         if (active) setSessionRestoring(true)
 
+        const auth0 = getAuth0()
         const hasCredentials = await auth0.credentialsManager.hasValidCredentials()
         if (!hasCredentials) {
           if (active) {
@@ -148,43 +186,59 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     return () => {
       active = false
     }
-  }, [apiUrl, clearSession, reportStatus, setProfileFromUser])
+  }, [apiUrl, clearSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogin = useCallback(async (): Promise<void> => {
     try {
       reportStatus("auth", "running", "Logging in...")
+      const auth0 = getAuth0()
       const credentials = await auth0.webAuth.authorize({
         scope: "openid profile email offline_access",
-        audience: auth0Config.audience,
+        audience: AUTH0_AUDIENCE,
       })
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
 
-      const user = await getMyProfile(apiUrl, credentials.accessToken)
+      let user: AuthUser
+      try {
+        user = await getMyProfile(apiUrl, credentials.accessToken)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          reportStatus("auth", "error", buildApiTokenRejectedMessage(apiUrl))
+          return
+        }
+        throw error
+      }
+
       setProfileFromUser(user)
       reportStatus("auth", "success", "Logged in")
     } catch (error) {
-      const message = (error as Error).message ?? ""
+      const message = extractLoginErrorMessage(error)
       // User cancelled the login flow
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
         reportStatus("auth", "idle", "")
         return
       }
+      if (/unauthorized/i.test(message)) {
+        reportStatus("auth", "error", buildAuth0UnauthorizedMessage(apiUrl))
+        return
+      }
       reportStatus("auth", "error", `Login error: ${message}`)
     }
-  }, [apiUrl, reportStatus, setProfileFromUser])
+  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
+      const auth0 = getAuth0()
       await auth0.webAuth.clearSession()
     } catch {
       // Continue with local logout even if Auth0 session clearing fails
     }
-    await auth0.credentialsManager.clearCredentials()
+    await getAuth0().credentialsManager.clearCredentials()
     await clearSession()
     reportStatus("auth", "success", "Logged out")
-  }, [clearSession, reportStatus])
+  }, [clearSession, getAuth0, reportStatus])
 
   const refreshSessionTokens = useCallback(async (): Promise<{
     accessToken: string
