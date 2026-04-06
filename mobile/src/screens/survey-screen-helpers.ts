@@ -3,7 +3,8 @@ import { FactorKey } from "../app/types"
 const FACTOR_ORDER: FactorKey[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER)
 
-export const isFactorKey = (value: string): value is FactorKey => FACTOR_KEYS.has(value as FactorKey)
+export const isFactorKey = (value: string): value is FactorKey =>
+  FACTOR_KEYS.has(value as FactorKey)
 
 export const asFiniteNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value

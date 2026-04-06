@@ -186,7 +186,8 @@ export function useSurveySync({
   const handleDebugResetIbpData = async (): Promise<void> => {
     runDebugReset({
       title: "Debug reset IBP data",
-      message: "This will delete all IBP surveys/events/attachments on server and clear local IBP data.",
+      message:
+        "This will delete all IBP surveys/events/attachments on server and clear local IBP data.",
       inProgressMessage: "Debug reset IBP data in progress...",
       onReset: async () => {
         const result = await withAuthRetry((token) => resetIbpData(apiUrl, token))
