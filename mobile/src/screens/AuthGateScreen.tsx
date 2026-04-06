@@ -124,8 +124,7 @@ export function AuthGateScreen({
     "refuse",
     "refus",
   ].some((pattern) => normalizedStatus.includes(pattern))
-  const feedbackTone: "danger" | "success" =
-    feedbackIndicatesError ? "danger" : "success"
+  const feedbackTone: "danger" | "success" = feedbackIndicatesError ? "danger" : "success"
 
   const handleLogin = async (): Promise<void> => {
     try {

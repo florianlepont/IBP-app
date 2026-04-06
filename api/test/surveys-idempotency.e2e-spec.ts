@@ -9,7 +9,10 @@ describe("Surveys idempotency (e2e)", () => {
   let app: INestApplication
   let db: DatabaseService
 
-  async function getNextVersionNumber(parcelId: string, surveyIdToExclude?: string): Promise<number> {
+  async function getNextVersionNumber(
+    parcelId: string,
+    surveyIdToExclude?: string,
+  ): Promise<number> {
     const result = await db.query<{ next_version: number }>(
       `SELECT COALESCE(MAX(s.version_number), 0) + 1 AS next_version
        FROM surveys s
