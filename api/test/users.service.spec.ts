@@ -348,32 +348,35 @@ describe("UsersService", () => {
     })
     auth0Management.deleteUser.mockResolvedValueOnce(undefined)
     client.query
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({
-        rows: [{ storage_key: "attachments/survey-draft/photo.jpg" }],
-      })
-      .mockResolvedValue({})
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ storage_key: "attachments/survey-draft/photo.jpg" }] }) // collect draft attachment keys
+      .mockResolvedValueOnce({}) // UPDATE survey_events SET actor_id = NULL
+      .mockResolvedValueOnce({}) // UPDATE surveys SET user_id = NULL
+      .mockResolvedValueOnce({}) // DELETE FROM attachments
+      .mockResolvedValueOnce({}) // DELETE FROM survey_events
+      .mockResolvedValueOnce({}) // DELETE FROM surveys
+      .mockResolvedValueOnce({}) // DELETE FROM users
+      .mockResolvedValue({}) // COMMIT
 
     await service.deleteAccount(AUTH_USER)
 
     expect(auth0Management.deleteUser).toHaveBeenCalledWith(AUTH_USER.auth0_sub)
     expect(db.connect).toHaveBeenCalledTimes(1)
     expect(client.query).toHaveBeenNthCalledWith(1, "BEGIN")
+    // Storage keys collected first, before any UPDATE/DELETE
     expect(client.query).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("SET actor_id = NULL"),
+      expect.stringContaining("FROM attachments a"),
       [AUTH_USER.id],
     )
     expect(client.query).toHaveBeenNthCalledWith(
       3,
-      expect.stringContaining("SET user_id = NULL"),
+      expect.stringContaining("SET actor_id = NULL"),
       [AUTH_USER.id],
     )
     expect(client.query).toHaveBeenNthCalledWith(
       4,
-      expect.stringContaining("FROM attachments a"),
+      expect.stringContaining("SET user_id = NULL"),
       [AUTH_USER.id],
     )
     expect(client.query).toHaveBeenCalledWith(

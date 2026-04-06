@@ -262,63 +262,62 @@ export class UsersService {
 
     const client = await this.db.connect()
     const storageKeysToDelete: string[] = []
-    const retainedSurveyPredicate = `
-      user_id = $1
-      AND deleted_at IS NULL
-      AND (status IN ('submitted', 'synced') OR submitted_at IS NOT NULL)
+    // Surveys to retain = submitted/synced (not soft-deleted).
+    // Identified once at the start of the transaction so subsequent UPDATEs
+    // (which nullify user_id) cannot affect the predicate.
+    const retainedSurveySubquery = `
+      SELECT id FROM surveys
+      WHERE user_id = $1
+        AND deleted_at IS NULL
+        AND (status IN ('submitted', 'synced') OR submitted_at IS NOT NULL)
+    `
+    // Draft surveys = everything still owned by the user after retaining submitted ones.
+    const draftSurveySubquery = `
+      SELECT id FROM surveys WHERE user_id = $1
     `
 
     try {
       await client.query("BEGIN")
 
+      // 1. Collect storage keys of draft attachments BEFORE any modification.
+      const attachmentKeys = await client.query<AttachmentStorageRow>(
+        `SELECT a.storage_key
+         FROM attachments a
+         WHERE a.survey_id IN (${draftSurveySubquery})`,
+        [user.id],
+      )
+      storageKeysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
+
+      // 2. Anonymise retained surveys: nullify actor on their events, then nullify user_id.
       await client.query(
         `UPDATE survey_events
          SET actor_id = NULL
          WHERE actor_id = $1
-           AND survey_id IN (
-             SELECT id
-             FROM surveys
-             WHERE ${retainedSurveyPredicate}
-           )`,
+           AND survey_id IN (${retainedSurveySubquery})`,
         [user.id],
       )
 
       await client.query(
         `UPDATE surveys
          SET user_id = NULL
-         WHERE ${retainedSurveyPredicate}`,
+         WHERE id IN (${retainedSurveySubquery})`,
         [user.id],
       )
 
-      const attachmentKeys = await client.query<AttachmentStorageRow>(
-        `SELECT a.storage_key
-         FROM attachments a
-         JOIN surveys s ON s.id = a.survey_id
-         WHERE s.user_id = $1`,
-        [user.id],
-      )
-      storageKeysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
-
+      // 3. Delete draft surveys and their dependents (user_id still set on drafts at this point).
       await client.query(
         `DELETE FROM attachments
-         WHERE survey_id IN (
-           SELECT id
-           FROM surveys
-           WHERE user_id = $1
-         )`,
+         WHERE survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
       await client.query(
         `DELETE FROM survey_events
-         WHERE survey_id IN (
-           SELECT id
-           FROM surveys
-           WHERE user_id = $1
-         )`,
+         WHERE survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
       await client.query(`DELETE FROM surveys WHERE user_id = $1`, [user.id])
 
+      // 4. Delete the user row.
       await client.query(`DELETE FROM users WHERE id = $1`, [user.id])
       await client.query("COMMIT")
     } catch (error) {
