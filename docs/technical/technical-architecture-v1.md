@@ -1,7 +1,7 @@
 # V1 Technical Architecture (Blocks and Responsibilities)
 
 ## Status
-Aligned with accepted V1 data/API contracts (updated on 2026-03-08). V1.1 parcel/history extension proposed on 2026-03-10.
+Aligned with accepted V1 data/API contracts (updated on 2026-03-08). V1.1 parcel/history extension proposed on 2026-03-10. Auth0 delegation and account deletion flow added on 2026-04-06.
 
 ## Objective
 Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP MVP.
@@ -25,11 +25,12 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Photo capture and geolocation collection
 - Parcel lookup/selection UX and parcel history visualization
 - Profile management UI (`/me`)
-- Local auth token lifecycle (`/auth/login`, `/auth/refresh`, `/auth/logout`)
+- Auth flows via Auth0 SDK (login, sign-up, social providers, logout, token refresh — all delegated to Auth0)
 
 ### 2) Backend API
-- Authentication and session lifecycle
-- User profile read/update
+- JWT validation (Auth0 RS256/JWKS) and user auto-provisioning on first login
+- Auth0 Management API calls (email update, password reset trigger, account deletion)
+- User profile read/update/delete
 - Survey CRUD and business workflow enforcement
 - Server-side IBP validation and score verification
 - Parcel linkage validation (`parcel_id`) and versioning checks (`observation_year`, `version_number`)
@@ -69,10 +70,13 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 ## Main Technical Flows
 
 ### A) Login
-1. Mobile sends user credentials
-2. API returns access and refresh tokens
-3. Mobile stores tokens in secure storage
-4. Mobile refreshes access token with `/auth/refresh` when needed
+1. Mobile authenticates via Auth0 (Universal Login, social provider, or email/password)
+2. Auth0 issues a signed JWT access token (RS256) and a refresh token
+3. Mobile stores tokens in encrypted local storage
+4. Mobile sends `Authorization: Bearer <token>` on every API request
+5. Backend `AuthGuard` validates the JWT against Auth0's JWKS endpoint
+6. On first login, backend auto-provisions a DB user record from Auth0's `/userinfo`; if a user with the same email already exists, the `auth0_sub` is linked to that record
+7. Mobile refreshes the access token directly with Auth0 when it expires
 
 ### B) Save Draft Offline
 1. User fills in the form
@@ -127,6 +131,15 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 1. Client requests analytics aggregates (regions/factors/trends)
 2. API serves pre-aggregated read models
 3. UI renders insights with confidence/sample indicators
+
+### L) Account Deletion (US-A7)
+1. User confirms deletion in the mobile app (explicit confirmation step)
+2. Mobile calls `DELETE /me`
+3. Backend calls Auth0 Management API (`DELETE /api/v2/users/{auth0_sub}`) using a M2M token with `delete:users` scope
+4. Auth0 deletes the user and invalidates all active tokens
+5. Backend deletes personal data from DB (name, email, profile picture file and DB fields)
+6. Backend anonymises surveys (removes user reference, retains observation data)
+7. API returns `204`; mobile clears local state and redirects to login screen
 
 ## Security and Compliance Baseline (V1)
 - TLS for all API communication

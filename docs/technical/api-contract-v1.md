@@ -1,7 +1,7 @@
 # V1 API Contract
 
 ## Status
-Accepted for V1 baseline (validated on 2026-03-08, non-exhaustive by design). V1.1 parcel/history extension proposed on 2026-03-10.
+Accepted for V1 baseline (validated on 2026-03-08, non-exhaustive by design). V1.1 parcel/history extension proposed on 2026-03-10. Auth section updated on 2026-04-06 to reflect Auth0 delegation. `/me` endpoints updated to match implementation. `DELETE /me` added (US-A7).
 
 Base path: `/v1`
 
@@ -23,83 +23,20 @@ Base path: `/v1`
 
 ## 1) Authentication
 
-### POST /auth/login
-Authenticate a user and create a session.
+Authentication is fully delegated to **Auth0**. The backend does not expose login, register, refresh, or logout endpoints. All token issuance and session lifecycle (access token, refresh token, rotation, revocation) are handled by Auth0.
 
-Request:
-```json
-{
-  "email": "user@example.com",
-  "password": "secret",
-  "create_if_missing": false
-}
-```
+### How it works
+1. The mobile app authenticates via Auth0 (Universal Login, social providers, or email/password).
+2. Auth0 issues a signed JWT access token (RS256).
+3. The mobile sends this token as `Authorization: Bearer <token>` on every API request.
+4. The backend's `AuthGuard` validates the JWT against Auth0's JWKS endpoint (`/.well-known/jwks.json`).
+5. On first login, the backend auto-provisions a DB user record from Auth0's `/userinfo` endpoint. If a user with the same email already exists, the Auth0 `sub` is linked to that record.
 
-Response `201`:
-```json
-{
-  "access_token": "jwt",
-  "refresh_token": "jwt",
-  "user": {
-    "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
-    "display_name": "Florian",
-    "role": "contributor"
-  }
-}
-```
+### Logout
+Handled client-side: the mobile clears its local token storage. Token revocation (refresh token) is performed directly against Auth0.
 
-Notes:
-- `create_if_missing` is optional. If omitted, server behavior depends on `AUTH_LOGIN_OR_CREATE_ENABLED` and environment defaults.
-- For strict login-only UX, clients should send `create_if_missing: false`.
-- If an existing account has no password hash (bootstrap/legacy case), the first successful login stores the provided password hash.
-
-### POST /auth/register
-Create a new account and immediately authenticate it.
-
-Request:
-```json
-{
-  "email": "new-user@example.com",
-  "password": "secret",
-  "display_name": "New User"
-}
-```
-
-Response `201`:
-```json
-{
-  "access_token": "jwt",
-  "refresh_token": "jwt",
-  "user": {
-    "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
-    "display_name": "New User",
-    "role": "contributor"
-  }
-}
-```
-
-### POST /auth/refresh
-Rotate tokens using refresh token.
-
-Request:
-```json
-{
-  "refresh_token": "jwt"
-}
-```
-
-Response `200`:
-```json
-{
-  "access_token": "jwt",
-  "refresh_token": "jwt"
-}
-```
-
-### POST /auth/logout
-Revoke refresh token and close session.
-
-Response `204`.
+### Social / SSO providers
+Supported providers (Apple, Google, etc.) are configured in the Auth0 tenant. No backend changes are needed to add or remove providers.
 
 ## 1.1) User Profile
 
@@ -116,56 +53,25 @@ Response `200`:
   "last_name": "Lepont",
   "display_name": "Florian",
   "profile_picture_url": "/me/profile-picture?v=1741525200",
-  "email_change_required": false,
-  "email_change_pending_to": null
+  "updated_at": "2026-03-08T12:00:00Z"
 }
 ```
 
 ### PATCH /me
 Partially update editable profile fields.
-Editable fields in V1: `first_name`, `last_name`, `display_name`, `email`, `profile_picture_url`.
-Rules:
-- `email` change requires uniqueness check and verification flow.
-- `profile_picture_url` must reference a valid uploaded asset.
-
-Request:
-```json
-{
-  "first_name": "Florian",
-  "last_name": "Lepont",
-  "display_name": "Florian L.",
-  "email": "florian@example.com",
-  "profile_picture_url": "https://storage.example/profiles/0f5f57bb/avatar.jpg"
-}
-```
-
-Response `200`:
-```json
-{
-  "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
-  "first_name": "Florian",
-  "last_name": "Lepont",
-  "display_name": "Florian L.",
-  "email": "user@example.com",
-  "profile_picture_url": "https://storage.example/profiles/0f5f57bb/avatar.jpg",
-  "updated_at": "2026-03-08T12:10:00Z",
-  "email_change_required": true,
-  "email_change_pending_to": "florian@example.com",
-  "email_change_token_dev": "e8fe84f5-6f88-413d-b6ad-31fa7ad13e03"
-}
-```
+Editable fields in V1: `first_name`, `last_name`, `display_name`, `profile_picture_url`.
 
 Notes:
-- `email_change_token_dev` is optional and exposed only in local development mode.
-- In non-development environments, confirmation token is sent via email (SMTP).
-
-### POST /me/email/confirm
-Confirm a pending email change with token received via verification channel.
+- `email` is **not** editable via this endpoint. Use `PATCH /me/email` instead.
+- Setting `profile_picture_url` to `null` removes the profile picture URL.
 
 Request:
 ```json
 {
-  "token": "e8fe84f5-6f88-413d-b6ad-31fa7ad13e03"
+  "first_name": "Florian",
+  "last_name": "Lepont",
+  "display_name": "Florian L.",
+  "profile_picture_url": null
 }
 ```
 
@@ -173,17 +79,43 @@ Response `200`:
 ```json
 {
   "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
-  "email": "florian@example.com",
+  "email": "user@example.com",
   "role": "contributor",
   "first_name": "Florian",
   "last_name": "Lepont",
   "display_name": "Florian L.",
-  "profile_picture_url": "https://storage.example/profiles/0f5f57bb/avatar.jpg",
-  "email_change_required": false,
-  "email_change_pending_to": null,
-  "updated_at": "2026-03-08T12:30:00Z"
+  "profile_picture_url": null,
+  "updated_at": "2026-03-08T12:10:00Z"
 }
 ```
+
+### PATCH /me/email
+Change the authenticated user's email address.
+
+Request:
+```json
+{
+  "email": "florian@example.com"
+}
+```
+
+Response `204`.
+
+Rules:
+- New email must differ from current email (`400` otherwise).
+- Email is updated on Auth0 first (triggers a verification email), then in the DB.
+- If the DB update fails with a uniqueness conflict, the Auth0 change is rolled back.
+- Returns `400` with code `Email already in use` if the email is taken on Auth0.
+- Returns `400` with code `Email already taken` if the email conflicts in the DB.
+
+### POST /me/password-reset
+Trigger a password reset email for the authenticated user (email/password accounts only).
+
+Response `204`.
+
+Notes:
+- Sends a secure reset link to the user's current email via Auth0's password reset flow.
+- No-op for users authenticated exclusively via social providers (no password set).
 
 ### PUT /me/profile-picture
 Upload user profile picture (`multipart/form-data`, field name: `file`).
@@ -216,6 +148,21 @@ Response `200`: binary image stream.
 Remove current authenticated user profile picture.
 
 Response `204`.
+
+### DELETE /me
+Permanently delete the authenticated user's account.
+
+Response `204`.
+
+Rules:
+- Immediate and irreversible — no grace period.
+- The user is deleted from Auth0 (`DELETE /api/v2/users/{auth0_sub}`). Requires M2M token with `delete:users` scope.
+- All personal identity data (name, email, profile picture) is deleted from the DB.
+- All surveys and observations previously submitted are anonymised (user reference removed), not deleted.
+- Profile picture file is deleted from storage.
+- If the Auth0 deletion fails, the DB is not modified (Auth0 first, then DB).
+- After deletion, all tokens issued to the user become invalid (Auth0 handles token revocation on user delete).
+- For users authenticated via social providers (Apple, Google), the Auth0 identity is deleted but the provider account itself is not revoked.
 
 ## 2) Surveys
 
@@ -406,7 +353,6 @@ Response `200`:
 }
 ```
 
-If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 
 ### DELETE /surveys/{id}
