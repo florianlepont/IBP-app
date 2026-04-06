@@ -1,7 +1,7 @@
 # Data Contract V1
 
 ## Status
-Accepted for V1 baseline (validated on 2026-03-08). V1.1 parcel/history extension proposed on 2026-03-10.
+Accepted for V1 baseline (validated on 2026-03-08). V1.1 parcel/history extension proposed on 2026-03-10. Auth Session entity updated on 2026-04-06 to reflect Auth0 delegation. User entity updated with `auth0_sub`.
 
 ## Purpose
 Define the shared data model between mobile app, backend API, and database for the V1 scope.
@@ -20,25 +20,22 @@ Represents an authenticated contributor or moderator.
 
 Required fields:
 - `id` (uuid)
+- `auth0_sub` (string, unique) // Auth0 user identifier (e.g. `auth0|xxx`, `google-oauth2|xxx`)
 - `email` (string, unique)
 - `role` (enum: `contributor` | `moderator` | `admin`)
 - `first_name` (string)
 - `last_name` (string)
 - `display_name` (string)
 - `profile_picture_url` (string, nullable)
+- `profile_picture_storage_key` (string, nullable) // local storage key for uploaded picture
+- `profile_picture_mime_type` (string, nullable)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 
 ### 2) Auth Session
-Represents a login session with refresh token lifecycle.
-
-Required fields:
-- `id` (uuid)
-- `user_id` (uuid)
-- `refresh_token_hash` (string)
-- `expires_at` (timestamp)
-- `created_at` (timestamp)
-- `revoked_at` (timestamp, nullable)
+> **Delegated to Auth0.** Session lifecycle (access tokens, refresh tokens, rotation, revocation) is fully managed by the Auth0 tenant. The backend does not store or manage sessions directly.
+>
+> The backend only validates the JWT access token on each request (RS256, JWKS). No `auth_sessions` table is maintained server-side in V1.
 
 ### 3) Survey
 Main IBP form entity.

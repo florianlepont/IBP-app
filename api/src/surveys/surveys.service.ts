@@ -61,7 +61,7 @@ export class SurveysService {
   ) {
     this.objectStorageMode =
       (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-surveys"
+    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-media"
     this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
 
     if (this.objectStorageMode === "minio") {
