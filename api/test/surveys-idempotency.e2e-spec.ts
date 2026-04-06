@@ -9,6 +9,22 @@ describe("Surveys idempotency (e2e)", () => {
   let app: INestApplication
   let db: DatabaseService
 
+  async function getNextVersionNumber(parcelId: string, surveyIdToExclude?: string): Promise<number> {
+    const result = await db.query<{ next_version: number }>(
+      `SELECT COALESCE(MAX(s.version_number), 0) + 1 AS next_version
+       FROM surveys s
+       JOIN survey_parcels sp
+         ON sp.survey_id = s.id
+       WHERE sp.parcel_id = $1
+         AND s.deleted_at IS NULL
+         AND s.status = 'submitted'
+         AND ($2::text IS NULL OR s.id <> $2)`,
+      [parcelId, surveyIdToExclude ?? null],
+    )
+
+    return result.rows[0]?.next_version ?? 1
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -228,6 +244,7 @@ describe("Surveys idempotency (e2e)", () => {
 
     const parcelId = resolved.body.parcel?.parcel_id as string
     expect(parcelId).toBeTruthy()
+    const versionNumber = await getNextVersionNumber(parcelId)
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -240,7 +257,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: versionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: {
@@ -292,6 +309,7 @@ describe("Surveys idempotency (e2e)", () => {
       .expect(200)
     const parcelId = resolved.body.parcel?.parcel_id as string
     expect(parcelId).toBeTruthy()
+    const versionNumber = await getNextVersionNumber(parcelId)
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -304,7 +322,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: versionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: {
@@ -360,6 +378,7 @@ describe("Surveys idempotency (e2e)", () => {
       .expect(200)
     const parcelId = resolved.body.parcel?.parcel_id as string
     expect(parcelId).toBeTruthy()
+    const versionNumber = await getNextVersionNumber(parcelId)
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -372,7 +391,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: versionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: {
@@ -532,6 +551,7 @@ describe("Surveys idempotency (e2e)", () => {
       .expect(200)
     const parcelPubId = resolvedPub.body.parcel?.parcel_id as string
     expect(parcelPubId).toBeTruthy()
+    const submittedPublicVersionNumber = await getNextVersionNumber(parcelPubId)
 
     const resolvedPrv = await request(app.getHttpServer())
       .get("/v1/parcels/resolve")
@@ -540,6 +560,7 @@ describe("Surveys idempotency (e2e)", () => {
       .expect(200)
     const parcelPrvId = resolvedPrv.body.parcel?.parcel_id as string
     expect(parcelPrvId).toBeTruthy()
+    const submittedPrivateVersionNumber = await getNextVersionNumber(parcelPrvId)
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -552,7 +573,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelPubId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: submittedPublicVersionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: validFactors,
@@ -582,7 +603,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelPrvId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: submittedPrivateVersionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: validFactors,
@@ -677,6 +698,8 @@ describe("Surveys idempotency (e2e)", () => {
     const parcelId = resolved.body.parcel?.parcel_id as string
     expect(parcelId).toBeTruthy()
     expect(typeof resolved.body.parcel?.commune_code).toBe("string")
+    const surveyIdV1VersionNumber = await getNextVersionNumber(parcelId)
+    const surveyIdV2VersionNumber = surveyIdV1VersionNumber + 1
 
     const surveyIdV1 = `e2e-parcel-history-v1-${Date.now()}`
     const surveyIdV2 = `e2e-parcel-history-v2-${Date.now()}`
@@ -692,7 +715,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: surveyIdV1VersionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: validFactors,
@@ -716,7 +739,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2026,
-        version_number: 2,
+        version_number: surveyIdV2VersionNumber,
         previous_survey_id: surveyIdV1,
         region_version: "ACA",
         vegetation_stage: "collineen",
@@ -778,6 +801,7 @@ describe("Surveys idempotency (e2e)", () => {
       .expect(200)
     const parcelId = resolvedParcel.body.parcel?.parcel_id as string
     expect(parcelId).toBeTruthy()
+    const versionNumber = await getNextVersionNumber(parcelId)
 
     const upsert = await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -790,7 +814,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2026,
-        version_number: 1,
+        version_number: versionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: validFactors,
@@ -854,6 +878,7 @@ describe("Surveys idempotency (e2e)", () => {
       .expect(200)
     const parcelId = resolvedParcel.body.parcel?.parcel_id as string
     expect(parcelId).toBeTruthy()
+    const versionNumber = await getNextVersionNumber(parcelId)
 
     const upsert = await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -866,7 +891,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2025,
-        version_number: 1,
+        version_number: versionNumber,
         region_version: "ACA",
         vegetation_stage: "collineen",
         factors: {
