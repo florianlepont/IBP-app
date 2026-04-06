@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import { dirname, join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
@@ -17,6 +18,10 @@ type UserMeRow = AuthenticatedUser & {
 type UserPictureRow = {
   profile_picture_storage_key: string | null
   profile_picture_mime_type: string | null
+}
+
+type AttachmentStorageRow = {
+  storage_key: string
 }
 
 export type MeResponse = {
@@ -39,13 +44,36 @@ export type PatchMeBody = {
 
 @Injectable()
 export class UsersService {
+  private readonly objectStorageMode: "local" | "minio"
+  private readonly s3Bucket: string
+  private readonly s3Client?: S3Client
   private readonly uploadsRootDir: string
 
   constructor(
     private readonly db: DatabaseService,
     private readonly auth0Management: Auth0ManagementService,
   ) {
+    this.objectStorageMode =
+      (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
+    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-surveys"
     this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
+
+    if (this.objectStorageMode === "minio") {
+      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
+      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
+      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
+      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
+
+      this.s3Client = new S3Client({
+        endpoint,
+        region,
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
+      })
+    }
   }
 
   async getMe(userId: string): Promise<MeResponse> {
@@ -224,6 +252,92 @@ export class UsersService {
     return this.toMeResponse(updated)
   }
 
+  async deleteAccount(user: AuthenticatedUser): Promise<void> {
+    const current = await this.findUserMeRow(user.id)
+    if (!current) {
+      throw new NotFoundException("User not found")
+    }
+
+    await this.auth0Management.deleteUser(user.auth0_sub)
+
+    const client = await this.db.connect()
+    const storageKeysToDelete: string[] = []
+    // Surveys to retain = submitted/synced (not soft-deleted).
+    // Identified once at the start of the transaction so subsequent UPDATEs
+    // (which nullify user_id) cannot affect the predicate.
+    const retainedSurveySubquery = `
+      SELECT id FROM surveys
+      WHERE user_id = $1
+        AND deleted_at IS NULL
+        AND (status IN ('submitted', 'synced') OR submitted_at IS NOT NULL)
+    `
+    // Draft surveys = everything still owned by the user after retaining submitted ones.
+    const draftSurveySubquery = `
+      SELECT id FROM surveys WHERE user_id = $1
+    `
+
+    try {
+      await client.query("BEGIN")
+
+      // 1. Collect storage keys of draft attachments BEFORE any modification.
+      const attachmentKeys = await client.query<AttachmentStorageRow>(
+        `SELECT a.storage_key
+         FROM attachments a
+         WHERE a.survey_id IN (${draftSurveySubquery})`,
+        [user.id],
+      )
+      storageKeysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
+
+      // 2. Anonymise retained surveys: nullify actor on their events, then nullify user_id.
+      await client.query(
+        `UPDATE survey_events
+         SET actor_id = NULL
+         WHERE actor_id = $1
+           AND survey_id IN (${retainedSurveySubquery})`,
+        [user.id],
+      )
+
+      await client.query(
+        `UPDATE surveys
+         SET user_id = NULL
+         WHERE id IN (${retainedSurveySubquery})`,
+        [user.id],
+      )
+
+      // 3. Delete draft surveys and their dependents (user_id still set on drafts at this point).
+      await client.query(
+        `DELETE FROM attachments
+         WHERE survey_id IN (${draftSurveySubquery})`,
+        [user.id],
+      )
+      await client.query(
+        `DELETE FROM survey_events
+         WHERE survey_id IN (${draftSurveySubquery})`,
+        [user.id],
+      )
+      await client.query(`DELETE FROM surveys WHERE user_id = $1`, [user.id])
+
+      // 4. Delete the user row.
+      await client.query(`DELETE FROM users WHERE id = $1`, [user.id])
+      await client.query("COMMIT")
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
+
+    if (current.profile_picture_storage_key) {
+      await rm(this.storagePathForKey(current.profile_picture_storage_key), { force: true }).catch(
+        () => undefined,
+      )
+    }
+
+    for (const storageKey of storageKeysToDelete) {
+      await this.cleanupAttachmentStorage(storageKey)
+    }
+  }
+
   private async findUserMeRow(userId: string): Promise<UserMeRow | null> {
     const result = await this.db.query<UserMeRow>(
       `SELECT id,
@@ -276,6 +390,24 @@ export class UsersService {
 
   private storagePathForKey(storageKey: string): string {
     return join(this.uploadsRootDir, storageKey)
+  }
+
+  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
+    if (this.objectStorageMode === "minio") {
+      if (this.s3Client) {
+        await this.s3Client
+          .send(
+            new DeleteObjectCommand({
+              Bucket: this.s3Bucket,
+              Key: storageKey,
+            }),
+          )
+          .catch(() => undefined)
+      }
+      return
+    }
+
+    await rm(this.storagePathForKey(storageKey), { force: true }).catch(() => undefined)
   }
 
   private toMeResponse(row: UserMeRow): MeResponse {
