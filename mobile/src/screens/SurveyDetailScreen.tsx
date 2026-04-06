@@ -59,6 +59,7 @@ import { AppField } from "../ui/AppField"
 import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip, AppStatusChipTone } from "../ui/AppStatusChip"
+import { isFactorKey, resolveDisplayCoordinates } from "./survey-screen-helpers"
 import { styles } from "./SurveyDetailScreen.styles"
 
 type SurveyDetailScreenProps = {
@@ -100,25 +101,6 @@ const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   J: "triangle-outline",
 }
 
-export const asFiniteNumber = (value: unknown): number | null => {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "string") {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return null
-}
-
-export const resolveDisplayCoordinates = (
-  displayLocation?: { lat?: unknown; lng?: unknown } | null,
-): { lat: number; lng: number } | null => {
-  if (!displayLocation) return null
-  const lat = asFiniteNumber(displayLocation.lat)
-  const lng = asFiniteNumber(displayLocation.lng)
-  if (lat === null || lng === null) return null
-  return { lat, lng }
-}
-
 type DisplayedScores = {
   ibp_total: number
   ibp_peuplement_gestion: number
@@ -136,9 +118,6 @@ type LocalDraftMeta = {
 type HeroMode = "map" | "photo"
 
 const FACTOR_ORDER: FactorKey[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
-const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER)
-export const isFactorKey = (value: string): value is FactorKey =>
-  FACTOR_KEYS.has(value as FactorKey)
 const DEFAULT_FRANCE_REGION: Region = {
   latitude: 46.603354,
   longitude: 1.888334,

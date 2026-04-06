@@ -45,7 +45,6 @@ import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
 import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
-
 import { screenStyles } from "./SurveyFormScreen.styles"
 import {
   FACTOR_ICONS,
@@ -85,7 +84,6 @@ type SurveyFormScreenProps = {
 }
 
 type WizardStep = "identity" | "parcels" | "factors"
-
 export function SurveyFormScreen({
   apiUrl,
   screen,

@@ -23,6 +23,12 @@ export const AUTH0_AUDIENCE = resolvePublicEnv(
   DEFAULT_AUTH0_AUDIENCE,
 )
 
+export const auth0Config = {
+  domain: AUTH0_DOMAIN,
+  clientId: AUTH0_CLIENT_ID,
+  audience: AUTH0_AUDIENCE,
+}
+
 export const AUTH0_IOS_CALLBACK_URL = `${IOS_BUNDLE_IDENTIFIER}.auth0://${AUTH0_DOMAIN}/ios/${IOS_BUNDLE_IDENTIFIER}/callback`
 
 export function buildAuth0UnauthorizedMessage(apiUrl: string): string {

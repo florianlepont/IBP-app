@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { brandColors } from "../app/brand-tokens"
 import { FactorKey, FactorRetainedScore } from "../app/types"
 import { AppChoiceChip } from "../ui/AppChoiceChip"
+import { toAddressLabel } from "./survey-screen-helpers"
 import { screenStyles } from "./SurveyFormScreen.styles"
 
 export const FACTOR_ORDER: FactorKey[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
@@ -163,16 +164,4 @@ export function FactorTile({
   )
 }
 
-export const toAddressLabel = (item: Record<string, unknown>): string => {
-  const streetNumber = typeof item.streetNumber === "string" ? item.streetNumber.trim() : ""
-  const street = typeof item.street === "string" ? item.street.trim() : ""
-  const postalCode = typeof item.postalCode === "string" ? item.postalCode.trim() : ""
-  const city = typeof item.city === "string" ? item.city.trim() : ""
-  const region = typeof item.region === "string" ? item.region.trim() : ""
-  const country = typeof item.country === "string" ? item.country.trim() : ""
-
-  const line1 = [streetNumber, street].filter((part) => part.length > 0).join(" ")
-  const line2 = [postalCode, city].filter((part) => part.length > 0).join(" ")
-  const line3 = [region, country].filter((part) => part.length > 0).join(", ")
-  return [line1, line2, line3].filter((part) => part.length > 0).join(" - ")
-}
+export { toAddressLabel }
