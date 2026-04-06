@@ -20,6 +20,11 @@ export const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 20,
   },
+  accountScreenWrap: {
+    flex: 1,
+    padding: 16,
+    gap: 14,
+  },
   formScreen: {
     gap: 12,
   },

@@ -6,21 +6,6 @@ export type AuthUser = {
   first_name: string
   last_name: string
   profile_picture_url: string | null
-  email_change_required?: boolean
-  email_change_pending_to?: string | null
-  email_change_token_dev?: string
-}
-
-export type LoginResponse = {
-  access_token: string
-  refresh_token: string
-  user: AuthUser
-  email_verification_token_dev?: string
-}
-
-export type RefreshResponse = {
-  access_token: string
-  refresh_token: string
 }
 
 export type FactorKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"

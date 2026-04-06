@@ -60,9 +60,8 @@ jest.mock("react-native-safe-area-context", () => ({
 import { AuthGateScreen } from "./AuthGateScreen"
 
 describe("AuthGateScreen", () => {
-  it("calls login handler when submitting in login mode", async () => {
+  it("calls login handler when pressing the login button", async () => {
     const onLogin = jest.fn(async () => undefined)
-    const onRegister = jest.fn(async () => undefined)
 
     let component: renderer.ReactTestRenderer
     await act(async () => {
@@ -70,14 +69,7 @@ describe("AuthGateScreen", () => {
         React.createElement(AuthGateScreen, {
           apiUrl: "http://localhost:3000/v1",
           onApiUrlChange: jest.fn(),
-          email: "demo@ibp.local",
-          onEmailChange: jest.fn(),
-          password: "demo1234",
-          onPasswordChange: jest.fn(),
-          displayName: "",
-          onDisplayNameChange: jest.fn(),
           onLogin,
-          onRegister,
           status: "Ready",
         }),
       )
@@ -89,48 +81,5 @@ describe("AuthGateScreen", () => {
     })
 
     expect(onLogin).toHaveBeenCalledTimes(1)
-    expect(onRegister).not.toHaveBeenCalled()
-  })
-
-  it("calls register handler in register mode when confirmation matches", async () => {
-    const onLogin = jest.fn(async () => undefined)
-    const onRegister = jest.fn(async () => undefined)
-
-    let component: renderer.ReactTestRenderer
-    await act(async () => {
-      component = renderer.create(
-        React.createElement(AuthGateScreen, {
-          apiUrl: "http://localhost:3000/v1",
-          onApiUrlChange: jest.fn(),
-          email: "new-user@ibp.local",
-          onEmailChange: jest.fn(),
-          password: "demo1234",
-          onPasswordChange: jest.fn(),
-          displayName: "New User",
-          onDisplayNameChange: jest.fn(),
-          onLogin,
-          onRegister,
-          status: "Ready",
-        }),
-      )
-    })
-
-    const registerModeButton = component!.root.findByProps({ testID: "auth-mode-register" })
-    await act(async () => {
-      registerModeButton.props.onPress()
-    })
-
-    const confirmPasswordInput = component!.root.findByProps({ testID: "auth-confirm-password" })
-    await act(async () => {
-      confirmPasswordInput.props.onChangeText("demo1234")
-    })
-
-    const submitButton = component!.root.findByProps({ testID: "auth-submit" })
-    await act(async () => {
-      submitButton.props.onPress()
-    })
-
-    expect(onRegister).toHaveBeenCalledTimes(1)
-    expect(onLogin).not.toHaveBeenCalled()
   })
 })

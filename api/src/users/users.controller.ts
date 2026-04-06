@@ -21,7 +21,7 @@ import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { UsersService } from "./users.service"
 import { PatchMeDto } from "./dtos/patch-me.dto"
-import { ConfirmEmailChangeDto } from "./dtos/confirm-email-change.dto"
+import { ChangeEmailDto } from "./dtos/change-email.dto"
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -38,10 +38,16 @@ export class UsersController {
     return this.usersService.patchMe(user, body)
   }
 
-  @Post("me/email/confirm")
-  @HttpCode(200)
-  confirmEmailChange(@CurrentUser() user: AuthenticatedUser, @Body() body: ConfirmEmailChangeDto) {
-    return this.usersService.confirmEmailChange(user, body.token ?? "")
+  @Patch("me/email")
+  @HttpCode(204)
+  changeEmail(@CurrentUser() user: AuthenticatedUser, @Body() body: ChangeEmailDto) {
+    return this.usersService.changeEmail(user, body.email)
+  }
+
+  @Post("me/password-reset")
+  @HttpCode(204)
+  passwordReset(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.sendPasswordReset(user)
   }
 
   @Put("me/profile-picture")
@@ -74,5 +80,11 @@ export class UsersController {
   @HttpCode(204)
   async deleteProfilePicture(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.usersService.removeProfilePicture(user)
+  }
+
+  @Delete("me")
+  @HttpCode(204)
+  async deleteAccount(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.usersService.deleteAccount(user)
   }
 }

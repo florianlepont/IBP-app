@@ -1,3 +1,4 @@
+import { useState, type Ref } from "react"
 import {
   StyleProp,
   StyleSheet,
@@ -18,6 +19,7 @@ import {
 type AppFieldProps = {
   label: string
   error?: string | null
+  inputRef?: Ref<TextInput>
   containerStyle?: StyleProp<ViewStyle>
   labelStyle?: StyleProp<TextStyle>
   inputStyle?: StyleProp<TextStyle>
@@ -27,20 +29,39 @@ type AppFieldProps = {
 export function AppField({
   label,
   error,
+  inputRef,
   containerStyle,
   labelStyle,
   inputStyle,
   testID,
   placeholderTextColor = brandColors.textSecondary,
+  onFocus,
+  onBlur,
   ...inputProps
 }: AppFieldProps) {
+  const [focused, setFocused] = useState(false)
+
   return (
     <View style={[styles.container, containerStyle]}>
       <Text style={[styles.label, labelStyle]}>{label}</Text>
       <TextInput
-        style={[styles.input, error ? styles.inputError : null, inputStyle]}
+        ref={inputRef}
+        style={[
+          styles.input,
+          focused ? styles.inputFocused : null,
+          error ? styles.inputError : null,
+          inputStyle,
+        ]}
         placeholderTextColor={placeholderTextColor}
         testID={testID}
+        onFocus={(event) => {
+          setFocused(true)
+          onFocus?.(event)
+        }}
+        onBlur={(event) => {
+          setFocused(false)
+          onBlur?.(event)
+        }}
         {...inputProps}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -70,6 +91,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 18,
     fontWeight: "500",
+  },
+  inputFocused: {
+    borderColor: brandColors.forest,
+    backgroundColor: brandColors.white,
+    shadowColor: brandColors.forest,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
   inputError: {
     borderColor: brandComponentTokens.field.borderError,

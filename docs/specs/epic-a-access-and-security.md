@@ -68,7 +68,7 @@ Acceptance criteria
 
 ### US-A4 - Extended login 
 
-**Release:** V1
+**Release:** MVP
 
 A contributor can sign in using third-party providers (Apple, Google, etc.) in addition to username/password, with clear UX for first-time account linking, errors, and session persistence.
 
@@ -107,3 +107,52 @@ Acceptance criteria
 - Profile picture upload supports camera and gallery selection.
 
 - Display name is used in community surfaces (for example leaderboard) while keeping personal identity controls.
+
+### US-A6 - Forgot Password
+
+**Release:** MVP
+
+A contributor can reset their password from the login screen by receiving a secure, single-use link by email, valid for 24 hours.
+
+As a contributor, I want to reset my password from the login screen so that I can regain access to my account if I have forgotten it.
+
+Acceptance criteria
+
+- A "Forgot password?" link is visible on the login screen.
+
+- After entering my email address, I receive an email containing a secure reset link.
+
+- The reset link expires after 24 hours and is single-use.
+
+- If the email address is not recognised, a message informs me.
+
+- After a successful reset, I am redirected to the login screen.
+
+### US-A7 - Delete Account
+
+**Release:** MVP
+
+A contributor can permanently delete their account from the profile menu. The deletion is immediate and irreversible. All personal identity data (name, email, profile picture) is deleted from the system. Surveys and observations previously submitted are anonymised (dissociated from the user's identity) and retained for scientific purposes.
+
+As a contributor, I want to permanently delete my account so that my personal data is removed from the system.
+
+Acceptance criteria
+
+- A "Delete my account" option is accessible from the profile menu (or account settings).
+
+- Before deletion is confirmed, a clear warning is displayed explaining:
+  - The action is immediate and irreversible.
+  - Personal data (name, email, profile picture) will be permanently deleted.
+  - Previously submitted surveys and observations will be anonymised and retained for scientific purposes.
+
+- Deletion requires an explicit confirmation step (e.g. confirmation dialog, typing "DELETE", or re-entering password).
+
+- Upon confirmation, the account and all associated personal data are immediately and permanently deleted.
+
+- All surveys and observations previously submitted by the user are anonymised (the link to the user identity is removed), not deleted.
+
+- After deletion, the user is logged out and redirected to the login screen.
+
+- If the user is authenticated via a third-party provider (Apple, Google), the local session is terminated. Revoking access on the provider side is the user's responsibility.
+
+- Errors (network, server) are handled with actionable messages and the deletion is not performed if the request fails.

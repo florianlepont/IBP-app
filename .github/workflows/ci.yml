@@ -88,7 +88,7 @@ jobs:
       POSTGRES_USER: ibp
       POSTGRES_PASSWORD: ibp
       OBJECT_STORAGE_MODE: local
-      OBJECT_STORAGE_BUCKET: ibp-surveys
+      OBJECT_STORAGE_BUCKET: ibp-media
       ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
       ACCESS_TOKEN_SECRET: ci-access-secret
       REFRESH_TOKEN_SECRET: ci-refresh-secret
@@ -114,3 +114,54 @@ jobs:
       - name: Run E2E tests
         run: npm run test:e2e
         working-directory: api
+
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'api/**'
+
+  build:
+    name: Build & push Docker image
+    runs-on: ubuntu-latest
+    needs: [quality, test-unit-api, test-unit-mobile, test-e2e-api, changes]
+    if: needs.changes.outputs.api == 'true'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/florianlepont/ibp-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

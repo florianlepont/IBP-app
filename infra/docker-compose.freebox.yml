@@ -33,25 +33,24 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     ports:
       - "3000:3000"
     env_file:
-      - .env.freebox
+      - /home/freebox/.env.freebox
     environment:
       NODE_ENV: production
       PORT: 3000
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
+      OBJECT_STORAGE_MODE: minio
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-ibp-media}
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio}
+      OBJECT_STORAGE_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: ibp-tunnel
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
-    depends_on:
-      - api
 
 volumes:
   ibp_postgres_data:

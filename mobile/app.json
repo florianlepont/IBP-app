@@ -23,11 +23,17 @@
         }
       ],
       "expo-secure-store",
-      "react-native-bottom-tabs"
+      "react-native-bottom-tabs",
+      [
+        "react-native-auth0",
+        {
+          "domain": "auth-ibp.algernon.ovh"
+        }
+      ]
     ],
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.anonymous.ibp-app"
+      "bundleIdentifier": "fr.etats-sauvages.ibp-app"
     }
   }
 }

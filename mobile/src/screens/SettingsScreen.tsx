@@ -8,11 +8,11 @@ import { AppSectionHeader } from "../ui/AppSectionHeader"
 type SettingsScreenProps = {
   apiUrl: string
   onApiUrlChange: (value: string) => void
-  onOpenUiPrimitives: () => void
   onSync: () => Promise<void>
   onPullChanges: () => Promise<void>
   onRefreshLocalList: () => Promise<void>
   onRefreshLocalAttachments: () => Promise<void>
+  onDeleteAccount: () => Promise<void>
   onDebugResetIbpData: () => Promise<void>
   onDebugResetUserData: () => Promise<void>
   status: string
@@ -21,11 +21,11 @@ type SettingsScreenProps = {
 export function SettingsScreen({
   apiUrl,
   onApiUrlChange,
-  onOpenUiPrimitives,
   onSync,
   onPullChanges,
   onRefreshLocalList,
   onRefreshLocalAttachments,
+  onDeleteAccount,
   onDebugResetIbpData,
   onDebugResetUserData,
   status,
@@ -33,21 +33,13 @@ export function SettingsScreen({
   return (
     <View style={screenStyles.screen}>
       <AppCard variant="panelElevated" style={screenStyles.section}>
-        <AppSectionHeader
-          title="Environment"
-          subtitle="Basculer d'API et ouvrir le showcase des primitives."
-        />
+        <AppSectionHeader title="Environment" subtitle="Basculer d'API pour les tests locaux." />
         <AppField
           label="API URL"
           value={apiUrl}
           onChangeText={onApiUrlChange}
           autoCapitalize="none"
           autoCorrect={false}
-        />
-        <AppButton
-          label="Open UI primitives showcase"
-          variant="secondary"
-          onPress={onOpenUiPrimitives}
         />
       </AppCard>
 
@@ -72,6 +64,20 @@ export function SettingsScreen({
             label="Refresh local attachments"
             variant="secondary"
             onPress={() => void onRefreshLocalAttachments()}
+          />
+        </View>
+      </AppCard>
+
+      <AppCard variant="soft" style={screenStyles.section}>
+        <AppSectionHeader
+          title="Account"
+          subtitle="Actions sensibles sur votre compte utilisateur."
+        />
+        <View style={screenStyles.buttonStack}>
+          <AppButton
+            label="Delete my account"
+            variant="danger"
+            onPress={() => void onDeleteAccount()}
           />
         </View>
       </AppCard>
@@ -105,9 +111,11 @@ export function SettingsScreen({
 const screenStyles = StyleSheet.create({
   screen: {
     gap: brandSpacing.md,
+    width: "100%",
   },
   section: {
     gap: brandSpacing.md,
+    width: "100%",
   },
   buttonStack: {
     gap: brandSpacing.sm,

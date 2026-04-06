@@ -35,15 +35,14 @@ describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  async function loginAsNewUser(): Promise<{ accessToken: string; refreshToken: string }> {
+  async function loginAsNewUser(): Promise<{ accessToken: string }> {
     const email = `e2e-val-${Date.now()}-${Math.random().toString(36).slice(2)}@ibp.local`
     const res = await request(app.getHttpServer())
-      .post("/v1/auth/login")
-      .send({ email, password: "demo1234" })
+      .post("/v1/debug/test-token")
+      .send({ email })
       .expect(201)
     return {
       accessToken: res.body.access_token as string,
-      refreshToken: res.body.refresh_token as string,
     }
   }
 
@@ -117,36 +116,6 @@ describe("ValidationPipe + Reports CRUD + Token refresh (e2e)", () => {
         .set("Authorization", `Bearer ${accessToken}`)
         .send({ survey_id: 12345 })
         .expect(400)
-    })
-  })
-
-  // ─── Token refresh ────────────────────────────────────────────────────────
-
-  describe("POST /v1/auth/refresh", () => {
-    it("returns new access_token and refresh_token", async () => {
-      const { refreshToken } = await loginAsNewUser()
-
-      const res = await request(app.getHttpServer())
-        .post("/v1/auth/refresh")
-        .send({ refresh_token: refreshToken })
-        .expect(201)
-
-      expect(typeof res.body.access_token).toBe("string")
-      expect(typeof res.body.refresh_token).toBe("string")
-    })
-
-    it("rejects an invalid refresh token (401)", async () => {
-      await request(app.getHttpServer())
-        .post("/v1/auth/refresh")
-        .send({ refresh_token: "not-a-valid-token" })
-        .expect(401)
-    })
-
-    it("rejects request with missing refresh_token field gracefully", async () => {
-      const res = await request(app.getHttpServer()).post("/v1/auth/refresh").send({})
-
-      // 401 or 400 — either is acceptable; just not 500
-      expect(res.status).toBeLessThan(500)
     })
   })
 

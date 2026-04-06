@@ -11,7 +11,7 @@ jest.mock("react-native", () => ({
   Platform: { select: (opts: Record<string, unknown>) => opts.default ?? Object.values(opts)[0] },
 }))
 
-jest.mock("../storage", () => ({
+jest.mock("../storage/surveys", () => ({
   createLocalDraft: jest.fn(),
   getLocalSurveyDraft: jest.fn(),
   updateLocalDraft: jest.fn(),

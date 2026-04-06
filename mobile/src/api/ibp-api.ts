@@ -1,9 +1,7 @@
 import {
   AuthUser,
-  LoginResponse,
   PublicMapItem,
   PublicParcelStatusItem,
-  RefreshResponse,
   SurveyDetailResponse,
   SurveyEventsResponse,
 } from "../app/types"
@@ -13,7 +11,6 @@ type PatchProfilePayload = {
   first_name: string
   last_name: string
   display_name: string
-  email: string
   profile_picture_url?: string | null
 }
 
@@ -42,87 +39,6 @@ type CreateReportResponse = {
   status: "open" | "reviewed"
 }
 
-export async function loginWithCredentials(
-  apiUrl: string,
-  email: string,
-  password: string,
-  options?: { createIfMissing?: boolean },
-): Promise<LoginResponse> {
-  const payload: Record<string, unknown> = { email, password }
-  if (typeof options?.createIfMissing === "boolean") {
-    payload.create_if_missing = options.createIfMissing
-  }
-
-  return apiRequest<LoginResponse>({
-    baseUrl: apiUrl,
-    path: "/auth/login",
-    method: "POST",
-    json: payload,
-  })
-}
-
-export async function registerWithCredentials(
-  apiUrl: string,
-  email: string,
-  password: string,
-  displayName: string,
-): Promise<LoginResponse> {
-  return apiRequest<LoginResponse>({
-    baseUrl: apiUrl,
-    path: "/auth/register",
-    method: "POST",
-    json: {
-      email,
-      password,
-      display_name: displayName,
-    },
-  })
-}
-
-export async function refreshAuthTokens(
-  apiUrl: string,
-  refreshToken: string,
-): Promise<RefreshResponse> {
-  return apiRequest<RefreshResponse>({
-    baseUrl: apiUrl,
-    path: "/auth/refresh",
-    method: "POST",
-    json: { refresh_token: refreshToken },
-  })
-}
-
-export async function verifyEmail(apiUrl: string, token: string): Promise<void> {
-  await apiRequest<void>({
-    baseUrl: apiUrl,
-    path: "/auth/verify-email",
-    method: "POST",
-    json: { token },
-    expectJson: false,
-  })
-}
-
-export async function resendVerificationEmail(
-  apiUrl: string,
-  email: string,
-): Promise<{ email_verification_token_dev?: string }> {
-  return apiRequest<{ email_verification_token_dev?: string }>({
-    baseUrl: apiUrl,
-    path: "/auth/resend-verification",
-    method: "POST",
-    json: { email },
-  })
-}
-
-export async function logoutSession(apiUrl: string, accessToken: string): Promise<void> {
-  await apiRequest<void>({
-    baseUrl: apiUrl,
-    path: "/auth/logout",
-    method: "POST",
-    token: accessToken,
-    expectJson: false,
-  })
-}
-
 export async function getMyProfile(apiUrl: string, accessToken: string): Promise<AuthUser> {
   return apiRequest<AuthUser>({
     baseUrl: apiUrl,
@@ -146,17 +62,26 @@ export async function patchMyProfile(
   })
 }
 
-export async function confirmMyEmail(
+export async function changeMyEmail(
   apiUrl: string,
   accessToken: string,
-  token: string,
-): Promise<AuthUser> {
-  return apiRequest<AuthUser>({
+  email: string,
+): Promise<void> {
+  return apiRequest<void>({
     baseUrl: apiUrl,
-    path: "/me/email/confirm",
+    path: "/me/email",
+    method: "PATCH",
+    token: accessToken,
+    json: { email },
+  })
+}
+
+export async function requestPasswordReset(apiUrl: string, accessToken: string): Promise<void> {
+  return apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/me/password-reset",
     method: "POST",
     token: accessToken,
-    json: { token },
   })
 }
 
@@ -178,6 +103,16 @@ export async function deleteMyProfilePicture(apiUrl: string, accessToken: string
   await apiRequest<void>({
     baseUrl: apiUrl,
     path: "/me/profile-picture",
+    method: "DELETE",
+    token: accessToken,
+    expectJson: false,
+  })
+}
+
+export async function deleteMyAccount(apiUrl: string, accessToken: string): Promise<void> {
+  await apiRequest<void>({
+    baseUrl: apiUrl,
+    path: "/me",
     method: "DELETE",
     token: accessToken,
     expectJson: false,

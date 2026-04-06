@@ -59,5 +59,76 @@ target 'IBPApp' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    fmt_base_header = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base_header)
+      original_block = <<~'BLOCK'
+        // Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.
+        #if !defined(__cpp_lib_is_constant_evaluated)
+        #  define FMT_USE_CONSTEVAL 0
+        #elif FMT_CPLUSPLUS < 201709L
+        #  define FMT_USE_CONSTEVAL 0
+        #elif FMT_GLIBCXX_RELEASE && FMT_GLIBCXX_RELEASE < 10
+        #  define FMT_USE_CONSTEVAL 0
+        #elif FMT_LIBCPP_VERSION && FMT_LIBCPP_VERSION < 10000
+        #  define FMT_USE_CONSTEVAL 0
+        #elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L
+        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in Apple clang < 14.
+        #elif FMT_MSC_VERSION && FMT_MSC_VERSION < 1929
+        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in MSVC VS2019 < 16.10.
+        #elif defined(__cpp_consteval)
+        #  define FMT_USE_CONSTEVAL 1
+        #elif FMT_GCC_VERSION >= 1002 || FMT_CLANG_VERSION >= 1101
+        #  define FMT_USE_CONSTEVAL 1
+        #else
+        #  define FMT_USE_CONSTEVAL 0
+        #endif
+      BLOCK
+      patched_block = <<~'BLOCK'
+        // Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.
+        #ifdef FMT_USE_CONSTEVAL
+        // Use the provided definition.
+        #elif !defined(__cpp_lib_is_constant_evaluated)
+        #  define FMT_USE_CONSTEVAL 0
+        #elif FMT_CPLUSPLUS < 201709L
+        #  define FMT_USE_CONSTEVAL 0
+        #elif FMT_GLIBCXX_RELEASE && FMT_GLIBCXX_RELEASE < 10
+        #  define FMT_USE_CONSTEVAL 0
+        #elif FMT_LIBCPP_VERSION && FMT_LIBCPP_VERSION < 10000
+        #  define FMT_USE_CONSTEVAL 0
+        #elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L
+        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in Apple clang < 14.
+        #elif FMT_MSC_VERSION && FMT_MSC_VERSION < 1929
+        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in MSVC VS2019 < 16.10.
+        #elif defined(__cpp_consteval)
+        #  define FMT_USE_CONSTEVAL 1
+        #elif FMT_GCC_VERSION >= 1002 || FMT_CLANG_VERSION >= 1101
+        #  define FMT_USE_CONSTEVAL 1
+        #else
+        #  define FMT_USE_CONSTEVAL 0
+        #endif
+      BLOCK
+
+      fmt_base_contents = File.read(fmt_base_header)
+      if fmt_base_contents.include?(original_block)
+        fmt_base_mode = File.stat(fmt_base_header).mode & 0o777
+        File.chmod(fmt_base_mode | 0o200, fmt_base_header)
+        File.write(fmt_base_header, fmt_base_contents.sub(original_block, patched_block))
+        File.chmod(fmt_base_mode, fmt_base_header)
+      end
+    end
+
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+
+      target.build_configurations.each do |build_configuration|
+        definitions = build_configuration.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+        definitions = [definitions] unless definitions.is_a?(Array)
+        unless definitions.include?('FMT_USE_CONSTEVAL=0')
+          definitions << 'FMT_USE_CONSTEVAL=0'
+        end
+        build_configuration.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
+      end
+    end
   end
 end

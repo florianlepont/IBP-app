@@ -19,4 +19,8 @@ module.exports = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.jest.json' }]
   },
+  moduleNameMapper: {
+    '^@expo/vector-icons$': '<rootDir>/test/vector-icons.mock.ts',
+    '^expo-sqlite$': '<rootDir>/test/expo-sqlite.mock.ts',
+  },
 };

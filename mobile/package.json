@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@bottom-tabs/react-navigation": "^1.1.0",
+    "@expo/ngrok": "^4.1.0",
     "@react-navigation/bottom-tabs": "^7.15.7",
     "@react-navigation/native": "^7.1.33",
     "@react-navigation/native-stack": "^7.14.4",
@@ -32,6 +33,7 @@
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-bottom-tabs": "^1.1.0",
+    "react-native-auth0": "^5.4.0",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-maps": "1.20.1",
     "react-native-safe-area-context": "~5.6.0",

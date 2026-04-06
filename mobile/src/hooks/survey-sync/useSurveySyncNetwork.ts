@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react"
 import * as Network from "expo-network"
 import { createSurveyReport } from "../../api/ibp-api"
 import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from "../../storage"
-import { AUTH_REQUIRED_ERROR } from "../useAuthSession"
+import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
 import { isOnlineNetworkState } from "./utils"
 
 type UseSurveySyncNetworkParams = {

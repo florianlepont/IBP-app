@@ -7,15 +7,12 @@ import { AuthUser } from "../app/types"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
-import { AppNotice } from "../ui/AppNotice"
-import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip } from "../ui/AppStatusChip"
 
 type UpdateProfileInput = {
   first_name: string
   last_name: string
   display_name: string
-  email: string
 }
 
 type AccountScreenProps = {
@@ -25,10 +22,11 @@ type AccountScreenProps = {
   profileUpdating: boolean
   apiUrl: string
   onSaveProfile: (input: UpdateProfileInput) => Promise<void>
+  onChangeEmail: (newEmail: string) => Promise<void>
+  onPasswordReset: () => Promise<void>
   onPickProfilePictureFromLibrary: () => Promise<void>
   onTakeProfilePictureFromCamera: () => Promise<void>
   onRemoveProfilePicture: () => Promise<void>
-  onConfirmEmailChange: (token: string) => Promise<void>
   onLogout: () => Promise<void>
 }
 
@@ -41,7 +39,6 @@ function ProfileField({
   placeholder,
   autoCapitalize,
   autoCorrect,
-  keyboardType,
 }: {
   label: string
   value: string
@@ -49,7 +46,6 @@ function ProfileField({
   placeholder?: string
   autoCapitalize?: "none" | "sentences" | "words" | "characters"
   autoCorrect?: boolean
-  keyboardType?: "default" | "email-address"
 }) {
   return (
     <AppField
@@ -59,7 +55,6 @@ function ProfileField({
       placeholder={placeholder}
       autoCapitalize={autoCapitalize}
       autoCorrect={autoCorrect}
-      keyboardType={keyboardType}
       containerStyle={styles.fieldGroup}
       labelStyle={styles.fieldLabel}
       inputStyle={styles.fieldInput}
@@ -90,10 +85,11 @@ export function AccountScreen({
   profileUpdating,
   apiUrl,
   onSaveProfile,
+  onChangeEmail,
+  onPasswordReset,
   onPickProfilePictureFromLibrary,
   onTakeProfilePictureFromCamera,
   onRemoveProfilePicture,
-  onConfirmEmailChange,
   onLogout,
 }: AccountScreenProps) {
   const avatarButtonRef = useRef<View | null>(null)
@@ -102,17 +98,15 @@ export function AccountScreen({
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [displayName, setDisplayName] = useState("")
-  const [profileEmail, setProfileEmail] = useState("")
-  const [emailConfirmToken, setEmailConfirmToken] = useState("")
   const [photoMenuVisible, setPhotoMenuVisible] = useState(false)
   const [photoMenuAnchor, setPhotoMenuAnchor] = useState<PhotoMenuAnchor | null>(null)
+  const [emailEditing, setEmailEditing] = useState(false)
+  const [newEmail, setNewEmail] = useState("")
 
   useEffect(() => {
     setFirstName(currentUser?.first_name ?? "")
     setLastName(currentUser?.last_name ?? "")
     setDisplayName(currentUser?.display_name ?? "")
-    setProfileEmail(currentUser?.email ?? "")
-    setEmailConfirmToken(currentUser?.email_change_token_dev ?? "")
   }, [currentUser])
 
   useEffect(() => {
@@ -144,15 +138,13 @@ export function AccountScreen({
     const baseFirstName = (currentUser?.first_name ?? "").trim()
     const baseLastName = (currentUser?.last_name ?? "").trim()
     const baseDisplayName = (currentUser?.display_name ?? "").trim()
-    const baseEmail = (currentUser?.email ?? "").trim().toLowerCase()
 
     return (
       firstName.trim() !== baseFirstName ||
       lastName.trim() !== baseLastName ||
-      displayName.trim() !== baseDisplayName ||
-      profileEmail.trim().toLowerCase() !== baseEmail
+      displayName.trim() !== baseDisplayName
     )
-  }, [currentUser, firstName, lastName, displayName, profileEmail])
+  }, [currentUser, firstName, lastName, displayName])
 
   const heroName =
     displayName.trim() ||
@@ -309,11 +301,12 @@ export function AccountScreen({
       </Modal>
 
       <View style={styles.screen}>
-        <AppCard variant="panelElevated" padding={14} style={styles.accountSummaryCard}>
+        {/* Identity card */}
+        <AppCard variant="panelElevated" padding={12} style={styles.identityCard}>
           <View style={styles.identityRow}>
             <Pressable
               ref={avatarButtonRef}
-              style={styles.avatarHeroButton}
+              style={styles.avatarButton}
               onPress={openPhotoActions}
               disabled={profileUpdating}
             >
@@ -323,52 +316,46 @@ export function AccountScreen({
                     uri: profilePictureUri,
                     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
                   }}
-                  style={styles.avatarHeroImage}
+                  style={styles.avatarImage}
                 />
               ) : (
-                <View style={styles.avatarHeroFallback}>
-                  <Text style={styles.avatarHeroFallbackText}>{initials || "A"}</Text>
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarFallbackText}>{initials || "A"}</Text>
                 </View>
               )}
             </Pressable>
 
             <View style={styles.identityCopy}>
-              <Text style={styles.identityName}>{heroName}</Text>
-              <Text style={styles.identityMeta}>{heroSubtitle}</Text>
-              <View style={styles.heroChipRow}>
+              <Text style={styles.identityName} numberOfLines={1}>
+                {heroName}
+              </Text>
+              <Text style={styles.identityMeta} numberOfLines={1}>
+                {heroSubtitle}
+              </Text>
+              <View style={styles.identityFooter}>
                 <AppStatusChip label={roleLabel} />
-                {currentUser?.email_change_required ? (
-                  <AppStatusChip label="Email pending" tone="warning" />
-                ) : null}
+                <AppButton
+                  label="Logout"
+                  leadingIcon="log-out-outline"
+                  variant="danger"
+                  onPress={() => void onLogout()}
+                  size="sm"
+                />
               </View>
             </View>
           </View>
-
-          <View style={styles.summaryFooterRow}>
-            <AppButton
-              label="Logout"
-              leadingIcon="log-out-outline"
-              variant="danger"
-              onPress={() => void onLogout()}
-              size="sm"
-            />
-          </View>
         </AppCard>
 
-        <AppCard variant="panelElevated" padding={14} style={styles.panel}>
-          <AppSectionHeader
-            title="Profile fields"
-            subtitle="Edit the synced identity shown across the app and shared survey data."
-            trailing={
-              isProfileDirty ? (
-                <AppStatusChip label="Unsaved changes" tone="warning" />
-              ) : (
-                <AppStatusChip label="Up to date" tone="success" />
-              )
-            }
-            titleStyle={styles.sectionTitle}
-            subtitleStyle={styles.sectionBody}
-          />
+        {/* Profile fields card */}
+        <AppCard variant="panelElevated" padding={12} style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Profile</Text>
+            {isProfileDirty ? (
+              <AppStatusChip label="Unsaved" tone="warning" />
+            ) : (
+              <AppStatusChip label="Saved" tone="success" />
+            )}
+          </View>
 
           <View style={styles.twoColumnRow}>
             <View style={styles.halfField}>
@@ -398,15 +385,69 @@ export function AccountScreen({
             placeholder="Field identity shown to others"
             autoCapitalize="words"
           />
-          <ProfileField
-            label="Email"
-            value={profileEmail}
-            onChangeText={setProfileEmail}
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-          />
+
+          {emailEditing ? (
+            <View style={styles.emailEditBlock}>
+              <AppField
+                label="New email"
+                value={newEmail}
+                onChangeText={setNewEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                autoFocus
+                containerStyle={styles.fieldGroup}
+                labelStyle={styles.fieldLabel}
+                inputStyle={styles.fieldInput}
+              />
+              <View style={styles.emailEditActions}>
+                <AppButton
+                  label="Cancel"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => {
+                    setEmailEditing(false)
+                    setNewEmail("")
+                  }}
+                />
+                <AppButton
+                  label={profileUpdating ? "Saving..." : "Save email"}
+                  size="sm"
+                  disabled={profileUpdating || !newEmail.includes("@")}
+                  onPress={() =>
+                    void onChangeEmail(newEmail).then(() => {
+                      setEmailEditing(false)
+                      setNewEmail("")
+                    })
+                  }
+                />
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => {
+                setNewEmail(currentUser?.email ?? "")
+                setEmailEditing(true)
+              }}
+            >
+              <View style={styles.settingsRowContent}>
+                <Text style={styles.settingsRowLabel}>Email</Text>
+                <Text style={styles.settingsRowValue} numberOfLines={1}>
+                  {currentUser?.email ?? "—"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
+            </Pressable>
+          )}
+
+          <Pressable style={styles.settingsRow} onPress={() => void onPasswordReset()}>
+            <View style={styles.settingsRowContent}>
+              <Text style={styles.settingsRowLabel}>Password</Text>
+              <Text style={styles.settingsRowValue}>Send reset email</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
+          </Pressable>
 
           <AppButton
             label={profileUpdating ? "Saving profile..." : "Save profile"}
@@ -416,52 +457,12 @@ export function AccountScreen({
                 first_name: firstName,
                 last_name: lastName,
                 display_name: displayName,
-                email: profileEmail,
               })
             }
             disabled={profileUpdating || !isProfileDirty}
             size="lg"
           />
         </AppCard>
-
-        {currentUser?.email_change_required ? (
-          <AppCard
-            variant="panelElevated"
-            padding={14}
-            style={[styles.panel, styles.pendingEmailPanel]}
-          >
-            <AppSectionHeader
-              title="Confirm pending email"
-              subtitle="A confirmation step is required before the new email becomes active on the account."
-              trailing={<AppStatusChip label="Pending" tone="warning" />}
-              titleStyle={styles.sectionTitle}
-              subtitleStyle={styles.sectionBody}
-            />
-
-            <AppNotice
-              tone="warning"
-              icon="mail-open-outline"
-              message={`Pending email: ${currentUser.email_change_pending_to ?? "unknown"}`}
-              style={styles.pendingEmailNotice}
-            />
-
-            <ProfileField
-              label="Confirmation token"
-              value={emailConfirmToken}
-              onChangeText={setEmailConfirmToken}
-              placeholder="Paste confirmation token"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <AppButton
-              label="Confirm pending email"
-              leadingIcon="checkmark-circle-outline"
-              onPress={() => void onConfirmEmailChange(emailConfirmToken)}
-              disabled={profileUpdating || emailConfirmToken.trim().length === 0}
-            />
-          </AppCard>
-        ) : null}
       </View>
     </>
   )
@@ -469,7 +470,8 @@ export function AccountScreen({
 
 const styles = StyleSheet.create({
   screen: {
-    gap: brandSpacing.md,
+    flex: 1,
+    gap: brandSpacing.sm,
   },
   photoMenuOverlay: {
     flex: 1,
@@ -574,91 +576,116 @@ const styles = StyleSheet.create({
     marginLeft: 56,
     backgroundColor: "rgba(62, 74, 54, 0.16)",
   },
-  accountSummaryCard: {
-    gap: 10,
+  identityCard: {
+    gap: 0,
   },
   identityRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  avatarHeroButton: {
-    width: 104,
-    height: 104,
-    borderRadius: 28,
+  avatarButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: brandColors.divider,
     backgroundColor: brandColors.panelMuted,
+    flexShrink: 0,
   },
-  avatarHeroImage: {
+  avatarImage: {
     width: "100%",
     height: "100%",
   },
-  avatarHeroFallback: {
+  avatarFallback: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: brandColors.panelMuted,
   },
-  avatarHeroFallbackText: {
-    fontSize: 32,
-    lineHeight: 36,
+  avatarFallbackText: {
+    fontSize: 26,
+    lineHeight: 30,
     fontWeight: "900",
     color: brandColors.forest,
   },
   identityCopy: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   identityName: {
     ...brandTypography.sectionTitle,
-    fontSize: 22,
-    lineHeight: 24,
+    fontSize: 18,
+    lineHeight: 22,
     color: brandColors.forest,
   },
   identityMeta: {
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
-  heroChipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  summaryFooterRow: {
+  identityFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 12,
+    justifyContent: "space-between",
+    marginTop: 2,
   },
   panel: {
-    gap: 10,
+    flex: 1,
+    gap: 8,
   },
-  pendingEmailPanel: {
-    backgroundColor: "#FBF6EC",
+  panelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
   },
-  sectionTitle: {
+  panelTitle: {
     ...brandTypography.sectionTitle,
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 20,
     color: brandColors.forest,
-  },
-  sectionBody: {
-    ...brandTypography.meta,
-    color: brandColors.textSecondary,
   },
   twoColumnRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
   halfField: {
     flex: 1,
-    minWidth: 140,
+    minWidth: 120,
+  },
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: brandColors.inputFill,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  settingsRowContent: {
+    flex: 1,
+    gap: 1,
+  },
+  settingsRowLabel: {
+    ...brandTypography.label,
+    color: brandColors.forest,
+  },
+  settingsRowValue: {
+    ...brandTypography.sectionBody,
+    color: brandColors.textSecondary,
+  },
+  emailEditBlock: {
+    gap: 8,
+  },
+  emailEditActions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
   },
   fieldGroup: {
-    gap: 6,
+    gap: 4,
   },
   fieldLabel: {
     ...brandTypography.label,
@@ -666,9 +693,6 @@ const styles = StyleSheet.create({
   },
   fieldInput: {
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  pendingEmailNotice: {
-    marginTop: 2,
+    paddingVertical: 10,
   },
 })

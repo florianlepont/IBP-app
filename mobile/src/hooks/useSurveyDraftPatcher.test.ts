@@ -9,12 +9,12 @@ jest.mock("react-native", () => ({
   Platform: { select: (opts: Record<string, unknown>) => opts.default ?? Object.values(opts)[0] },
 }))
 
-jest.mock("../storage", () => ({
+jest.mock("../storage/surveys", () => ({
   getLocalSurveyDraft: jest.fn(),
   updateLocalDraft: jest.fn(),
 }))
 
-import { getLocalSurveyDraft, updateLocalDraft } from "../storage"
+import { getLocalSurveyDraft, updateLocalDraft } from "../storage/surveys"
 import { useSurveyDraftPatcher } from "./useSurveyDraftPatcher"
 
 const mockGetLocalSurveyDraft = getLocalSurveyDraft as jest.Mock
