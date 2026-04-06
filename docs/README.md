@@ -4,7 +4,7 @@ The repository documentation is grouped under `docs/`:
 
 - `docs/specs/`
   Product and functional specifications.
-  Includes the Notion-synced epic files plus manual support documents such as `ibp-form-spec.md` and `user-stories.md`.
+  Includes epic files plus support documents such as `ibp-form-spec.md` and `user-stories.md`.
 
 - `docs/technical/`
   Technical contracts, ADRs, validation rules, architecture and sync behavior.

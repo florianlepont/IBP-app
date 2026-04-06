@@ -21,7 +21,6 @@ import { SurveyDetailScreen } from "../screens/SurveyDetailScreen"
 import { PublicMapScreen } from "../screens/PublicMapScreen"
 import { AccountScreen } from "../screens/AccountScreen"
 import { SettingsScreen } from "../screens/SettingsScreen"
-import { UiPrimitivesScreen } from "../screens/UiPrimitivesScreen"
 import { FactorDetailScreen } from "../screens/FactorDetailScreen"
 import { SurveyParcelSelectionScreen } from "../screens/SurveyParcelSelectionScreen"
 import { useSurveyForm } from "../hooks/useSurveyForm"
@@ -38,7 +37,6 @@ export type RootTabParamList = {
 type AccountStackParamList = {
   accountHome: undefined
   settings: undefined
-  uiPrimitives: undefined
 }
 
 type SurveysStackParamList = {
@@ -556,12 +554,11 @@ function AccountTabNavigator({
         )}
       </AccountStack.Screen>
       <AccountStack.Screen name="settings" options={{ title: "Settings" }}>
-        {({ navigation }) => (
+        {() => (
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
             <SettingsScreen
               apiUrl={apiUrl}
               onApiUrlChange={onApiUrlChange}
-              onOpenUiPrimitives={() => navigation.navigate("uiPrimitives")}
               onSync={surveySync.handleSync}
               onPullChanges={surveySync.handlePullChanges}
               onRefreshLocalList={surveyList.refreshLocalSurveys}
@@ -570,13 +567,6 @@ function AccountTabNavigator({
               onDebugResetUserData={surveySync.handleDebugResetUserData}
               status={surveySync.status}
             />
-          </ScrollView>
-        )}
-      </AccountStack.Screen>
-      <AccountStack.Screen name="uiPrimitives" options={{ title: "UI Primitives" }}>
-        {() => (
-          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-            <UiPrimitivesScreen />
           </ScrollView>
         )}
       </AccountStack.Screen>

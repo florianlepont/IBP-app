@@ -88,7 +88,7 @@ jobs:
       POSTGRES_USER: ibp
       POSTGRES_PASSWORD: ibp
       OBJECT_STORAGE_MODE: local
-      OBJECT_STORAGE_BUCKET: ibp-surveys
+      OBJECT_STORAGE_BUCKET: ibp-media
       ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
       ACCESS_TOKEN_SECRET: ci-access-secret
       REFRESH_TOKEN_SECRET: ci-refresh-secret

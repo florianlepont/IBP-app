@@ -53,6 +53,7 @@ import { AppChoiceChip } from "../ui/AppChoiceChip"
 import { AppField } from "../ui/AppField"
 import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { toAddressLabel } from "./survey-screen-helpers"
 
 type SurveyFormScreenProps = {
   apiUrl: string
@@ -240,20 +241,6 @@ function FactorTile({
       </Text>
     </Pressable>
   )
-}
-
-export const toAddressLabel = (item: Record<string, unknown>): string => {
-  const streetNumber = typeof item.streetNumber === "string" ? item.streetNumber.trim() : ""
-  const street = typeof item.street === "string" ? item.street.trim() : ""
-  const postalCode = typeof item.postalCode === "string" ? item.postalCode.trim() : ""
-  const city = typeof item.city === "string" ? item.city.trim() : ""
-  const region = typeof item.region === "string" ? item.region.trim() : ""
-  const country = typeof item.country === "string" ? item.country.trim() : ""
-
-  const line1 = [streetNumber, street].filter((part) => part.length > 0).join(" ")
-  const line2 = [postalCode, city].filter((part) => part.length > 0).join(" ")
-  const line3 = [region, country].filter((part) => part.length > 0).join(", ")
-  return [line1, line2, line3].filter((part) => part.length > 0).join(" - ")
 }
 
 export function SurveyFormScreen({

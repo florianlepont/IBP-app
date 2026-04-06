@@ -2,16 +2,13 @@ import { useCallback, useEffect, useState } from "react"
 import Auth0 from "react-native-auth0"
 import { ApiError } from "../api/client"
 import { getMyProfile } from "../api/ibp-api"
+import { auth0Config } from "../app/auth0-config"
 import { AuthUser } from "../app/types"
 import { OperationScope, OperationState } from "./operation-status"
 
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 
-const AUTH0_DOMAIN = "dev-zocy4q27tkkmjkmd.eu.auth0.com"
-const AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
-const AUTH0_AUDIENCE = "https://api.ibp-app"
-
-const auth0 = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
+const auth0 = new Auth0({ domain: auth0Config.domain, clientId: auth0Config.clientId })
 
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
@@ -158,7 +155,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       reportStatus("auth", "running", "Logging in...")
       const credentials = await auth0.webAuth.authorize({
         scope: "openid profile email offline_access",
-        audience: AUTH0_AUDIENCE,
+        audience: auth0Config.audience,
       })
 
       await auth0.credentialsManager.saveCredentials(credentials)
