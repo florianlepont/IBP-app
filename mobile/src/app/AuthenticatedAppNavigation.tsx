@@ -536,23 +536,20 @@ function AccountTabNavigator({
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={styles.accountScreenWrap}
           >
-            <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-              <AccountScreen
-                accessToken={surveySync.accessToken}
-                currentUser={surveySync.currentUser}
-                profile={surveySync.profile}
-                profileUpdating={surveySync.profileUpdating}
-                apiUrl={apiUrl}
-                onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
-                onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
-                onPasswordReset={() => surveySync.handlePasswordReset()}
-                onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
-                onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
-                onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
-                onDeleteAccount={() => surveySync.handleDeleteAccount()}
-                onLogout={surveySync.handleLogout}
-              />
-            </ScrollView>
+            <AccountScreen
+              accessToken={surveySync.accessToken}
+              currentUser={surveySync.currentUser}
+              profile={surveySync.profile}
+              profileUpdating={surveySync.profileUpdating}
+              apiUrl={apiUrl}
+              onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
+              onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
+              onPasswordReset={() => surveySync.handlePasswordReset()}
+              onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
+              onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
+              onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
+              onLogout={surveySync.handleLogout}
+            />
           </KeyboardAvoidingView>
         )}
       </AccountStack.Screen>
@@ -566,6 +563,7 @@ function AccountTabNavigator({
               onPullChanges={surveySync.handlePullChanges}
               onRefreshLocalList={surveyList.refreshLocalSurveys}
               onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
+              onDeleteAccount={surveySync.handleDeleteAccount}
               onDebugResetIbpData={surveySync.handleDebugResetIbpData}
               onDebugResetUserData={surveySync.handleDebugResetUserData}
               status={surveySync.status}

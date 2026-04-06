@@ -135,7 +135,7 @@ export function useSurveySync({
     setStatus,
   })
 
-  const handleDeleteAccount = useCallback(async (): Promise<void> => {
+  const performDeleteAccount = useCallback(async (): Promise<void> => {
     try {
       setStatus("Deleting account...")
       await withAuthRetry((token) => deleteMyAccount(apiUrl, token))
@@ -156,6 +156,23 @@ export function useSurveySync({
       )
     }
   }, [apiUrl, clearSession, handleLogout, setStatus, withAuthRetry])
+
+  const handleDeleteAccount = useCallback(async (): Promise<void> => {
+    Alert.alert(
+      "Delete account",
+      "This action is immediate and irreversible. Your name, email, and profile photo will be permanently deleted. Previously submitted surveys will be anonymised and retained for scientific purposes.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete my account",
+          style: "destructive",
+          onPress: () => {
+            void performDeleteAccount()
+          },
+        },
+      ],
+    )
+  }, [performDeleteAccount])
 
   const { handleSync, handlePullChanges, handleReportSurvey, maybeAutoSync } = useSurveySyncNetwork(
     {

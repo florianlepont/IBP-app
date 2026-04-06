@@ -7,7 +7,6 @@ import { AuthUser } from "../app/types"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
-import { AppNotice } from "../ui/AppNotice"
 import { AppStatusChip } from "../ui/AppStatusChip"
 
 type UpdateProfileInput = {
@@ -28,7 +27,6 @@ type AccountScreenProps = {
   onPickProfilePictureFromLibrary: () => Promise<void>
   onTakeProfilePictureFromCamera: () => Promise<void>
   onRemoveProfilePicture: () => Promise<void>
-  onDeleteAccount: () => Promise<void>
   onLogout: () => Promise<void>
 }
 
@@ -92,7 +90,6 @@ export function AccountScreen({
   onPickProfilePictureFromLibrary,
   onTakeProfilePictureFromCamera,
   onRemoveProfilePicture,
-  onDeleteAccount,
   onLogout,
 }: AccountScreenProps) {
   const avatarButtonRef = useRef<View | null>(null)
@@ -105,9 +102,6 @@ export function AccountScreen({
   const [photoMenuAnchor, setPhotoMenuAnchor] = useState<PhotoMenuAnchor | null>(null)
   const [emailEditing, setEmailEditing] = useState(false)
   const [newEmail, setNewEmail] = useState("")
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [deleteConfirmText, setDeleteConfirmText] = useState("")
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   useEffect(() => {
     setFirstName(currentUser?.first_name ?? "")
@@ -161,7 +155,6 @@ export function AccountScreen({
   const heroSubtitle = currentUser?.email ?? "No email attached yet"
   const initials = resolveInitials(currentUser, profile)
   const roleLabel = currentUser?.role?.trim() || "member"
-  const deleteConfirmed = deleteConfirmText.trim().toUpperCase() === "DELETE"
   const photoActions = useMemo(
     () => [
       {
@@ -206,15 +199,6 @@ export function AccountScreen({
 
   const closePhotoMenu = (): void => {
     setPhotoMenuVisible(false)
-  }
-
-  const handleConfirmDeleteAccount = async (): Promise<void> => {
-    try {
-      setDeleteSubmitting(true)
-      await onDeleteAccount()
-    } finally {
-      setDeleteSubmitting(false)
-    }
   }
 
   const openPhotoActions = (): void => {
@@ -479,61 +463,6 @@ export function AccountScreen({
             size="lg"
           />
         </AppCard>
-
-        <AppCard variant="soft" padding={12} style={styles.dangerCard}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.panelTitle}>Danger zone</Text>
-            <AppStatusChip label="Irreversible" tone="warning" />
-          </View>
-
-          <AppNotice
-            tone="danger"
-            icon="alert-circle-outline"
-            title="Delete account"
-            message={
-              "This action is immediate and irreversible. Your name, email, and profile photo will be permanently deleted. Previously submitted surveys will be anonymised and retained for scientific purposes."
-            }
-          />
-
-          {deleteConfirmOpen ? (
-            <View style={styles.deleteConfirmBlock}>
-              <AppField
-                label='Type "DELETE" to confirm'
-                value={deleteConfirmText}
-                onChangeText={setDeleteConfirmText}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                containerStyle={styles.fieldGroup}
-                labelStyle={styles.fieldLabel}
-                inputStyle={styles.fieldInput}
-              />
-              <View style={styles.dangerActions}>
-                <AppButton
-                  label="Cancel"
-                  variant="secondary"
-                  disabled={deleteSubmitting}
-                  onPress={() => {
-                    setDeleteConfirmOpen(false)
-                    setDeleteConfirmText("")
-                  }}
-                />
-                <AppButton
-                  label={deleteSubmitting ? "Deleting..." : "Delete my account"}
-                  variant="danger"
-                  disabled={deleteSubmitting || !deleteConfirmed}
-                  onPress={() => void handleConfirmDeleteAccount()}
-                />
-              </View>
-            </View>
-          ) : (
-            <AppButton
-              label="Delete my account"
-              variant="danger"
-              disabled={deleteSubmitting}
-              onPress={() => setDeleteConfirmOpen(true)}
-            />
-          )}
-        </AppCard>
       </View>
     </>
   )
@@ -541,6 +470,7 @@ export function AccountScreen({
 
 const styles = StyleSheet.create({
   screen: {
+    flex: 1,
     gap: brandSpacing.sm,
   },
   photoMenuOverlay: {
@@ -701,10 +631,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   panel: {
+    flex: 1,
     gap: 8,
-  },
-  dangerCard: {
-    gap: 10,
   },
   panelHeader: {
     flexDirection: "row",
@@ -752,14 +680,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emailEditActions: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "flex-end",
-  },
-  deleteConfirmBlock: {
-    gap: 10,
-  },
-  dangerActions: {
     flexDirection: "row",
     gap: 8,
     justifyContent: "flex-end",
