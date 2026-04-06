@@ -6,6 +6,10 @@ on:
     types: [completed]
     branches: [main]
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # ── Deploy on Freebox VM (self-hosted runner) ─────────────────────────────
   deploy:

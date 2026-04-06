@@ -702,7 +702,6 @@ describe("Surveys idempotency (e2e)", () => {
     expect(parcelId).toBeTruthy()
     expect(typeof resolved.body.parcel?.commune_code).toBe("string")
     const surveyIdV1VersionNumber = await getNextVersionNumber(parcelId)
-    const surveyIdV2VersionNumber = surveyIdV1VersionNumber + 1
 
     const surveyIdV1 = `e2e-parcel-history-v1-${Date.now()}`
     const surveyIdV2 = `e2e-parcel-history-v2-${Date.now()}`
@@ -731,6 +730,8 @@ describe("Surveys idempotency (e2e)", () => {
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(201)
 
+    const secondVersionNumber = await getNextVersionNumber(parcelId, surveyIdV2)
+
     await request(app.getHttpServer())
       .post("/v1/surveys")
       .set("Authorization", `Bearer ${accessToken}`)
@@ -742,7 +743,7 @@ describe("Surveys idempotency (e2e)", () => {
         visibility: "private",
         parcel_id: parcelId,
         observation_year: 2026,
-        version_number: surveyIdV2VersionNumber,
+        version_number: secondVersionNumber,
         previous_survey_id: surveyIdV1,
         region_version: "ACA",
         vegetation_stage: "collineen",

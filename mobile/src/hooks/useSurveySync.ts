@@ -67,6 +67,24 @@ export function useSurveySync({
     [reportStatus],
   )
 
+  const resetLocalSurveyState = useCallback(async (): Promise<void> => {
+    await clearLocalIbpData()
+    await refreshLocalSurveys()
+    await refreshLocalAttachments()
+    setSurveyDetails({})
+    setSurveyEvents({})
+    onCloseSurveyDetail()
+    if (editingSurveyId) {
+      onStopEditing()
+    }
+  }, [
+    editingSurveyId,
+    onCloseSurveyDetail,
+    onStopEditing,
+    refreshLocalAttachments,
+    refreshLocalSurveys,
+  ])
+
   const {
     accessToken,
     refreshToken,
@@ -125,11 +143,19 @@ export function useSurveySync({
     },
   )
 
-  const handleDebugResetIbpData = async (): Promise<void> => {
-    Alert.alert(
-      "Debug reset IBP data",
-      "This will delete all IBP surveys/events/attachments on server and clear local IBP data.",
-      [
+  const runDebugReset = useCallback(
+    ({
+      title,
+      message,
+      inProgressMessage,
+      onReset,
+    }: {
+      title: string
+      message: string
+      inProgressMessage: string
+      onReset: () => Promise<string>
+    }): void => {
+      Alert.alert(title, message, [
         { text: "Cancel", style: "cancel" },
         {
           text: "Reset",
@@ -137,75 +163,52 @@ export function useSurveySync({
           onPress: () => {
             void (async () => {
               try {
-                setStatus("Debug reset IBP data in progress...")
-                const result = await withAuthRetry((token) => resetIbpData(apiUrl, token))
-
-                await clearLocalIbpData()
-                await refreshLocalSurveys()
-                await refreshLocalAttachments()
-                setSurveyDetails({})
-                setSurveyEvents({})
-                onCloseSurveyDetail()
-                if (editingSurveyId) {
-                  onStopEditing()
-                }
-                setStatus(
-                  `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`,
-                )
+                setStatus(inProgressMessage)
+                const successMessage = await onReset()
+                setStatus(successMessage)
               } catch (error) {
                 if ((error as Error).message === AUTH_REQUIRED_ERROR) {
                   await clearSession()
                   setStatus("Login required before debug reset")
                   return
                 }
-                setStatus(`Debug reset IBP error: ${(error as Error).message}`)
+
+                setStatus(`${title} error: ${(error as Error).message}`)
               }
             })()
           },
         },
-      ],
-    )
+      ])
+    },
+    [clearSession, setStatus],
+  )
+
+  const handleDebugResetIbpData = async (): Promise<void> => {
+    runDebugReset({
+      title: "Debug reset IBP data",
+      message:
+        "This will delete all IBP surveys/events/attachments on server and clear local IBP data.",
+      inProgressMessage: "Debug reset IBP data in progress...",
+      onReset: async () => {
+        const result = await withAuthRetry((token) => resetIbpData(apiUrl, token))
+        await resetLocalSurveyState()
+        return `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`
+      },
+    })
   }
 
   const handleDebugResetUserData = async (): Promise<void> => {
-    Alert.alert(
-      "Debug reset user data",
-      "This will delete all users on server and clear your local session and IBP data.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              try {
-                setStatus("Debug reset user data in progress...")
-                const result = await withAuthRetry((token) => resetUserData(apiUrl, token))
-
-                await clearLocalIbpData()
-                onCloseSurveyDetail()
-                if (editingSurveyId) {
-                  onStopEditing()
-                }
-                await clearSession()
-                await refreshLocalSurveys()
-                await refreshLocalAttachments()
-                setStatus(
-                  `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`,
-                )
-              } catch (error) {
-                if ((error as Error).message === AUTH_REQUIRED_ERROR) {
-                  await clearSession()
-                  setStatus("Login required before debug reset")
-                  return
-                }
-                setStatus(`Debug reset user error: ${(error as Error).message}`)
-              }
-            })()
-          },
-        },
-      ],
-    )
+    runDebugReset({
+      title: "Debug reset user data",
+      message: "This will delete all users on server and clear your local session and IBP data.",
+      inProgressMessage: "Debug reset user data in progress...",
+      onReset: async () => {
+        const result = await withAuthRetry((token) => resetUserData(apiUrl, token))
+        await resetLocalSurveyState()
+        await clearSession()
+        return `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`
+      },
+    })
   }
   const handleLoadCanonicalDetails = useCallback(
     async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {

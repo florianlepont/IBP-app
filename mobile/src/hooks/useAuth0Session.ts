@@ -13,7 +13,6 @@ import { AuthUser } from "../app/types"
 import { OperationScope, OperationState } from "./operation-status"
 
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
-
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
   if (error instanceof Error) return /401|unauthorized|auth_required/i.test(error.message)

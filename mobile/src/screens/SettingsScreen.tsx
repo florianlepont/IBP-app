@@ -8,7 +8,6 @@ import { AppSectionHeader } from "../ui/AppSectionHeader"
 type SettingsScreenProps = {
   apiUrl: string
   onApiUrlChange: (value: string) => void
-  onOpenUiPrimitives: () => void
   onSync: () => Promise<void>
   onPullChanges: () => Promise<void>
   onRefreshLocalList: () => Promise<void>
@@ -21,7 +20,6 @@ type SettingsScreenProps = {
 export function SettingsScreen({
   apiUrl,
   onApiUrlChange,
-  onOpenUiPrimitives,
   onSync,
   onPullChanges,
   onRefreshLocalList,
@@ -33,21 +31,13 @@ export function SettingsScreen({
   return (
     <View style={screenStyles.screen}>
       <AppCard variant="panelElevated" style={screenStyles.section}>
-        <AppSectionHeader
-          title="Environment"
-          subtitle="Basculer d'API et ouvrir le showcase des primitives."
-        />
+        <AppSectionHeader title="Environment" subtitle="Basculer d'API pour les tests locaux." />
         <AppField
           label="API URL"
           value={apiUrl}
           onChangeText={onApiUrlChange}
           autoCapitalize="none"
           autoCorrect={false}
-        />
-        <AppButton
-          label="Open UI primitives showcase"
-          variant="secondary"
-          onPress={onOpenUiPrimitives}
         />
       </AppCard>
 
