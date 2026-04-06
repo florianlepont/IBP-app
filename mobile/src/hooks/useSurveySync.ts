@@ -149,11 +149,9 @@ export function useSurveySync({
 
       const message = (error as Error).message
       setStatus(`Delete account error: ${message}`)
-      Alert.alert(
-        "Delete account failed",
-        `The account has not been deleted. ${message}`,
-        [{ text: "OK" }],
-      )
+      Alert.alert("Delete account failed", `The account has not been deleted. ${message}`, [
+        { text: "OK" },
+      ])
     }
   }, [apiUrl, clearSession, handleLogout, setStatus, withAuthRetry])
 

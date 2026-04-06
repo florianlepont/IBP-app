@@ -364,33 +364,27 @@ describe("UsersService", () => {
     expect(db.connect).toHaveBeenCalledTimes(1)
     expect(client.query).toHaveBeenNthCalledWith(1, "BEGIN")
     // Storage keys collected first, before any UPDATE/DELETE
-    expect(client.query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining("FROM attachments a"),
-      [AUTH_USER.id],
-    )
+    expect(client.query).toHaveBeenNthCalledWith(2, expect.stringContaining("FROM attachments a"), [
+      AUTH_USER.id,
+    ])
     expect(client.query).toHaveBeenNthCalledWith(
       3,
       expect.stringContaining("SET actor_id = NULL"),
       [AUTH_USER.id],
     )
-    expect(client.query).toHaveBeenNthCalledWith(
-      4,
-      expect.stringContaining("SET user_id = NULL"),
-      [AUTH_USER.id],
-    )
-    expect(client.query).toHaveBeenCalledWith(
-      expect.stringContaining("DELETE FROM attachments"),
-      [AUTH_USER.id],
-    )
+    expect(client.query).toHaveBeenNthCalledWith(4, expect.stringContaining("SET user_id = NULL"), [
+      AUTH_USER.id,
+    ])
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM attachments"), [
+      AUTH_USER.id,
+    ])
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining("DELETE FROM survey_events"),
       [AUTH_USER.id],
     )
-    expect(client.query).toHaveBeenCalledWith(
-      `DELETE FROM surveys WHERE user_id = $1`,
-      [AUTH_USER.id],
-    )
+    expect(client.query).toHaveBeenCalledWith(`DELETE FROM surveys WHERE user_id = $1`, [
+      AUTH_USER.id,
+    ])
     expect(client.query).toHaveBeenCalledWith(`DELETE FROM users WHERE id = $1`, [AUTH_USER.id])
     expect(client.query).toHaveBeenLastCalledWith("COMMIT")
     expect(client.release).toHaveBeenCalledTimes(1)

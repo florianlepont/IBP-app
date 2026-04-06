@@ -126,7 +126,9 @@ describe("Auth + profile (e2e)", () => {
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(204)
 
-    const deletedUser = await db.query<{ id: string }>(`SELECT id FROM users WHERE id = $1`, [user.id])
+    const deletedUser = await db.query<{ id: string }>(`SELECT id FROM users WHERE id = $1`, [
+      user.id,
+    ])
     expect(deletedUser.rows).toHaveLength(0)
 
     const retainedSurvey = await db.query<{ user_id: string | null }>(
@@ -143,9 +145,10 @@ describe("Auth + profile (e2e)", () => {
     expect(retainedEvent.rows).toHaveLength(1)
     expect(retainedEvent.rows[0].actor_id).toBeNull()
 
-    const removedDraftSurvey = await db.query<{ id: string }>(`SELECT id FROM surveys WHERE id = $1`, [
-      draftSurveyId,
-    ])
+    const removedDraftSurvey = await db.query<{ id: string }>(
+      `SELECT id FROM surveys WHERE id = $1`,
+      [draftSurveyId],
+    )
     expect(removedDraftSurvey.rows).toHaveLength(0)
 
     const removedDraftEvent = await db.query<{ id: string }>(
