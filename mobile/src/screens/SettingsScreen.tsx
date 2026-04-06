@@ -12,6 +12,7 @@ type SettingsScreenProps = {
   onPullChanges: () => Promise<void>
   onRefreshLocalList: () => Promise<void>
   onRefreshLocalAttachments: () => Promise<void>
+  onDeleteAccount: () => Promise<void>
   onDebugResetIbpData: () => Promise<void>
   onDebugResetUserData: () => Promise<void>
   status: string
@@ -24,6 +25,7 @@ export function SettingsScreen({
   onPullChanges,
   onRefreshLocalList,
   onRefreshLocalAttachments,
+  onDeleteAccount,
   onDebugResetIbpData,
   onDebugResetUserData,
   status,
@@ -67,6 +69,20 @@ export function SettingsScreen({
       </AppCard>
 
       <AppCard variant="soft" style={screenStyles.section}>
+        <AppSectionHeader
+          title="Account"
+          subtitle="Actions sensibles sur votre compte utilisateur."
+        />
+        <View style={screenStyles.buttonStack}>
+          <AppButton
+            label="Delete my account"
+            variant="danger"
+            onPress={() => void onDeleteAccount()}
+          />
+        </View>
+      </AppCard>
+
+      <AppCard variant="soft" style={screenStyles.section}>
         <AppSectionHeader title="Debug" subtitle="Actions destructives reservees au debug local." />
         <View style={screenStyles.buttonStack}>
           <AppButton
@@ -95,9 +111,11 @@ export function SettingsScreen({
 const screenStyles = StyleSheet.create({
   screen: {
     gap: brandSpacing.md,
+    width: "100%",
   },
   section: {
     gap: brandSpacing.md,
+    width: "100%",
   },
   buttonStack: {
     gap: brandSpacing.sm,

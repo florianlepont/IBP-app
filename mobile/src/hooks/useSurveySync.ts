@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Alert } from "react-native"
 import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from "../app/types"
-import { loadSurveyDetail, loadSurveyEvents, resetIbpData, resetUserData } from "../api/ibp-api"
+import {
+  deleteMyAccount,
+  loadSurveyDetail,
+  loadSurveyEvents,
+  resetIbpData,
+  resetUserData,
+} from "../api/ibp-api"
 import { clearLocalIbpData } from "../storage/surveys"
 import type { LocalSurvey } from "../storage/types"
 import { createInitialOperationStatus, updateOperationStatus } from "./operation-status"
@@ -128,6 +134,43 @@ export function useSurveySync({
     handleLoadMyProfile,
     setStatus,
   })
+
+  const performDeleteAccount = useCallback(async (): Promise<void> => {
+    try {
+      setStatus("Deleting account...")
+      await withAuthRetry((token) => deleteMyAccount(apiUrl, token))
+      await handleLogout()
+    } catch (error) {
+      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        await clearSession()
+        setStatus("Login required before deleting account")
+        return
+      }
+
+      const message = (error as Error).message
+      setStatus(`Delete account error: ${message}`)
+      Alert.alert("Delete account failed", `The account has not been deleted. ${message}`, [
+        { text: "OK" },
+      ])
+    }
+  }, [apiUrl, clearSession, handleLogout, setStatus, withAuthRetry])
+
+  const handleDeleteAccount = useCallback(async (): Promise<void> => {
+    Alert.alert(
+      "Delete account",
+      "This action is immediate and irreversible. Your name, email, and profile photo will be permanently deleted. Previously submitted surveys will be anonymised and retained for scientific purposes.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete my account",
+          style: "destructive",
+          onPress: () => {
+            void performDeleteAccount()
+          },
+        },
+      ],
+    )
+  }, [performDeleteAccount])
 
   const { handleSync, handlePullChanges, handleReportSurvey, maybeAutoSync } = useSurveySyncNetwork(
     {
@@ -393,6 +436,7 @@ export function useSurveySync({
     handleUpdateProfile,
     handleChangeEmail,
     handlePasswordReset,
+    handleDeleteAccount,
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,

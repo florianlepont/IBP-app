@@ -65,7 +65,7 @@ export type FactorCanonical = {
 
 export type SurveyRow = {
   id: string
-  user_id: string
+  user_id: string | null
   site_name: string
   status: "draft" | "submitted" | "synced" | "error" | "expired"
   visibility: "private" | "public"

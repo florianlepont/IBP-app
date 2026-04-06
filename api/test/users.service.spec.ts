@@ -32,17 +32,24 @@ function buildUserRow(overrides: Record<string, unknown> = {}) {
 }
 
 function buildService() {
+  const client = {
+    query: jest.fn(),
+    release: jest.fn(),
+  }
   const db = {
     query: jest.fn(),
+    connect: jest.fn().mockResolvedValue(client),
   }
   const auth0Management = {
     updateEmail: jest.fn(),
     sendPasswordResetEmail: jest.fn(),
+    deleteUser: jest.fn(),
   }
 
   return {
     service: new UsersService(db as never, auth0Management as never),
     db,
+    client,
     auth0Management,
   }
 }
@@ -332,5 +339,54 @@ describe("UsersService", () => {
 
       expect(rm).not.toHaveBeenCalled()
     })
+  })
+
+  it("deletes the Auth0 account, anonymizes submitted surveys, and removes the user row", async () => {
+    const { service, db, client, auth0Management } = buildService()
+    db.query.mockResolvedValueOnce({
+      rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
+    })
+    auth0Management.deleteUser.mockResolvedValueOnce(undefined)
+    client.query
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ storage_key: "attachments/survey-draft/photo.jpg" }] }) // collect draft attachment keys
+      .mockResolvedValueOnce({}) // UPDATE survey_events SET actor_id = NULL
+      .mockResolvedValueOnce({}) // UPDATE surveys SET user_id = NULL
+      .mockResolvedValueOnce({}) // DELETE FROM attachments
+      .mockResolvedValueOnce({}) // DELETE FROM survey_events
+      .mockResolvedValueOnce({}) // DELETE FROM surveys
+      .mockResolvedValueOnce({}) // DELETE FROM users
+      .mockResolvedValue({}) // COMMIT
+
+    await service.deleteAccount(AUTH_USER)
+
+    expect(auth0Management.deleteUser).toHaveBeenCalledWith(AUTH_USER.auth0_sub)
+    expect(db.connect).toHaveBeenCalledTimes(1)
+    expect(client.query).toHaveBeenNthCalledWith(1, "BEGIN")
+    // Storage keys collected first, before any UPDATE/DELETE
+    expect(client.query).toHaveBeenNthCalledWith(2, expect.stringContaining("FROM attachments a"), [
+      AUTH_USER.id,
+    ])
+    expect(client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("SET actor_id = NULL"),
+      [AUTH_USER.id],
+    )
+    expect(client.query).toHaveBeenNthCalledWith(4, expect.stringContaining("SET user_id = NULL"), [
+      AUTH_USER.id,
+    ])
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM attachments"), [
+      AUTH_USER.id,
+    ])
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM survey_events"),
+      [AUTH_USER.id],
+    )
+    expect(client.query).toHaveBeenCalledWith(`DELETE FROM surveys WHERE user_id = $1`, [
+      AUTH_USER.id,
+    ])
+    expect(client.query).toHaveBeenCalledWith(`DELETE FROM users WHERE id = $1`, [AUTH_USER.id])
+    expect(client.query).toHaveBeenLastCalledWith("COMMIT")
+    expect(client.release).toHaveBeenCalledTimes(1)
   })
 })

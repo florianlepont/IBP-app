@@ -81,4 +81,10 @@ export class UsersController {
   async deleteProfilePicture(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.usersService.removeProfilePicture(user)
   }
+
+  @Delete("me")
+  @HttpCode(204)
+  async deleteAccount(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.usersService.deleteAccount(user)
+  }
 }

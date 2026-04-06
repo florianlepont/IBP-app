@@ -19,13 +19,26 @@ function mockTokenFetch() {
 
 describe("Auth0ManagementService", () => {
   let originalFetch: typeof global.fetch
+  let originalEnv: NodeJS.ProcessEnv
+
+  beforeAll(() => {
+    originalEnv = { ...process.env }
+  })
 
   beforeEach(() => {
     originalFetch = global.fetch
+    process.env.AUTH0_DOMAIN = "tenant.example.auth0.com"
+    process.env.AUTH0_MGMT_CLIENT_ID = "test-mgmt-client-id"
+    process.env.AUTH0_MGMT_CLIENT_SECRET = "test-mgmt-client-secret"
+    process.env.AUTH0_APP_CLIENT_ID = "test-app-client-id"
   })
 
   afterEach(() => {
     global.fetch = originalFetch
+    process.env.AUTH0_DOMAIN = originalEnv.AUTH0_DOMAIN
+    process.env.AUTH0_MGMT_CLIENT_ID = originalEnv.AUTH0_MGMT_CLIENT_ID
+    process.env.AUTH0_MGMT_CLIENT_SECRET = originalEnv.AUTH0_MGMT_CLIENT_SECRET
+    process.env.AUTH0_APP_CLIENT_ID = originalEnv.AUTH0_APP_CLIENT_ID
   })
 
   describe("getManagementToken caching", () => {

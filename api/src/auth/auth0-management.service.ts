@@ -1,28 +1,46 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common"
 
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN ?? ""
-const AUTH0_MGMT_CLIENT_ID = process.env.AUTH0_MGMT_CLIENT_ID ?? ""
-const AUTH0_MGMT_CLIENT_SECRET = process.env.AUTH0_MGMT_CLIENT_SECRET ?? ""
-const AUTH0_APP_CLIENT_ID = process.env.AUTH0_APP_CLIENT_ID ?? ""
-
 @Injectable()
 export class Auth0ManagementService {
   private cachedToken: string | null = null
   private tokenExpiresAt = 0
 
+  private getManagementConfig(): {
+    domain: string
+    managementClientId: string
+    managementClientSecret: string
+  } {
+    return {
+      domain: process.env.AUTH0_DOMAIN ?? "",
+      managementClientId: process.env.AUTH0_MGMT_CLIENT_ID ?? "",
+      managementClientSecret: process.env.AUTH0_MGMT_CLIENT_SECRET ?? "",
+    }
+  }
+
+  private isManagementConfigured(): boolean {
+    const { domain, managementClientId, managementClientSecret } = this.getManagementConfig()
+    return Boolean(domain && managementClientId && managementClientSecret)
+  }
+
   private async getManagementToken(): Promise<string> {
+    const { domain, managementClientId, managementClientSecret } = this.getManagementConfig()
+
+    if (!this.isManagementConfigured()) {
+      throw new InternalServerErrorException("Auth0 management API is not configured")
+    }
+
     if (this.cachedToken && Date.now() < this.tokenExpiresAt) {
       return this.cachedToken
     }
 
-    const response = await fetch(`https://${AUTH0_DOMAIN}/oauth/token`, {
+    const response = await fetch(`https://${domain}/oauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         grant_type: "client_credentials",
-        client_id: AUTH0_MGMT_CLIENT_ID,
-        client_secret: AUTH0_MGMT_CLIENT_SECRET,
-        audience: `https://${AUTH0_DOMAIN}/api/v2/`,
+        client_id: managementClientId,
+        client_secret: managementClientSecret,
+        audience: `https://${domain}/api/v2/`,
       }),
     })
 
@@ -37,10 +55,11 @@ export class Auth0ManagementService {
   }
 
   async updateEmail(auth0Sub: string, newEmail: string): Promise<void> {
+    const { domain } = this.getManagementConfig()
     const token = await this.getManagementToken()
 
     const encodedSub = encodeURIComponent(auth0Sub)
-    const response = await fetch(`https://${AUTH0_DOMAIN}/api/v2/users/${encodedSub}`, {
+    const response = await fetch(`https://${domain}/api/v2/users/${encodedSub}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -63,12 +82,40 @@ export class Auth0ManagementService {
     }
   }
 
+  async deleteUser(auth0Sub: string): Promise<void> {
+    if (process.env.NODE_ENV === "test") {
+      return
+    }
+
+    const { domain } = this.getManagementConfig()
+    const token = await this.getManagementToken()
+    const encodedSub = encodeURIComponent(auth0Sub)
+    const response = await fetch(`https://${domain}/api/v2/users/${encodedSub}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (response.status === 404) {
+      return
+    }
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { message?: string }
+      throw new InternalServerErrorException(body.message ?? "Failed to delete Auth0 user")
+    }
+  }
+
   async sendPasswordResetEmail(email: string): Promise<void> {
-    const response = await fetch(`https://${AUTH0_DOMAIN}/dbconnections/change_password`, {
+    const domain = process.env.AUTH0_DOMAIN ?? ""
+    const appClientId = process.env.AUTH0_APP_CLIENT_ID ?? ""
+
+    const response = await fetch(`https://${domain}/dbconnections/change_password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client_id: AUTH0_APP_CLIENT_ID,
+        client_id: appClientId,
         email,
         connection: "Username-Password-Authentication",
       }),

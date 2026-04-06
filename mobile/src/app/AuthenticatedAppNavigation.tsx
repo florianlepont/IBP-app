@@ -563,6 +563,7 @@ function AccountTabNavigator({
               onPullChanges={surveySync.handlePullChanges}
               onRefreshLocalList={surveyList.refreshLocalSurveys}
               onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
+              onDeleteAccount={surveySync.handleDeleteAccount}
               onDebugResetIbpData={surveySync.handleDebugResetIbpData}
               onDebugResetUserData={surveySync.handleDebugResetUserData}
               status={surveySync.status}
