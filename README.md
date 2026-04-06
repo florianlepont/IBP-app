@@ -104,9 +104,11 @@ pod install
 | `POSTGRES_HOST/PORT/USER/PASSWORD/DB` | PostgreSQL connection |
 | `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET` | JWT secrets |
 | `OBJECT_STORAGE_MODE` | `local` or `minio` |
+| `OBJECT_STORAGE_BUCKET/ENDPOINT/REGION/ACCESS_KEY/SECRET_KEY` | S3-compatible storage config |
 | `ATTACHMENTS_UPLOAD_DIR` | Local upload path (when mode = local) |
-| `SMTP_ENABLED`, `SMTP_HOST/PORT/USER/PASS/FROM` | Email confirmation |
-| `WEB_CONFIRM_EMAIL_BASE_URL` | Email confirmation link base URL |
+| `SMTP_ENABLED`, `SMTP_HOST/PORT/USER/PASSWORD/FROM` | Email confirmation |
+| `EMAIL_CHANGE_CONFIRM_URL_TEMPLATE` | Email confirmation URL template |
+| `AUTH0_DOMAIN`, `AUTH0_PUBLIC_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 backend validation settings |
 | `CADASTRE_PROVIDER` | `synthetic` (offline) or `ign` (real parcels) |
 | `CORS_ORIGIN` | Allowed origin for CORS |
 
@@ -116,6 +118,9 @@ pod install
 |----------|-------------|
 | `EXPO_PUBLIC_API_URL` | Backend API URL |
 | `EXPO_PUBLIC_API_TIMEOUT_MS` | Request timeout in ms (optional) |
+| `EXPO_PUBLIC_AUTH0_DOMAIN` | Public Auth0 domain used by the app |
+| `EXPO_PUBLIC_AUTH0_CLIENT_ID` | Auth0 native/mobile application client id |
+| `EXPO_PUBLIC_AUTH0_AUDIENCE` | API audience requested during login |
 
 Common values for `EXPO_PUBLIC_API_URL`:
 - iOS Simulator: `http://localhost:3000/v1`

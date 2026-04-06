@@ -4,7 +4,7 @@
 Accepted
 
 ## Date
-2026-03-08
+2026-03-08 (updated 2026-04-06: auth delegation to Auth0)
 
 ## Context
 The IBP project must work in low-connectivity conditions, on iOS and Android, with reliable synchronization, and with a team that is still building technical architecture experience.
@@ -14,7 +14,7 @@ The IBP project must work in low-connectivity conditions, on iOS and Android, wi
 - Backend API: Node.js + NestJS
 - Database: PostgreSQL
 - Photo storage: S3-compatible object storage
-- Authentication: JWT (access + refresh token)
+- Authentication: Auth0 (JWT RS256, JWKS validation) — token issuance, session lifecycle, social providers, and password reset are fully delegated to Auth0
 - Synchronization: offline-first model with local queue and retry
 
 ## Why these choices
@@ -29,8 +29,9 @@ The IBP project must work in low-connectivity conditions, on iOS and Android, wi
 - Server source of truth: at sync time, the server validates and acknowledges data.
 - Idempotent sync operations: replaying a request must not duplicate records.
 - Versioned API: `/v1` prefix.
-- Baseline security: TLS, short-lived tokens, encrypted local storage for sensitive data.
+- Baseline security: TLS, short-lived Auth0 JWT tokens (RS256), encrypted local storage for sensitive data.
 - Baseline observability: structured logs and sync error tracing.
+- Auth delegation: all authentication flows (login, sign-up, social providers, password reset, token rotation) are handled by Auth0. The backend is stateless with respect to sessions.
 
 ## Consequences
 - Explicit sync statuses are required on both mobile and backend.

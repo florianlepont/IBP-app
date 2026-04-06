@@ -1,6 +1,6 @@
 # IBP Specifications
 
-Auto-generated from Notion. Do not edit manually.
+Project specifications index.
 
 - [Epic B - Survey Preparation](epic-b-survey-preparation.md) — 5 US *(MVP)*
 - [Epic G - IBP Information, Association Visibility and Donation](epic-g-ibp-information-association-visibility-and-donation.md) — 3 US *(V1)*
