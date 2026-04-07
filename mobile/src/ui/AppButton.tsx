@@ -1,4 +1,4 @@
-import { Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from "react-native"
+import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import {
   brandColors,
@@ -18,6 +18,7 @@ type AppButtonProps = {
   iconOnly?: boolean
   accessibilityLabel?: string
   disabled?: boolean
+  loading?: boolean
   onPress: () => void
   testID?: string
   style?: StyleProp<ViewStyle>
@@ -32,6 +33,7 @@ export function AppButton({
   iconOnly = false,
   accessibilityLabel,
   disabled = false,
+  loading = false,
   onPress,
   testID,
   style,
@@ -41,12 +43,14 @@ export function AppButton({
   const iconColor =
     variant === "secondary" ? brandComponentTokens.button.secondaryBorder : brandColors.white
   const iconSize = size === "lg" ? 18 : size === "sm" ? 15 : 16
+  const isDisabled = disabled || loading
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label ?? "Action"}
-      disabled={disabled}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      disabled={isDisabled}
       onPress={onPress}
       style={[
         styles.base,
@@ -59,12 +63,16 @@ export function AppButton({
               : styles.iconOnlyMd
           : null,
         styles[variant],
-        disabled ? styles.disabled : null,
+        isDisabled ? styles.disabled : null,
         style,
       ]}
       testID={testID}
     >
-      {leadingIcon ? <Ionicons name={leadingIcon} size={iconSize} color={iconColor} /> : null}
+      {loading ? (
+        <ActivityIndicator size="small" color={iconColor} />
+      ) : leadingIcon ? (
+        <Ionicons name={leadingIcon} size={iconSize} color={iconColor} />
+      ) : null}
       {hasLabel && !iconOnly ? (
         <Text
           style={[

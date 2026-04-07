@@ -28,7 +28,32 @@ jest.mock("react-native", () => {
       ReactRef.createElement(name, props, children)
   }
 
+  const animatedValue = () => ({
+    interpolate: jest.fn(() => ({})),
+    setValue: jest.fn(),
+  })
+
+  const Animated = {
+    Value: jest.fn(() => animatedValue()),
+    View: mockComponent("Animated.View"),
+    Image: mockComponent("Animated.Image"),
+    timing: jest.fn(() => ({ start: jest.fn() })),
+    sequence: jest.fn((anims: { start: (cb?: () => void) => void }[]) => ({
+      start: (cb?: () => void) => {
+        anims.forEach((a) => a.start())
+        cb?.()
+      },
+    })),
+    stagger: jest.fn((_delay: number, anims: { start: (cb?: () => void) => void }[]) => ({
+      start: (cb?: () => void) => {
+        anims.forEach((a) => a.start())
+        cb?.()
+      },
+    })),
+  }
+
   return {
+    Animated,
     Text: mockComponent("Text"),
     TextInput: mockComponent("TextInput"),
     Pressable: mockComponent("Pressable"),
@@ -36,8 +61,10 @@ jest.mock("react-native", () => {
     ImageBackground: mockComponent("ImageBackground"),
     KeyboardAvoidingView: mockComponent("KeyboardAvoidingView"),
     ScrollView: mockComponent("ScrollView"),
+    StatusBar: mockComponent("StatusBar"),
     TouchableWithoutFeedback: mockComponent("TouchableWithoutFeedback"),
     View: mockComponent("View"),
+    ActivityIndicator: mockComponent("ActivityIndicator"),
     Platform: {
       OS: "ios",
       select: <T>(options: { ios?: T; android?: T; default?: T }): T | undefined =>

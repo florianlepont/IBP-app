@@ -1,24 +1,18 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, type ElementType } from "react"
 import {
-  Animated,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native"
 import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
-import { createNativeBottomTabNavigator } from "@bottom-tabs/react-navigation"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import Constants, { ExecutionEnvironment } from "expo-constants"
 import { BlurView } from "expo-blur"
-import type { SearchBarCommands } from "react-native-screens"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors } from "./brand-tokens"
 import { useAppBottomTabBarHeight } from "./useAppBottomTabBarHeight"
@@ -47,7 +41,6 @@ export type RootTabParamList = {
   surveys: undefined
   publicMap: undefined
   account: undefined
-  newSurvey: undefined
 }
 
 type AccountStackParamList = {
@@ -100,11 +93,15 @@ type AuthenticatedAppNavigationProps = {
 
 // ─── Navigators ──────────────────────────────────────────────────────────────
 
-const NativeTab = createNativeBottomTabNavigator<RootTabParamList>()
 const JsTab = createBottomTabNavigator<RootTabParamList>()
 const AccountStack = createNativeStackNavigator<AccountStackParamList>()
 const SurveysStack = createNativeStackNavigator<SurveysStackParamList>()
 const PublicMapStack = createNativeStackNavigator<PublicMapStackParamList>()
+
+type TabNavigatorLike = {
+  Navigator: ElementType
+  Screen: ElementType
+}
 
 // ─── Native availability detection ───────────────────────────────────────────
 
@@ -116,6 +113,16 @@ function isNativeBottomTabViewAvailable(): boolean {
     Constants.executionEnvironment !== ExecutionEnvironment.StoreClient &&
     Constants.appOwnership !== "expo"
   )
+}
+
+function getNativeTabNavigator(): TabNavigatorLike {
+  // Keep the native tabs package out of module initialization so unsupported
+  // runtimes can still boot and fall back cleanly.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const nativeBottomTabsModule = require("@bottom-tabs/react-navigation") as typeof import(
+    "@bottom-tabs/react-navigation"
+  )
+  return nativeBottomTabsModule.createNativeBottomTabNavigator<RootTabParamList>() as TabNavigatorLike
 }
 
 // ─── Shared stack screen options ─────────────────────────────────────────────
@@ -155,31 +162,24 @@ const IOS_TAB_ICONS = {
     focused: { sfSymbol: "person.crop.circle.fill" },
     unfocused: { sfSymbol: "person.crop.circle" },
   },
-  newSurvey: {
-    focused: { sfSymbol: "plus.circle.fill" },
-    unfocused: { sfSymbol: "plus.circle" },
-  },
 } as const
 
 const ANDROID_TAB_ICONS = {
   surveys: require("../../assets/tabs/surveys.png"),
   publicMap: require("../../assets/tabs/public-map.png"),
   account: require("../../assets/tabs/account.png"),
-  newSurvey: require("../../assets/tabs/surveys.png"),
 } as const
 
 const TAB_TITLES: Record<keyof RootTabParamList, string> = {
   surveys: "My Surveys",
   publicMap: "Explore",
   account: "Account",
-  newSurvey: "",
 }
 
 const JS_TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
   surveys: "list-outline",
   publicMap: "map-outline",
   account: "person-outline",
-  newSurvey: "add-circle-outline",
 }
 
 // ─── Native tab screen options ────────────────────────────────────────────────
@@ -255,171 +255,54 @@ function makeAccountTabListeners(
   }
 }
 
-// ─── FAB dock (Expo Go fallback only) ────────────────────────────────────────
+function CreateSurveyFloatingButton({ onPress }: { onPress: () => void }) {
+  const insets = useSafeAreaInsets()
+  const tabBarHeight = useAppBottomTabBarHeight(Platform.select({ ios: 84, default: 68 }) ?? 68)
+  const buttonSize = 58
+  const bottomOffset = Math.max(insets.bottom + 4, (tabBarHeight - buttonSize) / 2)
 
-function FloatingSurveyActions({
-  searchOpen,
-  onOpenSearch,
-  onCreateSurvey,
-}: {
-  searchOpen: boolean
-  onOpenSearch: () => void
-  onCreateSurvey: () => void
-}) {
   return (
-    <View pointerEvents="box-none" style={styles.fabDockShell}>
-      <View style={styles.fabDock}>
-        <Pressable
-          style={[
-            styles.fabDockSecondaryButton,
-            searchOpen ? styles.fabDockSecondaryButtonActive : null,
-          ]}
-          onPress={onOpenSearch}
-        >
-          <Ionicons name="search-outline" size={20} color={searchOpen ? "#ffffff" : "#2a764f"} />
-        </Pressable>
-        <View style={styles.fabDockDivider} />
-        <Pressable style={styles.fabDockPrimaryButton} onPress={onCreateSurvey}>
-          <Ionicons name="add" size={28} color="#ffffff" />
-        </Pressable>
-      </View>
+    <View pointerEvents="box-none" style={[floatingActionStyles.shell, { bottom: bottomOffset }]}>
+      <Pressable onPress={onPress} style={floatingActionStyles.button}>
+        <BlurView intensity={68} tint="systemMaterial" style={floatingActionStyles.blur}>
+          <View style={floatingActionStyles.inner}>
+            <Ionicons name="add" size={28} color={brandColors.forest} />
+          </View>
+        </BlurView>
+      </Pressable>
     </View>
   )
 }
 
-// ─── Floating search trigger (native nav only) ───────────────────────────────
-
-function SearchFloatingButton({ onPress }: { onPress: () => void }) {
-  const insets = useSafeAreaInsets()
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={10}
-      style={[searchFloatStyles.button, { top: insets.top + 12 }]}
-    >
-      <BlurView intensity={60} tint="systemMaterial" style={searchFloatStyles.blur}>
-        <Ionicons name="search-outline" size={18} color={brandColors.forest} />
-      </BlurView>
-    </Pressable>
-  )
-}
-
-const searchFloatStyles = StyleSheet.create({
-  button: {
+const floatingActionStyles = StyleSheet.create({
+  shell: {
     position: "absolute",
     right: 16,
-    zIndex: 10,
+    zIndex: 6,
+  },
+  button: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
   },
   blur: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    flex: 1,
+    borderRadius: 29,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.6)",
+    overflow: "hidden",
+  },
+  inner: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-  },
-})
-
-// ─── Bottom search bar (native nav only) ─────────────────────────────────────
-
-function BottomSearchBar({
-  value,
-  onChangeText,
-  onClose,
-}: {
-  value: string
-  onChangeText: (text: string) => void
-  onClose: () => void
-}) {
-  const tabBarHeight = useAppBottomTabBarHeight()
-  const inputRef = useRef<TextInput>(null)
-  const slideY = useRef(new Animated.Value(80)).current
-
-  useEffect(() => {
-    Animated.spring(slideY, {
-      toValue: 0,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 300,
-    }).start(() => inputRef.current?.focus())
-  }, [])
-
-  const handleClose = () => {
-    Keyboard.dismiss()
-    Animated.spring(slideY, {
-      toValue: 80,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 300,
-    }).start(onClose)
-  }
-
-  return (
-    <Animated.View
-      style={[
-        bottomSearchStyles.wrapper,
-        { bottom: tabBarHeight, transform: [{ translateY: slideY }] },
-      ]}
-    >
-      <BlurView intensity={80} tint="systemMaterial" style={bottomSearchStyles.blur}>
-        <View style={bottomSearchStyles.field}>
-          <Ionicons name="search" size={15} color="rgba(60,60,67,0.5)" />
-          <TextInput
-            ref={inputRef}
-            style={bottomSearchStyles.input}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder="Search surveys"
-            placeholderTextColor="rgba(60,60,67,0.35)"
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
-        </View>
-        <Pressable onPress={handleClose} hitSlop={10}>
-          <Text style={bottomSearchStyles.cancel}>Cancel</Text>
-        </Pressable>
-      </BlurView>
-    </Animated.View>
-  )
-}
-
-const bottomSearchStyles = StyleSheet.create({
-  wrapper: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-  },
-  blur: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(0,0,0,0.12)",
-    overflow: "hidden",
-  },
-  field: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(118,118,128,0.12)",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  input: {
-    flex: 1,
-    fontSize: 17,
-    color: brandColors.textPrimary,
-    padding: 0,
-  },
-  cancel: {
-    fontSize: 17,
-    color: brandColors.forest,
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
   },
 })
 
@@ -451,16 +334,6 @@ function SurveysTabNavigator({
   onCloseSurveyDetailSelection,
   useNativeNav = false,
 }: SurveysTabNavigatorProps) {
-  const [isSurveySearchOpen, setIsSurveySearchOpen] = useState(false)
-  const searchBarRef = useRef<SearchBarCommands>(null!)
-  const isSurveySearchActive = isSurveySearchOpen || surveyList.surveyQuery.trim().length > 0
-
-  useEffect(() => {
-    if (!isSurveySearchOpen) return
-    const timeoutId = setTimeout(() => searchBarRef.current?.focus(), 80)
-    return () => clearTimeout(timeoutId)
-  }, [isSurveySearchOpen])
-
   return (
     <SurveysStack.Navigator
       screenOptions={{
@@ -484,40 +357,11 @@ function SurveysTabNavigator({
     >
       <SurveysStack.Screen
         name="surveysHome"
-        options={() => ({
+        options={{
           title: "My Surveys",
           headerLargeTitle: false,
-          ...(useNativeNav
-            ? {
-                headerShown: false,
-              }
-            : {
-                headerShown: isSurveySearchActive,
-                headerTitle: "",
-                headerShadowVisible: false,
-                headerTransparent: false,
-                headerStyle: { backgroundColor: brandColors.canvas },
-                headerSearchBarOptions: isSurveySearchActive
-                  ? {
-                      ref: searchBarRef,
-                      placeholder: "Search surveys",
-                      autoCapitalize: "none",
-                      hideWhenScrolling: false,
-                      hideNavigationBar: false,
-                      obscureBackground: false,
-                      onChangeText: (event) => surveyList.setSurveyQuery(event.nativeEvent.text),
-                      onCancelButtonPress: () => {
-                        surveyList.setSurveyQuery("")
-                        setIsSurveySearchOpen(false)
-                      },
-                      onClose: () => {
-                        surveyList.setSurveyQuery("")
-                        setIsSurveySearchOpen(false)
-                      },
-                    }
-                  : undefined,
-              }),
-        })}
+          headerShown: false,
+        }}
       >
         {({ navigation }) => (
           <View style={styles.tabScreenContainer}>
@@ -526,6 +370,8 @@ function SurveysTabNavigator({
               visibleSurveys={surveyList.visibleSurveys}
               selectedSurveyId={surveyList.selectedSurveyId}
               attachmentsBySurvey={surveyList.attachmentsBySurvey}
+              surveyQuery={surveyList.surveyQuery}
+              setSurveyQuery={surveyList.setSurveyQuery}
               surveyFromDate={surveyList.surveyFromDate}
               setSurveyFromDate={surveyList.setSurveyFromDate}
               surveyToDate={surveyList.surveyToDate}
@@ -543,35 +389,17 @@ function SurveysTabNavigator({
               sortMode={surveyList.sortMode}
               setSortMode={surveyList.setSortMode}
               resetFilters={surveyList.resetFilters}
-              searchActive={isSurveySearchActive}
               onOpenSurvey={(surveyId) => {
                 onOpenSurvey(surveyId)
                 navigation.navigate("surveyDetail")
               }}
             />
-            {useNativeNav && !isSurveySearchOpen && (
-              <SearchFloatingButton onPress={() => setIsSurveySearchOpen(true)} />
-            )}
-            {useNativeNav && isSurveySearchOpen && (
-              <BottomSearchBar
-                value={surveyList.surveyQuery}
-                onChangeText={surveyList.setSurveyQuery}
-                onClose={() => {
-                  surveyList.setSurveyQuery("")
-                  setIsSurveySearchOpen(false)
-                }}
-              />
-            )}
-            {!useNativeNav && (
-              <FloatingSurveyActions
-                searchOpen={isSurveySearchOpen}
-                onOpenSearch={() => setIsSurveySearchOpen(true)}
-                onCreateSurvey={() => {
-                  onOpenCreateSurvey()
-                  navigation.navigate("surveyForm")
-                }}
-              />
-            )}
+            <CreateSurveyFloatingButton
+              onPress={() => {
+                onOpenCreateSurvey()
+                navigation.navigate("surveyForm")
+              }}
+            />
           </View>
         )}
       </SurveysStack.Screen>
@@ -873,14 +701,17 @@ function NativeRootTabs({
   onApiUrlChange,
   ...surveysProps
 }: AuthenticatedAppNavigationProps) {
-  const { surveySync, onCloseSurveyDetailSelection, onOpenCreateSurvey } = surveysProps
+  const { surveySync, onCloseSurveyDetailSelection } = surveysProps
+  const nativeTabRef = useRef<TabNavigatorLike | null>(null)
+
+  if (nativeTabRef.current == null) {
+    nativeTabRef.current = getNativeTabNavigator()
+  }
+
+  const NativeTab = nativeTabRef.current
 
   return (
-    <NativeTab.Navigator
-      screenOptions={nativeTabScreenOptions}
-      scrollEdgeAppearance="transparent"
-      minimizeBehavior="automatic"
-    >
+    <NativeTab.Navigator screenOptions={nativeTabScreenOptions}>
       <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(surveySync)}>
         {() => <SurveysTabNavigator {...surveysProps} useNativeNav />}
       </NativeTab.Screen>
@@ -908,19 +739,6 @@ function NativeRootTabs({
             surveySync={surveySync}
           />
         )}
-      </NativeTab.Screen>
-      <NativeTab.Screen
-        name="newSurvey"
-        options={{ role: "search" as const }}
-        listeners={({ navigation }: { navigation: { navigate: (name: string, params?: unknown) => void } }) => ({
-          tabPress: (e: { preventDefault: () => void }) => {
-            e.preventDefault()
-            onOpenCreateSurvey()
-            navigation.navigate("surveys", { screen: "surveyForm" } as never)
-          },
-        })}
-      >
-        {() => <View />}
       </NativeTab.Screen>
     </NativeTab.Navigator>
   )

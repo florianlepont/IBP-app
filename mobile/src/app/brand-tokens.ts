@@ -136,6 +136,8 @@ export const brandSemanticColors = {
   successSurface: brandColors.successSoft,
   errorSurface: brandColors.errorSoft,
   warningSurface: brandColors.warningSoft,
+  // Warm off-white for body text on dark (forest) backgrounds — reduces glare vs pure white
+  heroBodyOnDark: "#E8ECD9",
 } as const
 
 export const brandComponentTokens = {
