@@ -110,6 +110,8 @@ const PublicMapStack = createNativeStackNavigator<PublicMapStackParamList>()
 
 function isNativeBottomTabViewAvailable(): boolean {
   if (Platform.OS === "web") return false
+  // Opt-out via env var (set EXPO_PUBLIC_ENABLE_NATIVE_TABS=false to force JS tabs)
+  if (process.env.EXPO_PUBLIC_ENABLE_NATIVE_TABS === "false") return false
   return (
     Constants.executionEnvironment !== ExecutionEnvironment.StoreClient &&
     Constants.appOwnership !== "expo"
@@ -979,9 +981,9 @@ function JsRootTabs({
   )
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
+// ─── Root (single NavigationContainer) ───────────────────────────────────────
 
-export function AuthenticatedAppNavigation(props: AuthenticatedAppNavigationProps) {
+function AppTabs(props: AuthenticatedAppNavigationProps) {
   const nativeBottomTabsAvailable = isNativeBottomTabViewAvailable()
 
   useEffect(() => {
@@ -992,9 +994,13 @@ export function AuthenticatedAppNavigation(props: AuthenticatedAppNavigationProp
     }
   }, [nativeBottomTabsAvailable])
 
+  return nativeBottomTabsAvailable ? <NativeRootTabs {...props} /> : <JsRootTabs {...props} />
+}
+
+export function AuthenticatedAppNavigation(props: AuthenticatedAppNavigationProps) {
   return (
     <NavigationContainer>
-      {nativeBottomTabsAvailable ? <NativeRootTabs {...props} /> : <JsRootTabs {...props} />}
+      <AppTabs {...props} />
     </NavigationContainer>
   )
 }

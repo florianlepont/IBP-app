@@ -67,7 +67,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow IBP App to access your photos for survey attachments.</string>
 	<key>RCTNewArchEnabled</key>
-	<false/>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

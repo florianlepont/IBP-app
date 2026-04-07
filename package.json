@@ -23,7 +23,8 @@
     "test:coverage:api": "npm --workspace api run test:unit:coverage && npm --workspace api run test:e2e:coverage",
     "test:coverage:mobile": "npm --workspace mobile run test:unit:coverage",
     "android": "npm --prefix mobile run android",
-    "ios": "npm --prefix mobile run ios"
+    "ios": "npm --prefix mobile run ios",
+    "postinstall": "node mobile/scripts/patch-react-native-bottom-tabs.mjs"
   },
   "dependencies": {
     "expo": "54.0.33",
