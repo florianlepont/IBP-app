@@ -97,6 +97,7 @@ export const brandTypography = {
 } as const
 
 export const brandRadius = {
+  hero: 34,
   panel: 30,
   card: 24,
   field: 18,

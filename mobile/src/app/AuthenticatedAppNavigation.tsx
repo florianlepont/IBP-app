@@ -385,6 +385,7 @@ function SurveysTabNavigator({
               resetFilters={surveyList.resetFilters}
               useNativeSearchUI={nativeSearchEnabled}
               showInlineSearch={!hasDedicatedSearchTab}
+              onRefresh={surveySync.handlePullChanges}
               onOpenCreateSurvey={() => {
                 onOpenCreateSurvey()
                 navigation.navigate("surveyForm")
