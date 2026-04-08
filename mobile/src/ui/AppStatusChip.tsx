@@ -44,14 +44,14 @@ const styles = StyleSheet.create({
     backgroundColor: brandComponentTokens.statusChip.dangerBackground,
   },
   onDark: {
-    borderColor: "rgba(255, 255, 255, 0.25)",
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderColor: brandComponentTokens.statusChip.onDarkBorder,
+    backgroundColor: brandComponentTokens.statusChip.onDarkBackground,
   },
   label: {
     ...brandTypography.meta,
     color: brandComponentTokens.statusChip.textColor,
   },
   labelOnDark: {
-    color: "rgba(255, 255, 255, 0.90)",
+    color: brandComponentTokens.statusChip.onDarkTextColor,
   },
 })

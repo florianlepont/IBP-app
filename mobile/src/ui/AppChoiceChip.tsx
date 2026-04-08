@@ -25,6 +25,7 @@ export function AppChoiceChip({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: !isInteractive, selected: active }}
       disabled={!isInteractive}
       onPress={onPress}
       style={[
@@ -51,12 +52,15 @@ export function AppChoiceChip({
 
 const styles = StyleSheet.create({
   base: {
+    minHeight: brandComponentTokens.choiceChip.minHeight,
     borderRadius: brandRadius.pill,
     borderWidth: 1,
     borderColor: brandComponentTokens.choiceChip.border,
     backgroundColor: brandComponentTokens.choiceChip.background,
     paddingHorizontal: 10,
     paddingVertical: 7,
+    alignItems: "center",
+    justifyContent: "center",
   },
   interactive: {
     borderColor: brandComponentTokens.choiceChip.interactiveBorder,
