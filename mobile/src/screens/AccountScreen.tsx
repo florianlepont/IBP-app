@@ -63,7 +63,7 @@ const resolveInitials = (user: AuthUser | null, fallbackProfile: string): string
     user?.display_name?.trim() ||
     user?.email?.trim() ||
     fallbackProfile.trim() ||
-    "Account"
+    "Compte"
 
   return source
     .split(/[\s@._-]+/)

@@ -241,7 +241,7 @@ export function PublicMapScreen({
           <View style={screenStyles.topDockLeft}>
             <View style={screenStyles.exploreBadge}>
               <Ionicons name="globe-outline" size={15} color={brandColors.forest} />
-              <Text style={screenStyles.exploreBadgeText}>Explore</Text>
+              <Text style={screenStyles.exploreBadgeText}>Explorer</Text>
             </View>
             <View style={screenStyles.countBadge}>
               <Text style={screenStyles.countBadgeText}>{visibleCountLabel}</Text>

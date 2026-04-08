@@ -179,10 +179,10 @@ const ANDROID_TAB_ICONS = {
 } as const
 
 const TAB_TITLES: Record<keyof RootTabParamList, string> = {
-  surveys: "Home",
-  search: "Search",
-  publicMap: "Explore",
-  account: "Account",
+  surveys: "Accueil",
+  search: "Recherche",
+  publicMap: "Explorer",
+  account: "Compte",
 }
 
 const JS_TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
@@ -333,7 +333,7 @@ function SurveysTabNavigator({
         <SurveysStack.Screen
           name="surveysHome"
           options={() => ({
-            title: searchEntry ? "Search" : "Home",
+            title: searchEntry ? "Recherche" : "Accueil",
             headerShown: nativeSearchEnabled,
             headerLargeTitle: false,
             headerTransparent: nativeSearchEnabled ? false : undefined,
@@ -342,7 +342,7 @@ function SurveysTabNavigator({
             headerSearchBarOptions: nativeSearchEnabled
               ? {
                   ref: searchBarRef,
-                  placeholder: "Search surveys",
+                  placeholder: "Rechercher des relevés",
                   placement: searchEntry ? "automatic" : "integratedButton",
                   hideWhenScrolling: false,
                   obscureBackground: false,
@@ -386,6 +386,7 @@ function SurveysTabNavigator({
               useNativeSearchUI={nativeSearchEnabled}
               showInlineSearch={!hasDedicatedSearchTab}
               onRefresh={surveySync.handlePullChanges}
+              onDeleteSurvey={surveySync.confirmDeleteSurvey}
               onOpenCreateSurvey={() => {
                 onOpenCreateSurvey()
                 navigation.navigate("surveyForm")
@@ -650,7 +651,7 @@ function AccountTabNavigator({
         <AccountStack.Screen
           name="accountHome"
           options={({ navigation }) => ({
-            title: "Account",
+            title: "Compte",
             headerLargeTitle: false,
             headerRight: () => (
               <HeaderIconButton
@@ -682,7 +683,7 @@ function AccountTabNavigator({
             </KeyboardAvoidingView>
           )}
         </AccountStack.Screen>
-        <AccountStack.Screen name="settings" options={{ title: "Settings" }}>
+        <AccountStack.Screen name="settings" options={{ title: "Paramètres" }}>
           {() => (
             <SettingsScreen
               apiUrl={apiUrl}
@@ -780,7 +781,7 @@ function JsRootTabs({
       <JsTab.Screen
         name="surveys"
         options={({ route }) => ({
-          tabBarLabel: "My Surveys",
+          tabBarLabel: TAB_TITLES.surveys,
           headerShown: false,
           tabBarStyle:
             getFocusedRouteNameFromRoute(route) === "surveyParcels"
