@@ -23,7 +23,7 @@ import {
   brandSpacing,
   brandTypography,
 } from "../app/brand-tokens"
-import { formatDateTime } from "../app/formatters"
+import { formatShortDateTime, formatSyncErrorForUser } from "../app/formatters"
 import {
   computeSurveyStats,
   formatSurveyUiStatusLabel,
@@ -498,11 +498,16 @@ export function SurveyListScreen({
                 </Text>
               </View>
 
-              {/* Stat tiles — interactive (P1-01, P2-07) */}
+              {/* Stat tiles — interactive (P1-01, P2-07) — 2×2 grid (I-01) */}
               <View pointerEvents="box-none" style={styles.heroStatsGrid}>
-                {heroStats.map((stat) => (
-                  <SurveyStatTile key={stat.label} {...stat} />
-                ))}
+                <View pointerEvents="box-none" style={styles.heroStatsRow}>
+                  <SurveyStatTile {...heroStats[0]} />
+                  <SurveyStatTile {...heroStats[1]} />
+                </View>
+                <View pointerEvents="box-none" style={styles.heroStatsRow}>
+                  <SurveyStatTile {...heroStats[2]} />
+                  <SurveyStatTile {...heroStats[3]} />
+                </View>
               </View>
             </Animated.View>
 
@@ -531,8 +536,11 @@ export function SurveyListScreen({
           styles.pageContent,
           useNativeSearchUI ? styles.pageContentNativeSearch : null,
         ]}
-        showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
+        scrollIndicatorInsets={{
+          top: showHero ? heroTopInset + collapsedHeroHeight : 0,
+          bottom: tabBarHeight,
+        }}
         stickyHeaderIndices={showFiltersPanel ? (useNativeSearchUI ? [0] : [1]) : undefined}
         contentInsetAdjustmentBehavior={useNativeSearchUI ? "automatic" : "never"}
         onScroll={Animated.event(
@@ -712,7 +720,6 @@ export function SurveyListScreen({
             <View style={styles.attentionList}>
               {attentionSurveys.map((survey) => {
                 const uiStatus = resolveSurveyUiStatus(survey)
-                const rowTone = resolveSurveyRowTone(uiStatus)
                 const { bg, iconName, iconColor } = resolveAttentionStyle(uiStatus)
 
                 return (
@@ -737,15 +744,11 @@ export function SurveyListScreen({
                         {survey.site_name}
                       </Text>
                       <Text numberOfLines={2} style={styles.attentionRowMeta}>
-                        {survey.last_sync_error?.trim()
-                          ? survey.last_sync_error
-                          : `Mis à jour ${formatDateTime(survey.updated_at)}`}
+                        {formatSyncErrorForUser(survey.last_sync_error)
+                          ?? `Mis à jour ${formatShortDateTime(survey.updated_at)}`}
                       </Text>
                     </View>
-                    <View style={styles.attentionRowTrailing}>
-                      <SurveyBadge label={formatSurveyUiStatusLabel(uiStatus)} tone={rowTone} />
-                      <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
-                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
                   </Pressable>
                 )
               })}
@@ -758,15 +761,9 @@ export function SurveyListScreen({
           <AppCard variant="surface" padding={16} style={styles.featureCard}>
             <AppSectionHeader
               title="Continuer le brouillon"
-              subtitle={`Mis à jour ${formatDateTime(continueDraftSurvey.updated_at)}`}
+              subtitle={`Mis à jour ${formatShortDateTime(continueDraftSurvey.updated_at)}`}
               titleStyle={styles.homeSectionTitle}
               subtitleStyle={styles.homeSectionSubtitle}
-              trailing={
-                <SurveyBadge
-                  label={formatSurveyUiStatusLabel(resolveSurveyUiStatus(continueDraftSurvey))}
-                  tone={resolveSurveyRowTone(resolveSurveyUiStatus(continueDraftSurvey))}
-                />
-              }
             />
             <Text style={styles.featureTitle}>{continueDraftSurvey.site_name}</Text>
             <Text style={styles.featureBody}>
@@ -786,32 +783,6 @@ export function SurveyListScreen({
           </AppCard>
         ) : null}
 
-        {/* ── P2-01: Create card THIRD — P3-08: icon add-outline ───────────── */}
-        {showHero ? (
-          <AppCard variant="surface" padding={16} style={styles.createCard}>
-            <View style={styles.createHeader}>
-              <View style={styles.createIconWrap}>
-                <Ionicons name="add-outline" size={20} color={brandColors.forest} />
-              </View>
-              <View style={styles.createCopy}>
-                <Text style={styles.createTitle}>Nouveau relevé</Text>
-                <Text style={styles.createBody}>
-                  Démarrez un nouveau carnet de terrain et capturez vos observations.
-                </Text>
-              </View>
-            </View>
-            <AppButton
-              label="Démarrer un relevé"
-              size="md"
-              leadingIcon="add-outline"
-              onPress={() => {
-                triggerHaptic()
-                onOpenCreateSurvey()
-              }}
-              style={styles.createButton}
-            />
-          </AppCard>
-        ) : null}
 
         {/* ── Section header for main list ──────────────────────────────────── */}
         {mainListSurveys.length > 0 || (useNativeSearchUI && surveys.length > 0) ? (
@@ -842,19 +813,19 @@ export function SurveyListScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={`${survey.site_name}, ${uiStatusLabel}, mis à jour ${formatDateTime(survey.updated_at)}`}
+              accessibilityLabel={`${survey.site_name}, ${uiStatusLabel}, mis à jour ${formatShortDateTime(survey.updated_at)}`}
               key={survey.id}
               style={({ pressed }) => [
                 styles.surveyCard,
                 isSelected ? styles.surveyCardSelected : null,
-                pressed && styles.rowPressed,
+                pressed && styles.surveyCardPressed,
               ]}
               onPress={() => {
                 triggerHaptic()
                 onOpenSurvey(survey.id)
               }}
             >
-              {/* Accent bar */}
+              {/* Accent bar — hidden for neutral tone (N-06) */}
               <View
                 style={[
                   styles.surveyCardAccent,
@@ -864,7 +835,7 @@ export function SurveyListScreen({
                       ? styles.surveyCardAccentWarning
                       : rowTone === "danger"
                         ? styles.surveyCardAccentDanger
-                        : null,
+                        : styles.surveyCardAccentNeutral,
                 ]}
               />
 
@@ -905,13 +876,13 @@ export function SurveyListScreen({
 
                 {/* P2-03: simplified meta — date only */}
                 <Text numberOfLines={1} style={styles.surveyCardMeta}>
-                  Mis à jour {formatDateTime(survey.updated_at)}
+                  Mis à jour {formatShortDateTime(survey.updated_at)}
                 </Text>
 
                 {/* Error message */}
                 {supportText ? (
                   <Text numberOfLines={2} style={styles.surveyCardSupport}>
-                    {supportText}
+                    {formatSyncErrorForUser(supportText) ?? supportText}
                   </Text>
                 ) : null}
               </View>
@@ -1026,7 +997,7 @@ const styles = StyleSheet.create({
   },
   heroExpandedHeader: {
     gap: 8,
-    paddingRight: 24,
+    paddingRight: 64,
   },
   heroEyebrow: {
     ...brandTypography.heroEyebrow,
@@ -1034,21 +1005,20 @@ const styles = StyleSheet.create({
   },
   heroTitleExpanded: {
     ...brandTypography.heroTitle,
-    fontSize: 30,
-    lineHeight: 34,
     color: brandColors.white,
   },
   heroBody: {
     ...brandTypography.heroBody,
-    fontSize: 14,
-    lineHeight: 20,
     color: brandSemanticColors.heroBodyOnDark,
   },
   heroStatsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
     gap: 8,
     alignSelf: "flex-start",
+  },
+  heroStatsRow: {
+    flexDirection: "row",
+    gap: 8,
   },
   heroStatTile: {
     borderColor: brandSemanticColors.heroPanelBorderOnDark,
@@ -1084,7 +1054,7 @@ const styles = StyleSheet.create({
   pageContent: {
     paddingHorizontal: 16,
     paddingTop: 0,
-    paddingBottom: 120,
+    paddingBottom: 160,
     gap: 14,
   },
   pageContentNativeSearch: {
@@ -1223,8 +1193,8 @@ const styles = StyleSheet.create({
   },
   homeSectionTitle: {
     ...brandTypography.sectionTitle,
-    fontSize: 21,
-    lineHeight: 24,
+    fontSize: 24,
+    lineHeight: 28,
   },
   homeSectionSubtitle: {
     ...brandTypography.meta,
@@ -1275,45 +1245,7 @@ const styles = StyleSheet.create({
     ...brandTypography.meta,
     color: brandColors.textSecondary,
   },
-  attentionRowTrailing: {
-    alignItems: "flex-end",
-    gap: 8,
-  },
 
-  // ── Create card ───────────────────────────────────────────────────────────
-  createCard: {
-    gap: 14,
-  },
-  createHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  createIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: brandColors.panelMuted,
-  },
-  createCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  createTitle: {
-    ...brandTypography.sectionTitle,
-    fontSize: 20,
-    lineHeight: 23,
-    color: brandColors.forest,
-  },
-  createBody: {
-    ...brandTypography.sectionBody,
-    color: brandColors.textSecondary,
-  },
-  createButton: {
-    alignSelf: "flex-start",
-  },
 
   // ── List section header ───────────────────────────────────────────────────
   listSectionHeader: {
@@ -1350,6 +1282,9 @@ const styles = StyleSheet.create({
   },
   surveyCardAccentDanger: {
     backgroundColor: brandComponentTokens.surveyList.cardAccentDanger,
+  },
+  surveyCardAccentNeutral: {
+    backgroundColor: "transparent",
   },
   // P3-04: 72×96 (3:4 portrait ratio)
   surveyCardMedia: {
@@ -1407,8 +1342,13 @@ const styles = StyleSheet.create({
   },
 
   // ── Shared interaction ────────────────────────────────────────────────────
+  // Attention rows: slight opacity dimming (bg color is dynamic, can't override statically)
   rowPressed: {
-    opacity: 0.82,
+    opacity: 0.88,
+  },
+  // Survey cards: background color shift instead of opacity (more native on iOS)
+  surveyCardPressed: {
+    backgroundColor: brandColors.surfaceSoft,
   },
   badgeTextDanger: {
     color: brandComponentTokens.surveyList.badgeDangerText,

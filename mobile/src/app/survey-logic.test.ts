@@ -236,9 +236,12 @@ describe("filterAndSortSurveys", () => {
   })
 
   test("formats UI state labels", () => {
-    expect(formatSurveyUiStatusLabel("submitted")).toBe("Submitted")
-    expect(formatSurveyUiStatusLabel("sync_error")).toBe("Sync error")
-    expect(formatSurveyUiStatusLabel("sync_pending")).toBe("Sync pending")
+    expect(formatSurveyUiStatusLabel("submitted")).toBe("Soumis")
+    expect(formatSurveyUiStatusLabel("expired")).toBe("Expiré")
+    expect(formatSurveyUiStatusLabel("sync_error")).toBe("Erreur de sync")
+    expect(formatSurveyUiStatusLabel("sync_pending")).toBe("Sync en attente")
+    expect(formatSurveyUiStatusLabel("sync_blocked")).toBe("Sync bloqué")
+    expect(formatSurveyUiStatusLabel("draft")).toBe("Brouillon")
   })
 
   test("resolves workflow status for explicit badge display", () => {
@@ -276,7 +279,12 @@ describe("filterAndSortSurveys", () => {
     ).toBe("sync_blocked")
     expect(formatSurveySyncDisplayLabel("sync")).toBe("Sync")
     expect(formatSurveySyncDisplayLabel("local")).toBe("Local")
-    expect(formatSurveyWorkflowStatusLabel("pending")).toBe("Pending")
+    expect(formatSurveySyncDisplayLabel("sync_error")).toBe("Erreur de sync")
+    expect(formatSurveySyncDisplayLabel("sync_blocked")).toBe("Sync bloqué")
+    expect(formatSurveyWorkflowStatusLabel("pending")).toBe("En attente")
+    expect(formatSurveyWorkflowStatusLabel("submitted")).toBe("Soumis")
+    expect(formatSurveyWorkflowStatusLabel("expired")).toBe("Expiré")
+    expect(formatSurveyWorkflowStatusLabel("draft")).toBe("Brouillon")
   })
 })
 

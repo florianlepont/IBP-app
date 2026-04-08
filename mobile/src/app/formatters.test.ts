@@ -1,5 +1,6 @@
 import {
   formatRemainingTime,
+  formatSyncErrorForUser,
   isLessThan24HoursRemaining,
   resolveSubmissionDeadline,
 } from "./formatters"
