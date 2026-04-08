@@ -123,7 +123,7 @@ function HeroSection({
           ) : null}
           {/* AUTH-03 : role header sur le titre */}
           <Text style={authStyles.heroTitle} accessibilityRole="header">
-            Bienvenue sur l'app IBP
+            Bienvenue sur l&apos;app IBP
           </Text>
           {/* AUTH-01 : couleur via token heroBodyOnDark */}
           <Text style={authStyles.heroBody}>
