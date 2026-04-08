@@ -1,9 +1,16 @@
-import { StyleSheet, Text, View } from "react-native"
+import { useState } from "react"
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from "react-native"
+import { useHeaderHeight } from "@react-navigation/elements"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
+import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
+import { AppCollapsibleSection } from "../ui/AppCollapsibleSection"
 import { AppField } from "../ui/AppField"
+import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { AppSettingsRow } from "../ui/AppSettingsRow"
 
 type SettingsScreenProps = {
   apiUrl: string
@@ -30,105 +37,248 @@ export function SettingsScreen({
   onDebugResetUserData,
   status,
 }: SettingsScreenProps) {
+  const headerHeight = useHeaderHeight()
+  const insets = useSafeAreaInsets()
+  const tabBarHeight = useAppBottomTabBarHeight(Platform.select({ ios: 84, default: 68 }) ?? 68)
+  const topContentPadding = Platform.OS === "ios" ? headerHeight + brandSpacing.md : brandSpacing.md
+  const bottomContentPadding = Math.max(tabBarHeight, insets.bottom) + brandSpacing.md
+
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [pullLoading, setPullLoading] = useState(false)
+  const [refreshListLoading, setRefreshListLoading] = useState(false)
+  const [refreshAttachmentsLoading, setRefreshAttachmentsLoading] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const syncBusy = syncLoading || pullLoading || refreshListLoading || refreshAttachmentsLoading
+
+  const handleSync = async () => {
+    setSyncLoading(true)
+    try {
+      await onSync()
+    } finally {
+      setSyncLoading(false)
+    }
+  }
+
+  const handlePullChanges = async () => {
+    setPullLoading(true)
+    try {
+      await onPullChanges()
+    } finally {
+      setPullLoading(false)
+    }
+  }
+
+  const handleRefreshLocalList = async () => {
+    setRefreshListLoading(true)
+    try {
+      await onRefreshLocalList()
+    } finally {
+      setRefreshListLoading(false)
+    }
+  }
+
+  const handleRefreshLocalAttachments = async () => {
+    setRefreshAttachmentsLoading(true)
+    try {
+      await onRefreshLocalAttachments()
+    } finally {
+      setRefreshAttachmentsLoading(false)
+    }
+  }
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      "Supprimer mon compte",
+      "Cette action est irréversible. Toutes vos données seront définitivement supprimées, y compris vos relevés et pièces jointes.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            setDeleteLoading(true)
+            try {
+              await onDeleteAccount()
+            } finally {
+              setDeleteLoading(false)
+            }
+          },
+        },
+      ],
+    )
+  }
+
+  const confirmDebugResetIbpData = () => {
+    Alert.alert(
+      "Vider la base IBP",
+      "Toutes les données IBP locales seront supprimées.",
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Vider", style: "destructive", onPress: () => void onDebugResetIbpData() },
+      ],
+    )
+  }
+
+  const confirmDebugResetUserData = () => {
+    Alert.alert(
+      "Vider la base utilisateur",
+      "Toutes les données utilisateur locales seront supprimées.",
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Vider", style: "destructive", onPress: () => void onDebugResetUserData() },
+      ],
+    )
+  }
+
   return (
-    <View style={screenStyles.screen}>
-      <AppCard variant="panelElevated" style={screenStyles.section}>
-        <AppSectionHeader title="Environment" subtitle="Basculer d'API pour les tests locaux." />
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[
+        styles.content,
+        {
+          paddingTop: topContentPadding,
+          paddingBottom: bottomContentPadding,
+          paddingHorizontal: brandSpacing.md,
+        },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      showsVerticalScrollIndicator={false}
+      contentInsetAdjustmentBehavior="never"
+      automaticallyAdjustContentInsets={false}
+      scrollIndicatorInsets={{
+        top: Platform.OS === "ios" ? headerHeight : 0,
+        bottom: tabBarHeight,
+      }}
+    >
+      {/* Feedback de statut — en tête pour visibilité immédiate */}
+      {status.trim() ? (
+        <AppNotice
+          message={status}
+          tone="info"
+          icon="information-circle-outline"
+        />
+      ) : null}
+
+      {/* Zone 1 — Compte (production) */}
+      <AppCard variant="panelElevated" style={styles.section}>
+        <AppSectionHeader
+          title="Compte"
+          subtitle="Gestion de votre compte et de vos données."
+          titleStyle={styles.sectionTitle}
+        />
+        <AppNotice
+          tone="danger"
+          icon="warning-outline"
+          message="Cette action est irréversible. Toutes vos données seront définitivement supprimées."
+        />
+        <AppButton
+          label="Supprimer mon compte"
+          variant="danger"
+          size="lg"
+          leadingIcon="trash-outline"
+          loading={deleteLoading}
+          disabled={deleteLoading}
+          onPress={confirmDeleteAccount}
+        />
+      </AppCard>
+
+      {/* Zone 2 — Synchronisation */}
+      <AppCard variant="panel" style={styles.section}>
+        <AppSectionHeader
+          title="Synchronisation"
+          subtitle="Rafraîchir l'état local et les données serveur."
+          titleStyle={styles.sectionTitle}
+        />
+        <AppButton
+          label="Synchroniser maintenant"
+          leadingIcon="sync-outline"
+          loading={syncLoading}
+          disabled={syncBusy}
+          onPress={() => void handleSync()}
+        />
+        <View style={styles.advancedDivider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerLabel}>Avancé</Text>
+          <View style={styles.dividerLine} />
+        </View>
+        <AppSettingsRow
+          label="Récupérer les changements serveur"
+          onPress={() => void handlePullChanges()}
+          loading={pullLoading}
+          disabled={syncBusy}
+        />
+        <AppSettingsRow
+          label="Rafraîchir la liste locale"
+          onPress={() => void handleRefreshLocalList()}
+          loading={refreshListLoading}
+          disabled={syncBusy}
+        />
+        <AppSettingsRow
+          label="Rafraîchir les pièces jointes"
+          onPress={() => void handleRefreshLocalAttachments()}
+          loading={refreshAttachmentsLoading}
+          disabled={syncBusy}
+        />
+      </AppCard>
+
+      {/* Zone 3 — Outils développeur (repliée par défaut) */}
+      <AppCollapsibleSection title="Outils développeur" badge="DEV">
         <AppField
-          label="API URL"
+          label="URL de l'API"
           value={apiUrl}
           onChangeText={onApiUrlChange}
           autoCapitalize="none"
           autoCorrect={false}
         />
-      </AppCard>
-
-      <AppCard variant="panelElevated" style={screenStyles.section}>
-        <AppSectionHeader
-          title="Sync"
-          subtitle="Actions utiles pour rafraichir l'etat local et serveur."
+        <AppButton
+          label="Vider la base IBP"
+          variant="dangerSoft"
+          leadingIcon="bug-outline"
+          onPress={confirmDebugResetIbpData}
         />
-        <View style={screenStyles.buttonStack}>
-          <AppButton label="Sync now (push + pull)" onPress={() => void onSync()} />
-          <AppButton
-            label="Pull server changes (advanced)"
-            variant="secondary"
-            onPress={() => void onPullChanges()}
-          />
-          <AppButton
-            label="Refresh local list"
-            variant="secondary"
-            onPress={() => void onRefreshLocalList()}
-          />
-          <AppButton
-            label="Refresh local attachments"
-            variant="secondary"
-            onPress={() => void onRefreshLocalAttachments()}
-          />
-        </View>
-      </AppCard>
-
-      <AppCard variant="soft" style={screenStyles.section}>
-        <AppSectionHeader
-          title="Account"
-          subtitle="Actions sensibles sur votre compte utilisateur."
+        <AppButton
+          label="Vider la base utilisateur"
+          variant="dangerSoft"
+          leadingIcon="bug-outline"
+          onPress={confirmDebugResetUserData}
         />
-        <View style={screenStyles.buttonStack}>
-          <AppButton
-            label="Delete my account"
-            variant="danger"
-            onPress={() => void onDeleteAccount()}
-          />
-        </View>
-      </AppCard>
-
-      <AppCard variant="soft" style={screenStyles.section}>
-        <AppSectionHeader title="Debug" subtitle="Actions destructives reservees au debug local." />
-        <View style={screenStyles.buttonStack}>
-          <AppButton
-            label="Debug: Clear IBP DB"
-            variant="danger"
-            onPress={() => void onDebugResetIbpData()}
-          />
-          <AppButton
-            label="Debug: Clear User DB"
-            variant="danger"
-            onPress={() => void onDebugResetUserData()}
-          />
-        </View>
-      </AppCard>
-
-      {status.trim() ? (
-        <AppCard variant="surface" style={screenStyles.statusCard}>
-          <Text style={screenStyles.statusLabel}>Status</Text>
-          <Text style={screenStyles.statusText}>{status}</Text>
-        </AppCard>
-      ) : null}
-    </View>
+      </AppCollapsibleSection>
+    </ScrollView>
   )
 }
 
-const screenStyles = StyleSheet.create({
+const styles = StyleSheet.create({
   screen: {
+    flex: 1,
+    backgroundColor: brandColors.canvas,
+  },
+  content: {
     gap: brandSpacing.md,
-    width: "100%",
   },
   section: {
-    gap: brandSpacing.md,
-    width: "100%",
-  },
-  buttonStack: {
     gap: brandSpacing.sm,
   },
-  statusCard: {
-    gap: brandSpacing.xs,
+  sectionTitle: {
+    fontSize: 17,
+    lineHeight: 20,
   },
-  statusLabel: {
-    ...brandTypography.label,
-    color: brandColors.textPrimary,
+  advancedDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: brandSpacing.sm,
+    marginVertical: brandSpacing.xs - 2,
   },
-  statusText: {
-    ...brandTypography.sectionBody,
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: brandColors.divider,
+  },
+  dividerLabel: {
+    ...brandTypography.meta,
     color: brandColors.textSecondary,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
 })

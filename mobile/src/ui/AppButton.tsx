@@ -7,7 +7,7 @@ import {
   brandTypography,
 } from "../app/brand-tokens"
 
-type AppButtonVariant = "primary" | "secondary" | "danger"
+type AppButtonVariant = "primary" | "secondary" | "danger" | "dangerSoft"
 type AppButtonSize = "sm" | "md" | "lg"
 
 type AppButtonProps = {
@@ -41,7 +41,11 @@ export function AppButton({
 }: AppButtonProps) {
   const hasLabel = Boolean(label?.trim().length)
   const iconColor =
-    variant === "secondary" ? brandComponentTokens.button.secondaryBorder : brandColors.white
+    variant === "secondary"
+      ? brandComponentTokens.button.secondaryBorder
+      : variant === "dangerSoft"
+        ? brandColors.terracotta
+        : brandColors.white
   const iconSize = size === "lg" ? 18 : size === "sm" ? 15 : 16
   const isDisabled = disabled || loading
 
@@ -78,7 +82,11 @@ export function AppButton({
           style={[
             styles.label,
             size === "sm" ? styles.labelSmall : null,
-            variant === "secondary" ? styles.labelSecondary : null,
+            variant === "secondary"
+              ? styles.labelSecondary
+              : variant === "dangerSoft"
+                ? styles.labelDangerSoft
+                : null,
             labelStyle,
           ]}
         >
@@ -136,6 +144,11 @@ const styles = StyleSheet.create({
   danger: {
     backgroundColor: brandComponentTokens.button.dangerBackground,
   },
+  dangerSoft: {
+    backgroundColor: brandColors.errorSoft,
+    borderWidth: 1,
+    borderColor: "#E4A595",
+  },
   disabled: {
     opacity: 0.7,
   },
@@ -149,5 +162,8 @@ const styles = StyleSheet.create({
   },
   labelSecondary: {
     color: brandComponentTokens.button.secondaryBorder,
+  },
+  labelDangerSoft: {
+    color: brandColors.terracotta,
   },
 })

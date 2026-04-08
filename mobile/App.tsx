@@ -130,64 +130,66 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container} edges={["left", "right"]}>
-        <View style={styles.appLayout}>
-          <AuthenticatedAppNavigation
-            apiUrl={apiUrl}
-            formMode={formMode}
-            editingSurveyId={editingSurveyId}
-            surveyDetailTab={surveyDetailTab}
-            setSurveyDetailTab={setSurveyDetailTab}
-            surveyForm={surveyForm}
-            surveyList={surveyList}
-            surveySync={surveySync}
-            publicMapExplorer={publicMapExplorer}
-            ownSurveyIds={ownSurveyIds}
-            onOpenCreateSurvey={editing.handleOpenCreateSurvey}
-            onOpenSurvey={handleOpenSurvey}
-            onStartEditSurvey={editing.handleStartEditSurvey}
-            onRenameSurvey={draftPatcher.handleRenameSurvey}
-            onUpdateRegionVersion={draftPatcher.handleUpdateSurveyRegionVersion}
-            onUpdateVegetationStage={draftPatcher.handleUpdateSurveyVegetationStage}
-            onSaveSurveyEdits={editing.handleSaveSurveyEdits}
-            onCreateDraft={editing.handleCreateDraft}
-            onCaptureGpsLocation={gpsCapture.handleCaptureGpsLocation}
-            onApiUrlChange={handleApiUrlChange}
-            onCloseSurveyDetailSelection={closeSurveyDetailSelection}
-          />
-        </View>
-      </SafeAreaView>
+      <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={["left", "right"]}>
+          <View style={styles.appLayout}>
+            <AuthenticatedAppNavigation
+              apiUrl={apiUrl}
+              formMode={formMode}
+              editingSurveyId={editingSurveyId}
+              surveyDetailTab={surveyDetailTab}
+              setSurveyDetailTab={setSurveyDetailTab}
+              surveyForm={surveyForm}
+              surveyList={surveyList}
+              surveySync={surveySync}
+              publicMapExplorer={publicMapExplorer}
+              ownSurveyIds={ownSurveyIds}
+              onOpenCreateSurvey={editing.handleOpenCreateSurvey}
+              onOpenSurvey={handleOpenSurvey}
+              onStartEditSurvey={editing.handleStartEditSurvey}
+              onRenameSurvey={draftPatcher.handleRenameSurvey}
+              onUpdateRegionVersion={draftPatcher.handleUpdateSurveyRegionVersion}
+              onUpdateVegetationStage={draftPatcher.handleUpdateSurveyVegetationStage}
+              onSaveSurveyEdits={editing.handleSaveSurveyEdits}
+              onCreateDraft={editing.handleCreateDraft}
+              onCaptureGpsLocation={gpsCapture.handleCaptureGpsLocation}
+              onApiUrlChange={handleApiUrlChange}
+              onCloseSurveyDetailSelection={closeSurveyDetailSelection}
+            />
+          </View>
+        </SafeAreaView>
 
-      {/* Auth screens rendered as overlays — outside the navigation tree so the
-          NavigationContainer (and native tab bar) is always mounted and stable. */}
-      {showAuthOverlay && (
-        <View style={overlayStyles.fill}>
-          <AuthGateScreen
-            apiUrl={apiUrl}
-            onApiUrlChange={handleApiUrlChange}
-            onLogin={surveySync.handleLogin}
-            status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
-            logoSource={require("./assets/logo-app.png")}
-            heroMartenSource={require("./assets/auth/marten.png")}
-          />
-        </View>
-      )}
-      {showProfileSetupOverlay && (
-        <View style={overlayStyles.fill}>
-          <ProfileSetupScreen
-            saving={surveySync.profileUpdating}
-            logoSource={require("./assets/logo-app.png")}
-            onSave={async (firstName, lastName) => {
-              await surveySync.handleUpdateProfile({
-                first_name: firstName,
-                last_name: lastName,
-                display_name: [firstName, lastName].filter(Boolean).join(" "),
-              })
-            }}
-            onSkip={() => setProfileSetupSkipped(true)}
-          />
-        </View>
-      )}
+        {/* Auth screens rendered as overlays — outside the navigation tree so the
+            NavigationContainer (and native tab bar) is always mounted and stable. */}
+        {showAuthOverlay && (
+          <View style={overlayStyles.fill}>
+            <AuthGateScreen
+              apiUrl={apiUrl}
+              onApiUrlChange={handleApiUrlChange}
+              onLogin={surveySync.handleLogin}
+              status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
+              logoSource={require("./assets/logo-app.png")}
+              heroMartenSource={require("./assets/auth/marten.png")}
+            />
+          </View>
+        )}
+        {showProfileSetupOverlay && (
+          <View style={overlayStyles.fill}>
+            <ProfileSetupScreen
+              saving={surveySync.profileUpdating}
+              logoSource={require("./assets/logo-app.png")}
+              onSave={async (firstName, lastName) => {
+                await surveySync.handleUpdateProfile({
+                  first_name: firstName,
+                  last_name: lastName,
+                  display_name: [firstName, lastName].filter(Boolean).join(" "),
+                })
+              }}
+              onSkip={() => setProfileSetupSkipped(true)}
+            />
+          </View>
+        )}
+      </View>
     </SafeAreaProvider>
   )
 }

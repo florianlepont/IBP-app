@@ -620,10 +620,14 @@ function HeaderIconButton({
   icon: keyof typeof Ionicons.glyphMap
   onPress: () => void
 }) {
-  const iconColor = Platform.OS === "ios" ? "#007AFF" : brandColors.forest
   return (
-    <Pressable accessibilityRole="button" hitSlop={8} onPress={onPress} style={{ padding: 4 }}>
-      <Ionicons name={icon} size={22} color={iconColor} />
+    <Pressable
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={{ width: 34, height: 34, alignItems: "center", justifyContent: "center" }}
+    >
+      <Ionicons name={icon} size={22} color={brandColors.forest} />
     </Pressable>
   )
 }
@@ -673,20 +677,18 @@ function AccountTabNavigator({ apiUrl, onApiUrlChange, surveyList, surveySync }:
       </AccountStack.Screen>
       <AccountStack.Screen name="settings" options={{ title: "Settings" }}>
         {() => (
-          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-            <SettingsScreen
-              apiUrl={apiUrl}
-              onApiUrlChange={onApiUrlChange}
-              onSync={surveySync.handleSync}
-              onPullChanges={surveySync.handlePullChanges}
-              onRefreshLocalList={surveyList.refreshLocalSurveys}
-              onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
-              onDeleteAccount={surveySync.handleDeleteAccount}
-              onDebugResetIbpData={surveySync.handleDebugResetIbpData}
-              onDebugResetUserData={surveySync.handleDebugResetUserData}
-              status={surveySync.status}
-            />
-          </ScrollView>
+          <SettingsScreen
+            apiUrl={apiUrl}
+            onApiUrlChange={onApiUrlChange}
+            onSync={surveySync.handleSync}
+            onPullChanges={surveySync.handlePullChanges}
+            onRefreshLocalList={surveyList.refreshLocalSurveys}
+            onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
+            onDeleteAccount={surveySync.handleDeleteAccount}
+            onDebugResetIbpData={surveySync.handleDebugResetIbpData}
+            onDebugResetUserData={surveySync.handleDebugResetUserData}
+            status={surveySync.status}
+          />
         )}
       </AccountStack.Screen>
     </AccountStack.Navigator>

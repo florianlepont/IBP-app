@@ -100,6 +100,7 @@ export const brandRadius = {
   panel: 30,
   card: 24,
   field: 18,
+  avatar: 20,
   pill: 999,
 } as const
 
@@ -158,6 +159,7 @@ export const brandComponentTokens = {
   },
   card: {
     defaultPadding: brandSpacing.md,
+    compactPadding: 12,
     surfaceBorder: brandColors.panelMuted,
     softSurface: brandSemanticColors.surfaceSoft,
     panelBorder: brandColors.divider,
