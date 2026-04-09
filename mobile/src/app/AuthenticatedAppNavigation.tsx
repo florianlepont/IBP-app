@@ -122,9 +122,10 @@ function isNativeBottomTabViewAvailable(): boolean {
 function getNativeTabNavigator(): TabNavigatorLike {
   // Keep the native tabs package out of module initialization so unsupported
   // runtimes can still boot and fall back cleanly.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  /* eslint-disable @typescript-eslint/no-var-requires */
   const nativeBottomTabsModule =
     require("@bottom-tabs/react-navigation") as typeof import("@bottom-tabs/react-navigation")
+  /* eslint-enable @typescript-eslint/no-var-requires */
   return nativeBottomTabsModule.createNativeBottomTabNavigator<RootTabParamList>() as TabNavigatorLike
 }
 
