@@ -1,9 +1,10 @@
 import { StyleSheet } from "react-native"
+import { brandColors } from "./brand-tokens"
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#e8eee7",
+    backgroundColor: brandColors.canvas,
   },
   appLayout: {
     flex: 1,
@@ -22,8 +23,6 @@ export const styles = StyleSheet.create({
   },
   accountScreenWrap: {
     flex: 1,
-    padding: 16,
-    gap: 14,
   },
   formScreen: {
     gap: 12,

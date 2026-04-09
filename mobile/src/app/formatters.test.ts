@@ -26,6 +26,6 @@ describe("formatters time helpers", () => {
   })
 
   test("formats expired deadline", () => {
-    expect(formatRemainingTime("2026-03-09T11:59:00.000Z")).toBe("expired")
+    expect(formatRemainingTime("2026-03-09T11:59:00.000Z")).toBe("expiré")
   })
 })

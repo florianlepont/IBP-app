@@ -1,7 +1,7 @@
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from "react-native"
 import { brandComponentTokens, brandRadius, brandTypography } from "../app/brand-tokens"
 
-export type AppStatusChipTone = "neutral" | "success" | "warning" | "danger"
+export type AppStatusChipTone = "neutral" | "success" | "warning" | "danger" | "onDark"
 
 type AppStatusChipProps = {
   label: string
@@ -13,7 +13,9 @@ type AppStatusChipProps = {
 export function AppStatusChip({ label, tone = "neutral", style, labelStyle }: AppStatusChipProps) {
   return (
     <View style={[styles.base, styles[tone], style]}>
-      <Text style={[styles.label, labelStyle]}>{label}</Text>
+      <Text style={[styles.label, tone === "onDark" && styles.labelOnDark, labelStyle]}>
+        {label}
+      </Text>
     </View>
   )
 }
@@ -41,8 +43,15 @@ const styles = StyleSheet.create({
     borderColor: brandComponentTokens.statusChip.dangerBorder,
     backgroundColor: brandComponentTokens.statusChip.dangerBackground,
   },
+  onDark: {
+    borderColor: brandComponentTokens.statusChip.onDarkBorder,
+    backgroundColor: brandComponentTokens.statusChip.onDarkBackground,
+  },
   label: {
     ...brandTypography.meta,
     color: brandComponentTokens.statusChip.textColor,
+  },
+  labelOnDark: {
+    color: brandComponentTokens.statusChip.onDarkTextColor,
   },
 })

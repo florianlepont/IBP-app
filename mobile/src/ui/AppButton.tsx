@@ -1,4 +1,12 @@
-import { Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from "react-native"
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextStyle,
+  ViewStyle,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import {
   brandColors,
@@ -7,7 +15,7 @@ import {
   brandTypography,
 } from "../app/brand-tokens"
 
-type AppButtonVariant = "primary" | "secondary" | "danger"
+type AppButtonVariant = "primary" | "secondary" | "danger" | "dangerSoft"
 type AppButtonSize = "sm" | "md" | "lg"
 
 type AppButtonProps = {
@@ -18,6 +26,7 @@ type AppButtonProps = {
   iconOnly?: boolean
   accessibilityLabel?: string
   disabled?: boolean
+  loading?: boolean
   onPress: () => void
   testID?: string
   style?: StyleProp<ViewStyle>
@@ -32,6 +41,7 @@ export function AppButton({
   iconOnly = false,
   accessibilityLabel,
   disabled = false,
+  loading = false,
   onPress,
   testID,
   style,
@@ -39,14 +49,20 @@ export function AppButton({
 }: AppButtonProps) {
   const hasLabel = Boolean(label?.trim().length)
   const iconColor =
-    variant === "secondary" ? brandComponentTokens.button.secondaryBorder : brandColors.white
+    variant === "secondary"
+      ? brandComponentTokens.button.secondaryBorder
+      : variant === "dangerSoft"
+        ? brandColors.terracotta
+        : brandColors.white
   const iconSize = size === "lg" ? 18 : size === "sm" ? 15 : 16
+  const isDisabled = disabled || loading
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label ?? "Action"}
-      disabled={disabled}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      disabled={isDisabled}
       onPress={onPress}
       style={[
         styles.base,
@@ -59,18 +75,26 @@ export function AppButton({
               : styles.iconOnlyMd
           : null,
         styles[variant],
-        disabled ? styles.disabled : null,
+        isDisabled ? styles.disabled : null,
         style,
       ]}
       testID={testID}
     >
-      {leadingIcon ? <Ionicons name={leadingIcon} size={iconSize} color={iconColor} /> : null}
+      {loading ? (
+        <ActivityIndicator size="small" color={iconColor} />
+      ) : leadingIcon ? (
+        <Ionicons name={leadingIcon} size={iconSize} color={iconColor} />
+      ) : null}
       {hasLabel && !iconOnly ? (
         <Text
           style={[
             styles.label,
             size === "sm" ? styles.labelSmall : null,
-            variant === "secondary" ? styles.labelSecondary : null,
+            variant === "secondary"
+              ? styles.labelSecondary
+              : variant === "dangerSoft"
+                ? styles.labelDangerSoft
+                : null,
             labelStyle,
           ]}
         >
@@ -128,6 +152,11 @@ const styles = StyleSheet.create({
   danger: {
     backgroundColor: brandComponentTokens.button.dangerBackground,
   },
+  dangerSoft: {
+    backgroundColor: brandColors.errorSoft,
+    borderWidth: 1,
+    borderColor: "#E4A595",
+  },
   disabled: {
     opacity: 0.7,
   },
@@ -141,5 +170,8 @@ const styles = StyleSheet.create({
   },
   labelSecondary: {
     color: brandComponentTokens.button.secondaryBorder,
+  },
+  labelDangerSoft: {
+    color: brandColors.terracotta,
   },
 })

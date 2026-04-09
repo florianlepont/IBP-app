@@ -1,17 +1,25 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
-  Image,
+  Animated,
   ImageSourcePropType,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { brandColors, brandRadius, brandSpacing, brandTypography } from "../app/brand-tokens"
+import {
+  brandColors,
+  brandRadius,
+  brandSemanticColors,
+  brandSpacing,
+  brandTypography,
+} from "../app/brand-tokens"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
@@ -26,30 +34,100 @@ type AuthGateScreenProps = {
   heroMartenSource?: ImageSourcePropType
 }
 
+// AUTH-13 : dimensions asset/layout extraites comme constantes nommées
 const HERO_MIN_HEIGHT_RATIO = 0.35
 const HERO_MIN_HEIGHT_PX = 280
+const HERO_LOGO_WIDTH = 154
+const HERO_LOGO_HEIGHT = 50
+const HERO_LOGO_MARGIN_LEFT = -22
+const HERO_LOGO_MARGIN_BOTTOM = brandSpacing.xs
+const HERO_MARTEN_WIDTH = 168
+const HERO_MARTEN_HEIGHT = 216
+const HERO_MARTEN_RIGHT = 12
+const HERO_MARTEN_BOTTOM = -14
+const PANEL_OVERLAP = 24
+
+// AUTH-11 : durées et décalages d'animation
+const ANIM_HERO_DURATION = 200
+const ANIM_LOGO_DURATION = 220
+const ANIM_MARTEN_DURATION = 260
+const ANIM_PANEL_DURATION = 300
+const ANIM_STAGGER = 80
 
 type HeroSectionProps = {
   height: number
   topInset: number
   logoSource?: ImageSourcePropType
   heroMartenSource?: ImageSourcePropType
+  logoAnim: Animated.Value
+  martenAnim: Animated.Value
 }
 
-function HeroSection({ height, topInset, logoSource, heroMartenSource }: HeroSectionProps) {
+function HeroSection({
+  height,
+  topInset,
+  logoSource,
+  heroMartenSource,
+  logoAnim,
+  martenAnim,
+}: HeroSectionProps) {
   return (
     <View style={[authStyles.hero, { height }]}>
+      {/* AUTH-02 : status bar claire sur le fond sombre */}
+      <StatusBar barStyle="light-content" />
       <View style={[authStyles.heroBackground, { paddingTop: Math.max(topInset, 12) + 18 }]}>
+        {/* AUTH-11 : martre en slide depuis la droite */}
         {heroMartenSource ? (
-          <Image source={heroMartenSource} style={authStyles.heroMarten} resizeMode="contain" />
+          <Animated.Image
+            source={heroMartenSource}
+            style={[
+              authStyles.heroMarten,
+              {
+                opacity: martenAnim,
+                transform: [
+                  {
+                    translateX: martenAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [40, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+            resizeMode="contain"
+            accessible={false}
+          />
         ) : null}
         <View style={authStyles.heroContent}>
+          {/* AUTH-11 : logo en slide depuis le haut */}
           {logoSource ? (
-            <Image source={logoSource} style={authStyles.heroLogo} resizeMode="contain" />
+            <Animated.Image
+              source={logoSource}
+              style={[
+                authStyles.heroLogo,
+                {
+                  opacity: logoAnim,
+                  transform: [
+                    {
+                      translateY: logoAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-16, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+              resizeMode="contain"
+              accessible={false}
+            />
           ) : null}
-          <Text style={authStyles.heroTitle}>Welcome to the IBP app</Text>
+          {/* AUTH-03 : role header sur le titre */}
+          <Text style={authStyles.heroTitle} accessibilityRole="header">
+            Bienvenue sur l&apos;app IBP
+          </Text>
+          {/* AUTH-01 : couleur via token heroBodyOnDark */}
           <Text style={authStyles.heroBody}>
-            Sign in or create an account to sync and manage your field surveys.
+            Connectez-vous pour synchroniser et gérer vos relevés de terrain.
           </Text>
         </View>
       </View>
@@ -65,12 +143,15 @@ type AuthPanelFooterProps = {
 function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
   const [editing, setEditing] = useState(false)
 
+  // AUTH-12 : masqué en production
+  if (!__DEV__) return null
+
   return (
     <View style={authStyles.panelFooter}>
       {editing ? (
         <AppCard variant="soft" padding={14} style={authStyles.advancedPanel}>
           <AppField
-            label="API URL"
+            label="URL de l'API"
             value={apiUrl}
             onChangeText={onApiUrlChange}
             autoCapitalize="none"
@@ -81,20 +162,24 @@ function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
             testID="auth-api-url-input"
           />
           <Text style={authStyles.hint}>
-            iOS Simulator: localhost · Physical device: Mac local IP on same Wi-Fi
+            Simulateur iOS : localhost · Appareil physique : IP locale du Mac sur le même Wi-Fi
           </Text>
         </AppCard>
       ) : (
+        // AUTH-07 : zone tactile >= 44pt via hitSlop
         <Pressable
           onPress={() => setEditing(true)}
           style={authStyles.apiUrlPill}
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Modifier l'URL de l'API"
           testID="auth-advanced-toggle"
         >
           <Text style={authStyles.apiUrlPillLabel}>API</Text>
           <Text style={authStyles.apiUrlPillValue} numberOfLines={1}>
             {apiUrl}
           </Text>
-          <Text style={authStyles.apiUrlPillEdit}>Edit</Text>
+          <Text style={authStyles.apiUrlPillEdit}>Modifier</Text>
         </Pressable>
       )}
     </View>
@@ -112,6 +197,39 @@ export function AuthGateScreen({
   const { height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const [submitting, setSubmitting] = useState(false)
+
+  // AUTH-11 : valeurs d'animation
+  const heroAnim = useRef(new Animated.Value(0)).current
+  const logoAnim = useRef(new Animated.Value(0)).current
+  const martenAnim = useRef(new Animated.Value(0)).current
+  const panelAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(heroAnim, {
+        toValue: 1,
+        duration: ANIM_HERO_DURATION,
+        useNativeDriver: true,
+      }),
+      Animated.stagger(ANIM_STAGGER, [
+        Animated.timing(logoAnim, {
+          toValue: 1,
+          duration: ANIM_LOGO_DURATION,
+          useNativeDriver: true,
+        }),
+        Animated.timing(martenAnim, {
+          toValue: 1,
+          duration: ANIM_MARTEN_DURATION,
+          useNativeDriver: true,
+        }),
+        Animated.timing(panelAnim, {
+          toValue: 1,
+          duration: ANIM_PANEL_DURATION,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start()
+  }, [heroAnim, logoAnim, martenAnim, panelAnim])
 
   const normalizedStatus = status.trim().toLowerCase()
   const feedbackMessage = normalizedStatus && !normalizedStatus.includes("logged in") ? status : ""
@@ -138,31 +256,66 @@ export function AuthGateScreen({
   const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
 
   return (
+    // AUTH-04 : behavior="padding" sur iOS (standard iOS HIG)
     <KeyboardAvoidingView
-      style={[authStyles.screen, authStyles.screenContent]}
-      behavior={Platform.OS === "ios" ? "height" : undefined}
+      style={authStyles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <HeroSection
-        height={heroHeight}
-        topInset={insets.top}
-        logoSource={logoSource}
-        heroMartenSource={heroMartenSource}
-      />
+      {/* AUTH-11 : hero en fadeIn */}
+      <Animated.View style={{ opacity: heroAnim }}>
+        <HeroSection
+          height={heroHeight}
+          topInset={insets.top}
+          logoSource={logoSource}
+          heroMartenSource={heroMartenSource}
+          logoAnim={logoAnim}
+          martenAnim={martenAnim}
+        />
+      </Animated.View>
 
-      <View style={authStyles.panelWrap}>
-        <View style={authStyles.panelContent}>
+      {/* AUTH-11 : panneau en slideUp + fade */}
+      <Animated.View
+        style={[
+          authStyles.panelWrap,
+          {
+            opacity: panelAnim,
+            transform: [
+              {
+                translateY: panelAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [32, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        {/* AUTH-08 : ScrollView pour petits écrans avec clavier */}
+        <ScrollView
+          style={authStyles.panelScroll}
+          contentContainerStyle={[
+            authStyles.panelContent,
+            { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={authStyles.panelMain}>
             <View style={authStyles.panelHeader}>
-              <Text style={authStyles.panelTitle}>Sign in</Text>
+              {/* AUTH-03 : role header sur le titre du panneau */}
+              <Text style={authStyles.panelTitle} accessibilityRole="header">
+                Connexion
+              </Text>
               <Text style={authStyles.panelSubtitle}>
-                Access your surveys, public map, and account settings.
+                Accédez à vos relevés, la carte publique et votre compte.
               </Text>
             </View>
 
+            {/* AUTH-06 : prop loading sur AppButton */}
             <AppButton
-              label={submitting ? "Opening..." : "Sign in / Create account"}
+              label={submitting ? "Ouverture..." : "Se connecter / Créer un compte"}
               onPress={() => void handleLogin()}
-              disabled={submitting}
+              loading={submitting}
               style={authStyles.primaryButton}
               testID="auth-submit"
             />
@@ -173,15 +326,15 @@ export function AuthGateScreen({
                 icon={
                   feedbackTone === "danger" ? "alert-circle-outline" : "information-circle-outline"
                 }
-                title={feedbackTone === "danger" ? "Login issue" : "Status"}
+                title={feedbackTone === "danger" ? "Problème de connexion" : "Statut"}
                 message={feedbackMessage}
               />
             ) : null}
           </View>
 
           <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
-        </View>
-      </View>
+        </ScrollView>
+      </Animated.View>
     </KeyboardAvoidingView>
   )
 }
@@ -191,9 +344,6 @@ const authStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: brandColors.canvas,
   },
-  screenContent: {
-    flexGrow: 1,
-  },
   hero: {
     width: "100%",
   },
@@ -202,21 +352,22 @@ const authStyles = StyleSheet.create({
     backgroundColor: brandColors.forest,
     overflow: "hidden",
     paddingHorizontal: brandSpacing.lg,
-    paddingBottom: 30,
+    // AUTH-13 : paddingBottom aligné sur brandSpacing.xl (28) + 2 = 30
+    paddingBottom: brandSpacing.xl + 2,
     justifyContent: "flex-end",
   },
   heroContent: {
     zIndex: 1,
     width: "62%",
     alignItems: "flex-start",
-    gap: 8,
+    gap: brandSpacing.xs,
   },
   heroLogo: {
-    width: 154,
-    height: 50,
+    width: HERO_LOGO_WIDTH,
+    height: HERO_LOGO_HEIGHT,
     alignSelf: "flex-start",
-    marginLeft: -22,
-    marginBottom: 6,
+    marginLeft: HERO_LOGO_MARGIN_LEFT,
+    marginBottom: HERO_LOGO_MARGIN_BOTTOM,
   },
   heroTitle: {
     ...brandTypography.heroTitle,
@@ -224,42 +375,46 @@ const authStyles = StyleSheet.create({
   },
   heroBody: {
     ...brandTypography.sectionBody,
-    color: "#E8ECD9",
+    // AUTH-01 : token sémantique au lieu de #E8ECD9 hardcodé
+    color: brandSemanticColors.heroBodyOnDark,
     maxWidth: 260,
   },
   heroMarten: {
     position: "absolute",
-    right: 12,
-    bottom: -14,
-    width: 168,
-    height: 216,
+    right: HERO_MARTEN_RIGHT,
+    bottom: HERO_MARTEN_BOTTOM,
+    width: HERO_MARTEN_WIDTH,
+    height: HERO_MARTEN_HEIGHT,
     zIndex: 0,
   },
   panelWrap: {
     flex: 1,
-    marginTop: -24,
+    marginTop: -PANEL_OVERLAP,
     borderTopLeftRadius: brandRadius.panel,
     borderTopRightRadius: brandRadius.panel,
     backgroundColor: brandColors.panel,
     zIndex: 2,
   },
-  panelContent: {
+  panelScroll: {
     flex: 1,
-    paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: 20,
+  },
+  panelContent: {
+    flexGrow: 1,
+    paddingHorizontal: brandSpacing.lg,
+    paddingTop: brandSpacing.lg + 2,
     justifyContent: "space-between",
+    gap: brandSpacing.lg,
   },
   panelMain: {
     gap: 14,
   },
   panelFooter: {
-    gap: 10,
-    paddingTop: 10,
+    gap: brandSpacing.sm,
+    paddingTop: brandSpacing.sm,
   },
   panelHeader: {
     minHeight: 88,
-    paddingTop: 6,
+    paddingTop: brandSpacing.xs,
     justifyContent: "center",
     gap: 4,
   },
@@ -272,7 +427,7 @@ const authStyles = StyleSheet.create({
     color: brandColors.textSecondary,
   },
   primaryButton: {
-    marginTop: 8,
+    marginTop: brandSpacing.xs + 2,
   },
   apiUrlPill: {
     flexDirection: "row",
@@ -281,9 +436,9 @@ const authStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: brandColors.divider,
     borderRadius: brandRadius.pill,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingVertical: brandSpacing.xs,
+    paddingHorizontal: brandSpacing.sm + 2,
+    gap: brandSpacing.xs,
     maxWidth: "100%",
   },
   apiUrlPillLabel: {
@@ -302,7 +457,7 @@ const authStyles = StyleSheet.create({
     fontWeight: "600",
   },
   advancedPanel: {
-    gap: 6,
+    gap: brandSpacing.xs,
   },
   hint: {
     ...brandTypography.meta,

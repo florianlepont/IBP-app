@@ -2,7 +2,7 @@ import { ReactNode } from "react"
 import { StyleProp, StyleSheet, View, ViewStyle } from "react-native"
 import { brandColors, brandComponentTokens, brandRadius, brandShadow } from "../app/brand-tokens"
 
-type AppCardVariant = "panel" | "panelElevated" | "surface" | "soft"
+type AppCardVariant = "panel" | "panelElevated" | "surface" | "soft" | "hero"
 
 type AppCardProps = {
   children: ReactNode
@@ -43,5 +43,10 @@ const styles = StyleSheet.create({
     backgroundColor: brandComponentTokens.card.softSurface,
     borderWidth: 1,
     borderColor: brandComponentTokens.card.surfaceBorder,
+  },
+  // Dark premium surface — for identity/hero cards on dark brand background
+  hero: {
+    backgroundColor: brandColors.forest,
+    ...brandShadow.card,
   },
 })

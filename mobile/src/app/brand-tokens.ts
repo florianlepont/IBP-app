@@ -97,9 +97,11 @@ export const brandTypography = {
 } as const
 
 export const brandRadius = {
+  hero: 34,
   panel: 30,
   card: 24,
   field: 18,
+  avatar: 20,
   pill: 999,
 } as const
 
@@ -136,6 +138,12 @@ export const brandSemanticColors = {
   successSurface: brandColors.successSoft,
   errorSurface: brandColors.errorSoft,
   warningSurface: brandColors.warningSoft,
+  // Warm off-white for body text on dark (forest) backgrounds — reduces glare vs pure white
+  heroBodyOnDark: "#E8ECD9",
+  heroMetaOnDark: "#D9E3C6",
+  heroPanelBorderOnDark: "rgba(255, 255, 255, 0.14)",
+  heroPanelBackgroundOnDark: "rgba(255, 255, 255, 0.08)",
+  heroOrbOnDark: "rgba(137, 163, 58, 0.22)",
 } as const
 
 export const brandComponentTokens = {
@@ -156,6 +164,7 @@ export const brandComponentTokens = {
   },
   card: {
     defaultPadding: brandSpacing.md,
+    compactPadding: 12,
     surfaceBorder: brandColors.panelMuted,
     softSurface: brandSemanticColors.surfaceSoft,
     panelBorder: brandColors.divider,
@@ -179,8 +188,12 @@ export const brandComponentTokens = {
     dangerBorder: "#E4A595",
     dangerBackground: brandColors.errorSoft,
     textColor: brandColors.forest,
+    onDarkBorder: "rgba(255, 255, 255, 0.25)",
+    onDarkBackground: "rgba(255, 255, 255, 0.15)",
+    onDarkTextColor: "rgba(255, 255, 255, 0.90)",
   },
   choiceChip: {
+    minHeight: 44,
     border: brandColors.inputBorder,
     background: brandColors.panelMuted,
     interactiveBorder: brandColors.forest,
@@ -193,6 +206,25 @@ export const brandComponentTokens = {
     successBackground: brandColors.successSoft,
     warningBackground: brandColors.warningSoft,
     dangerBackground: brandColors.errorSoft,
+  },
+  surveyList: {
+    cardAccentNeutral: brandColors.divider,
+    cardAccentSuccess: brandColors.sage,
+    cardAccentWarning: brandColors.ochre,
+    cardAccentDanger: brandColors.terracotta,
+    cardSelectedBorder: brandColors.forest,
+    cardSelectedBackground: brandColors.panel,
+    workflowNeutralBackground: brandColors.panelMuted,
+    workflowSuccessBackground: brandColors.successSoft,
+    workflowWarningBackground: brandColors.warningSoft,
+    workflowDangerBackground: brandColors.errorSoft,
+    workflowNeutralText: brandColors.forest,
+    workflowSuccessText: brandColors.forest,
+    workflowWarningText: brandColors.ochre,
+    workflowDangerText: brandColors.terracotta,
+    progressTrack: brandColors.divider,
+    supportDangerText: brandColors.terracotta,
+    badgeDangerText: brandColors.terracotta,
   },
   notice: {
     infoBackground: brandColors.panelMuted,

@@ -23,4 +23,7 @@ module.exports = {
     '^@expo/vector-icons$': '<rootDir>/test/vector-icons.mock.ts',
     '^expo-sqlite$': '<rootDir>/test/expo-sqlite.mock.ts',
   },
+  globals: {
+    __DEV__: true,
+  },
 };

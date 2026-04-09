@@ -16,6 +16,42 @@ export const formatDateTime = (value?: string | null): string => {
   return date.toLocaleString()
 }
 
+export const formatShortDateTime = (value?: string | null): string => {
+  if (!value) return "n/a"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+const SYNC_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
+  { pattern: /site_name.*required|required.*site_name/i, message: "Le nom du site est manquant" },
+  { pattern: /region.*required|required.*region/i, message: "La région est manquante" },
+  {
+    pattern: /vegetation.*required|required.*vegetation/i,
+    message: "Le stade de végétation est manquant",
+  },
+  { pattern: /HTTP 4\d\d/i, message: "Données invalides — ouvrez le relevé pour corriger" },
+  {
+    pattern: /HTTP 5\d\d|network|timeout|ECONNREFUSED/i,
+    message: "Erreur réseau — réessayez plus tard",
+  },
+  { pattern: /unauthorized|401|forbidden|403/i, message: "Session expirée — reconnectez-vous" },
+]
+
+export const formatSyncErrorForUser = (rawError?: string | null): string | null => {
+  if (!rawError?.trim()) return null
+  for (const { pattern, message } of SYNC_ERROR_PATTERNS) {
+    if (pattern.test(rawError)) return message
+  }
+  return "Erreur de synchronisation — ouvrez le relevé pour corriger"
+}
+
 export const resolveSubmissionDeadline = (
   createdAt?: string | null,
   expiresAt?: string | null,
@@ -43,14 +79,14 @@ export const isLessThan24HoursRemaining = (deadlineIso?: string | null): boolean
 export const formatRemainingTime = (deadlineIso?: string | null): string => {
   const deltaMs = getRemainingTimeMs(deadlineIso)
   if (deltaMs === null) return "n/a"
-  if (deltaMs <= 0) return "expired"
+  if (deltaMs <= 0) return "expiré"
 
   const totalMinutes = Math.floor(deltaMs / (60 * 1000))
   const days = Math.floor(totalMinutes / (24 * 60))
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
   const minutes = totalMinutes % 60
 
-  if (days > 0) return `${days}d ${hours}h remaining`
-  if (hours > 0) return `${hours}h ${minutes}m remaining`
-  return `${minutes}m remaining`
+  if (days > 0) return `${days}j ${hours}h restant`
+  if (hours > 0) return `${hours}h ${minutes}m restant`
+  return `${minutes}m restant`
 }
