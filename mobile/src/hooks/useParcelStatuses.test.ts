@@ -38,8 +38,7 @@ describe("useParcelStatuses", () => {
   let useRefSpy: jest.SpyInstance
   let useMemoSpy: jest.SpyInstance
   let useEffectSpy: jest.SpyInstance
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let capturedEffect: (() => (() => void) | void) | null
+  let capturedEffect: React.EffectCallback | null
 
   beforeEach(() => {
     jest.useFakeTimers()
@@ -60,12 +59,9 @@ describe("useParcelStatuses", () => {
       .spyOn(React, "useMemo")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .mockImplementation((fn) => fn() as any)
-    useEffectSpy = jest
-      .spyOn(React, "useEffect")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation((fn) => {
-        capturedEffect = fn as any
-      })
+    useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation((fn) => {
+      capturedEffect = fn
+    })
   })
 
   afterEach(() => {

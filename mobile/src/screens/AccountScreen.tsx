@@ -1,12 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native"
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native"
+import { useHeaderHeight } from "@react-navigation/elements"
 import { Ionicons } from "@expo/vector-icons"
-import { BlurView } from "expo-blur"
-import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import {
+  brandColors,
+  brandComponentTokens,
+  brandRadius,
+  brandSemanticColors,
+  brandSpacing,
+  brandTypography,
+} from "../app/brand-tokens"
 import { AuthUser } from "../app/types"
+import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
+import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { AppSettingsRow } from "../ui/AppSettingsRow"
 import { AppStatusChip } from "../ui/AppStatusChip"
 
 type UpdateProfileInput = {
@@ -30,37 +54,8 @@ type AccountScreenProps = {
   onLogout: () => Promise<void>
 }
 
-type PhotoMenuAnchor = { x: number; y: number; width: number; height: number }
-
-function ProfileField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  autoCapitalize,
-  autoCorrect,
-}: {
-  label: string
-  value: string
-  onChangeText: (value: string) => void
-  placeholder?: string
-  autoCapitalize?: "none" | "sentences" | "words" | "characters"
-  autoCorrect?: boolean
-}) {
-  return (
-    <AppField
-      label={label}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      autoCapitalize={autoCapitalize}
-      autoCorrect={autoCorrect}
-      containerStyle={styles.fieldGroup}
-      labelStyle={styles.fieldLabel}
-      inputStyle={styles.fieldInput}
-    />
-  )
-}
+// ACC-06 : validation email correcte
+const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
 const resolveInitials = (user: AuthUser | null, fallbackProfile: string): string => {
   const source =
@@ -68,7 +63,7 @@ const resolveInitials = (user: AuthUser | null, fallbackProfile: string): string
     user?.display_name?.trim() ||
     user?.email?.trim() ||
     fallbackProfile.trim() ||
-    "Account"
+    "Compte"
 
   return source
     .split(/[\s@._-]+/)
@@ -92,38 +87,24 @@ export function AccountScreen({
   onRemoveProfilePicture,
   onLogout,
 }: AccountScreenProps) {
-  const avatarButtonRef = useRef<View | null>(null)
-  const pendingPhotoActionRef = useRef<(() => void) | null>(null)
-  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions()
+  const headerHeight = useHeaderHeight()
+  const insets = useSafeAreaInsets()
+  const tabBarHeight = useAppBottomTabBarHeight(Platform.select({ ios: 84, default: 68 }) ?? 68)
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [displayName, setDisplayName] = useState("")
-  const [photoMenuVisible, setPhotoMenuVisible] = useState(false)
-  const [photoMenuAnchor, setPhotoMenuAnchor] = useState<PhotoMenuAnchor | null>(null)
   const [emailEditing, setEmailEditing] = useState(false)
   const [newEmail, setNewEmail] = useState("")
+
+  // ACC-13 : refs pour le chaining de focus clavier
+  const lastNameRef = useRef<TextInput>(null)
+  const displayNameRef = useRef<TextInput>(null)
 
   useEffect(() => {
     setFirstName(currentUser?.first_name ?? "")
     setLastName(currentUser?.last_name ?? "")
     setDisplayName(currentUser?.display_name ?? "")
   }, [currentUser])
-
-  useEffect(() => {
-    if (photoMenuVisible || !pendingPhotoActionRef.current) {
-      return
-    }
-
-    const nextAction = pendingPhotoActionRef.current
-    pendingPhotoActionRef.current = null
-    const timeoutId = setTimeout(() => {
-      nextAction()
-    }, 220)
-
-    return () => {
-      clearTimeout(timeoutId)
-    }
-  }, [photoMenuVisible])
 
   const profilePictureUri = useMemo(() => {
     const raw = currentUser?.profile_picture_url
@@ -135,323 +116,326 @@ export function AccountScreen({
   }, [apiUrl, currentUser?.profile_picture_url])
 
   const isProfileDirty = useMemo(() => {
-    const baseFirstName = (currentUser?.first_name ?? "").trim()
-    const baseLastName = (currentUser?.last_name ?? "").trim()
-    const baseDisplayName = (currentUser?.display_name ?? "").trim()
-
     return (
-      firstName.trim() !== baseFirstName ||
-      lastName.trim() !== baseLastName ||
-      displayName.trim() !== baseDisplayName
+      firstName.trim() !== (currentUser?.first_name ?? "").trim() ||
+      lastName.trim() !== (currentUser?.last_name ?? "").trim() ||
+      displayName.trim() !== (currentUser?.display_name ?? "").trim()
     )
   }, [currentUser, firstName, lastName, displayName])
 
   const heroName =
     displayName.trim() ||
-    [firstName.trim(), lastName.trim()].filter((part) => part.length > 0).join(" ") ||
+    [firstName.trim(), lastName.trim()].filter((p) => p.length > 0).join(" ") ||
     currentUser?.display_name ||
     profile ||
-    "Account"
-  const heroSubtitle = currentUser?.email ?? "No email attached yet"
+    "Compte"
+  const heroSubtitle = currentUser?.email ?? "Aucun email associé"
   const initials = resolveInitials(currentUser, profile)
-  const roleLabel = currentUser?.role?.trim() || "member"
-  const photoActions = useMemo(
-    () => [
-      {
-        key: "camera",
-        label: "Take photo",
-        icon: "camera-outline" as const,
-        danger: false,
-        action: () => {
-          void onTakeProfilePictureFromCamera()
-        },
-      },
-      {
-        key: "gallery",
-        label: "Choose from gallery",
-        icon: "image-outline" as const,
-        danger: false,
-        action: () => {
-          void onPickProfilePictureFromLibrary()
-        },
-      },
-      ...(profilePictureUri
-        ? [
-            {
-              key: "remove",
-              label: "Remove photo",
-              icon: "trash-outline" as const,
-              danger: true,
-              action: () => {
-                void onRemoveProfilePicture()
-              },
-            },
-          ]
-        : []),
-    ],
-    [
-      onPickProfilePictureFromLibrary,
-      onRemoveProfilePicture,
-      onTakeProfilePictureFromCamera,
-      profilePictureUri,
-    ],
-  )
+  const roleLabel = currentUser?.role?.trim() || "membre"
+  // Keep header/tab bar clearance inside the scroll content so it scrolls away naturally.
+  const topContentPadding = Platform.OS === "ios" ? headerHeight + brandSpacing.md : brandSpacing.md
+  const bottomContentPadding = Math.max(tabBarHeight, insets.bottom) + brandSpacing.md
 
-  const closePhotoMenu = (): void => {
-    setPhotoMenuVisible(false)
-  }
-
+  // ACC-01 : Action Sheet native au lieu du Modal custom
   const openPhotoActions = (): void => {
-    avatarButtonRef.current?.measureInWindow((x, y, width, height) => {
-      setPhotoMenuAnchor({ x, y, width, height })
-      setPhotoMenuVisible(true)
-    })
+    const options = ["Annuler", "Prendre une photo", "Choisir depuis la galerie"]
+    const actions = [
+      () => void onTakeProfilePictureFromCamera(),
+      () => void onPickProfilePictureFromLibrary(),
+    ]
+    if (profilePictureUri) {
+      options.push("Supprimer la photo")
+      actions.push(() => void onRemoveProfilePicture())
+    }
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: "Photo de profil",
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: profilePictureUri ? options.length - 1 : undefined,
+        },
+        (buttonIndex) => {
+          if (buttonIndex > 0) actions[buttonIndex - 1]()
+        },
+      )
+    } else {
+      // Android fallback via Alert
+      Alert.alert(
+        "Photo de profil",
+        undefined,
+        [
+          { text: "Prendre une photo", onPress: () => void onTakeProfilePictureFromCamera() },
+          {
+            text: "Choisir depuis la galerie",
+            onPress: () => void onPickProfilePictureFromLibrary(),
+          },
+          ...(profilePictureUri
+            ? [
+                {
+                  text: "Supprimer la photo",
+                  style: "destructive" as const,
+                  onPress: () => void onRemoveProfilePicture(),
+                },
+              ]
+            : []),
+          { text: "Annuler", style: "cancel" as const },
+        ],
+        { cancelable: true },
+      )
+    }
   }
 
-  const menuWidth = Math.min(312, viewportWidth - 24)
-  const estimatedMenuHeight = 92 + photoActions.length * 58
-  const preferredTop = photoMenuAnchor ? photoMenuAnchor.y + photoMenuAnchor.height + 12 : 110
-  const fallbackTop = photoMenuAnchor ? photoMenuAnchor.y - estimatedMenuHeight - 12 : 24
-  const menuTop =
-    photoMenuAnchor && preferredTop + estimatedMenuHeight > viewportHeight - 24
-      ? Math.max(24, fallbackTop)
-      : Math.max(24, preferredTop)
-  const menuLeft = photoMenuAnchor
-    ? Math.min(Math.max(16, photoMenuAnchor.x - 6), viewportWidth - menuWidth - 16)
-    : 16
+  // ACC-I05 : confirmation avant reset mot de passe
+  const handlePasswordReset = (): void => {
+    Alert.alert(
+      "Réinitialiser le mot de passe",
+      `Un email de réinitialisation sera envoyé à ${currentUser?.email ?? "votre adresse email"}.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Envoyer", onPress: () => void onPasswordReset() },
+      ],
+    )
+  }
+
+  // ACC-I05 : confirmation avant déconnexion
+  const handleLogout = (): void => {
+    Alert.alert("Se déconnecter", "Vous serez déconnecté de votre compte.", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Se déconnecter", style: "destructive", onPress: () => void onLogout() },
+    ])
+  }
+
+  // ACC-C02 : état de chargement quand currentUser n'est pas encore disponible
+  if (currentUser === null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={brandColors.forest} />
+      </View>
+    )
+  }
 
   return (
-    <>
-      <Modal
-        transparent
-        visible={photoMenuVisible}
-        animationType="fade"
-        onRequestClose={closePhotoMenu}
+    // ACC-04 : ScrollView pour gérer le clavier et les petits écrans
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[
+        styles.content,
+        {
+          paddingTop: topContentPadding,
+          paddingBottom: bottomContentPadding,
+          paddingHorizontal: brandSpacing.md,
+        },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      showsVerticalScrollIndicator={false}
+      contentInsetAdjustmentBehavior="never"
+      automaticallyAdjustContentInsets={false}
+      scrollIndicatorInsets={{
+        top: Platform.OS === "ios" ? headerHeight : 0,
+        bottom: tabBarHeight,
+      }}
+    >
+      {/* ACC-14 : Carte d'identité en variant hero (fond forest) */}
+      <AppCard
+        variant="hero"
+        padding={brandComponentTokens.card.compactPadding}
+        style={styles.identityCard}
       >
-        <View style={styles.photoMenuOverlay}>
-          <Pressable style={styles.photoMenuDismissArea} onPress={closePhotoMenu} />
-          <View style={[styles.photoMenuCard, { top: menuTop, left: menuLeft, width: menuWidth }]}>
-            <BlurView intensity={68} tint="light" style={styles.photoMenuBlur}>
-              <View style={styles.photoMenuPreviewRow}>
-                <View style={styles.photoMenuPreviewAvatar}>
-                  {profilePictureUri ? (
-                    <Image
-                      source={{
-                        uri: profilePictureUri,
-                        headers: accessToken
-                          ? { Authorization: `Bearer ${accessToken}` }
-                          : undefined,
-                      }}
-                      style={styles.photoMenuPreviewImage}
-                    />
-                  ) : (
-                    <Text style={styles.photoMenuPreviewFallback}>{initials || "A"}</Text>
-                  )}
-                </View>
-                <View style={styles.photoMenuPreviewCopy}>
-                  <Text style={styles.photoMenuTitle}>Profile photo</Text>
-                  <Text style={styles.photoMenuSubtitle}>
-                    {profilePictureUri
-                      ? "Update or remove the current avatar."
-                      : "Choose how to add a profile photo."}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.photoMenuList}>
-                {photoActions.map((item, index) => (
-                  <View key={item.key}>
-                    <Pressable
-                      style={styles.photoMenuActionRow}
-                      onPress={() => {
-                        pendingPhotoActionRef.current = item.action
-                        closePhotoMenu()
-                      }}
-                    >
-                      <View
-                        style={[
-                          styles.photoMenuActionIconWrap,
-                          item.danger ? styles.photoMenuActionIconWrapDanger : null,
-                        ]}
-                      >
-                        <Ionicons
-                          name={item.icon}
-                          size={18}
-                          color={item.danger ? brandColors.terracotta : brandColors.forest}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.photoMenuActionLabel,
-                          item.danger ? styles.photoMenuActionLabelDanger : null,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                    {index < photoActions.length - 1 ? (
-                      <View style={styles.photoMenuSeparator} />
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            </BlurView>
-          </View>
-        </View>
-      </Modal>
-
-      <View style={styles.screen}>
-        {/* Identity card */}
-        <AppCard variant="panelElevated" padding={12} style={styles.identityCard}>
-          <View style={styles.identityRow}>
-            <Pressable
-              ref={avatarButtonRef}
-              style={styles.avatarButton}
-              onPress={openPhotoActions}
-              disabled={profileUpdating}
-            >
-              {profilePictureUri ? (
-                <Image
-                  source={{
-                    uri: profilePictureUri,
-                    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-                  }}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarFallbackText}>{initials || "A"}</Text>
-                </View>
-              )}
-            </Pressable>
-
-            <View style={styles.identityCopy}>
-              <Text style={styles.identityName} numberOfLines={1}>
-                {heroName}
-              </Text>
-              <Text style={styles.identityMeta} numberOfLines={1}>
-                {heroSubtitle}
-              </Text>
-              <View style={styles.identityFooter}>
-                <AppStatusChip label={roleLabel} />
-                <AppButton
-                  label="Logout"
-                  leadingIcon="log-out-outline"
-                  variant="danger"
-                  onPress={() => void onLogout()}
-                  size="sm"
-                />
-              </View>
-            </View>
-          </View>
-        </AppCard>
-
-        {/* Profile fields card */}
-        <AppCard variant="panelElevated" padding={12} style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.panelTitle}>Profile</Text>
-            {isProfileDirty ? (
-              <AppStatusChip label="Unsaved" tone="warning" />
+        <View style={styles.identityRow}>
+          {/* ACC-11 : Avatar avec badge caméra */}
+          <Pressable
+            style={styles.avatarButton}
+            onPress={openPhotoActions}
+            disabled={profileUpdating}
+            accessibilityRole="button"
+            accessibilityLabel="Modifier la photo de profil"
+            accessibilityHint="Ouvre les options de photo"
+            hitSlop={{ top: 4, right: 4, bottom: 4, left: 0 }}
+          >
+            {profilePictureUri ? (
+              <Image
+                source={{
+                  uri: profilePictureUri,
+                  headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+                }}
+                style={styles.avatarImage}
+                accessible={false}
+              />
             ) : (
-              <AppStatusChip label="Saved" tone="success" />
-            )}
-          </View>
-
-          <View style={styles.twoColumnRow}>
-            <View style={styles.halfField}>
-              <ProfileField
-                label="First name"
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="Florian"
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={styles.halfField}>
-              <ProfileField
-                label="Last name"
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Lepont"
-                autoCapitalize="words"
-              />
-            </View>
-          </View>
-
-          <ProfileField
-            label="Display name"
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Field identity shown to others"
-            autoCapitalize="words"
-          />
-
-          {emailEditing ? (
-            <View style={styles.emailEditBlock}>
-              <AppField
-                label="New email"
-                value={newEmail}
-                onChangeText={setNewEmail}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                autoFocus
-                containerStyle={styles.fieldGroup}
-                labelStyle={styles.fieldLabel}
-                inputStyle={styles.fieldInput}
-              />
-              <View style={styles.emailEditActions}>
-                <AppButton
-                  label="Cancel"
-                  variant="secondary"
-                  size="sm"
-                  onPress={() => {
-                    setEmailEditing(false)
-                    setNewEmail("")
-                  }}
-                />
-                <AppButton
-                  label={profileUpdating ? "Saving..." : "Save email"}
-                  size="sm"
-                  disabled={profileUpdating || !newEmail.includes("@")}
-                  onPress={() =>
-                    void onChangeEmail(newEmail).then(() => {
-                      setEmailEditing(false)
-                      setNewEmail("")
-                    })
-                  }
-                />
-              </View>
-            </View>
-          ) : (
-            <Pressable
-              style={styles.settingsRow}
-              onPress={() => {
-                setNewEmail(currentUser?.email ?? "")
-                setEmailEditing(true)
-              }}
-            >
-              <View style={styles.settingsRowContent}>
-                <Text style={styles.settingsRowLabel}>Email</Text>
-                <Text style={styles.settingsRowValue} numberOfLines={1}>
-                  {currentUser?.email ?? "—"}
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarFallbackText} accessible={false}>
+                  {initials || "A"}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
-            </Pressable>
-          )}
-
-          <Pressable style={styles.settingsRow} onPress={() => void onPasswordReset()}>
-            <View style={styles.settingsRowContent}>
-              <Text style={styles.settingsRowLabel}>Password</Text>
-              <Text style={styles.settingsRowValue}>Send reset email</Text>
+            )}
+            {/* ACC-C01 : Badge caméra agrandi à 28pt, centrage icône garanti */}
+            <View style={styles.avatarEditBadge}>
+              <Ionicons name="camera" size={13} color={brandColors.white} />
             </View>
-            <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
           </Pressable>
 
+          <View style={styles.identityCopy}>
+            <Text style={styles.identityName} numberOfLines={1}>
+              {heroName}
+            </Text>
+            <Text style={styles.identityMeta} numberOfLines={1}>
+              {heroSubtitle}
+            </Text>
+            {/* ACC-I07 : chip de rôle avec tone onDark pour s'intégrer au fond forest */}
+            <View style={styles.identityFooter}>
+              <AppStatusChip label={roleLabel} tone="onDark" />
+            </View>
+          </View>
+        </View>
+      </AppCard>
+
+      {/* Carte profil */}
+      <AppCard
+        variant="panelElevated"
+        padding={brandComponentTokens.card.compactPadding}
+        style={styles.panel}
+      >
+        {/* ACC-07 : AppSectionHeader au lieu du header custom */}
+        <AppSectionHeader
+          title="Profil"
+          titleStyle={styles.panelTitle}
+          trailing={
+            isProfileDirty ? (
+              <AppStatusChip label="Non sauvegardé" tone="warning" />
+            ) : (
+              <AppStatusChip label="Sauvegardé" tone="success" />
+            )
+          }
+          style={styles.panelHeader}
+        />
+
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfField}>
+            {/* ACC-12 : AppField direct sans wrapper ProfileField */}
+            {/* ACC-13 : returnKeyType + onSubmitEditing pour le chaining */}
+            <AppField
+              label="Prénom"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Florian"
+              autoCapitalize="words"
+              autoCorrect={false}
+              containerStyle={styles.fieldGroup}
+              labelStyle={styles.fieldLabel}
+              inputStyle={styles.fieldInput}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => lastNameRef.current?.focus()}
+            />
+          </View>
+          <View style={styles.halfField}>
+            <AppField
+              label="Nom"
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Lepont"
+              autoCapitalize="words"
+              autoCorrect={false}
+              inputRef={lastNameRef}
+              containerStyle={styles.fieldGroup}
+              labelStyle={styles.fieldLabel}
+              inputStyle={styles.fieldInput}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => displayNameRef.current?.focus()}
+            />
+          </View>
+        </View>
+
+        {/* ACC-17 : placeholder = exemple, pas une description */}
+        <AppField
+          label="Nom d'affichage"
+          value={displayName}
+          onChangeText={setDisplayName}
+          placeholder="ex. F. Lepont"
+          autoCapitalize="words"
+          autoCorrect={false}
+          inputRef={displayNameRef}
+          containerStyle={styles.fieldGroup}
+          labelStyle={styles.fieldLabel}
+          inputStyle={styles.fieldInput}
+          returnKeyType="done"
+        />
+
+        {/* ACC-09 : AppSettingsRow pour Email et Mot de passe */}
+        {emailEditing ? (
+          <View style={styles.emailEditBlock}>
+            <AppField
+              label="Nouvel email"
+              value={newEmail}
+              onChangeText={setNewEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              autoFocus
+              containerStyle={styles.fieldGroup}
+              labelStyle={styles.fieldLabel}
+              inputStyle={styles.fieldInput}
+              returnKeyType="done"
+              // ACC-06 : afficher une erreur inline si email invalide
+              error={newEmail.length > 0 && !isValidEmail(newEmail) ? "Email invalide" : undefined}
+            />
+            <View style={styles.emailEditActions}>
+              <AppButton
+                label="Annuler"
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+                  setEmailEditing(false)
+                  setNewEmail("")
+                }}
+              />
+              <AppButton
+                label="Enregistrer"
+                size="sm"
+                loading={profileUpdating}
+                disabled={profileUpdating || !isValidEmail(newEmail)}
+                onPress={() =>
+                  void onChangeEmail(newEmail).then(() => {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+                    setEmailEditing(false)
+                    setNewEmail("")
+                  })
+                }
+              />
+            </View>
+          </View>
+        ) : (
+          <AppSettingsRow
+            label="Email"
+            value={currentUser.email ?? "—"}
+            accessibilityLabel="Modifier l'adresse email"
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+              setNewEmail(currentUser.email ?? "")
+              setEmailEditing(true)
+            }}
+          />
+        )}
+
+        {/* ACC-I08 : value = action courte, pas une description longue */}
+        <AppSettingsRow
+          label="Mot de passe"
+          value="Réinitialiser"
+          accessibilityLabel="Réinitialiser le mot de passe"
+          onPress={handlePasswordReset}
+        />
+
+        {/* ACC-I06 : bouton Enregistrer visible uniquement si des modifications sont en cours */}
+        {isProfileDirty && (
           <AppButton
-            label={profileUpdating ? "Saving profile..." : "Save profile"}
-            leadingIcon={profileUpdating ? "hourglass-outline" : "save-outline"}
+            label={profileUpdating ? "Enregistrement..." : "Enregistrer le profil"}
+            leadingIcon={profileUpdating ? undefined : "save-outline"}
+            loading={profileUpdating}
             onPress={() =>
               void onSaveProfile({
                 first_name: firstName,
@@ -459,122 +443,39 @@ export function AccountScreen({
                 display_name: displayName,
               })
             }
-            disabled={profileUpdating || !isProfileDirty}
+            disabled={profileUpdating}
             size="lg"
           />
-        </AppCard>
-      </View>
-    </>
+        )}
+      </AppCard>
+
+      {/* ACC-10 : Logout déplacé en bas, séparé de la carte identité */}
+      <AppButton
+        label="Se déconnecter"
+        leadingIcon="log-out-outline"
+        variant="secondary"
+        onPress={handleLogout}
+        style={styles.logoutButton}
+      />
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    gap: brandSpacing.sm,
+    backgroundColor: brandColors.canvas,
   },
-  photoMenuOverlay: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: "rgba(24, 28, 23, 0.12)",
-  },
-  photoMenuDismissArea: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  photoMenuCard: {
-    position: "absolute",
-    borderRadius: 30,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.72)",
-    backgroundColor: "rgba(248, 242, 234, 0.78)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 8,
-  },
-  photoMenuBlur: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  photoMenuPreviewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 4,
-    paddingBottom: 6,
-  },
-  photoMenuPreviewAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.56)",
+    backgroundColor: brandColors.canvas,
   },
-  photoMenuPreviewImage: {
-    width: "100%",
-    height: "100%",
-  },
-  photoMenuPreviewFallback: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: "900",
-    color: brandColors.forest,
-  },
-  photoMenuPreviewCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  photoMenuTitle: {
-    ...brandTypography.label,
-    fontSize: 14,
-    lineHeight: 16,
-    color: brandColors.textPrimary,
-  },
-  photoMenuSubtitle: {
-    ...brandTypography.meta,
-    color: brandColors.textSecondary,
-  },
-  photoMenuList: {
-    borderRadius: 22,
-    overflow: "hidden",
-    backgroundColor: "rgba(255, 255, 255, 0.28)",
-  },
-  photoMenuActionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-  },
-  photoMenuActionIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.52)",
-  },
-  photoMenuActionIconWrapDanger: {
-    backgroundColor: "#F6E1D8",
-  },
-  photoMenuActionLabel: {
-    flex: 1,
-    ...brandTypography.sectionBody,
-    fontSize: 17,
-    lineHeight: 22,
-    color: brandColors.textPrimary,
-  },
-  photoMenuActionLabelDanger: {
-    color: brandColors.terracotta,
-  },
-  photoMenuSeparator: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 56,
-    backgroundColor: "rgba(62, 74, 54, 0.16)",
+  // ACC-N02 : gap inter-sections avec brandSpacing.md pour une meilleure respiration
+  content: {
+    gap: brandSpacing.md,
+    paddingBottom: brandSpacing.xl,
   },
   identityCard: {
     gap: 0,
@@ -582,27 +483,31 @@ const styles = StyleSheet.create({
   identityRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: brandSpacing.sm + 2,
   },
   avatarButton: {
     width: 72,
     height: 72,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    backgroundColor: brandColors.panelMuted,
+    borderRadius: brandRadius.avatar,
+    overflow: "visible",
     flexShrink: 0,
   },
   avatarImage: {
-    width: "100%",
-    height: "100%",
+    width: 72,
+    height: 72,
+    borderRadius: brandRadius.avatar,
+    borderWidth: 2,
+    borderColor: brandColors.canvas,
   },
   avatarFallback: {
-    flex: 1,
+    width: 72,
+    height: 72,
+    borderRadius: brandRadius.avatar,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: brandColors.panelMuted,
+    borderWidth: 2,
+    borderColor: brandColors.canvas,
   },
   avatarFallbackText: {
     fontSize: 26,
@@ -610,80 +515,61 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: brandColors.forest,
   },
+  // ACC-C01 : badge caméra agrandi à 28pt pour une meilleure cible tactile visuelle
+  avatarEditBadge: {
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: brandColors.forest,
+    borderWidth: 2,
+    borderColor: brandColors.canvas,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   identityCopy: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
   identityName: {
     ...brandTypography.sectionTitle,
     fontSize: 18,
     lineHeight: 22,
-    color: brandColors.forest,
+    // ACC-14 : texte clair sur fond hero forest
+    color: brandColors.canvas,
   },
   identityMeta: {
     ...brandTypography.meta,
-    color: brandColors.textSecondary,
+    // ACC-14 : texte secondaire sur fond forest
+    color: brandSemanticColors.heroBodyOnDark,
   },
   identityFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     marginTop: 2,
   },
   panel: {
-    flex: 1,
-    gap: 8,
+    gap: brandSpacing.xs + 2,
   },
   panelHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 2,
+    marginBottom: brandSpacing.xs - 2,
   },
   panelTitle: {
-    ...brandTypography.sectionTitle,
     fontSize: 17,
     lineHeight: 20,
-    color: brandColors.forest,
   },
   twoColumnRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: brandSpacing.sm,
   },
   halfField: {
     flex: 1,
     minWidth: 120,
   },
-  settingsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: brandColors.inputFill,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  settingsRowContent: {
-    flex: 1,
-    gap: 1,
-  },
-  settingsRowLabel: {
-    ...brandTypography.label,
-    color: brandColors.forest,
-  },
-  settingsRowValue: {
-    ...brandTypography.sectionBody,
-    color: brandColors.textSecondary,
-  },
-  emailEditBlock: {
-    gap: 8,
-  },
-  emailEditActions: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "flex-end",
-  },
+  // ACC-12 : styles de champ directement sur AppField (sans wrapper ProfileField)
   fieldGroup: {
     gap: 4,
   },
@@ -693,6 +579,18 @@ const styles = StyleSheet.create({
   },
   fieldInput: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: brandSpacing.sm,
+  },
+  emailEditBlock: {
+    gap: brandSpacing.xs + 2,
+  },
+  emailEditActions: {
+    flexDirection: "row",
+    gap: brandSpacing.xs + 2,
+    justifyContent: "flex-end",
+  },
+  // ACC-10 : Logout en bas, style discret
+  logoutButton: {
+    marginTop: brandSpacing.xs,
   },
 })

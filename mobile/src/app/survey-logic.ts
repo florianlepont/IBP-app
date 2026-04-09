@@ -98,12 +98,12 @@ export const resolveSurveyUiStatus = (survey: LocalSurvey): SurveyUiStatus => {
 }
 
 export const formatSurveyUiStatusLabel = (uiStatus: SurveyUiStatus): string => {
-  if (uiStatus === "submitted") return "Submitted"
-  if (uiStatus === "expired") return "Expired"
-  if (uiStatus === "sync_pending") return "Sync pending"
-  if (uiStatus === "sync_error") return "Sync error"
-  if (uiStatus === "sync_blocked") return "Sync blocked"
-  return "Draft"
+  if (uiStatus === "submitted") return "Soumis"
+  if (uiStatus === "expired") return "Expiré"
+  if (uiStatus === "sync_pending") return "Sync en attente"
+  if (uiStatus === "sync_error") return "Erreur de sync"
+  if (uiStatus === "sync_blocked") return "Sync bloqué"
+  return "Brouillon"
 }
 
 export type SurveyWorkflowStatus = "draft" | "pending" | "submitted" | "expired"
@@ -116,10 +116,10 @@ export const resolveSurveyWorkflowStatus = (survey: LocalSurvey): SurveyWorkflow
 }
 
 export const formatSurveyWorkflowStatusLabel = (status: SurveyWorkflowStatus): string => {
-  if (status === "submitted") return "Submitted"
-  if (status === "expired") return "Expired"
-  if (status === "pending") return "Pending"
-  return "Draft"
+  if (status === "submitted") return "Soumis"
+  if (status === "expired") return "Expiré"
+  if (status === "pending") return "En attente"
+  return "Brouillon"
 }
 
 export type SurveySyncDisplay = "local" | "sync" | "sync_error" | "sync_blocked"
@@ -136,8 +136,8 @@ export const resolveSurveySyncDisplay = (survey: LocalSurvey): SurveySyncDisplay
 
 export const formatSurveySyncDisplayLabel = (syncDisplay: SurveySyncDisplay): string => {
   if (syncDisplay === "sync") return "Sync"
-  if (syncDisplay === "sync_error") return "Sync error"
-  if (syncDisplay === "sync_blocked") return "Sync blocked"
+  if (syncDisplay === "sync_error") return "Erreur de sync"
+  if (syncDisplay === "sync_blocked") return "Sync bloqué"
   return "Local"
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { Alert, View } from "react-native"
-import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
+import { Alert, StyleSheet, View } from "react-native"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
 import { initLocalDb } from "./src/storage/db"
 import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
@@ -13,9 +13,10 @@ import { useSurveySync } from "./src/hooks/useSurveySync"
 import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
-import { PreAuthNavigator } from "./src/app/PreAuthNavigator"
 import { loadStoredApiUrl, saveStoredApiUrl } from "./src/app/api-url-storage"
 import { DEFAULT_API_URL } from "./src/app/constants"
+import { AuthGateScreen } from "./src/screens/AuthGateScreen"
+import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL)
@@ -119,65 +120,86 @@ export default function App() {
     setStatus(`Survey ${surveyId} opened`)
   }
 
+  const needsProfileSetup =
+    !profileSetupSkipped &&
+    surveySync.currentUser != null &&
+    !surveySync.currentUser.first_name &&
+    !surveySync.currentUser.last_name
+
+  const showAuthOverlay = !surveySync.isAuthenticated
+  const showProfileSetupOverlay = surveySync.isAuthenticated && needsProfileSetup
+
   return (
-    <SafeAreaProvider>
-      <SafeAreaView
-        style={styles.container}
-        edges={surveySync.isAuthenticated ? ["top", "left", "right"] : ["left", "right"]}
-      >
-        <View style={styles.appLayout}>
-          {!surveySync.isAuthenticated ? (
-            <PreAuthNavigator
-              apiUrl={apiUrl}
-              onApiUrlChange={handleApiUrlChange}
-              onLogin={surveySync.handleLogin}
-              status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
-              logoSource={require("./assets/logo-app.png")}
-              heroMartenSource={require("./assets/auth/marten.png")}
-            />
-          ) : !profileSetupSkipped &&
-            surveySync.currentUser &&
-            !surveySync.currentUser.first_name &&
-            !surveySync.currentUser.last_name ? (
-            <ProfileSetupScreen
-              saving={surveySync.profileUpdating}
-              logoSource={require("./assets/logo-app.png")}
-              onSave={async (firstName, lastName) => {
-                await surveySync.handleUpdateProfile({
-                  first_name: firstName,
-                  last_name: lastName,
-                  display_name: [firstName, lastName].filter(Boolean).join(" "),
-                })
-              }}
-              onSkip={() => setProfileSetupSkipped(true)}
-            />
-          ) : (
-            <AuthenticatedAppNavigation
-              apiUrl={apiUrl}
-              formMode={formMode}
-              editingSurveyId={editingSurveyId}
-              surveyDetailTab={surveyDetailTab}
-              setSurveyDetailTab={setSurveyDetailTab}
-              surveyForm={surveyForm}
-              surveyList={surveyList}
-              surveySync={surveySync}
-              publicMapExplorer={publicMapExplorer}
-              ownSurveyIds={ownSurveyIds}
-              onOpenCreateSurvey={editing.handleOpenCreateSurvey}
-              onOpenSurvey={handleOpenSurvey}
-              onStartEditSurvey={editing.handleStartEditSurvey}
-              onRenameSurvey={draftPatcher.handleRenameSurvey}
-              onUpdateRegionVersion={draftPatcher.handleUpdateSurveyRegionVersion}
-              onUpdateVegetationStage={draftPatcher.handleUpdateSurveyVegetationStage}
-              onSaveSurveyEdits={editing.handleSaveSurveyEdits}
-              onCreateDraft={editing.handleCreateDraft}
-              onCaptureGpsLocation={gpsCapture.handleCaptureGpsLocation}
-              onApiUrlChange={handleApiUrlChange}
-              onCloseSurveyDetailSelection={closeSurveyDetailSelection}
-            />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <SafeAreaView style={styles.container} edges={["left", "right"]}>
+            <View style={styles.appLayout}>
+              <AuthenticatedAppNavigation
+                apiUrl={apiUrl}
+                formMode={formMode}
+                editingSurveyId={editingSurveyId}
+                surveyDetailTab={surveyDetailTab}
+                setSurveyDetailTab={setSurveyDetailTab}
+                surveyForm={surveyForm}
+                surveyList={surveyList}
+                surveySync={surveySync}
+                publicMapExplorer={publicMapExplorer}
+                ownSurveyIds={ownSurveyIds}
+                onOpenCreateSurvey={editing.handleOpenCreateSurvey}
+                onOpenSurvey={handleOpenSurvey}
+                onStartEditSurvey={editing.handleStartEditSurvey}
+                onRenameSurvey={draftPatcher.handleRenameSurvey}
+                onUpdateRegionVersion={draftPatcher.handleUpdateSurveyRegionVersion}
+                onUpdateVegetationStage={draftPatcher.handleUpdateSurveyVegetationStage}
+                onSaveSurveyEdits={editing.handleSaveSurveyEdits}
+                onCreateDraft={editing.handleCreateDraft}
+                onCaptureGpsLocation={gpsCapture.handleCaptureGpsLocation}
+                onApiUrlChange={handleApiUrlChange}
+                onCloseSurveyDetailSelection={closeSurveyDetailSelection}
+              />
+            </View>
+          </SafeAreaView>
+
+          {/* Auth screens rendered as overlays — outside the navigation tree so the
+            NavigationContainer (and native tab bar) is always mounted and stable. */}
+          {showAuthOverlay && (
+            <View style={overlayStyles.fill}>
+              <AuthGateScreen
+                apiUrl={apiUrl}
+                onApiUrlChange={handleApiUrlChange}
+                onLogin={surveySync.handleLogin}
+                status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
+                logoSource={require("./assets/logo-app.png")}
+                heroMartenSource={require("./assets/auth/marten.png")}
+              />
+            </View>
+          )}
+          {showProfileSetupOverlay && (
+            <View style={overlayStyles.fill}>
+              <ProfileSetupScreen
+                saving={surveySync.profileUpdating}
+                logoSource={require("./assets/logo-app.png")}
+                onSave={async (firstName, lastName) => {
+                  await surveySync.handleUpdateProfile({
+                    first_name: firstName,
+                    last_name: lastName,
+                    display_name: [firstName, lastName].filter(Boolean).join(" "),
+                  })
+                }}
+                onSkip={() => setProfileSetupSkipped(true)}
+              />
+            </View>
           )}
         </View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   )
 }
+
+const overlayStyles = StyleSheet.create({
+  fill: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
+})
