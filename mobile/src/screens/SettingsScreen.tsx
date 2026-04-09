@@ -110,14 +110,10 @@ export function SettingsScreen({
   }
 
   const confirmDebugResetIbpData = () => {
-    Alert.alert(
-      "Vider la base IBP",
-      "Toutes les données IBP locales seront supprimées.",
-      [
-        { text: "Annuler", style: "cancel" },
-        { text: "Vider", style: "destructive", onPress: () => void onDebugResetIbpData() },
-      ],
-    )
+    Alert.alert("Vider la base IBP", "Toutes les données IBP locales seront supprimées.", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Vider", style: "destructive", onPress: () => void onDebugResetIbpData() },
+    ])
   }
 
   const confirmDebugResetUserData = () => {
@@ -154,11 +150,7 @@ export function SettingsScreen({
     >
       {/* Feedback de statut — en tête pour visibilité immédiate */}
       {status.trim() ? (
-        <AppNotice
-          message={status}
-          tone="info"
-          icon="information-circle-outline"
-        />
+        <AppNotice message={status} tone="info" icon="information-circle-outline" />
       ) : null}
 
       {/* Zone 1 — Compte (production) */}

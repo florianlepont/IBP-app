@@ -154,12 +154,20 @@ function resolveAttentionStyle(uiStatus: ReturnType<typeof resolveSurveyUiStatus
   iconColor: string
 } {
   if (uiStatus === "sync_blocked" || uiStatus === "sync_error") {
-    return { bg: brandColors.errorSoft, iconName: "alert-circle", iconColor: brandColors.terracotta }
+    return {
+      bg: brandColors.errorSoft,
+      iconName: "alert-circle",
+      iconColor: brandColors.terracotta,
+    }
   }
   if (uiStatus === "expired") {
     return { bg: brandColors.warningSoft, iconName: "time", iconColor: brandColors.ochre }
   }
-  return { bg: brandColors.panel, iconName: "information-circle", iconColor: brandColors.textSecondary }
+  return {
+    bg: brandColors.panel,
+    iconName: "information-circle",
+    iconColor: brandColors.textSecondary,
+  }
 }
 
 function parseSurveyDate(value: string): number {
@@ -183,7 +191,13 @@ function triggerHaptic() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 // P3-PERSON-05: severity tint + P1-A11Y-01: funnel affordance
-function SurveyStatTile({ label, value, severity = "neutral", onPress, accessibilityLabel }: SurveyStatTileProps) {
+function SurveyStatTile({
+  label,
+  value,
+  severity = "neutral",
+  onPress,
+  accessibilityLabel,
+}: SurveyStatTileProps) {
   const chipBg =
     severity === "danger"
       ? "rgba(205,88,51,0.20)"
@@ -199,13 +213,18 @@ function SurveyStatTile({ label, value, severity = "neutral", onPress, accessibi
 
   return (
     <Pressable
-      onPress={() => { triggerHaptic(); onPress() }}
+      onPress={() => {
+        triggerHaptic()
+        onPress()
+      }}
       style={({ pressed }) => [pressed && styles.statTilePressed]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
     >
       <View style={[styles.statTile, { backgroundColor: chipBg, borderColor: chipBorder }]}>
-        <Text style={styles.statTileText}>{value} {label}</Text>
+        <Text style={styles.statTileText}>
+          {value} {label}
+        </Text>
         {/* P1-A11Y-01: subtle funnel affordance hinting the tile is interactive */}
         <Ionicons name="funnel-outline" size={9} color="rgba(255,255,255,0.50)" />
       </View>
@@ -339,7 +358,8 @@ export function SurveyListScreen({
     items.sort((left, right) => {
       const leftStatus = resolveSurveyUiStatus(left)
       const rightStatus = resolveSurveyUiStatus(right)
-      const priorityDelta = resolveAttentionPriority(leftStatus) - resolveAttentionPriority(rightStatus)
+      const priorityDelta =
+        resolveAttentionPriority(leftStatus) - resolveAttentionPriority(rightStatus)
       if (priorityDelta !== 0) return priorityDelta
       return parseSurveyDate(right.updated_at) - parseSurveyDate(left.updated_at)
     })
@@ -361,10 +381,7 @@ export function SurveyListScreen({
   }, [continueDraftSurvey, attentionSurveys])
 
   const mainListSurveys = useMemo(
-    () =>
-      showHero
-        ? visibleSurveys.filter((s) => !excludedIds.has(s.id))
-        : visibleSurveys,
+    () => (showHero ? visibleSurveys.filter((s) => !excludedIds.has(s.id)) : visibleSurveys),
     [showHero, visibleSurveys, excludedIds],
   )
 
@@ -394,7 +411,14 @@ export function SurveyListScreen({
       return `${visibleSurveys.length} sur ${surveys.length} affichés • ${totalFilterCount} filtre${totalFilterCount > 1 ? "s" : ""} actif${totalFilterCount > 1 ? "s" : ""}`
     }
     return `${surveyStats.total} relevés • ${surveyStats.draft} brouillons • ${surveyStats.pending} en attente`
-  }, [totalFilterCount, visibleSurveys.length, surveys.length, surveyStats.total, surveyStats.draft, surveyStats.pending])
+  }, [
+    totalFilterCount,
+    visibleSurveys.length,
+    surveys.length,
+    surveyStats.total,
+    surveyStats.draft,
+    surveyStats.pending,
+  ])
 
   const createSurveyCardCopy = useMemo(
     () =>
@@ -426,10 +450,8 @@ export function SurveyListScreen({
       return `${surveyStats.blocked} relevé${surveyStats.blocked > 1 ? "s" : ""} nécessite${surveyStats.blocked > 1 ? "nt" : ""} votre attention.`
     if (attentionSurveys.length > 0)
       return `${attentionSurveys.length} relevé${attentionSurveys.length > 1 ? "s" : ""} à examiner.`
-    if (continueDraftSurvey)
-      return `${continueDraftSurvey.site_name} vous attend.`
-    if (surveyStats.submitted > 0 && surveyStats.draft === 0)
-      return "Tous vos relevés sont à jour."
+    if (continueDraftSurvey) return `${continueDraftSurvey.site_name} vous attend.`
+    if (surveyStats.submitted > 0 && surveyStats.draft === 0) return "Tous vos relevés sont à jour."
     return "Retrouvez vos relevés et reprenez où vous vous êtes arrêté."
   }, [surveys.length, surveyStats, attentionSurveys.length, continueDraftSurvey])
 
@@ -454,7 +476,10 @@ export function SurveyListScreen({
       {
         label: "en attente",
         value: String(surveyStats.pending),
-        severity: (surveyStats.pending > 0 ? "warning" : "neutral") as "neutral" | "warning" | "danger",
+        severity: (surveyStats.pending > 0 ? "warning" : "neutral") as
+          | "neutral"
+          | "warning"
+          | "danger",
         onPress: () => setSyncFilter("pending"),
         accessibilityLabel: `${surveyStats.pending} en attente de sync — appuyer pour filtrer`,
       },
@@ -482,11 +507,11 @@ export function SurveyListScreen({
   const baseExpandedHeroHeight = Math.max(190, Math.min(215, Math.round(viewportHeight * 0.22)))
   const measuredExpandedHeroHeight =
     heroExpandedHeaderHeight > 0 && heroStatsRowHeight > 0
-      ? HERO_EXPANDED_PADDING_TOP
-        + heroExpandedHeaderHeight
-        + HERO_EXPANDED_CONTENT_GAP
-        + heroStatsRowHeight
-        + HERO_EXPANDED_PADDING_BOTTOM
+      ? HERO_EXPANDED_PADDING_TOP +
+        heroExpandedHeaderHeight +
+        HERO_EXPANDED_CONTENT_GAP +
+        heroStatsRowHeight +
+        HERO_EXPANDED_PADDING_BOTTOM
       : 0
   const expandedHeroHeight = Math.max(baseExpandedHeroHeight, measuredExpandedHeroHeight)
   const collapsedHeroHeight = 88
@@ -544,10 +569,7 @@ export function SurveyListScreen({
       {showHero ? (
         <Animated.View
           pointerEvents="box-none"
-          style={[
-            styles.heroShell,
-            { height: heroShellHeight, paddingTop: heroTopInset },
-          ]}
+          style={[styles.heroShell, { height: heroShellHeight, paddingTop: heroTopInset }]}
         >
           <View pointerEvents="box-none" style={styles.heroCard}>
             {/* Decorative brand mark */}
@@ -615,7 +637,12 @@ export function SurveyListScreen({
 
             {/* P1-PERSON-01: BrandBump at the bottom of the hero card */}
             <View pointerEvents="none">
-              <BrandBump width={heroCardWidth} height={22} color={brandColors.moss} opacity={0.16} />
+              <BrandBump
+                width={heroCardWidth}
+                height={22}
+                color={brandColors.moss}
+                opacity={0.16}
+              />
             </View>
           </View>
         </Animated.View>
@@ -635,10 +662,9 @@ export function SurveyListScreen({
         }}
         stickyHeaderIndices={showFiltersPanel ? (useNativeSearchUI ? [0] : [1]) : undefined}
         contentInsetAdjustmentBehavior={useNativeSearchUI ? "automatic" : "never"}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false },
-        )}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: false,
+        })}
         refreshControl={
           onRefresh ? (
             <RefreshControl
@@ -674,7 +700,11 @@ export function SurveyListScreen({
                 </View>
 
                 <Pressable
-                  accessibilityLabel={advancedFiltersOpen ? "Masquer les filtres avancés" : "Afficher les filtres avancés"}
+                  accessibilityLabel={
+                    advancedFiltersOpen
+                      ? "Masquer les filtres avancés"
+                      : "Afficher les filtres avancés"
+                  }
                   accessibilityRole="button"
                   accessibilityState={{ expanded: advancedFiltersOpen }}
                   style={styles.advancedToggle}
@@ -727,7 +757,7 @@ export function SurveyListScreen({
               ) : null}
 
               {/* P2-COMPACT-02: Status chips only when active filter or advanced panel open */}
-              {(statusFilter !== "all" || advancedFiltersOpen) ? (
+              {statusFilter !== "all" || advancedFiltersOpen ? (
                 <FilterSection
                   label="Statut"
                   options={STATUS_OPTIONS}
@@ -805,7 +835,10 @@ export function SurveyListScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={createSurveyCardCopy.accessibilityLabel}
-            onPress={() => { triggerHaptic(); onOpenCreateSurvey() }}
+            onPress={() => {
+              triggerHaptic()
+              onOpenCreateSurvey()
+            }}
             style={({ pressed }) => [pressed && styles.createSurveyCardPressed]}
           >
             <AppCard variant="panelElevated" padding={16} style={styles.createSurveyCard}>
@@ -819,7 +852,9 @@ export function SurveyListScreen({
                 </View>
 
                 <View style={styles.createSurveyActionPill}>
-                  <Text style={styles.createSurveyActionText}>{createSurveyCardCopy.actionLabel}</Text>
+                  <Text style={styles.createSurveyActionText}>
+                    {createSurveyCardCopy.actionLabel}
+                  </Text>
                   <Ionicons name="arrow-forward" size={14} color={brandColors.white} />
                 </View>
               </View>
@@ -856,21 +891,29 @@ export function SurveyListScreen({
                   key={survey.id}
                   accessibilityRole="button"
                   accessibilityLabel={`${survey.site_name}, ${formatSurveyUiStatusLabel(uiStatus)}`}
-                  onPress={() => { triggerHaptic(); onOpenSurvey(survey.id) }}
+                  onPress={() => {
+                    triggerHaptic()
+                    onOpenSurvey(survey.id)
+                  }}
                   style={({ pressed }) => [
                     styles.attentionRow,
                     { backgroundColor: bg },
                     pressed && styles.rowPressed,
                   ]}
                 >
-                  <Ionicons name={iconName} size={18} color={iconColor} style={styles.attentionRowIcon} />
+                  <Ionicons
+                    name={iconName}
+                    size={18}
+                    color={iconColor}
+                    style={styles.attentionRowIcon}
+                  />
                   <View style={styles.attentionRowCopy}>
                     <Text numberOfLines={1} style={styles.attentionRowTitle}>
                       {survey.site_name}
                     </Text>
                     <Text numberOfLines={1} style={styles.attentionRowMeta}>
-                      {formatSyncErrorForUser(survey.last_sync_error)
-                        ?? `Mis à jour ${formatShortDateTime(survey.updated_at)}`}
+                      {formatSyncErrorForUser(survey.last_sync_error) ??
+                        `Mis à jour ${formatShortDateTime(survey.updated_at)}`}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
@@ -881,7 +924,8 @@ export function SurveyListScreen({
             {/* "Voir N autres" if more than 2 */}
             {hiddenAttentionCount > 0 ? (
               <Text style={styles.seeMoreText}>
-                +{hiddenAttentionCount} autre{hiddenAttentionCount > 1 ? "s" : ""} relevé{hiddenAttentionCount > 1 ? "s" : ""} à examiner
+                +{hiddenAttentionCount} autre{hiddenAttentionCount > 1 ? "s" : ""} relevé
+                {hiddenAttentionCount > 1 ? "s" : ""} à examiner
               </Text>
             ) : null}
 
@@ -895,7 +939,10 @@ export function SurveyListScreen({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Continuer le brouillon : ${continueDraftSurvey.site_name}`}
-                onPress={() => { triggerHaptic(); onOpenSurvey(continueDraftSurvey.id) }}
+                onPress={() => {
+                  triggerHaptic()
+                  onOpenSurvey(continueDraftSurvey.id)
+                }}
                 style={({ pressed }) => [styles.draftRow, pressed && styles.rowPressed]}
               >
                 <View style={styles.draftIconWrap}>
@@ -910,7 +957,9 @@ export function SurveyListScreen({
                     <View
                       style={[
                         styles.progressFill,
-                        { width: `${Math.max(4, Math.min(100, continueDraftSurvey.completion_rate))}%` },
+                        {
+                          width: `${Math.max(4, Math.min(100, continueDraftSurvey.completion_rate))}%`,
+                        },
                       ]}
                     />
                   </View>
@@ -989,7 +1038,10 @@ export function SurveyListScreen({
                   isSelected ? styles.surveyCardSelected : null,
                   pressed && styles.surveyCardPressed,
                 ]}
-                onPress={() => { triggerHaptic(); onOpenSurvey(survey.id) }}
+                onPress={() => {
+                  triggerHaptic()
+                  onOpenSurvey(survey.id)
+                }}
               >
                 {/* Accent bar — transparent for neutral (N-06) */}
                 <View
@@ -1087,7 +1139,6 @@ export function SurveyListScreen({
 
         {showHero ? <View style={{ height: brandSpacing.xl }} /> : null}
       </Animated.ScrollView>
-
     </View>
   )
 }

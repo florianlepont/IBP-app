@@ -123,9 +123,8 @@ function getNativeTabNavigator(): TabNavigatorLike {
   // Keep the native tabs package out of module initialization so unsupported
   // runtimes can still boot and fall back cleanly.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const nativeBottomTabsModule = require("@bottom-tabs/react-navigation") as typeof import(
-    "@bottom-tabs/react-navigation"
-  )
+  const nativeBottomTabsModule =
+    require("@bottom-tabs/react-navigation") as typeof import("@bottom-tabs/react-navigation")
   return nativeBottomTabsModule.createNativeBottomTabNavigator<RootTabParamList>() as TabNavigatorLike
 }
 
@@ -362,7 +361,11 @@ function SurveysTabNavigator({
           {({ navigation }) => (
             <SurveyListScreen
               surveys={surveyList.surveys}
-              visibleSurveys={hasDedicatedSearchTab && !searchEntry ? surveyList.surveys : surveyList.visibleSurveys}
+              visibleSurveys={
+                hasDedicatedSearchTab && !searchEntry
+                  ? surveyList.surveys
+                  : surveyList.visibleSurveys
+              }
               selectedSurveyId={surveyList.selectedSurveyId}
               attachmentsBySurvey={surveyList.attachmentsBySurvey}
               surveyQuery={surveyList.surveyQuery}
@@ -590,9 +593,7 @@ function PublicMapTabNavigator({
 }: PublicMapTabProps) {
   return (
     <View style={styles.tabScreenContainer}>
-      <PublicMapStack.Navigator
-        screenOptions={{ ...baseStackScreenOptions, headerShown: false }}
-      >
+      <PublicMapStack.Navigator screenOptions={{ ...baseStackScreenOptions, headerShown: false }}>
         <PublicMapStack.Screen name="publicMapHome">
           {() => (
             <PublicMapTab
@@ -723,10 +724,7 @@ function NativeRootTabs({
   const NativeTab = nativeTabRef.current
 
   return (
-    <NativeTab.Navigator
-      screenOptions={nativeTabScreenOptions}
-      minimizeBehavior="automatic"
-    >
+    <NativeTab.Navigator screenOptions={nativeTabScreenOptions} minimizeBehavior="automatic">
       <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(surveySync)}>
         {() => <SurveysTabNavigator {...surveysProps} useNativeNav />}
       </NativeTab.Screen>

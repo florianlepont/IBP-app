@@ -13,7 +13,12 @@ type BrandBumpProps = {
   opacity?: number
 }
 
-export function BrandBump({ width, height = 20, color = "#89A33A", opacity = 0.18 }: BrandBumpProps) {
+export function BrandBump({
+  width,
+  height = 20,
+  color = "#89A33A",
+  opacity = 0.18,
+}: BrandBumpProps) {
   // Bump occupies right 60% of the container, never centered — per charter
   const startX = width * 0.38
   const endX = width

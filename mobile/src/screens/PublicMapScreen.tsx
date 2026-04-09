@@ -369,7 +369,12 @@ export function PublicMapScreen({
         ) : null}
       </View>
 
-      <View style={[screenStyles.bottomDock, { bottom: Math.max(12, Math.max(tabBarHeight, insets.bottom) + 10) }]}>
+      <View
+        style={[
+          screenStyles.bottomDock,
+          { bottom: Math.max(12, Math.max(tabBarHeight, insets.bottom) + 10) },
+        ]}
+      >
         {showEmptyDock ? (
           <AppCard variant="panelElevated" padding={14} style={screenStyles.emptyDockBubble}>
             <Text style={screenStyles.emptyDockText}>No public items found</Text>
@@ -395,7 +400,10 @@ export function PublicMapScreen({
         <AppCard
           variant="panelElevated"
           padding={14}
-          style={[screenStyles.reportCard, { bottom: Math.max(84, Math.max(tabBarHeight, insets.bottom) + 62) }]}
+          style={[
+            screenStyles.reportCard,
+            { bottom: Math.max(84, Math.max(tabBarHeight, insets.bottom) + 62) },
+          ]}
         >
           <AppSectionHeader
             title={`Survey ${selectedItem.survey_id}`}

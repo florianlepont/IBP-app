@@ -201,14 +201,10 @@ export function AccountScreen({
 
   // ACC-I05 : confirmation avant déconnexion
   const handleLogout = (): void => {
-    Alert.alert(
-      "Se déconnecter",
-      "Vous serez déconnecté de votre compte.",
-      [
-        { text: "Annuler", style: "cancel" },
-        { text: "Se déconnecter", style: "destructive", onPress: () => void onLogout() },
-      ],
-    )
+    Alert.alert("Se déconnecter", "Vous serez déconnecté de votre compte.", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Se déconnecter", style: "destructive", onPress: () => void onLogout() },
+    ])
   }
 
   // ACC-C02 : état de chargement quand currentUser n'est pas encore disponible
@@ -243,7 +239,11 @@ export function AccountScreen({
       }}
     >
       {/* ACC-14 : Carte d'identité en variant hero (fond forest) */}
-      <AppCard variant="hero" padding={brandComponentTokens.card.compactPadding} style={styles.identityCard}>
+      <AppCard
+        variant="hero"
+        padding={brandComponentTokens.card.compactPadding}
+        style={styles.identityCard}
+      >
         <View style={styles.identityRow}>
           {/* ACC-11 : Avatar avec badge caméra */}
           <Pressable
@@ -293,7 +293,11 @@ export function AccountScreen({
       </AppCard>
 
       {/* Carte profil */}
-      <AppCard variant="panelElevated" padding={brandComponentTokens.card.compactPadding} style={styles.panel}>
+      <AppCard
+        variant="panelElevated"
+        padding={brandComponentTokens.card.compactPadding}
+        style={styles.panel}
+      >
         {/* ACC-07 : AppSectionHeader au lieu du header custom */}
         <AppSectionHeader
           title="Profil"
@@ -377,9 +381,7 @@ export function AccountScreen({
               inputStyle={styles.fieldInput}
               returnKeyType="done"
               // ACC-06 : afficher une erreur inline si email invalide
-              error={
-                newEmail.length > 0 && !isValidEmail(newEmail) ? "Email invalide" : undefined
-              }
+              error={newEmail.length > 0 && !isValidEmail(newEmail) ? "Email invalide" : undefined}
             />
             <View style={styles.emailEditActions}>
               <AppButton

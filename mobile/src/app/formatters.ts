@@ -32,9 +32,15 @@ export const formatShortDateTime = (value?: string | null): string => {
 const SYNC_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /site_name.*required|required.*site_name/i, message: "Le nom du site est manquant" },
   { pattern: /region.*required|required.*region/i, message: "La région est manquante" },
-  { pattern: /vegetation.*required|required.*vegetation/i, message: "Le stade de végétation est manquant" },
+  {
+    pattern: /vegetation.*required|required.*vegetation/i,
+    message: "Le stade de végétation est manquant",
+  },
   { pattern: /HTTP 4\d\d/i, message: "Données invalides — ouvrez le relevé pour corriger" },
-  { pattern: /HTTP 5\d\d|network|timeout|ECONNREFUSED/i, message: "Erreur réseau — réessayez plus tard" },
+  {
+    pattern: /HTTP 5\d\d|network|timeout|ECONNREFUSED/i,
+    message: "Erreur réseau — réessayez plus tard",
+  },
   { pattern: /unauthorized|401|forbidden|403/i, message: "Session expirée — reconnectez-vous" },
 ]
 
