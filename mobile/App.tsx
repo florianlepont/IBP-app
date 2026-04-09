@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Alert, StyleSheet, View } from "react-native"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
 import { initLocalDb } from "./src/storage/db"
 import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
@@ -129,6 +130,7 @@ export default function App() {
   const showProfileSetupOverlay = surveySync.isAuthenticated && needsProfileSetup
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
       <View style={styles.container}>
         <SafeAreaView style={styles.container} edges={["left", "right"]}>
@@ -191,6 +193,7 @@ export default function App() {
         )}
       </View>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   )
 }
 
@@ -200,3 +203,4 @@ const overlayStyles = StyleSheet.create({
     zIndex: 100,
   },
 })
+

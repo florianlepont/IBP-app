@@ -724,7 +724,6 @@ function NativeRootTabs({
   return (
     <NativeTab.Navigator
       screenOptions={nativeTabScreenOptions}
-      scrollEdgeAppearance="transparent"
       minimizeBehavior="automatic"
     >
       <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(surveySync)}>
