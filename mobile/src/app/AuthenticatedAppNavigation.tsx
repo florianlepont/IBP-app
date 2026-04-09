@@ -4,6 +4,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   View,
 } from "react-native"
 import {
@@ -109,7 +110,7 @@ type TabNavigatorLike = {
 // ─── Native availability detection ───────────────────────────────────────────
 
 function isNativeBottomTabViewAvailable(): boolean {
-  if (Platform.OS === "web") return false
+  if (Platform.OS !== "ios") return false
   // Opt-out via env var (set EXPO_PUBLIC_ENABLE_NATIVE_TABS=false to force JS tabs)
   if (process.env.EXPO_PUBLIC_ENABLE_NATIVE_TABS === "false") return false
   return (
@@ -835,7 +836,12 @@ function AppTabs(props: AuthenticatedAppNavigationProps) {
     }
   }, [nativeBottomTabsAvailable])
 
-  return nativeBottomTabsAvailable ? <NativeRootTabs {...props} /> : <JsRootTabs {...props} />
+  return (
+    <>
+      <StatusBar barStyle={Platform.OS === "android" ? "dark-content" : "light-content"} />
+      {nativeBottomTabsAvailable ? <NativeRootTabs {...props} /> : <JsRootTabs {...props} />}
+    </>
+  )
 }
 
 export function AuthenticatedAppNavigation(props: AuthenticatedAppNavigationProps) {
