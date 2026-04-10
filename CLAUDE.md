@@ -1,0 +1,365 @@
+# CLAUDE.md — IBP App
+
+## Project overview
+
+IBP (Indice de Biodiversité Potentielle) is a field-survey mobile app that lets ecologists record biodiversity assessments on land parcels. Observers score ten factors (A–J) in the field; the app works offline and syncs to a backend when connectivity is restored.
+
+This is an **npm workspaces monorepo** with two packages:
+
+| Package | Path | Description |
+|---------|------|-------------|
+| `mobile` | `mobile/` | Expo / React Native iOS + Android client |
+| `api` | `api/` | NestJS REST API with PostgreSQL |
+
+Other top-level directories:
+
+| Directory | Description |
+|-----------|-------------|
+| `infra/` | Docker Compose files for local dev and Freebox deployment |
+| `docs/` | Technical architecture, API/data contracts, ADRs, product specs |
+| `media/` | Design assets |
+| `.github/workflows/` | CI (`ci.yml`) and deploy (`deploy.yml`) pipelines |
+
+---
+
+## Tech stack
+
+| Concern | Technology |
+|---------|-----------|
+| Mobile framework | React Native 0.81.5 + Expo 54 |
+| Mobile language | TypeScript 5.x (strict) |
+| Mobile navigation | React Navigation (native-stack + bottom-tabs) |
+| Mobile local DB | Expo SQLite (`ibp-local.db`) |
+| Mobile secure store | Expo SecureStore (tokens) |
+| API framework | NestJS 11 (Node 20+) |
+| API language | TypeScript 5.9 |
+| Database | PostgreSQL 16 (raw SQL via `pg`, no ORM) |
+| Auth | Auth0 — RS256 JWT validated against JWKS; native Auth0 SDK on mobile |
+| Object storage | S3-compatible: MinIO (local dev), configurable for AWS S3 (prod) |
+| Maps | React Native Maps 1.20 |
+| Testing | Jest 29 + ts-jest; Supertest for API E2E |
+| Linting | ESLint 8 + `@typescript-eslint` |
+| Formatting | Prettier 3.8 |
+
+---
+
+## Local setup
+
+### Prerequisites
+
+- Node.js 20+
+- npm 10+
+- Docker Desktop
+
+### Steps
+
+```bash
+npm install
+cp api/.env.example api/.env       # fill in secrets
+cp mobile/.env.example mobile/.env # fill in Auth0 / API URL
+docker compose -f infra/docker-compose.yml up -d
+npm run dev:api:migrated           # migrate DB then start API
+# in a second terminal:
+npm run dev:mobile                 # start Expo dev server
+```
+
+Useful local URLs:
+- API health: `http://localhost:3000/v1/health`
+- Mobile → API (iOS Simulator): `http://localhost:3000/v1`
+- Mobile → API (Android Emulator): `http://10.0.2.2:3000/v1`
+- Mobile → API (physical device, same Wi-Fi): `http://<LAN_IP>:3000/v1`
+
+---
+
+## Development commands (root)
+
+All commands are run from the repo root.
+
+```bash
+# Start
+npm run dev:api               # start API in watch mode
+npm run dev:api:migrated      # run migrations then start API
+npm run dev:mobile            # start Expo dev server
+
+# Quality
+npm run lint                  # ESLint across both workspaces
+npm run lint:fix              # auto-fix lint issues
+npm run typecheck             # tsc on mobile + api build check
+npm run format                # Prettier write on all .ts/.tsx/.json
+npm run format:check          # Prettier check (used in CI)
+
+# Testing
+npm run test:unit             # unit tests for api + mobile
+npm run test:e2e              # E2E tests for API (requires running DB)
+npm run test                  # unit + E2E
+npm run test:coverage:api     # coverage report for API
+npm run test:coverage:mobile  # coverage report for mobile
+
+# Database
+npm run migrate:api           # run pending SQL migrations
+
+# Native builds
+npm run ios                   # Expo iOS build
+npm run android               # Expo Android build
+```
+
+---
+
+## Code conventions
+
+### Formatting (`.prettierrc.json`)
+
+- Double quotes (`"`)
+- No semicolons
+- Trailing commas everywhere
+- 2-space indent
+- 100-character line width
+
+### Linting (`.eslintrc.json`)
+
+- Unused variables are an **error** — prefix intentionally unused vars/args with `_` to suppress (e.g. `_event`)
+- `no-explicit-any` is a **warning** — avoid `any`; use proper types or `unknown`
+- `no-require-imports` is an **error** — use ES module `import` syntax only
+
+### Naming
+
+- React components: `PascalCase` (files and exports)
+- Hooks: `camelCase` prefixed with `use` (e.g. `useSurveySync`)
+- Utilities / services: `camelCase`
+- Test files: co-located as `*.test.ts(x)` (unit) or in `api/test/` as `*.e2e-spec.ts` (E2E)
+- DTOs: suffix with `Dto` or `Body` (e.g. `SurveyUpsertBody`)
+
+### TypeScript
+
+- Prefer explicit `export type` for type-only exports
+- Strict mode is on — no implicit `any`, no unchecked indexing in hot paths
+- API DTOs use `class-validator` decorators for request validation
+
+---
+
+## Architecture
+
+### Mobile (offline-first)
+
+The mobile app is designed to work without connectivity. All survey data is persisted locally in SQLite before being synced.
+
+**SQLite schema** (`mobile/src/storage/db.ts`):
+- `local_surveys` — survey drafts with sync state and payload
+- `sync_queue` — ordered queue of pending operations (upsert, delete, etc.)
+- `local_attachments` — photo metadata and upload state
+- `app_metadata` — key/value store for app-level state
+
+**Sync flow**:
+1. User actions write to `local_surveys` and enqueue an operation in `sync_queue`
+2. `useSurveySyncNetwork` drains the queue by calling `POST /surveys/sync`
+3. Server returns results; client applies them and clears processed entries
+4. Retry backoff applies on failure (max `MAX_RETRY_COUNT = 8` retries)
+5. Operations that exceed the retry limit are marked `sync_blocked = 1`
+
+**State management** — custom hooks only, no Redux or Context API:
+- `useSurveySync` (`mobile/src/hooks/useSurveySync.ts`) — central orchestrator, consumed directly by `App.tsx`
+- Composed sub-hooks:
+  - `useAuth0Session` — authentication state and token lifecycle
+  - `useSurveySyncNetwork` — network sync operations
+  - `useSurveySyncProfile` — profile sync
+  - `useSurveySyncSurveyOperations` — survey CRUD
+  - `useSurveyForm` — active form state during creation/editing
+  - `useSurveyList` — local survey list cache
+  - `useEditingDraft` — draft editing workflow
+  - `useSurveyDraftPatcher` — incremental patch accumulation
+  - `usePublicMapExplorer` — public map data fetching
+  - `useGpsCapture` — device location capture
+
+**HTTP client** (`mobile/src/api/client.ts`):
+- Thin wrapper over `fetch` with Bearer token injection, timeout handling, and typed `ApiError`
+- Default timeout: 15 s (overridable per-request or via `EXPO_PUBLIC_API_TIMEOUT_MS`)
+- Endpoints defined in `mobile/src/api/ibp-api.ts`
+
+### API (NestJS)
+
+**Module layout** (`api/src/`):
+
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| `auth` | `api/src/auth/` | AuthGuard (JWT/JWKS), `@CurrentUser` decorator, Auth0 management calls |
+| `users` | `api/src/users/` | Profile CRUD, profile picture upload, account deletion |
+| `surveys` | `api/src/surveys/` | Survey CRUD, sync endpoint, IBP validation, parcel linkage, attachments, public map |
+| `database` | `api/src/database/` | `DatabaseService` (pg Pool wrapper) |
+| `reports` | `api/src/reports/` | Moderation/report endpoints |
+| `debug` | `api/src/debug/` | Dev-only data reset endpoints |
+| `common` | `api/src/common/` | Shared utilities and types |
+
+**Database access**: raw SQL via `pg` library through `DatabaseService`. No ORM. Migrations live in `api/migrations/` and run via `api/scripts/migrate.js`.
+
+**Request lifecycle**:
+1. `AuthGuard` validates JWT against Auth0 JWKS (RS256)
+2. On first login, `UsersService` auto-provisions a DB user from Auth0 `/userinfo`
+3. `@CurrentUser()` decorator injects the authenticated user into controllers
+4. Controllers delegate to services; services own business logic and DB queries
+
+**IBP validation**: `IbpRulesService` (`api/src/surveys/ibp-rules.service.ts`) enforces factor scoring rules server-side. The same rules exist on mobile in `mobile/src/app/` for immediate client feedback.
+
+### IBP domain
+
+The IBP score is composed of **10 factors (A–J)**, each representing a biodiversity dimension:
+
+| Factor | Focus area |
+|--------|-----------|
+| A | Native genus count |
+| B | Vegetation strata and native cover |
+| C/D | Deadwood (standing/fallen) |
+| E | Old/veteran trees |
+| F | Tree density |
+| G | Open flowering plant cover |
+| H | Connectivity class |
+| I | Ground cover types |
+| J | Water/wetland types |
+
+Factor validation matrix: `docs/technical/ibp-validation-matrix-v1.md`
+
+---
+
+## Key files
+
+| File | Purpose |
+|------|---------|
+| `mobile/src/App.tsx` | Root component; mounts `useSurveySync` and the navigation tree |
+| `mobile/src/hooks/useSurveySync.ts` | Central sync + state orchestrator |
+| `mobile/src/storage/db.ts` | SQLite schema, `initLocalDb`, constants |
+| `mobile/src/storage/surveys.ts` | Survey read/write helpers |
+| `mobile/src/storage/sync.ts` | Sync queue management |
+| `mobile/src/api/client.ts` | HTTP client wrapper |
+| `mobile/src/api/ibp-api.ts` | All API endpoint definitions |
+| `mobile/src/app/types.ts` | Shared mobile types |
+| `api/src/main.ts` | NestJS bootstrap |
+| `api/src/app.module.ts` | Root module wiring |
+| `api/src/auth/auth.guard.ts` | JWT validation guard |
+| `api/src/surveys/surveys.service.ts` | Core survey business logic |
+| `api/src/surveys/ibp-rules.service.ts` | Server-side IBP scoring rules |
+| `api/src/surveys/surveys-sync.service.ts` | Batch sync handler |
+| `api/src/database/database.service.ts` | pg pool wrapper |
+| `api/migrations/` | Ordered SQL migration files |
+| `docs/technical/technical-architecture-v1.md` | Architecture reference |
+| `docs/technical/api-contract-v1.md` | API endpoint specifications |
+| `docs/technical/sync-conflict-resolution-v1.md` | Offline sync conflict strategy |
+
+---
+
+## Testing
+
+### Unit tests
+
+- Located alongside source files as `*.test.ts` / `*.test.tsx`
+- Run with: `npm run test:unit`
+- Config: `mobile/jest.unit.config.js`, `api/jest.unit.config.js`
+- Mocks: `mobile/src/__mocks__/` and `api/test/__mocks__/`
+
+### E2E tests (API only)
+
+- Located in `api/test/` as `*.e2e-spec.ts`
+- Require a running PostgreSQL instance (Docker Compose)
+- Run with: `npm run test:e2e`
+- Config: `api/jest.config.js`
+- Notable suites: `auth-profile.e2e-spec.ts`, `surveys-idempotency.e2e-spec.ts`
+
+### Before committing
+
+```bash
+npm run lint
+npm run typecheck
+npm run test:unit
+npm run format:check
+```
+
+---
+
+## Environment variables
+
+### API (`api/.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | HTTP port (default: 3000) |
+| `POSTGRES_HOST/PORT/USER/PASSWORD/DB` | PostgreSQL connection |
+| `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET` | JWT secrets |
+| `AUTH0_DOMAIN`, `AUTH0_PUBLIC_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 backend config |
+| `OBJECT_STORAGE_MODE` | `local` or `minio` |
+| `OBJECT_STORAGE_BUCKET/ENDPOINT/REGION/ACCESS_KEY/SECRET_KEY` | S3 config |
+| `ATTACHMENTS_UPLOAD_DIR` | Local upload dir (when mode = local) |
+| `SMTP_ENABLED`, `SMTP_HOST/PORT/USER/PASSWORD/FROM` | Email config |
+| `CADASTRE_PROVIDER` | `synthetic` (offline) or `ign` (real IGN parcels) |
+| `CORS_ORIGIN` | Allowed CORS origin |
+
+### Mobile (`mobile/.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `EXPO_PUBLIC_API_URL` | Backend API base URL |
+| `EXPO_PUBLIC_API_TIMEOUT_MS` | Request timeout in ms (optional, default 15000) |
+| `EXPO_PUBLIC_AUTH0_DOMAIN` | Auth0 domain |
+| `EXPO_PUBLIC_AUTH0_CLIENT_ID` | Auth0 native app client ID |
+| `EXPO_PUBLIC_AUTH0_AUDIENCE` | Auth0 API audience |
+
+---
+
+## CI/CD
+
+### GitHub Actions
+
+**`ci.yml`** — runs on every push and PR to `main`:
+1. Lint (`npm run lint`)
+2. Format check (`npm run format:check`)
+3. Type check (`npm run typecheck`)
+4. Unit tests — mobile + API (`npm run test:unit`)
+5. E2E tests — API against a test PostgreSQL service (`npm run test:e2e`)
+6. Docker image build — only when `api/**` files changed, only on `main` pushes
+
+**`deploy.yml`** — manual trigger:
+- Pushes Docker image to GHCR
+- Restarts the Docker stack on the Freebox via a self-hosted runner
+- Runtime secrets live in `/home/freebox/.env.freebox` on the Freebox machine
+
+### Branch workflow
+
+- Feature work → PR → `main`
+- CI must pass before merge
+- No force-pushes to `main`
+
+---
+
+## Documentation index
+
+```
+docs/
+├── README.md                              # Docs index
+├── technical/
+│   ├── technical-architecture-v1.md       # System architecture
+│   ├── api-contract-v1.md                 # REST API contract
+│   ├── data-contract-v1.md                # DB schema and data model
+│   ├── sync-conflict-resolution-v1.md     # Offline sync conflict strategy
+│   ├── ibp-validation-matrix-v1.md        # Factor scoring rules
+│   ├── publication-visibility-post-submit-v1.md
+│   └── adr-001-technical-stack-and-engineering-principles-v1.md
+├── specs/
+│   ├── README.md                          # Specs index
+│   ├── user-stories.md                    # Full user story backlog
+│   ├── ibp-form-spec.md                   # IBP form field specification
+│   ├── epic-a-access-and-security.md      # Auth, login, account management (MVP)
+│   ├── epic-b-survey-preparation.md       # Parcel selection, site setup (MVP)
+│   ├── epic-c-ibp-survey-data-entry.md    # Factor A–J data entry flows (MVP)
+│   ├── epic-d-offline-and-synchronization.md  # Offline sync behaviour (MVP)
+│   ├── epic-e-data-quality-and-trust.md   # Moderation, validation (V1)
+│   ├── epic-f-participatory-experience-and-gamification.md  # Engagement (V1)
+│   ├── epic-g-ibp-information-association-visibility-and-donation.md  # Public info (V1)
+│   ├── epic-h-forest-insights-and-analytics.md  # Analytics & explore (V2)
+│   ├── epic-i-workshops-training-ma-foret-vivante.md  # Training flows (V1)
+│   └── z-infrastructure.md                # Infrastructure tasks
+├── design/
+│   └── charte-graphique-etats-sauvages-spec.md  # Brand & design system
+├── references/                            # Official IBP methodology PDFs
+└── user-tests/                            # User testing reports
+```
+
+### Recommended reading before making changes
+
+For **any feature work**, read the relevant epic spec(s) and `user-stories.md` first to understand intended UX and acceptance criteria. For **sync or offline changes**, read `sync-conflict-resolution-v1.md`. For **API changes**, read `api-contract-v1.md` and `data-contract-v1.md`.
