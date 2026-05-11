@@ -1,0 +1,3 @@
+api.algernon.ovh {
+	reverse_proxy api:3000
+}
