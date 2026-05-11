@@ -13,7 +13,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ibp}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
 
   minio:
     image: minio/minio:latest
@@ -35,8 +36,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
-    ports:
-      - "3000:3000"
     env_file:
       - /home/freebox/.env.freebox
     environment:
@@ -51,7 +50,23 @@ services:
       OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio}
       OBJECT_STORAGE_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: ibp-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
 
 volumes:
   ibp_postgres_data:
   ibp_minio_data:
+  caddy_data:
+  caddy_config:
