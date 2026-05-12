@@ -226,11 +226,31 @@ Le développement est accéléré par l'utilisation de **Claude** (Anthropic), u
 
 ## 9. Ce que nous vous demandons
 
-Nous avons besoin de votre **validation pour poursuivre** et d'un retour sur :
+### 1. Validation du projet
 
-1. **Les priorités V1** : parmi les fonctionnalités prévues (gamification, modération, don), lesquelles sont les plus urgentes pour Etats Sauvages ?
-2. **La carte publique** : souhaitez-vous qu'elle soit accessible sans compte, ou réservée aux membres ?
-3. **Les tests terrain** : pouvons-nous organiser une session de test avec des observateurs réels avant la mise en production ?
+Votre feu vert pour poursuivre le développement jusqu'à la mise en production.
+
+### 2. Validation des priorités V1
+
+Parmi les fonctionnalités prévues pour la V1, nous avons besoin de savoir lesquelles sont prioritaires pour l'association :
+
+- Gamification (points, badges, classement des observateurs)
+- Signalement de relevés douteux et interface de modération
+- Section Etats Sauvages in-app (mission, impact)
+- Bouton de don intégré
+
+### 3. Validation du budget
+
+Confirmer l'enveloppe annuelle de fonctionnement (~346 €/an) et les frais de lancement (~23 €), afin de prévoir leur prise en charge par l'association.
+
+### 4. Mise à disposition des accès outils
+
+Une fois le MVP finalisé (septembre 2026), nous aurons besoin que l'association fournisse ou ouvre les accès aux services d'hébergement et de distribution :
+
+- **alwaysdata** — compte d'hébergement pour déployer le serveur en production
+- **Apple Developer** — compte développeur pour publier sur l'App Store (la demande de dispense de frais sera faite au nom de l'association)
+- **Google Play Console** — compte pour publier sur Android
+- **Nom de domaine** — accès DNS pour pointer vers le serveur de production
 
 ---
 
