@@ -17,7 +17,23 @@ Aujourd'hui, ces relevés se font **sur papier ou dans des tableurs**, ce qui po
 
 ---
 
-## 2. À qui s'adresse-t-elle ?
+## 2. Comparaison avant / après
+
+| Critère | Aujourd'hui (papier / tableur) | Avec l'appli IBP |
+|---------|-------------------------------|-----------------|
+| Saisie sur le terrain | Papier libre, risque d'oubli | Guidée facteur par facteur |
+| Validation des données | Après coup, de retour au bureau | Immédiate, sur le terrain |
+| Travail sans réseau | ✅ (papier) | ✅ (mode hors ligne natif) |
+| Centralisation des relevés | Ressaisie manuelle dans un tableur | Automatique à la synchronisation |
+| Photos liées au relevé | Fichiers séparés, difficiles à relier | Intégrées directement au relevé |
+| Historique d'une parcelle | Recherche manuelle dans les archives | Affiché automatiquement avant chaque relevé |
+| Risque de perte de données | Élevé (papier mouillé, fichier écrasé) | Nul — sauvegarde locale + cloud |
+| Temps total (terrain + saisie) | ~2h (terrain) + ~30 min (ressaisie) | ~1h30 (terrain uniquement) |
+| Exploitation / analyse future | Ressaisie dans tableur nécessaire | API disponible pour export et analyse |
+
+---
+
+## 3. À qui s'adresse-t-elle ?
 
 | Public | Usage |
 |--------|-------|
@@ -27,37 +43,37 @@ Aujourd'hui, ces relevés se font **sur papier ou dans des tableurs**, ce qui po
 
 ---
 
-## 3. Les grandes fonctionnalités
+## 4. Les grandes fonctionnalités
 
-### 3.1 Saisie guidée des relevés IBP
+### 4.1 Saisie guidée des relevés IBP
 
 L'application guide l'observateur à travers les **dix facteurs IBP (A à J)** un par un. Chaque facteur propose des choix adaptés à la réalité du terrain. Les règles de validation sont appliquées immédiatement : impossible de soumettre un relevé incomplet ou incohérent.
 
 > **Exemple :** si le facteur B (strates de végétation) requiert une valeur minimale pour permettre un score élevé sur le facteur A, l'application le signale instantanément.
 
-### 3.2 Sélection cadastrale sur carte
+### 4.2 Sélection cadastrale sur carte
 
 Avant de commencer un relevé, l'observateur sélectionne la **parcelle cadastrale** directement sur une carte interactive. L'historique des scores précédents sur cette parcelle est affiché pour contexte.
 
-### 3.3 Mode hors ligne complet
+### 4.3 Mode hors ligne complet
 
 C'est un point clé : **l'application fonctionne entièrement sans réseau.** Toutes les données sont stockées localement sur l'appareil. Quand la connexion est rétablie, la synchronisation vers le serveur se déclenche automatiquement, avec gestion des erreurs et des tentatives automatiques.
 
-### 3.4 Photos et pièces jointes
+### 4.4 Photos et pièces jointes
 
 L'observateur peut photographier les éléments remarquables de la parcelle directement depuis l'application. Les photos sont associées au relevé et stockées de façon sécurisée.
 
-### 3.5 Carte publique des relevés
+### 4.5 Carte publique des relevés
 
 Une carte nationale affiche les relevés soumis et validés (données anonymisées). Elle permet d'explorer l'état de la biodiversité potentielle à l'échelle de la France.
 
-### 3.6 Compte sécurisé
+### 4.6 Compte sécurisé
 
 Connexion via email/mot de passe ou compte Google/Apple. Les données de chaque observateur sont isolées et protégées.
 
 ---
 
-## 4. Où en sommes-nous ?
+## 5. Où en sommes-nous ?
 
 ### Ce qui est fait — MVP complet
 
@@ -100,7 +116,18 @@ Le cœur du produit est **fonctionnel et testé**. Un observateur peut aujourd'h
 
 ---
 
-## 5. Coûts de lancement et de fonctionnement
+### Calendrier
+
+| Étape | Période |
+|-------|---------|
+| ✅ MVP terminé | Mai 2026 |
+| 🔵 Tests terrain avec observateurs pilotes | Juin – Juillet 2026 |
+| 🔵 Publication App Store et Google Play | Septembre 2026 |
+| 🔵 Version V1 (gamification, modération, section asso, don) | Décembre 2026 |
+
+---
+
+## 6. Coûts de lancement et de fonctionnement
 
 L'un des atouts du projet est son coût très contenu, notamment grâce aux programmes tarifaires réservés aux associations à but non lucratif.
 
@@ -128,7 +155,44 @@ L'un des atouts du projet est son coût très contenu, notamment grâce aux prog
 
 ---
 
-## 6. La technique en deux mots
+## 7. Données personnelles et RGPD
+
+L'application est conçue dans le respect du Règlement Général sur la Protection des Données (RGPD).
+
+### Quelles données sont collectées ?
+
+| Donnée | Finalité | Durée de conservation |
+|--------|----------|----------------------|
+| Email et nom | Identification du compte | Jusqu'à suppression du compte |
+| Photo de profil | Affichage dans l'appli | Jusqu'à suppression du compte |
+| Localisation GPS | Aide à la sélection de parcelle (non stockée en continu) | Durée du relevé uniquement |
+| Données des relevés (facteurs IBP, photos terrain) | Constitution de la base de données biodiversité | Indéfiniment, anonymisées après suppression du compte |
+
+### Où sont hébergées les données ?
+
+Toutes les données sont hébergées **en Europe** :
+- Serveur et base de données : **alwaysdata, Paris (France)**
+- Authentification : **Auth0, région UE**
+- Photos des relevés : stockage objet avec option hébergement **Union Européenne**
+
+Aucune donnée n'est transmise à des tiers à des fins commerciales.
+
+### Droits des utilisateurs
+
+L'application intègre nativement :
+
+- **Droit d'accès** — chaque observateur consulte ses propres relevés
+- **Droit de rectification** — modification du profil et des relevés en cours
+- **Droit à l'effacement** — suppression du compte depuis l'appli ; les données personnelles sont effacées, les relevés scientifiques sont anonymisés et conservés pour la base de données
+- **Droit à la portabilité** — les données sont exportables via l'API
+
+### Propriété des données
+
+Les relevés IBP soumis appartiennent à **Etats Sauvages**. Les observateurs cèdent leurs données à l'association au moment de la soumission, ce qui est précisé dans les conditions d'utilisation.
+
+---
+
+## 8. La technique en deux mots
 
 *(Pour les curieux — pas indispensable pour valider le projet)*
 
@@ -136,7 +200,7 @@ L'application mobile est développée avec des technologies modernes et standard
 
 ---
 
-## 7. Ce que nous vous demandons
+## 9. Ce que nous vous demandons
 
 Nous avons besoin de votre **validation pour poursuivre** et d'un retour sur :
 
