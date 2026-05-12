@@ -5,15 +5,12 @@
 
 ## 1. Pourquoi cette application ?
 
-La méthode **IBP (Indice de Biodiversité Potentielle)** est un protocole de terrain reconnu qui permet d'évaluer le potentiel de biodiversité d'une parcelle forestière en notant dix facteurs écologiques (arbres natifs, bois mort, vieux arbres, connectivité, zones humides, etc.).
+Aujourd'hui, les relevés IBP se font **sur papier ou dans des tableurs**, ce qui pose deux problèmes majeurs :
 
-Aujourd'hui, ces relevés se font **sur papier ou dans des tableurs**, ce qui pose trois problèmes majeurs :
+- Les données sont difficiles à centraliser et à exploiter — chaque observateur gère ses propres fichiers, sans vue commune ni historique par parcelle
+- Les erreurs de saisie ne sont détectées qu'après le passage sur le terrain, trop tard pour corriger
 
-- Les données sont difficiles à centraliser et à exploiter
-- Les erreurs de saisie sont fréquentes et détectées tard
-- Impossible de travailler sans réseau sur le terrain
-
-**Notre application mobile IBP** résout ces trois problèmes : elle guide l'observateur facteur par facteur, valide les données en temps réel, et fonctionne entièrement hors ligne. Les relevés se synchronisent automatiquement dès le retour en zone couverte.
+**Notre application mobile IBP** résout ces problèmes : elle guide l'observateur facteur par facteur, valide les données en temps réel sur le terrain, et synchronise automatiquement les relevés vers une base commune dès le retour en zone couverte.
 
 ---
 
@@ -39,7 +36,7 @@ Aujourd'hui, ces relevés se font **sur papier ou dans des tableurs**, ce qui po
 |--------|-------|
 | **Écologues et observateurs de terrain** | Saisie des relevés IBP sur smartphone, hors réseau |
 | **Coordinateurs Etats Sauvages** | Suivi des relevés soumis, consultation de l'historique par parcelle |
-| **Grand public (futur)** | Exploration d'une carte nationale des forêts évaluées |
+| **Membres et observateurs bénévoles** | Exploration de la carte des relevés, engagement via la gamification (points, badges, classement) — prévu en V1 |
 
 ---
 
