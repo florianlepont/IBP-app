@@ -76,22 +76,22 @@ Chaque relevé soumis alimente une base de données centralisée. À terme, l'en
 
 ## 5. Où en sommes-nous ?
 
-### Ce qui est fait — MVP complet
+### État actuel — MVP en cours de finalisation
 
-| Fonctionnalité | Statut |
-|----------------|--------|
-| Authentification (email, Google, Apple) | ✅ Terminé |
-| Saisie des 10 facteurs IBP avec validation | ✅ Terminé |
-| Sélection cadastrale sur carte | ✅ Terminé |
-| Mode hors ligne + synchronisation automatique | ✅ Terminé |
-| Photos et pièces jointes | ✅ Terminé |
-| Carte publique des relevés | ✅ Terminé |
-| Historique des scores par parcelle | ✅ Terminé |
-| Gestion du profil utilisateur | ✅ Terminé |
-| API backend sécurisée (serveur) | ✅ Terminé |
-| Base de données (12 migrations validées) | ✅ Terminé |
+| Fonctionnalité | Logique métier | UX & Tests terrain |
+|----------------|---------------|-------------------|
+| Authentification (email, Google, Apple) | ✅ Fonctionnel | 🔵 À tester |
+| Saisie des 10 facteurs IBP avec validation | ✅ Fonctionnel | 🔵 UX à finaliser, à tester |
+| Sélection cadastrale sur carte | ✅ Fonctionnel | 🔵 UX à finaliser, à tester |
+| Mode hors ligne + synchronisation automatique | ✅ Fonctionnel | 🔵 À tester |
+| Photos et pièces jointes | ✅ Fonctionnel | 🔵 À tester |
+| Carte publique des relevés | ✅ Fonctionnel | 🔵 À tester |
+| Historique des scores par parcelle | ✅ Fonctionnel | 🔵 À tester |
+| Gestion du profil utilisateur | ✅ Fonctionnel | 🔵 UX à finaliser, à tester |
+| API backend sécurisée (serveur) | ✅ Fonctionnel | 🔵 À tester |
+| Base de données | ⚠️ PoC fonctionnel | 🔵 Déploiement sur solution pérenne à faire |
 
-Le cœur du produit est **fonctionnel et testé**. Un observateur peut aujourd'hui créer un compte, réaliser un relevé IBP complet sur le terrain sans réseau, et le retrouver synchronisé à son retour au bureau.
+Toute la logique métier est en place et fonctionne. La prochaine étape est la **finalisation de l'UX, les tests terrain avec de vrais observateurs, et le déploiement de la base de données sur une infrastructure de production**.
 
 ---
 
