@@ -32,11 +32,15 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 function getCentroid(item: PublicParcelStatusItem): { lat: number; lng: number } | null {
   if (!item.geometry) return null
-  const coords = item.geometry.type === "Polygon"
-    ? (item.geometry.coordinates as number[][][])[0]
-    : (item.geometry.coordinates as number[][][][])[0][0]
+  const coords =
+    item.geometry.type === "Polygon"
+      ? (item.geometry.coordinates as number[][][])[0]
+      : (item.geometry.coordinates as number[][][][])[0][0]
   if (!coords?.length) return null
-  const sum = coords.reduce((acc, [lng, lat]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), { lat: 0, lng: 0 })
+  const sum = coords.reduce((acc, [lng, lat]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), {
+    lat: 0,
+    lng: 0,
+  })
   return { lat: sum.lat / coords.length, lng: sum.lng / coords.length }
 }
 
@@ -82,10 +86,18 @@ export function useNearbyParcels(apiUrl: string) {
       const scored = withDistance.filter((p) => p.latest_ibp_total != null)
       const sectorAvgScore =
         scored.length > 0
-          ? Math.round((scored.reduce((sum, p) => sum + (p.latest_ibp_total ?? 0), 0) / scored.length) * 10) / 10
+          ? Math.round(
+              (scored.reduce((sum, p) => sum + (p.latest_ibp_total ?? 0), 0) / scored.length) * 10,
+            ) / 10
           : null
 
-      setState({ parcels: withDistance, sectorAvgScore, loading: false, locationDenied: false, error: false })
+      setState({
+        parcels: withDistance,
+        sectorAvgScore,
+        loading: false,
+        locationDenied: false,
+        error: false,
+      })
     } catch {
       setState((s) => ({ ...s, loading: false, error: true }))
     }

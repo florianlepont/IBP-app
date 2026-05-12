@@ -1,6 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { brandColors, brandComponentTokens, brandRadius, brandShadow, brandTypography } from "../../app/brand-tokens"
+import {
+  brandColors,
+  brandComponentTokens,
+  brandRadius,
+  brandShadow,
+  brandTypography,
+} from "../../app/brand-tokens"
 import { IbpScoreBadge } from "../../ui/IbpScoreBadge"
 import type { PublicParcelStatusItem } from "../../app/types"
 
@@ -22,7 +28,12 @@ function formatParcelId(parcelId: string): string {
   return `Parcelle ${parcelId}`
 }
 
-export function ParcelNearbyCard({ parcel, distanceKm, surveyCount, onPress }: ParcelNearbyCardProps) {
+export function ParcelNearbyCard({
+  parcel,
+  distanceKm,
+  surveyCount,
+  onPress,
+}: ParcelNearbyCardProps) {
   return (
     <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
       <IbpScoreBadge score={parcel.latest_ibp_total} size="md" />

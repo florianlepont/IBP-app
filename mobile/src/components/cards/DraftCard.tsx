@@ -1,6 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { brandColors, brandComponentTokens, brandRadius, brandShadow, brandTypography } from "../../app/brand-tokens"
+import {
+  brandColors,
+  brandComponentTokens,
+  brandRadius,
+  brandShadow,
+  brandTypography,
+} from "../../app/brand-tokens"
 import type { LocalSurvey } from "../../storage/types"
 
 type DraftCardProps = {

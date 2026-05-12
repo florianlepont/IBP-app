@@ -86,11 +86,7 @@ export function HomeScreen({
       ]}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl
-          onRefresh={onRefresh}
-          refreshing={false}
-          tintColor={brandColors.moss}
-        />
+        <RefreshControl onRefresh={onRefresh} refreshing={false} tintColor={brandColors.moss} />
       }
     >
       {/* ── Greeting ──────────────────────────────── */}
@@ -153,11 +149,7 @@ export function HomeScreen({
             contentContainerStyle={styles.draftsScroll}
           >
             {drafts.map((survey) => (
-              <DraftCard
-                key={survey.id}
-                survey={survey}
-                onPress={() => onOpenSurvey(survey.id)}
-              />
+              <DraftCard key={survey.id} survey={survey} onPress={() => onOpenSurvey(survey.id)} />
             ))}
           </ScrollView>
         </View>
@@ -307,7 +299,12 @@ const styles = StyleSheet.create({
     gap: 8,
     overflow: "hidden",
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 8 } },
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+      },
       android: { elevation: 4 },
     }),
   },
@@ -410,4 +407,3 @@ const styles = StyleSheet.create({
     color: brandColors.textSecondary,
   },
 })
-
