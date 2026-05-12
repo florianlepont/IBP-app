@@ -224,7 +224,7 @@ Le développement est accéléré par l'utilisation de **Claude** (Anthropic), u
 
 ---
 
-## 9. Ce que nous vous demandons
+## 9. Ce dont j'ai besoin 
 
 ### 1. Validation du projet
 
