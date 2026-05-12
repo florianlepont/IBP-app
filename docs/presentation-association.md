@@ -100,15 +100,43 @@ Le cœur du produit est **fonctionnel et testé**. Un observateur peut aujourd'h
 
 ---
 
-## 5. La technique en deux mots
+## 5. Coûts de lancement et de fonctionnement
 
-*(Pour les curieux — pas indispensable pour valider le projet)*
+L'un des atouts du projet est son coût très contenu, notamment grâce aux programmes tarifaires réservés aux associations à but non lucratif.
 
-L'application mobile est développée avec des technologies modernes et standards qui permettent de cibler **iOS et Android avec une seule base de code**. Le serveur est hébergé sur l'infrastructure de l'association. Le code est ouvert, versionné, et accompagné d'une suite de tests automatisés. Une chaîne d'intégration continue vérifie la qualité du code à chaque modification.
+### Lancement (frais uniques)
+
+| Poste | Montant | Note |
+|-------|---------|------|
+| Apple App Store (iOS) | **0 €** | Programme gratuit pour les associations — Apple dispense les organisations à but non lucratif des frais d'inscription (99 $/an) |
+| Google Play Store (Android) | ~23 € | Frais unique, non renouvelable |
+| **Total lancement** | **~23 €** | |
+
+### Fonctionnement annuel
+
+| Poste | Montant/an | Détail |
+|-------|-----------|--------|
+| Hébergement serveur (alwaysdata) | ~72 € TTC | Plan Small : 1 Go RAM, 50 Go disque, Node.js + PostgreSQL inclus |
+| Stockage photos (Cloudflare R2) | 0 € | 10 Go gratuits/mois — suffisant pour les premiers milliers de relevés |
+| Authentification (Auth0) | 0 € | Gratuit jusqu'à 7 500 utilisateurs actifs/mois ; 50 % de réduction pour les associations si dépassement |
+| Cadastre IGN | 0 € | API publique du gouvernement français |
+| Nom de domaine | ~10 € | Déjà existant |
+| Apple App Store (renouvellement) | **0 €** | Dispense reconduite chaque année |
+| **Total annuel** | **~82 € TTC/an** | |
+
+> En cas de forte croissance (plusieurs centaines d'utilisateurs actifs simultanément), le plan d'hébergement pourrait passer à l'échelon supérieur (~230 €/an), soit un total d'environ **240 €/an**.
 
 ---
 
-## 6. Ce que nous vous demandons
+## 6. La technique en deux mots
+
+*(Pour les curieux — pas indispensable pour valider le projet)*
+
+L'application mobile est développée avec des technologies modernes et standards qui permettent de cibler **iOS et Android avec une seule base de code**. Le serveur est hébergé chez un hébergeur européen (alwaysdata, Paris). Le code est ouvert, versionné, et accompagné d'une suite de tests automatisés. Une chaîne d'intégration continue vérifie la qualité du code à chaque modification.
+
+---
+
+## 7. Ce que nous vous demandons
 
 Nous avons besoin de votre **validation pour poursuivre** et d'un retour sur :
 
