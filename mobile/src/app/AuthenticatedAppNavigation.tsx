@@ -10,6 +10,7 @@ import {
 import {
   NavigationContainer,
   getFocusedRouteNameFromRoute,
+  useNavigation,
   type NavigatorScreenParams,
 } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
@@ -35,10 +36,17 @@ import { AccountScreen } from "../screens/AccountScreen"
 import { SettingsScreen } from "../screens/SettingsScreen"
 import { FactorDetailScreen } from "../screens/FactorDetailScreen"
 import { SurveyParcelSelectionScreen } from "../screens/SurveyParcelSelectionScreen"
+import { HomeScreen } from "../screens/HomeScreen"
 import { useSurveyForm } from "../hooks/useSurveyForm"
 import { useSurveyList } from "../hooks/useSurveyList"
 import { useSurveySync } from "../hooks/useSurveySync"
 import { usePublicMapExplorer } from "../hooks/usePublicMapExplorer"
+import type { NearbyParcelsState } from "../hooks/useNearbyParcels"
+import type { SurveyStats } from "./types"
+
+type HomeStackParamList = {
+  homeRoot: undefined
+}
 
 type AccountStackParamList = {
   accountHome: undefined
@@ -58,6 +66,7 @@ type PublicMapStackParamList = {
 }
 
 export type RootTabParamList = {
+  home: NavigatorScreenParams<HomeStackParamList> | undefined
   surveys: NavigatorScreenParams<SurveysStackParamList> | undefined
   search: NavigatorScreenParams<SurveysStackParamList> | undefined
   publicMap: NavigatorScreenParams<PublicMapStackParamList> | undefined
@@ -75,6 +84,9 @@ type AuthenticatedAppNavigationProps = {
   apiUrl: string
   formMode: FormMode
   editingSurveyId: string | null
+  surveyStats: SurveyStats
+  nearbyParcels: NearbyParcelsState
+  onLoadNearbyParcels: () => void
   surveyDetailTab: SurveyDetailTab
   setSurveyDetailTab: (tab: SurveyDetailTab) => void
   surveyForm: SurveyFormController
@@ -98,6 +110,7 @@ type AuthenticatedAppNavigationProps = {
 // ─── Navigators ──────────────────────────────────────────────────────────────
 
 const JsTab = createBottomTabNavigator<RootTabParamList>()
+const HomeStack = createNativeStackNavigator<HomeStackParamList>()
 const AccountStack = createNativeStackNavigator<AccountStackParamList>()
 const SurveysStack = createNativeStackNavigator<SurveysStackParamList>()
 const PublicMapStack = createNativeStackNavigator<PublicMapStackParamList>()
@@ -154,9 +167,13 @@ const baseStackScreenOptions = {
 // ─── Native tab icons ─────────────────────────────────────────────────────────
 
 const IOS_TAB_ICONS = {
-  surveys: {
+  home: {
     focused: { sfSymbol: "house.fill" },
     unfocused: { sfSymbol: "house" },
+  },
+  surveys: {
+    focused: { sfSymbol: "list.bullet.clipboard.fill" },
+    unfocused: { sfSymbol: "list.bullet.clipboard" },
   },
   search: {
     focused: { sfSymbol: "magnifyingglass" },
@@ -173,6 +190,7 @@ const IOS_TAB_ICONS = {
 } as const
 
 const ANDROID_TAB_ICONS = {
+  home: require("../../assets/tabs/surveys.png"),
   surveys: require("../../assets/tabs/surveys.png"),
   search: require("../../assets/tabs/surveys.png"),
   publicMap: require("../../assets/tabs/public-map.png"),
@@ -180,14 +198,16 @@ const ANDROID_TAB_ICONS = {
 } as const
 
 const TAB_TITLES: Record<keyof RootTabParamList, string> = {
-  surveys: "Accueil",
+  home: "Accueil",
+  surveys: "Mes Relevés",
   search: "Recherche",
   publicMap: "Explorer",
   account: "Compte",
 }
 
 const JS_TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
-  surveys: "home-outline",
+  home: "home-outline",
+  surveys: "list-outline",
   search: "search-outline",
   publicMap: "map-outline",
   account: "person-outline",
@@ -334,7 +354,7 @@ function SurveysTabNavigator({
         <SurveysStack.Screen
           name="surveysHome"
           options={() => ({
-            title: searchEntry ? "Recherche" : "Accueil",
+            title: searchEntry ? "Recherche" : "Mes Relevés",
             headerShown: nativeSearchEnabled,
             headerLargeTitle: false,
             headerTransparent: nativeSearchEnabled ? false : undefined,
@@ -554,6 +574,61 @@ function SurveysTabNavigator({
   )
 }
 
+// ─── Home stack ──────────────────────────────────────────────────────────────
+
+type HomeTabNavigatorProps = {
+  currentUser: SurveySyncController["currentUser"]
+  surveys: SurveyListController["surveys"]
+  surveyStats: SurveyStats
+  nearbyParcels: NearbyParcelsState
+  onLoadNearbyParcels: () => void
+  onOpenCreateSurvey: () => void
+  onOpenSurvey: (surveyId: string) => void
+  onRefresh: () => Promise<void>
+}
+
+function HomeTabNavigator({
+  currentUser,
+  surveys,
+  surveyStats,
+  nearbyParcels,
+  onLoadNearbyParcels,
+  onOpenCreateSurvey,
+  onOpenSurvey,
+  onRefresh,
+}: HomeTabNavigatorProps) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tabNav = useNavigation() as any
+
+  return (
+    <View style={styles.tabScreenContainer}>
+      <HomeStack.Navigator screenOptions={{ ...baseStackScreenOptions, headerShown: false }}>
+        <HomeStack.Screen name="homeRoot">
+          {() => (
+            <HomeScreen
+              currentUser={currentUser}
+              surveys={surveys}
+              surveyStats={surveyStats}
+              nearbyParcels={nearbyParcels}
+              onLoadNearbyParcels={onLoadNearbyParcels}
+              onCreateSurvey={() => {
+                onOpenCreateSurvey()
+                tabNav.navigate("surveys", { screen: "surveyForm" })
+              }}
+              onOpenSurvey={(surveyId) => {
+                onOpenSurvey(surveyId)
+                tabNav.navigate("surveys", { screen: "surveyDetail" })
+              }}
+              onNavigateToExplorer={() => tabNav.navigate("publicMap")}
+              onRefresh={onRefresh}
+            />
+          )}
+        </HomeStack.Screen>
+      </HomeStack.Navigator>
+    </View>
+  )
+}
+
 // ─── Public map ───────────────────────────────────────────────────────────────
 
 type PublicMapTabProps = {
@@ -726,6 +801,20 @@ function NativeRootTabs({
 
   return (
     <NativeTab.Navigator screenOptions={nativeTabScreenOptions} minimizeBehavior="automatic">
+      <NativeTab.Screen name="home">
+        {() => (
+          <HomeTabNavigator
+            currentUser={surveySync.currentUser}
+            surveys={surveysProps.surveyList.surveys}
+            surveyStats={surveysProps.surveyStats}
+            nearbyParcels={surveysProps.nearbyParcels}
+            onLoadNearbyParcels={surveysProps.onLoadNearbyParcels}
+            onOpenCreateSurvey={surveysProps.onOpenCreateSurvey}
+            onOpenSurvey={surveysProps.onOpenSurvey}
+            onRefresh={surveySync.handlePullChanges}
+          />
+        )}
+      </NativeTab.Screen>
       <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(surveySync)}>
         {() => <SurveysTabNavigator {...surveysProps} useNativeNav />}
       </NativeTab.Screen>
@@ -777,6 +866,20 @@ function JsRootTabs({
 
   return (
     <JsTab.Navigator screenOptions={jsTabScreenOptions}>
+      <JsTab.Screen name="home" options={{ headerShown: false }}>
+        {() => (
+          <HomeTabNavigator
+            currentUser={surveySync.currentUser}
+            surveys={surveysProps.surveyList.surveys}
+            surveyStats={surveysProps.surveyStats}
+            nearbyParcels={surveysProps.nearbyParcels}
+            onLoadNearbyParcels={surveysProps.onLoadNearbyParcels}
+            onOpenCreateSurvey={surveysProps.onOpenCreateSurvey}
+            onOpenSurvey={surveysProps.onOpenSurvey}
+            onRefresh={surveySync.handlePullChanges}
+          />
+        )}
+      </JsTab.Screen>
       <JsTab.Screen
         name="surveys"
         options={({ route }) => ({

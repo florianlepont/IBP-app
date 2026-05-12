@@ -1,0 +1,144 @@
+import { Pressable, StyleSheet, Text, View } from "react-native"
+import { Ionicons } from "@expo/vector-icons"
+import { brandColors, brandComponentTokens, brandRadius, brandShadow, brandTypography } from "../../app/brand-tokens"
+import type { LocalSurvey } from "../../storage/types"
+
+type DraftCardProps = {
+  survey: LocalSurvey
+  onPress: () => void
+}
+
+function getAccentColor(survey: LocalSurvey): string {
+  if (survey.sync_blocked) return brandColors.terracotta
+  if (survey.completion_rate >= 1) return brandColors.moss
+  return brandColors.ochre
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const hours = Math.floor(diff / 3600000)
+  if (hours < 1) return "À l'instant"
+  if (hours < 24) return `il y a ${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return "Hier"
+  return `il y a ${days}j`
+}
+
+export function DraftCard({ survey, onPress }: DraftCardProps) {
+  const accent = getAccentColor(survey)
+  const completedFactors = Math.round(survey.completion_rate * 10)
+  const progressWidth = `${Math.round(survey.completion_rate * 100)}%` as const
+
+  return (
+    <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
+      <View style={[styles.accent, { backgroundColor: accent }]} />
+      <View style={styles.content}>
+        <Text style={styles.title} numberOfLines={1}>
+          {survey.site_name || "Relevé sans titre"}
+        </Text>
+
+        <View style={styles.progressRow}>
+          <Text style={styles.progressLabel}>AVANCEMENT</Text>
+          <Text style={styles.progressCount}>{completedFactors}/10</Text>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: progressWidth, backgroundColor: accent }]} />
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.meta}>
+          <Text style={styles.metaText}>{formatRelativeTime(survey.updated_at)}</Text>
+          {survey.sync_blocked ? (
+            <View style={styles.syncWarning}>
+              <Ionicons name="warning-outline" size={12} color={brandColors.terracotta} />
+              <Text style={styles.syncWarningText}>Sync bloquée</Text>
+            </View>
+          ) : survey.sync_state === "pending" ? (
+            <View style={styles.syncPending}>
+              <Ionicons name="cloud-upload-outline" size={12} color={brandColors.textSecondary} />
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  )
+}
+
+const styles = StyleSheet.create({
+  card: {
+    width: 220,
+    backgroundColor: brandColors.panel,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: brandComponentTokens.card.panelBorder,
+    flexDirection: "row",
+    overflow: "hidden",
+    ...brandShadow.card,
+  },
+  accent: {
+    width: 4,
+  },
+  content: {
+    flex: 1,
+    padding: 14,
+    gap: 6,
+  },
+  title: {
+    ...brandTypography.input,
+    color: brandColors.textPrimary,
+  },
+  progressRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  progressLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: brandColors.textSecondary,
+  },
+  progressCount: {
+    ...brandTypography.meta,
+    color: brandColors.forest,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: brandColors.divider,
+    borderRadius: brandRadius.pill,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: 4,
+    borderRadius: brandRadius.pill,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: brandColors.divider,
+    marginVertical: 2,
+  },
+  meta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  metaText: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary,
+  },
+  syncWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  syncWarningText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: brandColors.terracotta,
+  },
+  syncPending: {
+    opacity: 0.6,
+  },
+})
