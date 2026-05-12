@@ -44,9 +44,9 @@ Aujourd'hui, les relevés IBP se font **sur papier ou dans des tableurs**, ce qu
 
 ### 4.1 Saisie guidée des relevés IBP
 
-L'application guide l'observateur à travers les **dix facteurs IBP (A à J)** un par un. Chaque facteur propose des choix adaptés à la réalité du terrain. Les règles de validation sont appliquées immédiatement : impossible de soumettre un relevé incomplet ou incohérent.
+L'application guide l'observateur à travers les **dix facteurs IBP (A à J)** un par un. Chaque facteur propose des choix adaptés à la réalité du terrain. Les règles de validation sont appliquées immédiatement au sein de chaque facteur : seules les options cohérentes avec les réponses déjà saisies sont proposées, et il est impossible de soumettre un relevé incomplet ou incohérent.
 
-> **Exemple :** si le facteur B (strates de végétation) requiert une valeur minimale pour permettre un score élevé sur le facteur A, l'application le signale instantanément.
+> **Exemple :** dans le facteur C (bois mort sur pied), si aucun bois mort n'est présent, les questions de volume et d'état ne sont pas posées — le score est fixé automatiquement.
 
 ### 4.2 Sélection cadastrale sur carte
 
@@ -67,6 +67,10 @@ Une carte nationale affiche les relevés soumis et validés (données anonymisé
 ### 4.6 Compte sécurisé
 
 Connexion via email/mot de passe ou compte Google/Apple. Les données de chaque observateur sont isolées et protégées.
+
+### 4.7 Base de données nationale de la forêt française *(à venir)*
+
+Chaque relevé soumis alimente une base de données centralisée. À terme, l'ensemble de ces données permettra de produire des **indicateurs agrégés à l'échelle nationale** : score IBP moyen par région, évolution dans le temps d'une parcelle, distribution des facteurs sur le territoire. Ces analyses constitueront un outil de plaidoyer et de suivi de l'état de la biodiversité forestière en France — unique en son genre pour une association citoyenne.
 
 ---
 
