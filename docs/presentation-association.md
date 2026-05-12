@@ -121,10 +121,10 @@ Toute la logique métier est en place et fonctionne. La prochaine étape est la 
 
 | Étape | Période |
 |-------|---------|
-| ✅ MVP terminé | Mai 2026 |
-| 🔵 Tests terrain avec observateurs pilotes | Juin – Juillet 2026 |
-| 🔵 Publication App Store et Google Play | Septembre 2026 |
-| 🔵 Version V1 (gamification, modération, section asso, don) | Décembre 2026 |
+| 🔵 MVP finalisé (UX + déploiement base de données) | Septembre 2026 |
+| 🔵 Tests terrain avec observateurs pilotes | Octobre – Décembre 2026 |
+| 🔵 Publication App Store et Google Play | Janvier 2027 |
+| 🔵 Version V1 (gamification, modération, section asso, don) | Courant 2027 |
 
 ---
 
@@ -150,9 +150,10 @@ L'un des atouts du projet est son coût très contenu, notamment grâce aux prog
 | Cadastre IGN | 0 € | API publique du gouvernement français |
 | Nom de domaine | ~10 € | Déjà existant |
 | Apple App Store (renouvellement) | **0 €** | Dispense reconduite chaque année |
-| **Total annuel** | **~82 € TTC/an** | |
+| Assistant IA (Claude Pro) | ~264 € TTC | Outil de développement utilisé pour accélérer la conception et l'écriture du code — $20/mois, pas de réduction association connue |
+| **Total annuel** | **~346 € TTC/an** | |
 
-> En cas de forte croissance (plusieurs centaines d'utilisateurs actifs simultanément), le plan d'hébergement pourrait passer à l'échelon supérieur (~230 €/an), soit un total d'environ **240 €/an**.
+> En cas de forte croissance (plusieurs centaines d'utilisateurs actifs simultanément), le plan d'hébergement pourrait passer à l'échelon supérieur (~230 €/an), soit un total d'environ **500 €/an**.
 
 ---
 
@@ -193,11 +194,33 @@ Les relevés IBP soumis appartiennent à **Etats Sauvages**. Les observateurs c�
 
 ---
 
-## 8. La technique en deux mots
+## 8. La technique en quelques mots
 
 *(Pour les curieux — pas indispensable pour valider le projet)*
 
-L'application mobile est développée avec des technologies modernes et standards qui permettent de cibler **iOS et Android avec une seule base de code**. Le serveur est hébergé chez un hébergeur européen (alwaysdata, Paris). Le code est ouvert, versionné, et accompagné d'une suite de tests automatisés. Une chaîne d'intégration continue vérifie la qualité du code à chaque modification.
+### Une seule application pour iOS et Android
+
+L'application mobile est développée en **React Native**, une technologie créée par Meta et utilisée par des acteurs comme Shopify ou Microsoft. Elle permet d'écrire le code une seule fois et de le faire tourner à la fois sur iPhone et Android, sans doubler le travail de développement.
+
+### Le téléphone fonctionne comme un mini-serveur
+
+Toutes les données de relevé sont d'abord stockées **directement sur l'appareil** dans une base de données locale (SQLite). L'application peut donc fonctionner sans aucune connexion. Quand le réseau revient, les données sont envoyées automatiquement vers le serveur central — sans que l'observateur n'ait à faire quoi que ce soit.
+
+### Le serveur
+
+Le serveur (appelé "API") tourne sur **Node.js** avec le framework **NestJS**, un standard robuste utilisé dans de nombreuses applications professionnelles. Il est hébergé chez **alwaysdata**, un hébergeur français basé à Paris. La base de données est **PostgreSQL**, une des solutions les plus fiables et les plus répandues au monde.
+
+### La sécurité des connexions
+
+L'authentification (login, création de compte, connexion Google/Apple) est déléguée à **Auth0**, un service spécialisé utilisé par des milliers d'entreprises. Cela évite de gérer soi-même les mots de passe et réduit considérablement les risques de sécurité.
+
+### La qualité du code
+
+Le projet suit les standards professionnels : le code est **typé** (TypeScript), ce qui réduit les bugs ; il est **testé automatiquement** à chaque modification ; et une **chaîne d'intégration continue** (GitHub Actions) vérifie que rien ne régresse avant chaque mise à jour. Le code est hébergé sur GitHub, versionné, et peut être audité ou repris par un autre développeur.
+
+### L'assistant IA
+
+Le développement est accéléré par l'utilisation de **Claude** (Anthropic), un assistant IA utilisé pour la conception, l'écriture de code et la documentation. C'est un outil de productivité, pas un remplaçant du développeur : toutes les décisions techniques restent humaines.
 
 ---
 
