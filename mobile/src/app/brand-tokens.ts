@@ -146,6 +146,16 @@ export const brandSemanticColors = {
   heroOrbOnDark: "rgba(137, 163, 58, 0.22)",
 } as const
 
+export const ibpScoreTokens = {
+  thresholds: { high: 7, mid: 5 },
+  colors: {
+    high: { background: brandColors.moss, text: brandColors.white },
+    mid: { background: brandColors.ochre, text: brandColors.white },
+    low: { background: brandColors.terracotta, text: brandColors.white },
+    empty: { background: brandColors.panelMuted, text: brandColors.textSecondary },
+  },
+} as const
+
 export const brandComponentTokens = {
   button: {
     minHeight: 44,
