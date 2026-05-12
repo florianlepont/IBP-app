@@ -13,8 +13,10 @@ import { useSurveySync } from "./src/hooks/useSurveySync"
 import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
+import { useNearbyParcels } from "./src/hooks/useNearbyParcels"
 import { loadStoredApiUrl, saveStoredApiUrl } from "./src/app/api-url-storage"
 import { DEFAULT_API_URL } from "./src/app/constants"
+import type { SurveyStats } from "./src/app/types"
 import { AuthGateScreen } from "./src/screens/AuthGateScreen"
 import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
 
@@ -76,6 +78,21 @@ export default function App() {
     },
   })
   const setStatus = surveySync.setStatus
+
+  const nearbyParcels = useNearbyParcels(apiUrl)
+
+  const surveyStats = useMemo((): SurveyStats => {
+    const surveys = surveyList.surveys
+    return {
+      total: surveys.length,
+      draft: surveys.filter((s) => s.status === "draft").length,
+      submitted: surveys.filter((s) => s.status === "submitted").length,
+      pending: surveys.filter((s) => s.sync_state === "pending").length,
+      synced: surveys.filter((s) => s.sync_state === "synced").length,
+      failed: surveys.filter((s) => s.sync_state === "failed").length,
+      blocked: surveys.filter((s) => s.sync_blocked).length,
+    }
+  }, [surveyList.surveys])
 
   const publicMapExplorer = usePublicMapExplorer({
     apiUrl,
@@ -139,6 +156,9 @@ export default function App() {
                 apiUrl={apiUrl}
                 formMode={formMode}
                 editingSurveyId={editingSurveyId}
+                surveyStats={surveyStats}
+                nearbyParcels={nearbyParcels}
+                onLoadNearbyParcels={nearbyParcels.load}
                 surveyDetailTab={surveyDetailTab}
                 setSurveyDetailTab={setSurveyDetailTab}
                 surveyForm={surveyForm}
