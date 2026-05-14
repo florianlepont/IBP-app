@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import {
   AccessibilityInfo,
-  ActivityIndicator,
   Animated,
+  Easing,
   Image,
   ImageSourcePropType,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -29,8 +30,8 @@ import {
   brandTypography,
 } from "../app/brand-tokens"
 import { AppButton } from "../ui/AppButton"
-import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
+import { TypewriterSplash } from "../components/TypewriterSplash"
 
 type AuthGateScreenProps = {
   apiUrl: string
@@ -43,133 +44,9 @@ type AuthGateScreenProps = {
   heroMartenSource?: ImageSourcePropType
 }
 
-const SPECIES_NAMES = [
-  "Fagus sylvatica",
-  "Dryocopus martius",
-  "Quercus robur",
-  "Salamandra salamandra",
-  "Betula pendula",
-  "Sitta europaea",
-  "Tilia cordata",
-  "Martes martes",
-  "Pinus sylvestris",
-  "Parus major",
-  "Carpinus betulus",
-  "Rosalia alpina",
-]
-
-const TYPE_CHAR_MS = 68
-const HOLD_MS = 900
-const FADE_MS = 300
-
-function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) {
-  const insets = useSafeAreaInsets()
-  const [idx, setIdx] = useState(0)
-  const [charsTyped, setCharsTyped] = useState(0)
-  const [holding, setHolding] = useState(false)
-  const [reducedMotion, setReducedMotion] = useState(false)
-  const textOpacity = useRef(new Animated.Value(1)).current
-  const cursorOpacity = useRef(new Animated.Value(1)).current
-
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion)
-  }, [])
-
-  useEffect(() => {
-    if (reducedMotion) return
-    const blink = Animated.loop(
-      Animated.sequence([
-        Animated.timing(cursorOpacity, { toValue: 0, duration: 530, useNativeDriver: true }),
-        Animated.timing(cursorOpacity, { toValue: 1, duration: 530, useNativeDriver: true }),
-      ]),
-    )
-    blink.start()
-    return () => blink.stop()
-  }, [cursorOpacity, reducedMotion])
-
-  const species = SPECIES_NAMES[idx]
-  const spaceIdx = species.indexOf(" ")
-  const genus = species.slice(0, spaceIdx)
-  const epithet = species.slice(spaceIdx + 1)
-
-  useEffect(() => {
-    if (reducedMotion) return
-    if (holding) return
-
-    if (charsTyped < species.length) {
-      const t = setTimeout(() => setCharsTyped((c) => c + 1), TYPE_CHAR_MS)
-      return () => clearTimeout(t)
-    }
-
-    const t = setTimeout(() => {
-      setHolding(true)
-      Animated.timing(textOpacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(
-        ({ finished }) => {
-          if (!finished) return
-          textOpacity.setValue(1)
-          setCharsTyped(0)
-          setHolding(false)
-          setIdx((i) => (i + 1) % SPECIES_NAMES.length)
-        },
-      )
-    }, HOLD_MS)
-    return () => clearTimeout(t)
-  }, [charsTyped, holding, reducedMotion, species, textOpacity])
-
-  const genusTyped = reducedMotion ? genus : species.slice(0, Math.min(charsTyped, spaceIdx))
-  const epithetTyped = reducedMotion ? epithet : charsTyped > spaceIdx ? species.slice(spaceIdx + 1, charsTyped) : ""
-  const cursorOnGenus = !reducedMotion && charsTyped <= spaceIdx
-
-  return (
-    <View style={splashStyles.container}>
-      <StatusBar barStyle="light-content" />
-      <View style={[splashStyles.top, { paddingTop: Math.max(insets.top, 12) + 18 }]}>
-        {logoSource ? (
-          <Image source={logoSource} style={splashStyles.logo} resizeMode="contain" accessible={false} />
-        ) : null}
-      </View>
-      <View style={splashStyles.stage}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-          <ActivityIndicator size="small" color={brandColors.white} style={{ opacity: 0.6 }} />
-          <View
-            accessible={true}
-            accessibilityLabel="Chargement en cours"
-            accessibilityLiveRegion="none"
-          >
-            <Animated.View style={{ opacity: textOpacity }} accessibilityElementsHidden={true}>
-              <View style={splashStyles.twLine}>
-                <Text style={splashStyles.twGenus}>{genusTyped}</Text>
-                {cursorOnGenus ? (
-                  <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
-                    |
-                  </Animated.Text>
-                ) : (
-                  <Text style={splashStyles.twGenus}>{genus.slice(genusTyped.length)}</Text>
-                )}
-              </View>
-              <View style={splashStyles.twLine}>
-                <Text style={splashStyles.twEpithet}>{epithetTyped}</Text>
-                {!cursorOnGenus && !holding && !reducedMotion ? (
-                  <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
-                    |
-                  </Animated.Text>
-                ) : null}
-              </View>
-            </Animated.View>
-          </View>
-        </View>
-      </View>
-      <View style={[splashStyles.bottom, { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) }]}>
-        <Text style={splashStyles.tagline}>Chargement…</Text>
-      </View>
-    </View>
-  )
-}
-
 const HERO_MIN_HEIGHT_RATIO = 0.44
 const HERO_MIN_HEIGHT_PX = 260
 const HERO_LOGO_SIZE = 54
-const HERO_CONTENT_TOP_OFFSET = 42
 const HERO_MARTEN_WIDTH = 92
 const HERO_MARTEN_HEIGHT = 207
 const HERO_MARTEN_RIGHT = 34
@@ -179,7 +56,27 @@ const HERO_FERNS_HEIGHT = 400
 const HERO_FERNS_RIGHT = HERO_MARTEN_RIGHT + HERO_MARTEN_WIDTH / 2 - HERO_FERNS_WIDTH / 2
 const HERO_FERNS_BOTTOM = -Math.round(HERO_FERNS_HEIGHT * 0.3)
 const PANEL_OVERLAP = 30
-const HERO_TEXT_RAISE = -Math.round(HERO_MIN_HEIGHT_PX * 0.1)
+
+const BLOB_CYCLE_MS = 10000
+const BLOB_STAGGER_MS = BLOB_CYCLE_MS / 3
+
+function makeBlobExpandStyle(anim: Animated.Value, rotation: string): object {
+  return {
+    transform: [
+      { rotate: rotation },
+      {
+        scale: anim.interpolate({
+          inputRange: [0, 0.15, 1],
+          outputRange: [0.3, 1.6, 14],
+        }),
+      },
+    ],
+    opacity: anim.interpolate({
+      inputRange: [0, 0.06, 0.7, 1],
+      outputRange: [0, 0.28, 0.07, 0],
+    }),
+  }
+}
 
 type HeroSectionProps = {
   height: number
@@ -189,6 +86,8 @@ type HeroSectionProps = {
   heroMartenSource?: ImageSourcePropType
   logoAnim: Animated.Value
   martenAnim: Animated.Value
+  onLogoPress?: () => void
+  reducedMotion: boolean
 }
 
 function HeroSection({
@@ -199,14 +98,71 @@ function HeroSection({
   heroMartenSource,
   logoAnim,
   martenAnim,
+  onLogoPress,
+  reducedMotion,
 }: HeroSectionProps) {
   const { width: screenWidth } = useWindowDimensions()
   const heroContentMaxWidth = Math.min(screenWidth - brandSpacing.lg * 2, 270)
 
+  const blob1Anim = useRef(new Animated.Value(0)).current
+  const blob2Anim = useRef(new Animated.Value(0)).current
+  const blob3Anim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (reducedMotion) return
+
+    const animations: Animated.CompositeAnimation[] = []
+    const timers: ReturnType<typeof setTimeout>[] = []
+
+    ;[blob1Anim, blob2Anim, blob3Anim].forEach((anim, i) => {
+      const t = setTimeout(() => {
+        anim.setValue(0)
+        const loop = Animated.loop(
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: BLOB_CYCLE_MS,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+        )
+        animations.push(loop)
+        loop.start()
+      }, i * BLOB_STAGGER_MS)
+      timers.push(t)
+    })
+
+    return () => {
+      timers.forEach(clearTimeout)
+      animations.forEach((a) => a.stop())
+    }
+  }, [blob1Anim, blob2Anim, blob3Anim, reducedMotion])
+
+  const logoImage = logoSource ? (
+    <Animated.Image
+      source={logoSource}
+      style={[
+        authStyles.heroLogo,
+        {
+          opacity: logoAnim,
+          transform: [
+            {
+              translateY: logoAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-16, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+      resizeMode="contain"
+      accessible={false}
+    />
+  ) : null
+
   return (
     <View style={[authStyles.hero, { height }]}>
       <View style={authStyles.heroBackground}>
-        {/* Fougères décoratives — base végétale derrière la martre */}
+
         <Image
           source={require("../../assets/auth/fougeres.png")}
           style={authStyles.heroFerns}
@@ -214,7 +170,6 @@ function HeroSection({
           accessible={false}
         />
 
-        {/* Marten — position absolute, clippé par overflow:hidden de heroBackground */}
         {heroMartenSource ? (
           <Animated.Image
             source={heroMartenSource}
@@ -237,46 +192,35 @@ function HeroSection({
           />
         ) : null}
 
-        {/* Logo + texte centrés verticalement dans l'espace disponible */}
         <View
           style={[
             authStyles.heroContentWrapper,
             {
-              paddingTop: Math.max(topInset, 12) + HERO_CONTENT_TOP_OFFSET,
+              paddingTop: Math.max(topInset, 12),
               paddingBottom: PANEL_OVERLAP + brandSpacing.md,
               paddingLeft: leftInset,
             },
           ]}
         >
-          {logoSource ? (
-            <Animated.Image
-              source={logoSource}
-              style={[
-                authStyles.heroLogo,
-                {
-                  opacity: logoAnim,
-                  transform: [
-                    {
-                      translateY: logoAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-16, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-              resizeMode="contain"
-              accessible={false}
-            />
-          ) : null}
+          <View style={authStyles.logoBlobContainer}>
+            <Animated.View style={[authStyles.heroBlob, authStyles.heroBlob1, makeBlobExpandStyle(blob1Anim, "-14deg")]} />
+            <Animated.View style={[authStyles.heroBlob, authStyles.heroBlob2, makeBlobExpandStyle(blob2Anim, "22deg")]} />
+            <Animated.View style={[authStyles.heroBlob, authStyles.heroBlob3, makeBlobExpandStyle(blob3Anim, "-4deg")]} />
+            {onLogoPress ? (
+              <Pressable onPress={onLogoPress} accessible={false}>
+                {logoImage}
+              </Pressable>
+            ) : (
+              logoImage
+            )}
+          </View>
 
           <View
             style={[authStyles.heroContent, { maxWidth: heroContentMaxWidth }]}
             accessible={true}
             accessibilityRole="header"
-            accessibilityLabel="États Sauvages. Indice de Biodiversité Potentielle, un service proposé par Etats Sauvages."
+            accessibilityLabel="Indice de Biodiversité Potentielle, un service proposé par Etats Sauvages."
           >
-            <Text style={authStyles.heroEyebrow}>ÉTATS SAUVAGES</Text>
             <Text style={authStyles.heroTitle}>
               Indice de{"\n"}Biodiversité Potentielle
             </Text>
@@ -286,55 +230,6 @@ function HeroSection({
           </View>
         </View>
       </View>
-    </View>
-  )
-}
-
-type AuthPanelFooterProps = {
-  apiUrl: string
-  onApiUrlChange: (value: string) => void
-}
-
-function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
-  const [editing, setEditing] = useState(false)
-
-  if (!__DEV__) return null
-
-  return (
-    <View style={authStyles.panelFooter}>
-      {editing ? (
-        <AppCard variant="soft" padding={14} style={authStyles.advancedPanel}>
-          <AppField
-            label="URL de l'API"
-            value={apiUrl}
-            onChangeText={onApiUrlChange}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            placeholder="http://192.168.x.x:3000/v1"
-            onBlur={() => setEditing(false)}
-            testID="auth-api-url-input"
-          />
-          <Text style={authStyles.hint}>
-            Simulateur iOS : localhost · Appareil physique : IP locale du Mac sur le même Wi-Fi
-          </Text>
-        </AppCard>
-      ) : (
-        <Pressable
-          onPress={() => setEditing(true)}
-          style={authStyles.apiUrlPill}
-          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-          accessibilityRole="button"
-          accessibilityLabel="Modifier l'URL de l'API"
-          testID="auth-advanced-toggle"
-        >
-          <Text style={authStyles.apiUrlPillLabel}>API</Text>
-          <Text style={authStyles.apiUrlPillValue} numberOfLines={1}>
-            {apiUrl}
-          </Text>
-          <Ionicons name="create-outline" size={14} color={brandColors.forest} />
-        </Pressable>
-      )}
     </View>
   )
 }
@@ -354,6 +249,7 @@ export function AuthGateScreen({
   const [submitting, setSubmitting] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [reducedMotion, setReducedMotion] = useState(false)
+  const [showDevModal, setShowDevModal] = useState(false)
 
   const heroAnim = useRef(new Animated.Value(0)).current
   const logoAnim = useRef(new Animated.Value(0)).current
@@ -372,11 +268,33 @@ export function AuthGateScreen({
       panelAnim.setValue(1)
       return
     }
-    Animated.stagger(60, [
-      Animated.timing(heroAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.timing(logoAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(martenAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.timing(panelAnim, { toValue: 1, duration: 240, useNativeDriver: true }),
+    Animated.sequence([
+      Animated.timing(heroAnim, {
+        toValue: 1,
+        duration: 120,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(logoAnim, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(martenAnim, {
+          toValue: 1,
+          duration: 350,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(panelAnim, {
+          toValue: 1,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start()
   }, [heroAnim, logoAnim, martenAnim, panelAnim, reducedMotion])
 
@@ -422,7 +340,7 @@ export function AuthGateScreen({
   const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
 
   if (sessionRestoring) {
-    return <TypewriterLoader logoSource={logoSource} />
+    return <TypewriterSplash logoSource={logoSource} />
   }
 
   return (
@@ -438,6 +356,8 @@ export function AuthGateScreen({
           heroMartenSource={heroMartenSource}
           logoAnim={logoAnim}
           martenAnim={martenAnim}
+          onLogoPress={__DEV__ ? () => setShowDevModal(true) : undefined}
+          reducedMotion={reducedMotion}
         />
       </Animated.View>
 
@@ -458,154 +378,144 @@ export function AuthGateScreen({
         ]}
       >
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView
-          style={authStyles.panelScroll}
-          contentContainerStyle={[
-            authStyles.panelContent,
-            { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          alwaysBounceVertical={false}
-        >
-          <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
-            <View style={authStyles.panelHeader}>
-              <Text style={authStyles.panelTitle} accessibilityRole="header">
-                Bienvenue
-              </Text>
-              <Text style={authStyles.panelSubtitle}>
-                Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles hors-ligne.
-              </Text>
-            </View>
-
-            {authError !== null && (
-              <View style={authStyles.errorBanner}>
-                <Text style={authStyles.errorBannerText}>{authError}</Text>
+          <ScrollView
+            style={authStyles.panelScroll}
+            contentContainerStyle={[
+              authStyles.panelContent,
+              { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            alwaysBounceVertical={false}
+          >
+            <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
+              <View style={authStyles.panelHeader}>
+                <Text style={authStyles.panelTitle} accessibilityRole="header">
+                  Bienvenue
+                </Text>
+                <Text style={authStyles.panelSubtitle}>
+                  Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles hors-ligne.
+                </Text>
               </View>
-            )}
 
-            <View style={authStyles.actionsGroup}>
-              <AppButton
-                label={submitting ? "Connexion en cours…" : "Se connecter"}
-                onPress={() => void handleLoginPress()}
-                loading={submitting}
-                style={authStyles.primaryButton}
-                testID="auth-submit"
-              />
-              <AppButton
-                label="Créer un compte"
-                variant="secondary"
-                onPress={() => void handleRegisterPress()}
-                disabled={submitting}
-                style={authStyles.secondaryButton}
-                testID="auth-register"
-              />
+              {authError !== null && (
+                <View style={authStyles.errorBanner}>
+                  <Text style={authStyles.errorBannerText}>{authError}</Text>
+                </View>
+              )}
 
-              <Pressable
-                onPress={() => void handleForgotPasswordPress()}
-                style={authStyles.forgotPasswordLink}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="link"
-                testID="auth-forgot-password"
-              >
-                <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
-              </Pressable>
+              <View style={authStyles.actionsGroup}>
+                <AppButton
+                  label={submitting ? "Connexion en cours…" : "Se connecter"}
+                  onPress={() => void handleLoginPress()}
+                  loading={submitting}
+                  style={authStyles.primaryButton}
+                  testID="auth-submit"
+                />
+
+                <Pressable
+                  onPress={() => void handleForgotPasswordPress()}
+                  style={authStyles.forgotPasswordLink}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="link"
+                  testID="auth-forgot-password"
+                >
+                  <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                </Pressable>
+
+                <AppButton
+                  label="Créer un compte"
+                  variant="secondary"
+                  onPress={() => void handleRegisterPress()}
+                  disabled={submitting}
+                  style={authStyles.secondaryButton}
+                  testID="auth-register"
+                />
+              </View>
             </View>
-          </View>
 
-          <View style={authStyles.panelFooterGroup}>
-            <View style={authStyles.legalContainer}>
-              <Text style={authStyles.legalText}>
-                En continuant, vous acceptez nos{" "}
-                <Text
-                  style={authStyles.legalLink}
-                  onPress={() => void Linking.openURL(LEGAL_TERMS_URL)}
-                  accessibilityRole="link"
-                >
-                  Conditions d&apos;utilisation
+            <View style={authStyles.panelFooterGroup}>
+              <View style={authStyles.legalContainer}>
+                <Text style={authStyles.legalText}>
+                  En continuant, vous acceptez nos{" "}
+                  <Text
+                    style={authStyles.legalLink}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      void Linking.openURL(LEGAL_TERMS_URL)
+                    }}
+                    accessibilityRole="link"
+                  >
+                    Conditions d&apos;utilisation
+                  </Text>
+                  {" "}et notre{" "}
+                  <Text
+                    style={authStyles.legalLink}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      void Linking.openURL(LEGAL_PRIVACY_URL)
+                    }}
+                    accessibilityRole="link"
+                  >
+                    Politique de confidentialité
+                  </Text>
+                  .
                 </Text>
-                {" "}et notre{" "}
-                <Text
-                  style={authStyles.legalLink}
-                  onPress={() => void Linking.openURL(LEGAL_PRIVACY_URL)}
-                  accessibilityRole="link"
-                >
-                  Politique de confidentialité
+                <Text style={authStyles.legalText}>
+                  <Text
+                    style={authStyles.legalLink}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      void Linking.openURL("https://etatssauvages.org")
+                    }}
+                    accessibilityRole="link"
+                  >
+                    etatssauvages.org
+                  </Text>
                 </Text>
-                .
-              </Text>
-              <Text style={authStyles.legalText}>
-                <Text
-                  style={authStyles.legalLink}
-                  onPress={() => void Linking.openURL("https://etatssauvages.org")}
-                  accessibilityRole="link"
-                >
-                  etatssauvages.org
-                </Text>
-              </Text>
+              </View>
             </View>
-            <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
-          </View>
-        </ScrollView>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
+
+      {__DEV__ ? (
+        <Modal
+          visible={showDevModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setShowDevModal(false)}
+        >
+          <View style={[devModalStyles.container, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            <View style={devModalStyles.header}>
+              <Text style={devModalStyles.title}>Configuration dev</Text>
+              <Pressable
+                onPress={() => setShowDevModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Fermer"
+              >
+                <Ionicons name="close-circle" size={26} color={brandColors.textSecondary} />
+              </Pressable>
+            </View>
+            <AppField
+              label="URL de l'API"
+              value={apiUrl}
+              onChangeText={onApiUrlChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="http://192.168.x.x:3000/v1"
+              testID="auth-api-url-input"
+            />
+            <Text style={devModalStyles.hint}>
+              Simulateur iOS : localhost · Appareil physique : IP locale du Mac sur le même Wi-Fi
+            </Text>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   )
 }
-
-const splashStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: brandColors.forest,
-  },
-  top: {
-    alignItems: "center",
-    paddingTop: brandSpacing.lg,
-  },
-  logo: {
-    width: 130,
-    height: 42,
-  },
-  stage: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: brandSpacing.xl,
-  },
-  twLine: {
-    flexDirection: "row",
-    alignItems: "baseline",
-  },
-  twGenus: {
-    fontSize: 18,
-    fontWeight: "500",
-    color: brandSemanticColors.heroBodyOnDark,
-    letterSpacing: 2,
-  },
-  twEpithet: {
-    fontSize: 16,
-    fontStyle: "italic",
-    fontWeight: "300",
-    color: brandSemanticColors.heroBodyOnDark,
-    opacity: 0.75,
-    letterSpacing: 1.5,
-  },
-  twCursor: {
-    fontSize: 18,
-    fontWeight: "200",
-    color: brandSemanticColors.heroBodyOnDark,
-    opacity: 0.9,
-    marginLeft: 1,
-  },
-  bottom: {
-    alignItems: "center",
-    paddingBottom: brandSpacing.lg,
-  },
-  tagline: {
-    ...brandTypography.meta,
-    color: brandSemanticColors.heroBodyOnDark,
-    opacity: 0.6,
-  },
-})
 
 const authStyles = StyleSheet.create({
   screen: {
@@ -623,31 +533,56 @@ const authStyles = StyleSheet.create({
   },
   heroContentWrapper: {
     flex: 1,
-    justifyContent: "flex-start",
-    gap: 42,
+    justifyContent: "center",
+    gap: 16,
+  },
+  logoBlobContainer: {
+    width: HERO_LOGO_SIZE,
+    height: HERO_LOGO_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -14,
+  },
+  heroBlob: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#0E2210",
+  },
+  heroBlob1: {
+    borderTopLeftRadius: 55,
+    borderTopRightRadius: 32,
+    borderBottomLeftRadius: 44,
+    borderBottomRightRadius: 60,
+  },
+  heroBlob2: {
+    borderTopLeftRadius: 38,
+    borderTopRightRadius: 62,
+    borderBottomLeftRadius: 58,
+    borderBottomRightRadius: 36,
+  },
+  heroBlob3: {
+    borderTopLeftRadius: 48,
+    borderTopRightRadius: 40,
+    borderBottomLeftRadius: 66,
+    borderBottomRightRadius: 52,
   },
   heroContent: {
     zIndex: 2,
     alignItems: "flex-start",
-    gap: 12,
-    transform: [{ translateY: HERO_TEXT_RAISE }],
+    gap: 8,
+    marginTop: 24,
   },
   heroLogo: {
     width: HERO_LOGO_SIZE,
     height: HERO_LOGO_SIZE,
   },
-  heroEyebrow: {
-    ...brandTypography.heroEyebrow,
-    fontSize: 12,
-    lineHeight: 15,
-    letterSpacing: 2.4,
-    color: brandSemanticColors.heroMetaOnDark,
-    marginBottom: 4,
-  },
   heroTitle: {
     ...brandTypography.heroTitle,
-    fontSize: 22,
-    lineHeight: 27,
+    fontSize: 28,
+    lineHeight: 33,
     color: brandSemanticColors.heroBodyOnDark,
   },
   heroBody: {
@@ -655,8 +590,6 @@ const authStyles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: brandSemanticColors.heroMetaOnDark,
-    opacity: 0.92,
-    marginTop: 10,
   },
   heroFerns: {
     position: "absolute",
@@ -696,14 +629,9 @@ const authStyles = StyleSheet.create({
   panelMain: {
     gap: 14,
   },
-  panelFooter: {
-    gap: brandSpacing.sm,
-    paddingTop: brandSpacing.sm,
-  },
   panelHeader: {
     gap: 18,
     marginBottom: 18,
-    marginTop: -8,
   },
   panelTitle: {
     ...brandTypography.sectionTitle,
@@ -719,14 +647,13 @@ const authStyles = StyleSheet.create({
   },
   actionsGroup: {
     gap: 14,
-    transform: [{ translateY: -12 }],
   },
   primaryButton: {
     marginTop: 2,
     minHeight: 50,
   },
   secondaryButton: {
-    minHeight: 50,
+    minHeight: 44,
   },
   errorBanner: {
     backgroundColor: brandSemanticColors.errorSurface,
@@ -741,7 +668,8 @@ const authStyles = StyleSheet.create({
   },
   forgotPasswordLink: {
     alignSelf: "center",
-    paddingTop: 10,
+    paddingTop: 0,
+    marginTop: -6,
     paddingBottom: 6,
   },
   forgotPasswordText: {
@@ -760,14 +688,14 @@ const authStyles = StyleSheet.create({
   },
   legalText: {
     ...brandTypography.meta,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 16,
     color: brandColors.textSecondary,
     textAlign: "center",
     opacity: 0.9,
   },
   legalLink: {
-    fontSize: 10,
+    fontSize: 11,
     color: brandColors.forest,
     fontWeight: "600",
     textDecorationLine: "underline",
@@ -778,37 +706,27 @@ const authStyles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: brandColors.divider,
-    transform: [{ translateY: 6 }],
   },
-  apiUrlPill: {
+})
+
+const devModalStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: brandSpacing.lg,
+    paddingTop: 32,
+    backgroundColor: brandColors.canvas,
+    gap: brandSpacing.md,
+  },
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "center",
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    borderRadius: brandRadius.pill,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    gap: 8,
-    maxWidth: "100%",
-    minHeight: 32,
+    justifyContent: "space-between",
+    marginBottom: brandSpacing.sm,
   },
-  apiUrlPillLabel: {
-    ...brandTypography.meta,
-    fontSize: 12,
-    color: brandColors.textSecondary,
-    fontWeight: "600",
-    opacity: 0.75,
-  },
-  apiUrlPillValue: {
-    ...brandTypography.meta,
-    fontSize: 12,
+  title: {
+    ...brandTypography.sectionTitle,
+    fontSize: 18,
     color: brandColors.textPrimary,
-    opacity: 0.9,
-    flex: 1,
-  },
-  advancedPanel: {
-    gap: brandSpacing.xs,
   },
   hint: {
     ...brandTypography.meta,

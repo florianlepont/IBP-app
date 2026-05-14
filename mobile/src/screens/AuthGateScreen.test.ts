@@ -79,6 +79,7 @@ jest.mock("react-native", () => {
     TouchableWithoutFeedback: mockComponent("TouchableWithoutFeedback"),
     View: mockComponent("View"),
     ActivityIndicator: mockComponent("ActivityIndicator"),
+    Modal: mockComponent("Modal"),
     Platform: {
       OS: "ios",
       select: <T>(options: { ios?: T; android?: T; default?: T }): T | undefined =>
@@ -90,6 +91,11 @@ jest.mock("react-native", () => {
     useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }),
     StyleSheet: {
       create: <T extends object>(value: T): T => value,
+      hairlineWidth: 0.5,
+    },
+    Easing: {
+      out: jest.fn((fn: unknown) => fn),
+      cubic: jest.fn((t: number) => t),
     },
   }
 })
