@@ -192,7 +192,6 @@ export default function App() {
                 onRegister={surveySync.handleRegister}
                 onForgotPassword={surveySync.handleForgotPassword}
                 sessionRestoring={surveySync.sessionRestoring}
-                status={surveySync.status}
                 logoSource={require("./assets/logo-app.png")}
                 heroMartenSource={require("./assets/auth/marten.png")}
               />

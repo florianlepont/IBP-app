@@ -28,7 +28,6 @@ import {
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
-import { AppNotice } from "../ui/AppNotice"
 
 type AuthGateScreenProps = {
   apiUrl: string
@@ -37,9 +36,120 @@ type AuthGateScreenProps = {
   onRegister: () => Promise<void>
   onForgotPassword: () => Promise<void>
   sessionRestoring?: boolean
-  status: string
   logoSource?: ImageSourcePropType
   heroMartenSource?: ImageSourcePropType
+}
+
+const SPECIES_NAMES = [
+  "Fagus sylvatica",
+  "Dryocopus martius",
+  "Quercus robur",
+  "Salamandra salamandra",
+  "Betula pendula",
+  "Sitta europaea",
+  "Tilia cordata",
+  "Martes martes",
+  "Pinus sylvestris",
+  "Parus major",
+  "Carpinus betulus",
+  "Rosalia alpina",
+]
+
+const TYPE_CHAR_MS = 68
+const HOLD_MS = 900
+const FADE_MS = 300
+
+function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) {
+  const insets = useSafeAreaInsets()
+  const [idx, setIdx] = useState(0)
+  const [charsTyped, setCharsTyped] = useState(0)
+  const [holding, setHolding] = useState(false)
+  const textOpacity = useRef(new Animated.Value(1)).current
+  const cursorOpacity = useRef(new Animated.Value(1)).current
+
+  useEffect(() => {
+    const blink = Animated.loop(
+      Animated.sequence([
+        Animated.timing(cursorOpacity, { toValue: 0, duration: 530, useNativeDriver: true }),
+        Animated.timing(cursorOpacity, { toValue: 1, duration: 530, useNativeDriver: true }),
+      ]),
+    )
+    blink.start()
+    return () => blink.stop()
+  }, [cursorOpacity])
+
+  const species = SPECIES_NAMES[idx]
+  const spaceIdx = species.indexOf(" ")
+  const genus = species.slice(0, spaceIdx)
+  const epithet = species.slice(spaceIdx + 1)
+
+  useEffect(() => {
+    // While holding/fading, the animation callback drives the next transition.
+    if (holding) return
+
+    if (charsTyped < species.length) {
+      const t = setTimeout(() => setCharsTyped((c) => c + 1), TYPE_CHAR_MS)
+      return () => clearTimeout(t)
+    }
+
+    // All chars typed — hold then fade out.
+    const t = setTimeout(() => {
+      setHolding(true)
+      Animated.timing(textOpacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(
+        ({ finished }) => {
+          if (!finished) return
+          textOpacity.setValue(1)
+          setCharsTyped(0)
+          setHolding(false)
+          setIdx((i) => (i + 1) % SPECIES_NAMES.length)
+        },
+      )
+    }, HOLD_MS)
+    return () => clearTimeout(t)
+  }, [charsTyped, holding, species, textOpacity])
+
+  const genusTyped = species.slice(0, Math.min(charsTyped, spaceIdx))
+  const epithetTyped = charsTyped > spaceIdx ? species.slice(spaceIdx + 1, charsTyped) : ""
+  const cursorOnGenus = charsTyped <= spaceIdx
+
+  return (
+    <View style={splashStyles.container}>
+      <StatusBar barStyle="light-content" />
+      <View style={[splashStyles.top, { paddingTop: Math.max(insets.top, 12) + 18 }]}>
+        {logoSource ? (
+          <Image source={logoSource} style={splashStyles.logo} resizeMode="contain" accessible={false} />
+        ) : null}
+      </View>
+      <View style={splashStyles.stage}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <ActivityIndicator size="small" color={brandColors.white} style={{ opacity: 0.45 }} />
+          <Animated.View style={{ opacity: textOpacity }}>
+          <View style={splashStyles.twLine}>
+            <Text style={splashStyles.twGenus}>{genusTyped}</Text>
+            {cursorOnGenus ? (
+              <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
+                |
+              </Animated.Text>
+            ) : (
+              <Text style={splashStyles.twGenus}>{genus.slice(genusTyped.length)}</Text>
+            )}
+          </View>
+          <View style={splashStyles.twLine}>
+            <Text style={splashStyles.twEpithet}>{epithetTyped}</Text>
+            {!cursorOnGenus && !holding ? (
+              <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
+                |
+              </Animated.Text>
+            ) : null}
+          </View>
+          </Animated.View>
+        </View>
+      </View>
+      <View style={[splashStyles.bottom, { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) }]}>
+        <Text style={splashStyles.tagline}>Chargement…</Text>
+      </View>
+    </View>
+  )
 }
 
 // AUTH-13 : dimensions asset/layout extraites comme constantes nommées
@@ -135,7 +245,14 @@ function HeroSection({
           </Text>
           {/* AUTH-01 : couleur via token heroBodyOnDark */}
           <Text style={authStyles.heroBody}>
-            Connectez-vous pour synchroniser et gérer vos relevés de terrain.
+            un service proposé par{" "}
+            <Text
+              style={authStyles.heroLink}
+              onPress={() => void Linking.openURL("https://etatssauvages.org")}
+              accessibilityRole="link"
+            >
+              Etats Sauvages
+            </Text>
           </Text>
         </View>
       </View>
@@ -201,7 +318,6 @@ export function AuthGateScreen({
   onRegister,
   onForgotPassword,
   sessionRestoring,
-  status,
   logoSource,
   heroMartenSource,
 }: AuthGateScreenProps) {
@@ -242,30 +358,6 @@ export function AuthGateScreen({
     ]).start()
   }, [heroAnim, logoAnim, martenAnim, panelAnim])
 
-  const normalizedStatus = status.trim().toLowerCase()
-  const feedbackMessage = normalizedStatus && !normalizedStatus.includes("logged in") ? status : ""
-  const feedbackIndicatesError = [
-    "error",
-    "failed",
-    "unauthorized",
-    "forbidden",
-    "denied",
-    "refuse",
-    "refus",
-  ].some((pattern) => normalizedStatus.includes(pattern))
-  const feedbackTone: "danger" | "success" = feedbackIndicatesError ? "danger" : "success"
-
-  const prevFeedbackRef = useRef<string>("")
-  useEffect(() => {
-    if (!feedbackMessage || feedbackMessage === prevFeedbackRef.current) return
-    prevFeedbackRef.current = feedbackMessage
-    void Haptics.notificationAsync(
-      feedbackTone === "danger"
-        ? Haptics.NotificationFeedbackType.Error
-        : Haptics.NotificationFeedbackType.Success,
-    )
-  }, [feedbackMessage, feedbackTone])
-
   const handleLoginPress = async (): Promise<void> => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
@@ -294,26 +386,7 @@ export function AuthGateScreen({
   const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
 
   if (sessionRestoring) {
-    return (
-      <View style={authStyles.screen}>
-        <StatusBar barStyle="light-content" />
-        <View style={[authStyles.heroBackground, { flex: 1, paddingTop: Math.max(insets.top, 12) + 18 }]}>
-          {logoSource ? (
-            <Image
-              source={logoSource}
-              style={authStyles.heroLogo}
-              resizeMode="contain"
-              accessible={false}
-            />
-          ) : null}
-          <ActivityIndicator
-            color={brandColors.white}
-            size="large"
-            style={{ marginTop: brandSpacing.xl }}
-          />
-        </View>
-      </View>
-    )
+    return <TypewriterLoader logoSource={logoSource} />
   }
 
   return (
@@ -360,15 +433,15 @@ export function AuthGateScreen({
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEnabled={false}
         >
           <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
             <View style={authStyles.panelHeader}>
-              {/* AUTH-03 : role header sur le titre du panneau */}
               <Text style={authStyles.panelTitle} accessibilityRole="header">
                 Connexion
               </Text>
               <Text style={authStyles.panelSubtitle}>
-                Accédez à vos relevés, la carte publique et votre compte.
+                Gérez vos relevés IBP, synchronisez vos données de terrain et consultez la carte de biodiversité.
               </Text>
             </View>
 
@@ -398,16 +471,6 @@ export function AuthGateScreen({
               <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
             </Pressable>
 
-            {feedbackMessage ? (
-              <AppNotice
-                tone={feedbackTone}
-                icon={
-                  feedbackTone === "danger" ? "alert-circle-outline" : "information-circle-outline"
-                }
-                title={feedbackTone === "danger" ? "Problème de connexion" : "Statut"}
-                message={feedbackMessage}
-              />
-            ) : null}
           </View>
 
           <View style={authStyles.panelFooterGroup}>
@@ -439,6 +502,60 @@ export function AuthGateScreen({
     </KeyboardAvoidingView>
   )
 }
+
+const splashStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: brandColors.forest,
+  },
+  top: {
+    alignItems: "center",
+    paddingTop: brandSpacing.lg,
+  },
+  logo: {
+    width: 130,
+    height: 42,
+  },
+  stage: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: brandSpacing.xl,
+  },
+  twLine: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  twGenus: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: brandColors.white,
+    letterSpacing: 2,
+  },
+  twEpithet: {
+    fontSize: 16,
+    fontStyle: "italic",
+    fontWeight: "300",
+    color: brandColors.white,
+    opacity: 0.75,
+    letterSpacing: 1.5,
+  },
+  twCursor: {
+    fontSize: 18,
+    fontWeight: "200",
+    color: brandColors.white,
+    opacity: 0.9,
+    marginLeft: 1,
+  },
+  bottom: {
+    alignItems: "center",
+    paddingBottom: brandSpacing.lg,
+  },
+  tagline: {
+    ...brandTypography.meta,
+    color: brandSemanticColors.heroBodyOnDark,
+    opacity: 0.6,
+  },
+})
 
 const authStyles = StyleSheet.create({
   screen: {
@@ -476,9 +593,12 @@ const authStyles = StyleSheet.create({
   },
   heroBody: {
     ...brandTypography.sectionBody,
-    // AUTH-01 : token sémantique au lieu de #E8ECD9 hardcodé
     color: brandSemanticColors.heroBodyOnDark,
     maxWidth: 260,
+  },
+  heroLink: {
+    color: brandColors.sage,
+    textDecorationLine: "underline",
   },
   heroMarten: {
     position: "absolute",
@@ -514,10 +634,8 @@ const authStyles = StyleSheet.create({
     paddingTop: brandSpacing.sm,
   },
   panelHeader: {
-    minHeight: 88,
     paddingTop: brandSpacing.xs,
-    justifyContent: "center",
-    gap: 4,
+    paddingBottom: brandSpacing.xs,
   },
   panelTitle: {
     ...brandTypography.sectionTitle,

@@ -99,7 +99,6 @@ describe("AuthGateScreen", () => {
           onLogin,
           onRegister: jest.fn(async () => undefined),
           onForgotPassword: jest.fn(async () => undefined),
-          status: "Ready",
         }),
       )
     })

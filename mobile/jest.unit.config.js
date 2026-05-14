@@ -23,6 +23,8 @@ module.exports = {
     '^@expo/vector-icons$': '<rootDir>/test/vector-icons.mock.ts',
     '^expo-sqlite$': '<rootDir>/test/expo-sqlite.mock.ts',
     '^expo-haptics$': '<rootDir>/test/expo-haptics.mock.ts',
+    '^react-native-svg$': '<rootDir>/test/react-native-svg.mock.ts',
+    '\\.(png|jpg|jpeg|gif|webp)$': '<rootDir>/test/image.mock.ts',
   },
   globals: {
     __DEV__: true,

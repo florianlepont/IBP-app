@@ -57,6 +57,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [profile, setProfile] = useState("Not logged in")
   const auth0Ref = useRef<Auth0 | null>(null)
 
+  const apiUrlRef = useRef(apiUrl)
+  apiUrlRef.current = apiUrl
+
   const getAuth0 = useCallback((): Auth0 => {
     if (!auth0Ref.current) {
       auth0Ref.current = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
@@ -139,7 +142,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     const restore = async (): Promise<void> => {
       try {
         if (active) setSessionRestoring(true)
-
+        // DEV ONLY: slow down session restore to test the loading screen
         const auth0 = getAuth0()
         const hasCredentials = await auth0.credentialsManager.hasValidCredentials()
         if (!hasCredentials) {
@@ -158,7 +161,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
         setAccessToken(credentials.accessToken)
 
-        const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
+        const user = await getMyProfile(apiUrlRef.current, credentials.accessToken).catch(() => null)
         if (!active) return
 
         if (!user) {
@@ -186,7 +189,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     return () => {
       active = false
     }
-  }, [apiUrl, clearSession, getAuth0, reportStatus, setProfileFromUser])
+  }, [clearSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogin = useCallback(async (): Promise<void> => {
     try {

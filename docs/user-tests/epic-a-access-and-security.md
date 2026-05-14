@@ -8,12 +8,18 @@ Legend: ✅ Pass · ❌ Fail · ⚠️ Pass with issue · 🔲 Not tested
 
 ## US-A1 — Login
 
-| # | Case | Expected result | Status |
-|---|------|-----------------|--------|
-| A1-1 | Valid email + password | Redirected to home screen | ✅ |
-| A1-2 | Invalid email format | Clear error message displayed | ✅ |
-| A1-3 | Wrong password | Clear error message displayed | ✅ |
-| A1-4 | Close and reopen the app without logging out | Session still active | ✅ |
+| # | Case | Expected result | Status | Notes |
+|---|------|-----------------|--------|-------|
+| A1-1 | Valid email + password | Redirected to home screen | ✅ | |
+| A1-2 | Invalid email format | Clear error message displayed | ✅ | |
+| A1-3 | Wrong password | Clear error message displayed | ✅ | |
+| A1-4 | Close and reopen the app without logging out | Session still active | ✅ | |
+| A1-5 | App launch while session is restoring | Branded loading screen — no flash of the login form | ✅ | Typewriter loader: scientific species names typed character by character on forest green background, permanent spinner on the left |
+| A1-6 | Login screen | Two distinct buttons visible: "Se connecter" (primary) and "Créer un compte" (secondary) | ✅ | |
+| A1-7 | Tap "Se connecter" | Light haptic feedback before Auth0 opens | ✅ | Not verified on a physical device — code is correct (`Haptics.impactAsync` before each action) |
+| A1-8 | Auth0 error (e.g. wrong config) | User-friendly message displayed — no client ID, callback URL or technical detail visible | ✅ | |
+| A1-9 | Bottom of login panel | "Conditions d'utilisation" and "Politique de confidentialité" links visible and tappable | ✅ | |
+| A1-10 | Tap a legal link | Opens the corresponding page in the browser | ✅ | |
 
 ---
 
@@ -36,6 +42,7 @@ Legend: ✅ Pass · ❌ Fail · ⚠️ Pass with issue · 🔲 Not tested
 | A3-4 | Email already in use | Error message displayed with a suggestion to log in instead | ❌ | Auth0 shows a generic error instead of specifying the email is already taken |
 | A3-5 | Network error during sign up | Actionable error message with retry option | ✅ | |
 | A3-6 | Email verification flow | Verification email received, clear UX for both verified and unverified states | ✅ | |
+| A3-7 | Tap "Créer un compte" | Auth0 opens directly on the sign-up form (not the login page) | ✅ | Requires New Universal Login on Auth0 tenant |
 
 ---
 
@@ -56,7 +63,7 @@ Legend: ✅ Pass · ❌ Fail · ⚠️ Pass with issue · 🔲 Not tested
 
 | # | Case | Expected result | Status | Notes |
 |---|------|-----------------|--------|-------|
-| A6-1 | Tap "Forgot password?" on login screen | Email input form displayed | 🔲 | |
+| A6-1 | Tap "Mot de passe oublié ?" on login screen | Auth0 opens, user can enter their email to receive a reset link | 🔲 | Link now present directly on the login screen |
 | A6-2 | Submit a recognised email | Reset email received with a secure single-use link | ⚠️ | Email received but landed in spam — related to iCloud SMTP issue (to be fixed with OVH) |
 | A6-3 | Submit an unrecognised email | Informative message displayed | ✅ | |
 | A6-4 | Use reset link after 24 hours | Link expired, error message shown | 🔲 | Not yet verified |
