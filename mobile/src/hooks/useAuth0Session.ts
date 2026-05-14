@@ -191,7 +191,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     }
   }, [clearSession, getAuth0, reportStatus, setProfileFromUser])
 
-  const handleLogin = useCallback(async (): Promise<void> => {
+  const handleLogin = useCallback(async (): Promise<string | null> => {
     try {
       reportStatus("auth", "running", "Logging in...")
       const auth0 = getAuth0()
@@ -208,30 +208,35 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          reportStatus("auth", "error", buildApiTokenRejectedMessage(apiUrl))
-          return
+          const msg = buildApiTokenRejectedMessage(apiUrl)
+          reportStatus("auth", "error", msg)
+          return msg
         }
         throw error
       }
 
       setProfileFromUser(user)
       reportStatus("auth", "success", "Logged in")
+      return null
     } catch (error) {
       const message = extractLoginErrorMessage(error)
       // User cancelled the login flow
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
         reportStatus("auth", "idle", "")
-        return
+        return null
       }
       if (/unauthorized/i.test(message)) {
-        reportStatus("auth", "error", buildAuth0UnauthorizedMessage(apiUrl))
-        return
+        const msg = buildAuth0UnauthorizedMessage(apiUrl)
+        reportStatus("auth", "error", msg)
+        return msg
       }
-      reportStatus("auth", "error", `Login error: ${message}`)
+      const msg = `Login error: ${message}`
+      reportStatus("auth", "error", msg)
+      return msg
     }
   }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
 
-  const handleRegister = useCallback(async (): Promise<void> => {
+  const handleRegister = useCallback(async (): Promise<string | null> => {
     try {
       reportStatus("auth", "running", "Logging in...")
       const auth0 = getAuth0()
@@ -249,25 +254,30 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          reportStatus("auth", "error", buildApiTokenRejectedMessage(apiUrl))
-          return
+          const msg = buildApiTokenRejectedMessage(apiUrl)
+          reportStatus("auth", "error", msg)
+          return msg
         }
         throw error
       }
 
       setProfileFromUser(user)
       reportStatus("auth", "success", "Logged in")
+      return null
     } catch (error) {
       const message = extractLoginErrorMessage(error)
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
         reportStatus("auth", "idle", "")
-        return
+        return null
       }
       if (/unauthorized/i.test(message)) {
-        reportStatus("auth", "error", buildAuth0UnauthorizedMessage(apiUrl))
-        return
+        const msg = buildAuth0UnauthorizedMessage(apiUrl)
+        reportStatus("auth", "error", msg)
+        return msg
       }
-      reportStatus("auth", "error", `Login error: ${message}`)
+      const msg = `Login error: ${message}`
+      reportStatus("auth", "error", msg)
+      return msg
     }
   }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   Image,
@@ -16,12 +17,14 @@ import {
   useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { Ionicons } from "@expo/vector-icons"
 import * as Haptics from "expo-haptics"
 import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "../app/auth0-config"
 import {
   brandColors,
   brandRadius,
   brandSemanticColors,
+  brandShadow,
   brandSpacing,
   brandTypography,
 } from "../app/brand-tokens"
@@ -32,8 +35,8 @@ import { AppField } from "../ui/AppField"
 type AuthGateScreenProps = {
   apiUrl: string
   onApiUrlChange: (value: string) => void
-  onLogin: () => Promise<void>
-  onRegister: () => Promise<void>
+  onLogin: () => Promise<string | null>
+  onRegister: () => Promise<string | null>
   onForgotPassword: () => Promise<void>
   sessionRestoring?: boolean
   logoSource?: ImageSourcePropType
@@ -64,10 +67,16 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
   const [idx, setIdx] = useState(0)
   const [charsTyped, setCharsTyped] = useState(0)
   const [holding, setHolding] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(false)
   const textOpacity = useRef(new Animated.Value(1)).current
   const cursorOpacity = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion)
+  }, [])
+
+  useEffect(() => {
+    if (reducedMotion) return
     const blink = Animated.loop(
       Animated.sequence([
         Animated.timing(cursorOpacity, { toValue: 0, duration: 530, useNativeDriver: true }),
@@ -76,7 +85,7 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
     )
     blink.start()
     return () => blink.stop()
-  }, [cursorOpacity])
+  }, [cursorOpacity, reducedMotion])
 
   const species = SPECIES_NAMES[idx]
   const spaceIdx = species.indexOf(" ")
@@ -84,7 +93,7 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
   const epithet = species.slice(spaceIdx + 1)
 
   useEffect(() => {
-    // While holding/fading, the animation callback drives the next transition.
+    if (reducedMotion) return
     if (holding) return
 
     if (charsTyped < species.length) {
@@ -92,7 +101,6 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
       return () => clearTimeout(t)
     }
 
-    // All chars typed — hold then fade out.
     const t = setTimeout(() => {
       setHolding(true)
       Animated.timing(textOpacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(
@@ -106,11 +114,11 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
       )
     }, HOLD_MS)
     return () => clearTimeout(t)
-  }, [charsTyped, holding, species, textOpacity])
+  }, [charsTyped, holding, reducedMotion, species, textOpacity])
 
-  const genusTyped = species.slice(0, Math.min(charsTyped, spaceIdx))
-  const epithetTyped = charsTyped > spaceIdx ? species.slice(spaceIdx + 1, charsTyped) : ""
-  const cursorOnGenus = charsTyped <= spaceIdx
+  const genusTyped = reducedMotion ? genus : species.slice(0, Math.min(charsTyped, spaceIdx))
+  const epithetTyped = reducedMotion ? epithet : charsTyped > spaceIdx ? species.slice(spaceIdx + 1, charsTyped) : ""
+  const cursorOnGenus = !reducedMotion && charsTyped <= spaceIdx
 
   return (
     <View style={splashStyles.container}>
@@ -122,27 +130,33 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
       </View>
       <View style={splashStyles.stage}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-          <ActivityIndicator size="small" color={brandColors.white} style={{ opacity: 0.45 }} />
-          <Animated.View style={{ opacity: textOpacity }}>
-          <View style={splashStyles.twLine}>
-            <Text style={splashStyles.twGenus}>{genusTyped}</Text>
-            {cursorOnGenus ? (
-              <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
-                |
-              </Animated.Text>
-            ) : (
-              <Text style={splashStyles.twGenus}>{genus.slice(genusTyped.length)}</Text>
-            )}
+          <ActivityIndicator size="small" color={brandColors.white} style={{ opacity: 0.6 }} />
+          <View
+            accessible={true}
+            accessibilityLabel="Chargement en cours"
+            accessibilityLiveRegion="none"
+          >
+            <Animated.View style={{ opacity: textOpacity }} accessibilityElementsHidden={true}>
+              <View style={splashStyles.twLine}>
+                <Text style={splashStyles.twGenus}>{genusTyped}</Text>
+                {cursorOnGenus ? (
+                  <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
+                    |
+                  </Animated.Text>
+                ) : (
+                  <Text style={splashStyles.twGenus}>{genus.slice(genusTyped.length)}</Text>
+                )}
+              </View>
+              <View style={splashStyles.twLine}>
+                <Text style={splashStyles.twEpithet}>{epithetTyped}</Text>
+                {!cursorOnGenus && !holding && !reducedMotion ? (
+                  <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
+                    |
+                  </Animated.Text>
+                ) : null}
+              </View>
+            </Animated.View>
           </View>
-          <View style={splashStyles.twLine}>
-            <Text style={splashStyles.twEpithet}>{epithetTyped}</Text>
-            {!cursorOnGenus && !holding ? (
-              <Animated.Text style={[splashStyles.twCursor, { opacity: cursorOpacity }]}>
-                |
-              </Animated.Text>
-            ) : null}
-          </View>
-          </Animated.View>
         </View>
       </View>
       <View style={[splashStyles.bottom, { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) }]}>
@@ -152,29 +166,25 @@ function TypewriterLoader({ logoSource }: { logoSource?: ImageSourcePropType }) 
   )
 }
 
-// AUTH-13 : dimensions asset/layout extraites comme constantes nommées
-const HERO_MIN_HEIGHT_RATIO = 0.35
-const HERO_MIN_HEIGHT_PX = 280
-const HERO_LOGO_WIDTH = 154
-const HERO_LOGO_HEIGHT = 50
-const HERO_LOGO_MARGIN_LEFT = -22
-const HERO_LOGO_MARGIN_BOTTOM = brandSpacing.xs
-const HERO_MARTEN_WIDTH = 168
-const HERO_MARTEN_HEIGHT = 216
-const HERO_MARTEN_RIGHT = 12
-const HERO_MARTEN_BOTTOM = -14
-const PANEL_OVERLAP = 24
-
-// AUTH-11 : durées et décalages d'animation
-const ANIM_HERO_DURATION = 200
-const ANIM_LOGO_DURATION = 220
-const ANIM_MARTEN_DURATION = 260
-const ANIM_PANEL_DURATION = 300
-const ANIM_STAGGER = 80
+const HERO_MIN_HEIGHT_RATIO = 0.44
+const HERO_MIN_HEIGHT_PX = 260
+const HERO_LOGO_SIZE = 54
+const HERO_CONTENT_TOP_OFFSET = 42
+const HERO_MARTEN_WIDTH = 92
+const HERO_MARTEN_HEIGHT = 207
+const HERO_MARTEN_RIGHT = 34
+const HERO_MARTEN_BOTTOM = 28
+const HERO_FERNS_WIDTH = 485
+const HERO_FERNS_HEIGHT = 400
+const HERO_FERNS_RIGHT = HERO_MARTEN_RIGHT + HERO_MARTEN_WIDTH / 2 - HERO_FERNS_WIDTH / 2
+const HERO_FERNS_BOTTOM = -Math.round(HERO_FERNS_HEIGHT * 0.3)
+const PANEL_OVERLAP = 30
+const HERO_TEXT_RAISE = -Math.round(HERO_MIN_HEIGHT_PX * 0.1)
 
 type HeroSectionProps = {
   height: number
   topInset: number
+  leftInset: number
   logoSource?: ImageSourcePropType
   heroMartenSource?: ImageSourcePropType
   logoAnim: Animated.Value
@@ -184,17 +194,27 @@ type HeroSectionProps = {
 function HeroSection({
   height,
   topInset,
+  leftInset,
   logoSource,
   heroMartenSource,
   logoAnim,
   martenAnim,
 }: HeroSectionProps) {
+  const { width: screenWidth } = useWindowDimensions()
+  const heroContentMaxWidth = Math.min(screenWidth - brandSpacing.lg * 2, 270)
+
   return (
     <View style={[authStyles.hero, { height }]}>
-      {/* AUTH-02 : status bar claire sur le fond sombre */}
-      <StatusBar barStyle="light-content" />
-      <View style={[authStyles.heroBackground, { paddingTop: Math.max(topInset, 12) + 18 }]}>
-        {/* AUTH-11 : martre en slide depuis la droite */}
+      <View style={authStyles.heroBackground}>
+        {/* Fougères décoratives — base végétale derrière la martre */}
+        <Image
+          source={require("../../assets/auth/fougeres.png")}
+          style={authStyles.heroFerns}
+          resizeMode="contain"
+          accessible={false}
+        />
+
+        {/* Marten — position absolute, clippé par overflow:hidden de heroBackground */}
         {heroMartenSource ? (
           <Animated.Image
             source={heroMartenSource}
@@ -216,8 +236,18 @@ function HeroSection({
             accessible={false}
           />
         ) : null}
-        <View style={authStyles.heroContent}>
-          {/* AUTH-11 : logo en slide depuis le haut */}
+
+        {/* Logo + texte centrés verticalement dans l'espace disponible */}
+        <View
+          style={[
+            authStyles.heroContentWrapper,
+            {
+              paddingTop: Math.max(topInset, 12) + HERO_CONTENT_TOP_OFFSET,
+              paddingBottom: PANEL_OVERLAP + brandSpacing.md,
+              paddingLeft: leftInset,
+            },
+          ]}
+        >
           {logoSource ? (
             <Animated.Image
               source={logoSource}
@@ -239,21 +269,21 @@ function HeroSection({
               accessible={false}
             />
           ) : null}
-          {/* AUTH-03 : role header sur le titre */}
-          <Text style={authStyles.heroTitle} accessibilityRole="header">
-            Bienvenue sur l&apos;app IBP
-          </Text>
-          {/* AUTH-01 : couleur via token heroBodyOnDark */}
-          <Text style={authStyles.heroBody}>
-            un service proposé par{" "}
-            <Text
-              style={authStyles.heroLink}
-              onPress={() => void Linking.openURL("https://etatssauvages.org")}
-              accessibilityRole="link"
-            >
-              Etats Sauvages
+
+          <View
+            style={[authStyles.heroContent, { maxWidth: heroContentMaxWidth }]}
+            accessible={true}
+            accessibilityRole="header"
+            accessibilityLabel="États Sauvages. Indice de Biodiversité Potentielle, un service proposé par Etats Sauvages."
+          >
+            <Text style={authStyles.heroEyebrow}>ÉTATS SAUVAGES</Text>
+            <Text style={authStyles.heroTitle}>
+              Indice de{"\n"}Biodiversité Potentielle
             </Text>
-          </Text>
+            <Text style={authStyles.heroBody}>
+              un service proposé par{"\n"}Etats Sauvages
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -268,7 +298,6 @@ type AuthPanelFooterProps = {
 function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
   const [editing, setEditing] = useState(false)
 
-  // AUTH-12 : masqué en production
   if (!__DEV__) return null
 
   return (
@@ -291,7 +320,6 @@ function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
           </Text>
         </AppCard>
       ) : (
-        // AUTH-07 : zone tactile >= 44pt via hitSlop
         <Pressable
           onPress={() => setEditing(true)}
           style={authStyles.apiUrlPill}
@@ -304,7 +332,7 @@ function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
           <Text style={authStyles.apiUrlPillValue} numberOfLines={1}>
             {apiUrl}
           </Text>
-          <Text style={authStyles.apiUrlPillEdit}>Modifier</Text>
+          <Ionicons name="create-outline" size={14} color={brandColors.forest} />
         </Pressable>
       )}
     </View>
@@ -324,45 +352,46 @@ export function AuthGateScreen({
   const { height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const [submitting, setSubmitting] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [reducedMotion, setReducedMotion] = useState(false)
 
-  // AUTH-11 : valeurs d'animation
   const heroAnim = useRef(new Animated.Value(0)).current
   const logoAnim = useRef(new Animated.Value(0)).current
   const martenAnim = useRef(new Animated.Value(0)).current
   const panelAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(heroAnim, {
-        toValue: 1,
-        duration: ANIM_HERO_DURATION,
-        useNativeDriver: true,
-      }),
-      Animated.stagger(ANIM_STAGGER, [
-        Animated.timing(logoAnim, {
-          toValue: 1,
-          duration: ANIM_LOGO_DURATION,
-          useNativeDriver: true,
-        }),
-        Animated.timing(martenAnim, {
-          toValue: 1,
-          duration: ANIM_MARTEN_DURATION,
-          useNativeDriver: true,
-        }),
-        Animated.timing(panelAnim, {
-          toValue: 1,
-          duration: ANIM_PANEL_DURATION,
-          useNativeDriver: true,
-        }),
-      ]),
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion)
+  }, [])
+
+  useEffect(() => {
+    if (reducedMotion) {
+      heroAnim.setValue(1)
+      logoAnim.setValue(1)
+      martenAnim.setValue(1)
+      panelAnim.setValue(1)
+      return
+    }
+    Animated.stagger(60, [
+      Animated.timing(heroAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.timing(logoAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(martenAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(panelAnim, { toValue: 1, duration: 240, useNativeDriver: true }),
     ]).start()
-  }, [heroAnim, logoAnim, martenAnim, panelAnim])
+  }, [heroAnim, logoAnim, martenAnim, panelAnim, reducedMotion])
 
   const handleLoginPress = async (): Promise<void> => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
       setSubmitting(true)
-      await onLogin()
+      setAuthError(null)
+      const error = await onLogin()
+      if (error) {
+        setAuthError(error)
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -372,7 +401,14 @@ export function AuthGateScreen({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
       setSubmitting(true)
-      await onRegister()
+      setAuthError(null)
+      const error = await onRegister()
+      if (error) {
+        setAuthError(error)
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -390,16 +426,14 @@ export function AuthGateScreen({
   }
 
   return (
-    // AUTH-04 : behavior="padding" sur iOS (standard iOS HIG)
-    <KeyboardAvoidingView
-      style={authStyles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      {/* AUTH-11 : hero en fadeIn */}
+    <View style={authStyles.screen}>
+      <StatusBar barStyle="light-content" />
+
       <Animated.View style={{ opacity: heroAnim }}>
         <HeroSection
           height={heroHeight}
           topInset={insets.top}
+          leftInset={insets.left}
           logoSource={logoSource}
           heroMartenSource={heroMartenSource}
           logoAnim={logoAnim}
@@ -407,7 +441,6 @@ export function AuthGateScreen({
         />
       </Animated.View>
 
-      {/* AUTH-11 : panneau en slideUp + fade */}
       <Animated.View
         style={[
           authStyles.panelWrap,
@@ -424,7 +457,7 @@ export function AuthGateScreen({
           },
         ]}
       >
-        {/* AUTH-08 : ScrollView pour petits écrans avec clavier */}
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView
           style={authStyles.panelScroll}
           contentContainerStyle={[
@@ -433,44 +466,51 @@ export function AuthGateScreen({
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
+          alwaysBounceVertical={false}
         >
           <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
             <View style={authStyles.panelHeader}>
               <Text style={authStyles.panelTitle} accessibilityRole="header">
-                Connexion
+                Bienvenue
               </Text>
               <Text style={authStyles.panelSubtitle}>
-                Gérez vos relevés IBP, synchronisez vos données de terrain et consultez la carte de biodiversité.
+                Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles hors-ligne.
               </Text>
             </View>
 
-            {/* AUTH-06 : prop loading sur AppButton */}
-            <AppButton
-              label={submitting ? "Ouverture..." : "Se connecter"}
-              onPress={() => void handleLoginPress()}
-              loading={submitting}
-              style={authStyles.primaryButton}
-              testID="auth-submit"
-            />
-            <AppButton
-              label="Créer un compte"
-              variant="secondary"
-              onPress={() => void handleRegisterPress()}
-              disabled={submitting}
-              testID="auth-register"
-            />
+            {authError !== null && (
+              <View style={authStyles.errorBanner}>
+                <Text style={authStyles.errorBannerText}>{authError}</Text>
+              </View>
+            )}
 
-            <Pressable
-              onPress={() => void handleForgotPasswordPress()}
-              style={authStyles.forgotPasswordLink}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              testID="auth-forgot-password"
-            >
-              <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
-            </Pressable>
+            <View style={authStyles.actionsGroup}>
+              <AppButton
+                label={submitting ? "Connexion en cours…" : "Se connecter"}
+                onPress={() => void handleLoginPress()}
+                loading={submitting}
+                style={authStyles.primaryButton}
+                testID="auth-submit"
+              />
+              <AppButton
+                label="Créer un compte"
+                variant="secondary"
+                onPress={() => void handleRegisterPress()}
+                disabled={submitting}
+                style={authStyles.secondaryButton}
+                testID="auth-register"
+              />
 
+              <Pressable
+                onPress={() => void handleForgotPasswordPress()}
+                style={authStyles.forgotPasswordLink}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="link"
+                testID="auth-forgot-password"
+              >
+                <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={authStyles.panelFooterGroup}>
@@ -494,12 +534,22 @@ export function AuthGateScreen({
                 </Text>
                 .
               </Text>
+              <Text style={authStyles.legalText}>
+                <Text
+                  style={authStyles.legalLink}
+                  onPress={() => void Linking.openURL("https://etatssauvages.org")}
+                  accessibilityRole="link"
+                >
+                  etatssauvages.org
+                </Text>
+              </Text>
             </View>
             <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
           </View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </Animated.View>
-    </KeyboardAvoidingView>
+    </View>
   )
 }
 
@@ -528,21 +578,21 @@ const splashStyles = StyleSheet.create({
   twGenus: {
     fontSize: 18,
     fontWeight: "500",
-    color: brandColors.white,
+    color: brandSemanticColors.heroBodyOnDark,
     letterSpacing: 2,
   },
   twEpithet: {
     fontSize: 16,
     fontStyle: "italic",
     fontWeight: "300",
-    color: brandColors.white,
+    color: brandSemanticColors.heroBodyOnDark,
     opacity: 0.75,
     letterSpacing: 1.5,
   },
   twCursor: {
     fontSize: 18,
     fontWeight: "200",
-    color: brandColors.white,
+    color: brandSemanticColors.heroBodyOnDark,
     opacity: 0.9,
     marginLeft: 1,
   },
@@ -570,35 +620,52 @@ const authStyles = StyleSheet.create({
     backgroundColor: brandColors.forest,
     overflow: "hidden",
     paddingHorizontal: brandSpacing.lg,
-    // AUTH-13 : paddingBottom aligné sur brandSpacing.xl (28) + 2 = 30
-    paddingBottom: brandSpacing.xl + 2,
-    justifyContent: "flex-end",
+  },
+  heroContentWrapper: {
+    flex: 1,
+    justifyContent: "flex-start",
+    gap: 42,
   },
   heroContent: {
-    zIndex: 1,
-    width: "62%",
+    zIndex: 2,
     alignItems: "flex-start",
-    gap: brandSpacing.xs,
+    gap: 12,
+    transform: [{ translateY: HERO_TEXT_RAISE }],
   },
   heroLogo: {
-    width: HERO_LOGO_WIDTH,
-    height: HERO_LOGO_HEIGHT,
-    alignSelf: "flex-start",
-    marginLeft: HERO_LOGO_MARGIN_LEFT,
-    marginBottom: HERO_LOGO_MARGIN_BOTTOM,
+    width: HERO_LOGO_SIZE,
+    height: HERO_LOGO_SIZE,
+  },
+  heroEyebrow: {
+    ...brandTypography.heroEyebrow,
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: 2.4,
+    color: brandSemanticColors.heroMetaOnDark,
+    marginBottom: 4,
   },
   heroTitle: {
     ...brandTypography.heroTitle,
-    color: brandColors.white,
+    fontSize: 22,
+    lineHeight: 27,
+    color: brandSemanticColors.heroBodyOnDark,
   },
   heroBody: {
     ...brandTypography.sectionBody,
-    color: brandSemanticColors.heroBodyOnDark,
-    maxWidth: 260,
+    fontSize: 14,
+    lineHeight: 20,
+    color: brandSemanticColors.heroMetaOnDark,
+    opacity: 0.92,
+    marginTop: 10,
   },
-  heroLink: {
-    color: brandColors.sage,
-    textDecorationLine: "underline",
+  heroFerns: {
+    position: "absolute",
+    right: HERO_FERNS_RIGHT,
+    bottom: HERO_FERNS_BOTTOM,
+    width: HERO_FERNS_WIDTH,
+    height: HERO_FERNS_HEIGHT,
+    opacity: 0.52,
+    zIndex: 0,
   },
   heroMarten: {
     position: "absolute",
@@ -606,9 +673,10 @@ const authStyles = StyleSheet.create({
     bottom: HERO_MARTEN_BOTTOM,
     width: HERO_MARTEN_WIDTH,
     height: HERO_MARTEN_HEIGHT,
-    zIndex: 0,
+    zIndex: 1,
   },
   panelWrap: {
+    ...brandShadow.card,
     flex: 1,
     marginTop: -PANEL_OVERLAP,
     borderTopLeftRadius: brandRadius.panel,
@@ -621,10 +689,9 @@ const authStyles = StyleSheet.create({
   },
   panelContent: {
     flexGrow: 1,
-    paddingHorizontal: brandSpacing.lg,
-    paddingTop: brandSpacing.lg + 2,
-    justifyContent: "space-between",
-    gap: brandSpacing.lg,
+    paddingHorizontal: 28,
+    paddingTop: 44,
+    gap: 16,
   },
   panelMain: {
     gap: 14,
@@ -634,46 +701,84 @@ const authStyles = StyleSheet.create({
     paddingTop: brandSpacing.sm,
   },
   panelHeader: {
-    paddingTop: brandSpacing.xs,
-    paddingBottom: brandSpacing.xs,
+    gap: 18,
+    marginBottom: 18,
+    marginTop: -8,
   },
   panelTitle: {
     ...brandTypography.sectionTitle,
+    fontSize: 25,
+    lineHeight: 30,
     color: brandColors.textPrimary,
   },
   panelSubtitle: {
     ...brandTypography.sectionBody,
+    fontSize: 14,
+    lineHeight: 21,
     color: brandColors.textSecondary,
   },
+  actionsGroup: {
+    gap: 14,
+    transform: [{ translateY: -12 }],
+  },
   primaryButton: {
-    marginTop: brandSpacing.xs + 2,
+    marginTop: 2,
+    minHeight: 50,
+  },
+  secondaryButton: {
+    minHeight: 50,
+  },
+  errorBanner: {
+    backgroundColor: brandSemanticColors.errorSurface,
+    borderRadius: brandRadius.card,
+    paddingHorizontal: brandSpacing.md,
+    paddingVertical: brandSpacing.sm,
+  },
+  errorBannerText: {
+    ...brandTypography.meta,
+    color: brandColors.terracotta,
+    lineHeight: 17,
   },
   forgotPasswordLink: {
     alignSelf: "center",
-    paddingVertical: 2,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   forgotPasswordText: {
-    ...brandTypography.meta,
+    ...brandTypography.button,
+    fontSize: 13,
+    lineHeight: 17,
     color: brandColors.forest,
     fontWeight: "600",
+    textDecorationLine: "underline",
   },
   legalContainer: {
     alignItems: "center",
     paddingHorizontal: brandSpacing.sm,
+    paddingVertical: 6,
+    gap: 14,
   },
   legalText: {
     ...brandTypography.meta,
+    fontSize: 10,
+    lineHeight: 15,
     color: brandColors.textSecondary,
     textAlign: "center",
-    lineHeight: 18,
+    opacity: 0.9,
   },
   legalLink: {
+    fontSize: 10,
     color: brandColors.forest,
     fontWeight: "600",
+    textDecorationLine: "underline",
   },
   panelFooterGroup: {
-    gap: brandSpacing.sm,
-    paddingTop: brandSpacing.sm,
+    gap: 18,
+    marginTop: "auto",
+    paddingTop: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: brandColors.divider,
+    transform: [{ translateY: 6 }],
   },
   apiUrlPill: {
     flexDirection: "row",
@@ -682,25 +787,25 @@ const authStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: brandColors.divider,
     borderRadius: brandRadius.pill,
-    paddingVertical: brandSpacing.xs,
-    paddingHorizontal: brandSpacing.sm + 2,
-    gap: brandSpacing.xs,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    gap: 8,
     maxWidth: "100%",
+    minHeight: 32,
   },
   apiUrlPillLabel: {
     ...brandTypography.meta,
+    fontSize: 12,
     color: brandColors.textSecondary,
     fontWeight: "600",
+    opacity: 0.75,
   },
   apiUrlPillValue: {
     ...brandTypography.meta,
+    fontSize: 12,
     color: brandColors.textPrimary,
+    opacity: 0.9,
     flex: 1,
-  },
-  apiUrlPillEdit: {
-    ...brandTypography.meta,
-    color: brandColors.forest,
-    fontWeight: "600",
   },
   advancedPanel: {
     gap: brandSpacing.xs,

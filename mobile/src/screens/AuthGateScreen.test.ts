@@ -36,6 +36,7 @@ jest.mock("react-native", () => {
   const Animated = {
     Value: jest.fn(() => animatedValue()),
     View: mockComponent("Animated.View"),
+    Text: mockComponent("Animated.Text"),
     Image: mockComponent("Animated.Image"),
     timing: jest.fn(() => ({ start: jest.fn() })),
     sequence: jest.fn((anims: { start: (cb?: () => void) => void }[]) => ({
@@ -44,6 +45,13 @@ jest.mock("react-native", () => {
         cb?.()
       },
     })),
+    parallel: jest.fn((anims: { start: (cb?: () => void) => void }[]) => ({
+      start: (cb?: () => void) => {
+        anims.forEach((a) => a.start())
+        cb?.()
+      },
+    })),
+    loop: jest.fn(() => ({ start: jest.fn(), stop: jest.fn() })),
     stagger: jest.fn((_delay: number, anims: { start: (cb?: () => void) => void }[]) => ({
       start: (cb?: () => void) => {
         anims.forEach((a) => a.start())
@@ -54,12 +62,18 @@ jest.mock("react-native", () => {
 
   return {
     Animated,
+    AccessibilityInfo: {
+      isReduceMotionEnabled: jest.fn(() => Promise.resolve(false)),
+    },
     Text: mockComponent("Text"),
     TextInput: mockComponent("TextInput"),
     Pressable: mockComponent("Pressable"),
     Image: mockComponent("Image"),
     ImageBackground: mockComponent("ImageBackground"),
     KeyboardAvoidingView: mockComponent("KeyboardAvoidingView"),
+    Linking: {
+      openURL: jest.fn(() => Promise.resolve()),
+    },
     ScrollView: mockComponent("ScrollView"),
     StatusBar: mockComponent("StatusBar"),
     TouchableWithoutFeedback: mockComponent("TouchableWithoutFeedback"),
@@ -88,7 +102,7 @@ import { AuthGateScreen } from "./AuthGateScreen"
 
 describe("AuthGateScreen", () => {
   it("calls login handler when pressing the login button", async () => {
-    const onLogin = jest.fn(async () => undefined)
+    const onLogin = jest.fn(async () => null)
 
     let component: renderer.ReactTestRenderer
     await act(async () => {
@@ -97,7 +111,7 @@ describe("AuthGateScreen", () => {
           apiUrl: "http://localhost:3000/v1",
           onApiUrlChange: jest.fn(),
           onLogin,
-          onRegister: jest.fn(async () => undefined),
+          onRegister: jest.fn(async () => null),
           onForgotPassword: jest.fn(async () => undefined),
         }),
       )
