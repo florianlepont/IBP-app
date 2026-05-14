@@ -189,7 +189,10 @@ export default function App() {
                 apiUrl={apiUrl}
                 onApiUrlChange={handleApiUrlChange}
                 onLogin={surveySync.handleLogin}
-                status={surveySync.sessionRestoring ? "Restoring session..." : surveySync.status}
+                onRegister={surveySync.handleRegister}
+                onForgotPassword={surveySync.handleForgotPassword}
+                sessionRestoring={surveySync.sessionRestoring}
+                status={surveySync.status}
                 logoSource={require("./assets/logo-app.png")}
                 heroMartenSource={require("./assets/auth/marten.png")}
               />

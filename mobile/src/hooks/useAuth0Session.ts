@@ -228,6 +228,67 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     }
   }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
 
+  const handleRegister = useCallback(async (): Promise<void> => {
+    try {
+      reportStatus("auth", "running", "Logging in...")
+      const auth0 = getAuth0()
+      const credentials = await auth0.webAuth.authorize({
+        scope: "openid profile email offline_access",
+        audience: AUTH0_AUDIENCE,
+        additionalParameters: { screen_hint: "signup" },
+      })
+
+      await auth0.credentialsManager.saveCredentials(credentials)
+      setAccessToken(credentials.accessToken)
+
+      let user: AuthUser
+      try {
+        user = await getMyProfile(apiUrl, credentials.accessToken)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          reportStatus("auth", "error", buildApiTokenRejectedMessage(apiUrl))
+          return
+        }
+        throw error
+      }
+
+      setProfileFromUser(user)
+      reportStatus("auth", "success", "Logged in")
+    } catch (error) {
+      const message = extractLoginErrorMessage(error)
+      if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
+        reportStatus("auth", "idle", "")
+        return
+      }
+      if (/unauthorized/i.test(message)) {
+        reportStatus("auth", "error", buildAuth0UnauthorizedMessage(apiUrl))
+        return
+      }
+      reportStatus("auth", "error", `Login error: ${message}`)
+    }
+  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+
+  const handleForgotPassword = useCallback(async (): Promise<void> => {
+    try {
+      const auth0 = getAuth0()
+      const credentials = await auth0.webAuth.authorize({
+        scope: "openid profile email offline_access",
+        audience: AUTH0_AUDIENCE,
+      })
+      // If the user ended up logging in during the reset flow, treat it as a login
+      await auth0.credentialsManager.saveCredentials(credentials)
+      setAccessToken(credentials.accessToken)
+      const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
+      if (user) {
+        setProfileFromUser(user)
+        reportStatus("auth", "success", "Logged in")
+      }
+    } catch {
+      // Cancellation and errors are silent: the user just wanted to reset their password
+      reportStatus("auth", "idle", "")
+    }
+  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
       const auth0 = getAuth0()
@@ -265,7 +326,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
-    handleRegister: handleLogin, // Auth0 handles signup in the same flow
+    handleRegister,
+    handleForgotPassword,
     handleLogout,
     handleCancelEmailVerification: async () => undefined,
     handleVerifyEmail: async (_token: string) => undefined,

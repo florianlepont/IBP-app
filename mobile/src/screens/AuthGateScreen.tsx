@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  ActivityIndicator,
   Animated,
+  Image,
   ImageSourcePropType,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +16,8 @@ import {
   useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import * as Haptics from "expo-haptics"
+import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "../app/auth0-config"
 import {
   brandColors,
   brandRadius,
@@ -29,6 +34,9 @@ type AuthGateScreenProps = {
   apiUrl: string
   onApiUrlChange: (value: string) => void
   onLogin: () => Promise<void>
+  onRegister: () => Promise<void>
+  onForgotPassword: () => Promise<void>
+  sessionRestoring?: boolean
   status: string
   logoSource?: ImageSourcePropType
   heroMartenSource?: ImageSourcePropType
@@ -190,6 +198,9 @@ export function AuthGateScreen({
   apiUrl,
   onApiUrlChange,
   onLogin,
+  onRegister,
+  onForgotPassword,
+  sessionRestoring,
   status,
   logoSource,
   heroMartenSource,
@@ -244,7 +255,19 @@ export function AuthGateScreen({
   ].some((pattern) => normalizedStatus.includes(pattern))
   const feedbackTone: "danger" | "success" = feedbackIndicatesError ? "danger" : "success"
 
-  const handleLogin = async (): Promise<void> => {
+  const prevFeedbackRef = useRef<string>("")
+  useEffect(() => {
+    if (!feedbackMessage || feedbackMessage === prevFeedbackRef.current) return
+    prevFeedbackRef.current = feedbackMessage
+    void Haptics.notificationAsync(
+      feedbackTone === "danger"
+        ? Haptics.NotificationFeedbackType.Error
+        : Haptics.NotificationFeedbackType.Success,
+    )
+  }, [feedbackMessage, feedbackTone])
+
+  const handleLoginPress = async (): Promise<void> => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
       setSubmitting(true)
       await onLogin()
@@ -253,7 +276,45 @@ export function AuthGateScreen({
     }
   }
 
+  const handleRegisterPress = async (): Promise<void> => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      setSubmitting(true)
+      await onRegister()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleForgotPasswordPress = async (): Promise<void> => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    await onForgotPassword()
+  }
+
   const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
+
+  if (sessionRestoring) {
+    return (
+      <View style={authStyles.screen}>
+        <StatusBar barStyle="light-content" />
+        <View style={[authStyles.heroBackground, { flex: 1, paddingTop: Math.max(insets.top, 12) + 18 }]}>
+          {logoSource ? (
+            <Image
+              source={logoSource}
+              style={authStyles.heroLogo}
+              resizeMode="contain"
+              accessible={false}
+            />
+          ) : null}
+          <ActivityIndicator
+            color={brandColors.white}
+            size="large"
+            style={{ marginTop: brandSpacing.xl }}
+          />
+        </View>
+      </View>
+    )
+  }
 
   return (
     // AUTH-04 : behavior="padding" sur iOS (standard iOS HIG)
@@ -300,7 +361,7 @@ export function AuthGateScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={authStyles.panelMain}>
+          <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
             <View style={authStyles.panelHeader}>
               {/* AUTH-03 : role header sur le titre du panneau */}
               <Text style={authStyles.panelTitle} accessibilityRole="header">
@@ -313,12 +374,29 @@ export function AuthGateScreen({
 
             {/* AUTH-06 : prop loading sur AppButton */}
             <AppButton
-              label={submitting ? "Ouverture..." : "Se connecter / Créer un compte"}
-              onPress={() => void handleLogin()}
+              label={submitting ? "Ouverture..." : "Se connecter"}
+              onPress={() => void handleLoginPress()}
               loading={submitting}
               style={authStyles.primaryButton}
               testID="auth-submit"
             />
+            <AppButton
+              label="Créer un compte"
+              variant="secondary"
+              onPress={() => void handleRegisterPress()}
+              disabled={submitting}
+              testID="auth-register"
+            />
+
+            <Pressable
+              onPress={() => void handleForgotPasswordPress()}
+              style={authStyles.forgotPasswordLink}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              testID="auth-forgot-password"
+            >
+              <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
+            </Pressable>
 
             {feedbackMessage ? (
               <AppNotice
@@ -332,7 +410,30 @@ export function AuthGateScreen({
             ) : null}
           </View>
 
-          <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
+          <View style={authStyles.panelFooterGroup}>
+            <View style={authStyles.legalContainer}>
+              <Text style={authStyles.legalText}>
+                En continuant, vous acceptez nos{" "}
+                <Text
+                  style={authStyles.legalLink}
+                  onPress={() => void Linking.openURL(LEGAL_TERMS_URL)}
+                  accessibilityRole="link"
+                >
+                  Conditions d&apos;utilisation
+                </Text>
+                {" "}et notre{" "}
+                <Text
+                  style={authStyles.legalLink}
+                  onPress={() => void Linking.openURL(LEGAL_PRIVACY_URL)}
+                  accessibilityRole="link"
+                >
+                  Politique de confidentialité
+                </Text>
+                .
+              </Text>
+            </View>
+            <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
+          </View>
         </ScrollView>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -428,6 +529,33 @@ const authStyles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: brandSpacing.xs + 2,
+  },
+  forgotPasswordLink: {
+    alignSelf: "center",
+    paddingVertical: 2,
+  },
+  forgotPasswordText: {
+    ...brandTypography.meta,
+    color: brandColors.forest,
+    fontWeight: "600",
+  },
+  legalContainer: {
+    alignItems: "center",
+    paddingHorizontal: brandSpacing.sm,
+  },
+  legalText: {
+    ...brandTypography.meta,
+    color: brandColors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  legalLink: {
+    color: brandColors.forest,
+    fontWeight: "600",
+  },
+  panelFooterGroup: {
+    gap: brandSpacing.sm,
+    paddingTop: brandSpacing.sm,
   },
   apiUrlPill: {
     flexDirection: "row",

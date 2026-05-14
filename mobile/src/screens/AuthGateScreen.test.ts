@@ -97,6 +97,8 @@ describe("AuthGateScreen", () => {
           apiUrl: "http://localhost:3000/v1",
           onApiUrlChange: jest.fn(),
           onLogin,
+          onRegister: jest.fn(async () => undefined),
+          onForgotPassword: jest.fn(async () => undefined),
           status: "Ready",
         }),
       )

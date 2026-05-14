@@ -22,6 +22,7 @@ module.exports = {
   moduleNameMapper: {
     '^@expo/vector-icons$': '<rootDir>/test/vector-icons.mock.ts',
     '^expo-sqlite$': '<rootDir>/test/expo-sqlite.mock.ts',
+    '^expo-haptics$': '<rootDir>/test/expo-haptics.mock.ts',
   },
   globals: {
     __DEV__: true,
