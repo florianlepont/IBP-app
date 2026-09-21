@@ -157,6 +157,13 @@ npm run test:e2e
 - [Data contract](docs/technical/data-contract-v1.md)
 - [IBP form spec](docs/specs/ibp-form-spec.md)
 
+## Contributing and security
+
+This repository does not accept code contributions — see
+[CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately through
+GitHub's [security advisories](https://github.com/florianlepont/cortege/security/advisories/new),
+never in a public issue — see [SECURITY.md](SECURITY.md).
+
 ## License
 
 Copyright (c) 2026 Florian Lepont. All rights reserved.
