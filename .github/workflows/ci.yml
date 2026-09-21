@@ -132,7 +132,10 @@ jobs:
 
   build:
     name: Build & push Docker image
-    runs-on: ubuntu-latest
+    # Native arm64 runner: the deployment target is an ARM machine, and GitHub
+    # provides arm64 runners free of charge to public repositories. Emulating
+    # arm64 through QEMU on x86 took hours per build.
+    runs-on: ubuntu-24.04-arm
     needs: [quality, test-unit-api, test-unit-mobile, test-e2e-api, changes]
     if: needs.changes.outputs.api == 'true'
     permissions:
@@ -140,11 +143,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

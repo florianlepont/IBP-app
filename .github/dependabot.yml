@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+    # Version-update pull requests are not wanted: dependencies are upgraded
+    # deliberately, not on a schedule. Security updates are enabled separately
+    # in the repository settings and are not governed by this limit.
+    open-pull-requests-limit: 0
+
+    # Transitive dependencies for which no fix exists. Dependabot retries them
+    # on every run and fails, which buries genuine CI failures in the Actions
+    # tab. The vulnerabilities stay visible under Security > Dependabot alerts.
+    #
+    # Remove an entry as soon as a fix becomes reachable — while it is listed,
+    # a future patched version will not be reported either.
+    ignore:
+      # No patched version published upstream.
+      - dependency-name: "decode-uri-component"
+      - dependency-name: "image-size"
+      # Pinned to 8.4.49 by expo -> @expo/metro-config; unblocks when Expo
+      # accepts a newer postcss.
+      - dependency-name: "postcss"
