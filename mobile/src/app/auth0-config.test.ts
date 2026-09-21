@@ -25,22 +25,22 @@ describe("auth0-config", () => {
       AUTH0_IOS_CALLBACK_URL,
       buildAuth0UnauthorizedMessage,
     } = await import("./auth0-config")
-    const message = buildAuth0UnauthorizedMessage("https://api.algernon.ovh/v1")
+    const message = buildAuth0UnauthorizedMessage("https://cortege.algernon.ovh/v1")
 
     expect(message).toContain("[DEV]")
     expect(message).toContain(AUTH0_CLIENT_ID)
     expect(message).toContain(AUTH0_AUDIENCE)
     expect(message).toContain(AUTH0_IOS_CALLBACK_URL)
-    expect(message).toContain("https://api.algernon.ovh/v1")
+    expect(message).toContain("https://cortege.algernon.ovh/v1")
   })
 
   test("builds a detailed API token rejection message in dev mode", async () => {
     const { AUTH0_AUDIENCE, buildApiTokenRejectedMessage } = await import("./auth0-config")
-    const message = buildApiTokenRejectedMessage("https://api.algernon.ovh/v1")
+    const message = buildApiTokenRejectedMessage("https://cortege.algernon.ovh/v1")
 
     expect(message).toContain("[DEV]")
     expect(message).toContain(AUTH0_AUDIENCE)
-    expect(message).toContain("https://api.algernon.ovh/v1")
+    expect(message).toContain("https://cortege.algernon.ovh/v1")
   })
   test("uses EXPO public values when provided", async () => {
     process.env = {
