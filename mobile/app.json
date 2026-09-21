@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "IBP App",
-    "slug": "ibp-app",
+    "name": "Cortege",
+    "slug": "cortege",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/logo-app.png",
@@ -12,14 +12,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow IBP App to access your photos for survey attachments.",
-          "cameraPermission": "Allow IBP App to use your camera to capture survey photos."
+          "photosPermission": "Allow Cortege to access your photos for survey attachments.",
+          "cameraPermission": "Allow Cortege to use your camera to capture survey photos."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow IBP App to access your location to center the map and help parcel selection."
+          "locationWhenInUsePermission": "Allow Cortege to access your location to center the map and help parcel selection."
         }
       ],
       "expo-secure-store",
@@ -33,7 +33,7 @@
     ],
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "fr.etats-sauvages.ibp-app"
+      "bundleIdentifier": "fr.etatssauvages.cortege"
     },
     "android": {
       "permissions": [
@@ -41,7 +41,7 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "package": "fr.etatssauvages.ibpapp"
+      "package": "fr.etatssauvages.cortege"
     }
   }
 }

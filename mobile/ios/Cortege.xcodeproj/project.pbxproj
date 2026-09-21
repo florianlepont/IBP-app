@@ -10,26 +10,26 @@
 		06DA83887ED2231A7534FEDF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BBEDE0D03B1B67618144E645 /* PrivacyInfo.xcprivacy */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		75FCB273B123D883EC04BBB9 /* libPods-IBPApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 37143A18971E1F064C13C5FF /* libPods-IBPApp.a */; };
+		75FCB273B123D883EC04BBB9 /* libPods-Cortege.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 37143A18971E1F064C13C5FF /* libPods-Cortege.a */; };
 		9256B113D555CDF11395A2F2 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82FF6C468AEB28241E5AB8E /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* IBPApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IBPApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = IBPApp/Images.xcassets; sourceTree = "<group>"; };
-		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = IBPApp/Info.plist; sourceTree = "<group>"; };
-		160BEDDDF0EB29CE9DB5FDE7 /* Pods-IBPApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-IBPApp.release.xcconfig"; path = "Target Support Files/Pods-IBPApp/Pods-IBPApp.release.xcconfig"; sourceTree = "<group>"; };
-		37143A18971E1F064C13C5FF /* libPods-IBPApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-IBPApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		88DD24EE91B6516B0DAC4B87 /* Pods-IBPApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-IBPApp.debug.xcconfig"; path = "Target Support Files/Pods-IBPApp/Pods-IBPApp.debug.xcconfig"; sourceTree = "<group>"; };
-		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = IBPApp/SplashScreen.storyboard; sourceTree = "<group>"; };
+		13B07F961A680F5B00A75B9A /* Cortege.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cortege.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Cortege/Images.xcassets; sourceTree = "<group>"; };
+		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Cortege/Info.plist; sourceTree = "<group>"; };
+		160BEDDDF0EB29CE9DB5FDE7 /* Pods-Cortege.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Cortege.release.xcconfig"; path = "Target Support Files/Pods-Cortege/Pods-Cortege.release.xcconfig"; sourceTree = "<group>"; };
+		37143A18971E1F064C13C5FF /* libPods-Cortege.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Cortege.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		88DD24EE91B6516B0DAC4B87 /* Pods-Cortege.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Cortege.debug.xcconfig"; path = "Target Support Files/Pods-Cortege/Pods-Cortege.debug.xcconfig"; sourceTree = "<group>"; };
+		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Cortege/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		BBEDE0D03B1B67618144E645 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = IBPApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		D82FF6C468AEB28241E5AB8E /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-IBPApp/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		BBEDE0D03B1B67618144E645 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Cortege/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		D82FF6C468AEB28241E5AB8E /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Cortege/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = IBPApp/AppDelegate.swift; sourceTree = "<group>"; };
-		F11748442D0722820044C1D9 /* IBPApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "IBPApp-Bridging-Header.h"; path = "IBPApp/IBPApp-Bridging-Header.h"; sourceTree = "<group>"; };
+		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Cortege/AppDelegate.swift; sourceTree = "<group>"; };
+		F11748442D0722820044C1D9 /* Cortege-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Cortege-Bridging-Header.h"; path = "Cortege/Cortege-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,40 +37,40 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				75FCB273B123D883EC04BBB9 /* libPods-IBPApp.a in Frameworks */,
+				75FCB273B123D883EC04BBB9 /* libPods-Cortege.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		03B92FC41424748973708742 /* IBPApp */ = {
+		03B92FC41424748973708742 /* Cortege */ = {
 			isa = PBXGroup;
 			children = (
 				D82FF6C468AEB28241E5AB8E /* ExpoModulesProvider.swift */,
 			);
-			name = IBPApp;
+			name = Cortege;
 			sourceTree = "<group>";
 		};
-		13B07FAE1A68108700A75B9A /* IBPApp */ = {
+		13B07FAE1A68108700A75B9A /* Cortege */ = {
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
-				F11748442D0722820044C1D9 /* IBPApp-Bridging-Header.h */,
+				F11748442D0722820044C1D9 /* Cortege-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
 				BBEDE0D03B1B67618144E645 /* PrivacyInfo.xcprivacy */,
 			);
-			name = IBPApp;
+			name = Cortege;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				37143A18971E1F064C13C5FF /* libPods-IBPApp.a */,
+				37143A18971E1F064C13C5FF /* libPods-Cortege.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -78,7 +78,7 @@
 		2DE143558F278AA9B1C03CE7 /* ExpoModulesProviders */ = {
 			isa = PBXGroup;
 			children = (
-				03B92FC41424748973708742 /* IBPApp */,
+				03B92FC41424748973708742 /* Cortege */,
 			);
 			name = ExpoModulesProviders;
 			sourceTree = "<group>";
@@ -86,8 +86,8 @@
 		47523A26898C2E7F5D341B61 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				88DD24EE91B6516B0DAC4B87 /* Pods-IBPApp.debug.xcconfig */,
-				160BEDDDF0EB29CE9DB5FDE7 /* Pods-IBPApp.release.xcconfig */,
+				88DD24EE91B6516B0DAC4B87 /* Pods-Cortege.debug.xcconfig */,
+				160BEDDDF0EB29CE9DB5FDE7 /* Pods-Cortege.release.xcconfig */,
 			);
 			name = Pods;
 			path = Pods;
@@ -103,7 +103,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				13B07FAE1A68108700A75B9A /* IBPApp */,
+				13B07FAE1A68108700A75B9A /* Cortege */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
@@ -118,7 +118,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* IBPApp.app */,
+				13B07F961A680F5B00A75B9A /* Cortege.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -129,15 +129,15 @@
 				BB2F792C24A3F905000567C9 /* Expo.plist */,
 			);
 			name = Supporting;
-			path = IBPApp/Supporting;
+			path = Cortege/Supporting;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		13B07F861A680F5B00A75B9A /* IBPApp */ = {
+		13B07F861A680F5B00A75B9A /* Cortege */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "IBPApp" */;
+			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Cortege" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
 				DCB20CED77D3139275728D73 /* [Expo] Configure project */,
@@ -152,9 +152,9 @@
 			);
 			dependencies = (
 			);
-			name = IBPApp;
-			productName = IBPApp;
-			productReference = 13B07F961A680F5B00A75B9A /* IBPApp.app */;
+			name = Cortege;
+			productName = Cortege;
+			productReference = 13B07F961A680F5B00A75B9A /* Cortege.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -172,7 +172,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "IBPApp" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Cortege" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -185,7 +185,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				13B07F861A680F5B00A75B9A /* IBPApp */,
+				13B07F861A680F5B00A75B9A /* Cortege */,
 			);
 		};
 /* End PBXProject section */
@@ -237,7 +237,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-IBPApp-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-Cortege-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -250,7 +250,7 @@
 			files = (
 			);
 			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-IBPApp/Pods-IBPApp-resources.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-Cortege/Pods-Cortege-resources.sh",
 				"${PODS_CONFIGURATION_BUILD_DIR}/Auth0/Auth0.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
@@ -273,7 +273,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-IBPApp/Pods-IBPApp-resources.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Cortege/Pods-Cortege-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		9DDE4B1FB4FD1D01939FE13F /* [CP] Embed Pods Frameworks */ = {
@@ -282,7 +282,7 @@
 			files = (
 			);
 			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-IBPApp/Pods-IBPApp-frameworks.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-Cortege/Pods-Cortege-frameworks.sh",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
@@ -295,7 +295,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-IBPApp/Pods-IBPApp-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Cortege/Pods-Cortege-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		DCB20CED77D3139275728D73 /* [Expo] Configure project */ = {
@@ -309,18 +309,18 @@
 			inputPaths = (
 				"$(SRCROOT)/.xcode.env",
 				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/IBPApp/IBPApp.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-IBPApp/expo-configure-project.sh",
+				"$(SRCROOT)/Cortege/Cortege.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Cortege/expo-configure-project.sh",
 			);
 			name = "[Expo] Configure project";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-IBPApp/ExpoModulesProvider.swift",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Cortege/ExpoModulesProvider.swift",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-IBPApp/expo-configure-project.sh\"\n";
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Cortege/expo-configure-project.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -339,11 +339,11 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 88DD24EE91B6516B0DAC4B87 /* Pods-IBPApp.debug.xcconfig */;
+			baseConfigurationReference = 88DD24EE91B6516B0DAC4B87 /* Pods-Cortege.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = IBPApp/IBPApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Cortege/Cortege.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -353,7 +353,7 @@
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
 				);
-				INFOPLIST_FILE = IBPApp/Info.plist;
+				INFOPLIST_FILE = Cortege/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -366,9 +366,9 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = "fr.etats-sauvages.ibp-app";
-				PRODUCT_NAME = IBPApp;
-				SWIFT_OBJC_BRIDGING_HEADER = "IBPApp/IBPApp-Bridging-Header.h";
+				PRODUCT_BUNDLE_IDENTIFIER = fr.etatssauvages.cortege;
+				PRODUCT_NAME = Cortege;
+				SWIFT_OBJC_BRIDGING_HEADER = "Cortege/Cortege-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -378,16 +378,16 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 160BEDDDF0EB29CE9DB5FDE7 /* Pods-IBPApp.release.xcconfig */;
+			baseConfigurationReference = 160BEDDDF0EB29CE9DB5FDE7 /* Pods-Cortege.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = IBPApp/IBPApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Cortege/Cortege.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = GF26W4D7VM;
-				INFOPLIST_FILE = IBPApp/Info.plist;
+				INFOPLIST_FILE = Cortege/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -400,9 +400,9 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = "fr.etats-sauvages.ibp-app";
-				PRODUCT_NAME = IBPApp;
-				SWIFT_OBJC_BRIDGING_HEADER = "IBPApp/IBPApp-Bridging-Header.h";
+				PRODUCT_BUNDLE_IDENTIFIER = fr.etatssauvages.cortege;
+				PRODUCT_NAME = Cortege;
+				SWIFT_OBJC_BRIDGING_HEADER = "Cortege/Cortege-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -530,7 +530,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "IBPApp" */ = {
+		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Cortege" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
@@ -539,7 +539,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "IBPApp" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Cortege" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,

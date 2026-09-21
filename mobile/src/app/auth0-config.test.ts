@@ -14,7 +14,7 @@ describe("auth0-config", () => {
     expect(AUTH0_CLIENT_ID).toBe("qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py")
     expect(AUTH0_AUDIENCE).toBe("https://api.ibp-app")
     expect(AUTH0_IOS_CALLBACK_URL).toBe(
-      "fr.etats-sauvages.ibp-app.auth0://auth-ibp.algernon.ovh/ios/fr.etats-sauvages.ibp-app/callback",
+      "fr.etatssauvages.cortege.auth0://auth-ibp.algernon.ovh/ios/fr.etatssauvages.cortege/callback",
     )
   })
 

@@ -160,6 +160,6 @@ jobs:
           context: ./api
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/florianlepont/ibp-app:latest
+          tags: ghcr.io/florianlepont/cortege:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

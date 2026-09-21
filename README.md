@@ -1,4 +1,4 @@
-# IBP App
+# Cortege
 
 Monorepo for the IBP field-survey product:
 
@@ -12,6 +12,20 @@ Monorepo for the IBP field-survey product:
 - Node.js 20+
 - npm 10+
 - Docker Desktop
+
+For native builds:
+
+- **iOS** — Xcode and CocoaPods. Run `pod install` in `mobile/ios` after any
+  dependency change.
+- **Android** — Android Studio for the SDK, plus a **JDK 17**. Gradle 8.14
+  cannot read the JDK 25 that Android Studio bundles (`Unsupported class file
+  major version 69`), so command-line builds need it pointed elsewhere:
+
+  ```bash
+  brew install openjdk@17
+  export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+  export ANDROID_HOME=$HOME/Library/Android/sdk
+  ```
 
 ## Local setup
 

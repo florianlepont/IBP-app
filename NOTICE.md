@@ -24,7 +24,7 @@ purpose.
 | `mobile/assets/auth/`, `mobile/assets/tabs/` | Fern motif, marten, navigation pictograms |
 | `mobile/assets/logo-app.png` | Association logo, app variant |
 | `mobile/android/app/src/main/res/drawable-*/splashscreen_logo.png` | Splash screen, derived from the logo |
-| `mobile/ios/IBPApp/Images.xcassets/AppIcon.appiconset/` | iOS app icon, derived from the logo |
+| `mobile/ios/Cortege/Images.xcassets/AppIcon.appiconset/` | iOS app icon, derived from the logo |
 | `docs/design/charte-graphique-etats-sauvages-spec.md` | Implementation rules derived from the association's graphic charter |
 
 These files are present only because the application cannot be built without

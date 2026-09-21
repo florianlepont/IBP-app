@@ -1,4 +1,4 @@
-# CLAUDE.md — IBP App
+# CLAUDE.md — Cortege
 
 ## Project overview
 
@@ -28,7 +28,7 @@ Other top-level directories:
 | Mobile framework | React Native 0.81.5 + Expo 54 |
 | Mobile language | TypeScript 5.x (strict) |
 | Mobile navigation | React Navigation (native-stack + bottom-tabs) |
-| Mobile local DB | Expo SQLite (`ibp-local.db`) |
+| Mobile local DB | Expo SQLite (`cortege-local.db`) |
 | Mobile secure store | Expo SecureStore (tokens) |
 | API framework | NestJS 11 (Node 20+) |
 | API language | TypeScript 5.9 |
