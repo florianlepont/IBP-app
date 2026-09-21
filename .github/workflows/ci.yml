@@ -132,10 +132,7 @@ jobs:
 
   build:
     name: Build & push Docker image
-    # Native arm64 runner: the deployment target is an ARM machine, and GitHub
-    # provides arm64 runners free of charge to public repositories. Emulating
-    # arm64 through QEMU on x86 took hours per build.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     needs: [quality, test-unit-api, test-unit-mobile, test-e2e-api, changes]
     if: needs.changes.outputs.api == 'true'
     permissions:
@@ -158,7 +155,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./api
-          platforms: linux/arm64
+          # The VPS is x86_64, so this builds natively on the runner.
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/florianlepont/cortege:latest
           cache-from: type=gha
