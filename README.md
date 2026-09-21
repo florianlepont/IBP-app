@@ -144,7 +144,9 @@ npm run test:e2e
 ## Deployment
 
 - CI builds and tests the repo on pushes and pull requests to `main`
-- `Deploy` publishes the API image and restarts the Freebox stack through the self-hosted runner
+- Deployment is pull-based: the Freebox polls the registry and updates itself,
+  so nothing reaches into the machine from GitHub. See
+  [`infra/freebox/README.md`](infra/freebox/README.md)
 - Runtime secrets for Freebox live on the machine in `/home/freebox/.env.freebox`
 
 ## Documentation

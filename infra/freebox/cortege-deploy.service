@@ -1,0 +1,12 @@
+[Unit]
+Description=Update the Cortege stack from the registry
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=freebox
+Environment=REPO_DIR=/home/freebox/cortege
+Environment=ENV_FILE=/home/freebox/.env.freebox
+ExecStart=/home/freebox/cortege/infra/freebox/update-stack.sh

@@ -28,7 +28,9 @@ services:
       - ibp_minio_data:/data
 
   api:
-    image: cortege-api:latest
+    # Pulled straight from the registry: the stack updates itself (see
+    # infra/freebox/README.md), so nothing retags the image locally any more.
+    image: ghcr.io/florianlepont/cortege:latest
     container_name: cortege-api
     restart: unless-stopped
     depends_on:
