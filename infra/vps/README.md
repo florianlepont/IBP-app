@@ -48,7 +48,7 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker ubuntu   # log out and back in
 
 # The clone and the runtime environment
-git clone https://github.com/florianlepont/IBP-app.git /home/ubuntu/cortege
+git clone https://github.com/florianlepont/cortege.git /home/ubuntu/cortege
 cp /home/ubuntu/cortege/infra/vps/env.example /home/ubuntu/cortege.env
 chmod 600 /home/ubuntu/cortege.env
 # then fill in every CHANGE_ME
