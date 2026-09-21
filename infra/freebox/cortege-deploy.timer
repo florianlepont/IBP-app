@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll the registry for a new Cortege image
+
+[Timer]
+# Five minutes after boot, then every five minutes. The script exits straight
+# away when the image digest has not moved, so a tick costs one registry call.
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

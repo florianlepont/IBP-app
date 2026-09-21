@@ -17,7 +17,7 @@ Other top-level directories:
 |-----------|-------------|
 | `infra/` | Docker Compose files for local dev and Freebox deployment |
 | `docs/` | Technical architecture, API/data contracts, ADRs, product specs |
-| `.github/workflows/` | CI (`ci.yml`) and deploy (`deploy.yml`) pipelines |
+| `.github/workflows/` | CI pipeline (`ci.yml`); deployment is pull-based, see `infra/freebox/` |
 
 ---
 
@@ -313,10 +313,13 @@ npm run format:check
 5. E2E tests — API against a test PostgreSQL service (`npm run test:e2e`)
 6. Docker image build — only when `api/**` files changed, only on `main` pushes
 
-**`deploy.yml`** — manual trigger:
-- Pushes Docker image to GHCR
-- Restarts the Docker stack on the Freebox via a self-hosted runner
+**Deployment** — pull-based, no workflow:
+
+- `ci.yml` publishes `ghcr.io/florianlepont/cortege:latest` on `main` pushes touching `api/**`
+- A systemd timer on the Freebox polls the registry every 5 minutes and restarts the stack when the digest changes
+- GitHub never reaches into the machine: a self-hosted runner on a public repository can be made to execute a fork's code
 - Runtime secrets live in `/home/freebox/.env.freebox` on the Freebox machine
+- Setup and operations: `infra/freebox/README.md`
 
 ### Branch workflow
 
