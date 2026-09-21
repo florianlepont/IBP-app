@@ -31,20 +31,29 @@ export const auth0Config = {
 
 export const AUTH0_IOS_CALLBACK_URL = `${IOS_BUNDLE_IDENTIFIER}.auth0://${AUTH0_DOMAIN}/ios/${IOS_BUNDLE_IDENTIFIER}/callback`
 
+export const LEGAL_TERMS_URL = "https://etats-sauvages.fr/cgu"
+export const LEGAL_PRIVACY_URL = "https://etats-sauvages.fr/confidentialite"
+
 export function buildAuth0UnauthorizedMessage(apiUrl: string): string {
-  return [
-    "Auth0 a refuse la connexion avant l'appel a l'API.",
-    `Verifier le client mobile ${AUTH0_CLIENT_ID} et l'audience ${AUTH0_AUDIENCE}.`,
-    `Callback iOS attendu: ${AUTH0_IOS_CALLBACK_URL}`,
-    `API cible: ${apiUrl}`,
-  ].join("\n")
+  if (__DEV__) {
+    return [
+      "[DEV] Auth0 a refusé la connexion.",
+      `Client: ${AUTH0_CLIENT_ID}`,
+      `Audience: ${AUTH0_AUDIENCE}`,
+      `Callback iOS: ${AUTH0_IOS_CALLBACK_URL}`,
+      `API: ${apiUrl}`,
+    ].join("\n")
+  }
+  return "La connexion a échoué. Vérifiez votre connexion internet et réessayez."
 }
 
 export function buildApiTokenRejectedMessage(apiUrl: string): string {
-  return [
-    "Connexion Auth0 reussie, mais l'API a refuse le token.",
-    `Verifier AUTH0_AUDIENCE=${AUTH0_AUDIENCE} sur l'API.`,
-    "Verifier aussi AUTH0_PUBLIC_DOMAIN / AUTH0_DOMAIN si l'app utilise un domaine Auth0 public.",
-    `API cible: ${apiUrl}`,
-  ].join("\n")
+  if (__DEV__) {
+    return [
+      "[DEV] Auth0 OK, mais l'API a refusé le token.",
+      `Audience attendue: ${AUTH0_AUDIENCE}`,
+      `API cible: ${apiUrl}`,
+    ].join("\n")
+  }
+  return "Connexion interrompue. Veuillez réessayer."
 }

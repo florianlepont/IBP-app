@@ -57,6 +57,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [profile, setProfile] = useState("Not logged in")
   const auth0Ref = useRef<Auth0 | null>(null)
 
+  const apiUrlRef = useRef(apiUrl)
+  apiUrlRef.current = apiUrl
+
   const getAuth0 = useCallback((): Auth0 => {
     if (!auth0Ref.current) {
       auth0Ref.current = new Auth0({ domain: AUTH0_DOMAIN, clientId: AUTH0_CLIENT_ID })
@@ -139,7 +142,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     const restore = async (): Promise<void> => {
       try {
         if (active) setSessionRestoring(true)
-
+        // DEV ONLY: slow down session restore to test the loading screen
         const auth0 = getAuth0()
         const hasCredentials = await auth0.credentialsManager.hasValidCredentials()
         if (!hasCredentials) {
@@ -158,7 +161,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
         setAccessToken(credentials.accessToken)
 
-        const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
+        const user = await getMyProfile(apiUrlRef.current, credentials.accessToken).catch(
+          () => null,
+        )
         if (!active) return
 
         if (!user) {
@@ -186,9 +191,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     return () => {
       active = false
     }
-  }, [apiUrl, clearSession, getAuth0, reportStatus, setProfileFromUser])
+  }, [clearSession, getAuth0, reportStatus, setProfileFromUser])
 
-  const handleLogin = useCallback(async (): Promise<void> => {
+  const handleLogin = useCallback(async (): Promise<string | null> => {
     try {
       reportStatus("auth", "running", "Logging in...")
       const auth0 = getAuth0()
@@ -205,26 +210,97 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          reportStatus("auth", "error", buildApiTokenRejectedMessage(apiUrl))
-          return
+          const msg = buildApiTokenRejectedMessage(apiUrl)
+          reportStatus("auth", "error", msg)
+          return msg
         }
         throw error
       }
 
       setProfileFromUser(user)
       reportStatus("auth", "success", "Logged in")
+      return null
     } catch (error) {
       const message = extractLoginErrorMessage(error)
       // User cancelled the login flow
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
         reportStatus("auth", "idle", "")
-        return
+        return null
       }
       if (/unauthorized/i.test(message)) {
-        reportStatus("auth", "error", buildAuth0UnauthorizedMessage(apiUrl))
-        return
+        const msg = buildAuth0UnauthorizedMessage(apiUrl)
+        reportStatus("auth", "error", msg)
+        return msg
       }
-      reportStatus("auth", "error", `Login error: ${message}`)
+      const msg = `Login error: ${message}`
+      reportStatus("auth", "error", msg)
+      return msg
+    }
+  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+
+  const handleRegister = useCallback(async (): Promise<string | null> => {
+    try {
+      reportStatus("auth", "running", "Logging in...")
+      const auth0 = getAuth0()
+      const credentials = await auth0.webAuth.authorize({
+        scope: "openid profile email offline_access",
+        audience: AUTH0_AUDIENCE,
+        additionalParameters: { screen_hint: "signup" },
+      })
+
+      await auth0.credentialsManager.saveCredentials(credentials)
+      setAccessToken(credentials.accessToken)
+
+      let user: AuthUser
+      try {
+        user = await getMyProfile(apiUrl, credentials.accessToken)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          const msg = buildApiTokenRejectedMessage(apiUrl)
+          reportStatus("auth", "error", msg)
+          return msg
+        }
+        throw error
+      }
+
+      setProfileFromUser(user)
+      reportStatus("auth", "success", "Logged in")
+      return null
+    } catch (error) {
+      const message = extractLoginErrorMessage(error)
+      if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
+        reportStatus("auth", "idle", "")
+        return null
+      }
+      if (/unauthorized/i.test(message)) {
+        const msg = buildAuth0UnauthorizedMessage(apiUrl)
+        reportStatus("auth", "error", msg)
+        return msg
+      }
+      const msg = `Login error: ${message}`
+      reportStatus("auth", "error", msg)
+      return msg
+    }
+  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+
+  const handleForgotPassword = useCallback(async (): Promise<void> => {
+    try {
+      const auth0 = getAuth0()
+      const credentials = await auth0.webAuth.authorize({
+        scope: "openid profile email offline_access",
+        audience: AUTH0_AUDIENCE,
+      })
+      // If the user ended up logging in during the reset flow, treat it as a login
+      await auth0.credentialsManager.saveCredentials(credentials)
+      setAccessToken(credentials.accessToken)
+      const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
+      if (user) {
+        setProfileFromUser(user)
+        reportStatus("auth", "success", "Logged in")
+      }
+    } catch {
+      // Cancellation and errors are silent: the user just wanted to reset their password
+      reportStatus("auth", "idle", "")
     }
   }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
 
@@ -265,7 +341,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
-    handleRegister: handleLogin, // Auth0 handles signup in the same flow
+    handleRegister,
+    handleForgotPassword,
     handleLogout,
     handleCancelEmailVerification: async () => undefined,
     handleVerifyEmail: async (_token: string) => undefined,

@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  AccessibilityInfo,
   Animated,
+  Easing,
+  Image,
   ImageSourcePropType,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,70 +18,157 @@ import {
   useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { Ionicons } from "@expo/vector-icons"
+import * as Haptics from "expo-haptics"
+import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "../app/auth0-config"
 import {
   brandColors,
   brandRadius,
   brandSemanticColors,
+  brandShadow,
   brandSpacing,
   brandTypography,
 } from "../app/brand-tokens"
 import { AppButton } from "../ui/AppButton"
-import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
-import { AppNotice } from "../ui/AppNotice"
+import { TypewriterSplash } from "../components/TypewriterSplash"
 
 type AuthGateScreenProps = {
   apiUrl: string
   onApiUrlChange: (value: string) => void
-  onLogin: () => Promise<void>
-  status: string
+  onLogin: () => Promise<string | null>
+  onRegister: () => Promise<string | null>
+  onForgotPassword: () => Promise<void>
+  sessionRestoring?: boolean
   logoSource?: ImageSourcePropType
   heroMartenSource?: ImageSourcePropType
 }
 
-// AUTH-13 : dimensions asset/layout extraites comme constantes nommées
-const HERO_MIN_HEIGHT_RATIO = 0.35
-const HERO_MIN_HEIGHT_PX = 280
-const HERO_LOGO_WIDTH = 154
-const HERO_LOGO_HEIGHT = 50
-const HERO_LOGO_MARGIN_LEFT = -22
-const HERO_LOGO_MARGIN_BOTTOM = brandSpacing.xs
-const HERO_MARTEN_WIDTH = 168
-const HERO_MARTEN_HEIGHT = 216
-const HERO_MARTEN_RIGHT = 12
-const HERO_MARTEN_BOTTOM = -14
-const PANEL_OVERLAP = 24
+const HERO_MIN_HEIGHT_RATIO = 0.44
+const HERO_MIN_HEIGHT_PX = 260
+const HERO_LOGO_SIZE = 54
+const HERO_MARTEN_WIDTH = 92
+const HERO_MARTEN_HEIGHT = 207
+const HERO_MARTEN_RIGHT = 34
+const HERO_MARTEN_BOTTOM = 28
+const HERO_FERNS_WIDTH = 485
+const HERO_FERNS_HEIGHT = 400
+const HERO_FERNS_RIGHT = HERO_MARTEN_RIGHT + HERO_MARTEN_WIDTH / 2 - HERO_FERNS_WIDTH / 2
+const HERO_FERNS_BOTTOM = -Math.round(HERO_FERNS_HEIGHT * 0.3)
+const PANEL_OVERLAP = 30
 
-// AUTH-11 : durées et décalages d'animation
-const ANIM_HERO_DURATION = 200
-const ANIM_LOGO_DURATION = 220
-const ANIM_MARTEN_DURATION = 260
-const ANIM_PANEL_DURATION = 300
-const ANIM_STAGGER = 80
+const BLOB_CYCLE_MS = 10000
+const BLOB_STAGGER_MS = BLOB_CYCLE_MS / 3
+
+function makeBlobExpandStyle(anim: Animated.Value, rotation: string): object {
+  return {
+    transform: [
+      { rotate: rotation },
+      {
+        scale: anim.interpolate({
+          inputRange: [0, 0.15, 1],
+          outputRange: [0.3, 1.6, 14],
+        }),
+      },
+    ],
+    opacity: anim.interpolate({
+      inputRange: [0, 0.06, 0.7, 1],
+      outputRange: [0, 0.28, 0.07, 0],
+    }),
+  }
+}
 
 type HeroSectionProps = {
   height: number
   topInset: number
+  leftInset: number
   logoSource?: ImageSourcePropType
   heroMartenSource?: ImageSourcePropType
   logoAnim: Animated.Value
   martenAnim: Animated.Value
+  onLogoPress?: () => void
+  reducedMotion: boolean
 }
 
 function HeroSection({
   height,
   topInset,
+  leftInset,
   logoSource,
   heroMartenSource,
   logoAnim,
   martenAnim,
+  onLogoPress,
+  reducedMotion,
 }: HeroSectionProps) {
+  const { width: screenWidth } = useWindowDimensions()
+  const heroContentMaxWidth = Math.min(screenWidth - brandSpacing.lg * 2, 270)
+
+  const blob1Anim = useRef(new Animated.Value(0)).current
+  const blob2Anim = useRef(new Animated.Value(0)).current
+  const blob3Anim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (reducedMotion) return
+
+    const animations: Animated.CompositeAnimation[] = []
+    const timers: ReturnType<typeof setTimeout>[] = []
+
+    ;[blob1Anim, blob2Anim, blob3Anim].forEach((anim, i) => {
+      const t = setTimeout(() => {
+        anim.setValue(0)
+        const loop = Animated.loop(
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: BLOB_CYCLE_MS,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+        )
+        animations.push(loop)
+        loop.start()
+      }, i * BLOB_STAGGER_MS)
+      timers.push(t)
+    })
+
+    return () => {
+      timers.forEach(clearTimeout)
+      animations.forEach((a) => a.stop())
+    }
+  }, [blob1Anim, blob2Anim, blob3Anim, reducedMotion])
+
+  const logoImage = logoSource ? (
+    <Animated.Image
+      source={logoSource}
+      style={[
+        authStyles.heroLogo,
+        {
+          opacity: logoAnim,
+          transform: [
+            {
+              translateY: logoAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-16, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+      resizeMode="contain"
+      accessible={false}
+    />
+  ) : null
+
   return (
     <View style={[authStyles.hero, { height }]}>
-      {/* AUTH-02 : status bar claire sur le fond sombre */}
-      <StatusBar barStyle="light-content" />
-      <View style={[authStyles.heroBackground, { paddingTop: Math.max(topInset, 12) + 18 }]}>
-        {/* AUTH-11 : martre en slide depuis la droite */}
+      <View style={authStyles.heroBackground}>
+        <Image
+          source={require("../../assets/auth/fougeres.png")}
+          style={authStyles.heroFerns}
+          resizeMode="contain"
+          accessible={false}
+        />
+
         {heroMartenSource ? (
           <Animated.Image
             source={heroMartenSource}
@@ -98,90 +190,59 @@ function HeroSection({
             accessible={false}
           />
         ) : null}
-        <View style={authStyles.heroContent}>
-          {/* AUTH-11 : logo en slide depuis le haut */}
-          {logoSource ? (
-            <Animated.Image
-              source={logoSource}
+
+        <View
+          style={[
+            authStyles.heroContentWrapper,
+            {
+              paddingTop: Math.max(topInset, 12),
+              paddingBottom: PANEL_OVERLAP + brandSpacing.md,
+              paddingLeft: leftInset,
+            },
+          ]}
+        >
+          <View style={authStyles.logoBlobContainer}>
+            <Animated.View
               style={[
-                authStyles.heroLogo,
-                {
-                  opacity: logoAnim,
-                  transform: [
-                    {
-                      translateY: logoAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-16, 0],
-                      }),
-                    },
-                  ],
-                },
+                authStyles.heroBlob,
+                authStyles.heroBlob1,
+                makeBlobExpandStyle(blob1Anim, "-14deg"),
               ]}
-              resizeMode="contain"
-              accessible={false}
             />
-          ) : null}
-          {/* AUTH-03 : role header sur le titre */}
-          <Text style={authStyles.heroTitle} accessibilityRole="header">
-            Bienvenue sur l&apos;app IBP
-          </Text>
-          {/* AUTH-01 : couleur via token heroBodyOnDark */}
-          <Text style={authStyles.heroBody}>
-            Connectez-vous pour synchroniser et gérer vos relevés de terrain.
-          </Text>
+            <Animated.View
+              style={[
+                authStyles.heroBlob,
+                authStyles.heroBlob2,
+                makeBlobExpandStyle(blob2Anim, "22deg"),
+              ]}
+            />
+            <Animated.View
+              style={[
+                authStyles.heroBlob,
+                authStyles.heroBlob3,
+                makeBlobExpandStyle(blob3Anim, "-4deg"),
+              ]}
+            />
+            {onLogoPress ? (
+              <Pressable onPress={onLogoPress} accessible={false}>
+                {logoImage}
+              </Pressable>
+            ) : (
+              logoImage
+            )}
+          </View>
+
+          <View
+            style={[authStyles.heroContent, { maxWidth: heroContentMaxWidth }]}
+            accessible={true}
+            accessibilityRole="header"
+            accessibilityLabel="Indice de Biodiversité Potentielle, un service proposé par Etats Sauvages."
+          >
+            <Text style={authStyles.heroTitle}>Indice de{"\n"}Biodiversité Potentielle</Text>
+            <Text style={authStyles.heroBody}>un service proposé par{"\n"}Etats Sauvages</Text>
+          </View>
         </View>
       </View>
-    </View>
-  )
-}
-
-type AuthPanelFooterProps = {
-  apiUrl: string
-  onApiUrlChange: (value: string) => void
-}
-
-function AuthPanelFooter({ apiUrl, onApiUrlChange }: AuthPanelFooterProps) {
-  const [editing, setEditing] = useState(false)
-
-  // AUTH-12 : masqué en production
-  if (!__DEV__) return null
-
-  return (
-    <View style={authStyles.panelFooter}>
-      {editing ? (
-        <AppCard variant="soft" padding={14} style={authStyles.advancedPanel}>
-          <AppField
-            label="URL de l'API"
-            value={apiUrl}
-            onChangeText={onApiUrlChange}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            placeholder="http://192.168.x.x:3000/v1"
-            onBlur={() => setEditing(false)}
-            testID="auth-api-url-input"
-          />
-          <Text style={authStyles.hint}>
-            Simulateur iOS : localhost · Appareil physique : IP locale du Mac sur le même Wi-Fi
-          </Text>
-        </AppCard>
-      ) : (
-        // AUTH-07 : zone tactile >= 44pt via hitSlop
-        <Pressable
-          onPress={() => setEditing(true)}
-          style={authStyles.apiUrlPill}
-          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-          accessibilityRole="button"
-          accessibilityLabel="Modifier l'URL de l'API"
-          testID="auth-advanced-toggle"
-        >
-          <Text style={authStyles.apiUrlPillLabel}>API</Text>
-          <Text style={authStyles.apiUrlPillValue} numberOfLines={1}>
-            {apiUrl}
-          </Text>
-          <Text style={authStyles.apiUrlPillEdit}>Modifier</Text>
-        </Pressable>
-      )}
     </View>
   )
 }
@@ -190,90 +251,129 @@ export function AuthGateScreen({
   apiUrl,
   onApiUrlChange,
   onLogin,
-  status,
+  onRegister,
+  onForgotPassword,
+  sessionRestoring,
   logoSource,
   heroMartenSource,
 }: AuthGateScreenProps) {
   const { height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const [submitting, setSubmitting] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [reducedMotion, setReducedMotion] = useState(false)
+  const [showDevModal, setShowDevModal] = useState(false)
 
-  // AUTH-11 : valeurs d'animation
   const heroAnim = useRef(new Animated.Value(0)).current
   const logoAnim = useRef(new Animated.Value(0)).current
   const martenAnim = useRef(new Animated.Value(0)).current
   const panelAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion)
+  }, [])
+
+  useEffect(() => {
+    if (reducedMotion) {
+      heroAnim.setValue(1)
+      logoAnim.setValue(1)
+      martenAnim.setValue(1)
+      panelAnim.setValue(1)
+      return
+    }
     Animated.sequence([
       Animated.timing(heroAnim, {
         toValue: 1,
-        duration: ANIM_HERO_DURATION,
+        duration: 120,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-      Animated.stagger(ANIM_STAGGER, [
+      Animated.parallel([
         Animated.timing(logoAnim, {
           toValue: 1,
-          duration: ANIM_LOGO_DURATION,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(martenAnim, {
           toValue: 1,
-          duration: ANIM_MARTEN_DURATION,
+          duration: 350,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(panelAnim, {
           toValue: 1,
-          duration: ANIM_PANEL_DURATION,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
       ]),
     ]).start()
-  }, [heroAnim, logoAnim, martenAnim, panelAnim])
+  }, [heroAnim, logoAnim, martenAnim, panelAnim, reducedMotion])
 
-  const normalizedStatus = status.trim().toLowerCase()
-  const feedbackMessage = normalizedStatus && !normalizedStatus.includes("logged in") ? status : ""
-  const feedbackIndicatesError = [
-    "error",
-    "failed",
-    "unauthorized",
-    "forbidden",
-    "denied",
-    "refuse",
-    "refus",
-  ].some((pattern) => normalizedStatus.includes(pattern))
-  const feedbackTone: "danger" | "success" = feedbackIndicatesError ? "danger" : "success"
-
-  const handleLogin = async (): Promise<void> => {
+  const handleLoginPress = async (): Promise<void> => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
       setSubmitting(true)
-      await onLogin()
+      setAuthError(null)
+      const error = await onLogin()
+      if (error) {
+        setAuthError(error)
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      }
     } finally {
       setSubmitting(false)
     }
   }
 
+  const handleRegisterPress = async (): Promise<void> => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      setSubmitting(true)
+      setAuthError(null)
+      const error = await onRegister()
+      if (error) {
+        setAuthError(error)
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleForgotPasswordPress = async (): Promise<void> => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    await onForgotPassword()
+  }
+
   const heroHeight = Math.max(Math.round(height * HERO_MIN_HEIGHT_RATIO), HERO_MIN_HEIGHT_PX)
 
+  if (sessionRestoring) {
+    return <TypewriterSplash logoSource={logoSource} />
+  }
+
   return (
-    // AUTH-04 : behavior="padding" sur iOS (standard iOS HIG)
-    <KeyboardAvoidingView
-      style={authStyles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      {/* AUTH-11 : hero en fadeIn */}
+    <View style={authStyles.screen}>
+      <StatusBar barStyle="light-content" />
+
       <Animated.View style={{ opacity: heroAnim }}>
         <HeroSection
           height={heroHeight}
           topInset={insets.top}
+          leftInset={insets.left}
           logoSource={logoSource}
           heroMartenSource={heroMartenSource}
           logoAnim={logoAnim}
           martenAnim={martenAnim}
+          onLogoPress={__DEV__ ? () => setShowDevModal(true) : undefined}
+          reducedMotion={reducedMotion}
         />
       </Animated.View>
 
-      {/* AUTH-11 : panneau en slideUp + fade */}
       <Animated.View
         style={[
           authStyles.panelWrap,
@@ -290,52 +390,147 @@ export function AuthGateScreen({
           },
         ]}
       >
-        {/* AUTH-08 : ScrollView pour petits écrans avec clavier */}
-        <ScrollView
-          style={authStyles.panelScroll}
-          contentContainerStyle={[
-            authStyles.panelContent,
-            { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
         >
-          <View style={authStyles.panelMain}>
-            <View style={authStyles.panelHeader}>
-              {/* AUTH-03 : role header sur le titre du panneau */}
-              <Text style={authStyles.panelTitle} accessibilityRole="header">
-                Connexion
-              </Text>
-              <Text style={authStyles.panelSubtitle}>
-                Accédez à vos relevés, la carte publique et votre compte.
-              </Text>
+          <ScrollView
+            style={authStyles.panelScroll}
+            contentContainerStyle={[
+              authStyles.panelContent,
+              { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            alwaysBounceVertical={false}
+          >
+            <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
+              <View style={authStyles.panelHeader}>
+                <Text style={authStyles.panelTitle} accessibilityRole="header">
+                  Bienvenue
+                </Text>
+                <Text style={authStyles.panelSubtitle}>
+                  Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles
+                  hors-ligne.
+                </Text>
+              </View>
+
+              {authError !== null && (
+                <View style={authStyles.errorBanner}>
+                  <Text style={authStyles.errorBannerText}>{authError}</Text>
+                </View>
+              )}
+
+              <View style={authStyles.actionsGroup}>
+                <AppButton
+                  label={submitting ? "Connexion en cours…" : "Se connecter"}
+                  onPress={() => void handleLoginPress()}
+                  loading={submitting}
+                  style={authStyles.primaryButton}
+                  testID="auth-submit"
+                />
+
+                <Pressable
+                  onPress={() => void handleForgotPasswordPress()}
+                  style={authStyles.forgotPasswordLink}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="link"
+                  testID="auth-forgot-password"
+                >
+                  <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                </Pressable>
+
+                <AppButton
+                  label="Créer un compte"
+                  variant="secondary"
+                  onPress={() => void handleRegisterPress()}
+                  disabled={submitting}
+                  style={authStyles.secondaryButton}
+                  testID="auth-register"
+                />
+              </View>
             </View>
 
-            {/* AUTH-06 : prop loading sur AppButton */}
-            <AppButton
-              label={submitting ? "Ouverture..." : "Se connecter / Créer un compte"}
-              onPress={() => void handleLogin()}
-              loading={submitting}
-              style={authStyles.primaryButton}
-              testID="auth-submit"
-            />
-
-            {feedbackMessage ? (
-              <AppNotice
-                tone={feedbackTone}
-                icon={
-                  feedbackTone === "danger" ? "alert-circle-outline" : "information-circle-outline"
-                }
-                title={feedbackTone === "danger" ? "Problème de connexion" : "Statut"}
-                message={feedbackMessage}
-              />
-            ) : null}
-          </View>
-
-          <AuthPanelFooter apiUrl={apiUrl} onApiUrlChange={onApiUrlChange} />
-        </ScrollView>
+            <View style={authStyles.panelFooterGroup}>
+              <View style={authStyles.legalContainer}>
+                <Text style={authStyles.legalText}>
+                  En continuant, vous acceptez nos{" "}
+                  <Text
+                    style={authStyles.legalLink}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      void Linking.openURL(LEGAL_TERMS_URL)
+                    }}
+                    accessibilityRole="link"
+                  >
+                    Conditions d&apos;utilisation
+                  </Text>{" "}
+                  et notre{" "}
+                  <Text
+                    style={authStyles.legalLink}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      void Linking.openURL(LEGAL_PRIVACY_URL)
+                    }}
+                    accessibilityRole="link"
+                  >
+                    Politique de confidentialité
+                  </Text>
+                  .
+                </Text>
+                <Text style={authStyles.legalText}>
+                  <Text
+                    style={authStyles.legalLink}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      void Linking.openURL("https://etatssauvages.org")
+                    }}
+                    accessibilityRole="link"
+                  >
+                    etatssauvages.org
+                  </Text>
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Animated.View>
-    </KeyboardAvoidingView>
+
+      {__DEV__ ? (
+        <Modal
+          visible={showDevModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setShowDevModal(false)}
+        >
+          <View style={[devModalStyles.container, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            <View style={devModalStyles.header}>
+              <Text style={devModalStyles.title}>Configuration dev</Text>
+              <Pressable
+                onPress={() => setShowDevModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Fermer"
+              >
+                <Ionicons name="close-circle" size={26} color={brandColors.textSecondary} />
+              </Pressable>
+            </View>
+            <AppField
+              label="URL de l'API"
+              value={apiUrl}
+              onChangeText={onApiUrlChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="http://192.168.x.x:3000/v1"
+              testID="auth-api-url-input"
+            />
+            <Text style={devModalStyles.hint}>
+              Simulateur iOS : localhost · Appareil physique : IP locale du Mac sur le même Wi-Fi
+            </Text>
+          </View>
+        </Modal>
+      ) : null}
+    </View>
   )
 }
 
@@ -352,32 +547,75 @@ const authStyles = StyleSheet.create({
     backgroundColor: brandColors.forest,
     overflow: "hidden",
     paddingHorizontal: brandSpacing.lg,
-    // AUTH-13 : paddingBottom aligné sur brandSpacing.xl (28) + 2 = 30
-    paddingBottom: brandSpacing.xl + 2,
-    justifyContent: "flex-end",
+  },
+  heroContentWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 16,
+  },
+  logoBlobContainer: {
+    width: HERO_LOGO_SIZE,
+    height: HERO_LOGO_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -14,
+  },
+  heroBlob: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#0E2210",
+  },
+  heroBlob1: {
+    borderTopLeftRadius: 55,
+    borderTopRightRadius: 32,
+    borderBottomLeftRadius: 44,
+    borderBottomRightRadius: 60,
+  },
+  heroBlob2: {
+    borderTopLeftRadius: 38,
+    borderTopRightRadius: 62,
+    borderBottomLeftRadius: 58,
+    borderBottomRightRadius: 36,
+  },
+  heroBlob3: {
+    borderTopLeftRadius: 48,
+    borderTopRightRadius: 40,
+    borderBottomLeftRadius: 66,
+    borderBottomRightRadius: 52,
   },
   heroContent: {
-    zIndex: 1,
-    width: "62%",
+    zIndex: 2,
     alignItems: "flex-start",
-    gap: brandSpacing.xs,
+    gap: 8,
+    marginTop: 24,
   },
   heroLogo: {
-    width: HERO_LOGO_WIDTH,
-    height: HERO_LOGO_HEIGHT,
-    alignSelf: "flex-start",
-    marginLeft: HERO_LOGO_MARGIN_LEFT,
-    marginBottom: HERO_LOGO_MARGIN_BOTTOM,
+    width: HERO_LOGO_SIZE,
+    height: HERO_LOGO_SIZE,
   },
   heroTitle: {
     ...brandTypography.heroTitle,
-    color: brandColors.white,
+    fontSize: 28,
+    lineHeight: 33,
+    color: brandSemanticColors.heroBodyOnDark,
   },
   heroBody: {
     ...brandTypography.sectionBody,
-    // AUTH-01 : token sémantique au lieu de #E8ECD9 hardcodé
-    color: brandSemanticColors.heroBodyOnDark,
-    maxWidth: 260,
+    fontSize: 14,
+    lineHeight: 20,
+    color: brandSemanticColors.heroMetaOnDark,
+  },
+  heroFerns: {
+    position: "absolute",
+    right: HERO_FERNS_RIGHT,
+    bottom: HERO_FERNS_BOTTOM,
+    width: HERO_FERNS_WIDTH,
+    height: HERO_FERNS_HEIGHT,
+    opacity: 0.52,
+    zIndex: 0,
   },
   heroMarten: {
     position: "absolute",
@@ -385,9 +623,10 @@ const authStyles = StyleSheet.create({
     bottom: HERO_MARTEN_BOTTOM,
     width: HERO_MARTEN_WIDTH,
     height: HERO_MARTEN_HEIGHT,
-    zIndex: 0,
+    zIndex: 1,
   },
   panelWrap: {
+    ...brandShadow.card,
     flex: 1,
     marginTop: -PANEL_OVERLAP,
     borderTopLeftRadius: brandRadius.panel,
@@ -400,64 +639,111 @@ const authStyles = StyleSheet.create({
   },
   panelContent: {
     flexGrow: 1,
-    paddingHorizontal: brandSpacing.lg,
-    paddingTop: brandSpacing.lg + 2,
-    justifyContent: "space-between",
-    gap: brandSpacing.lg,
+    paddingHorizontal: 28,
+    paddingTop: 44,
+    gap: 16,
   },
   panelMain: {
     gap: 14,
   },
-  panelFooter: {
-    gap: brandSpacing.sm,
-    paddingTop: brandSpacing.sm,
-  },
   panelHeader: {
-    minHeight: 88,
-    paddingTop: brandSpacing.xs,
-    justifyContent: "center",
-    gap: 4,
+    gap: 18,
+    marginBottom: 18,
   },
   panelTitle: {
     ...brandTypography.sectionTitle,
+    fontSize: 25,
+    lineHeight: 30,
     color: brandColors.textPrimary,
   },
   panelSubtitle: {
     ...brandTypography.sectionBody,
+    fontSize: 14,
+    lineHeight: 21,
     color: brandColors.textSecondary,
+  },
+  actionsGroup: {
+    gap: 14,
   },
   primaryButton: {
-    marginTop: brandSpacing.xs + 2,
+    marginTop: 2,
+    minHeight: 50,
   },
-  apiUrlPill: {
-    flexDirection: "row",
-    alignItems: "center",
+  secondaryButton: {
+    minHeight: 44,
+  },
+  errorBanner: {
+    backgroundColor: brandSemanticColors.errorSurface,
+    borderRadius: brandRadius.card,
+    paddingHorizontal: brandSpacing.md,
+    paddingVertical: brandSpacing.sm,
+  },
+  errorBannerText: {
+    ...brandTypography.meta,
+    color: brandColors.terracotta,
+    lineHeight: 17,
+  },
+  forgotPasswordLink: {
     alignSelf: "center",
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    borderRadius: brandRadius.pill,
-    paddingVertical: brandSpacing.xs,
-    paddingHorizontal: brandSpacing.sm + 2,
-    gap: brandSpacing.xs,
-    maxWidth: "100%",
+    paddingTop: 0,
+    marginTop: -6,
+    paddingBottom: 6,
   },
-  apiUrlPillLabel: {
-    ...brandTypography.meta,
-    color: brandColors.textSecondary,
-    fontWeight: "600",
-  },
-  apiUrlPillValue: {
-    ...brandTypography.meta,
-    color: brandColors.textPrimary,
-    flex: 1,
-  },
-  apiUrlPillEdit: {
-    ...brandTypography.meta,
+  forgotPasswordText: {
+    ...brandTypography.button,
+    fontSize: 13,
+    lineHeight: 17,
     color: brandColors.forest,
     fontWeight: "600",
+    textDecorationLine: "underline",
   },
-  advancedPanel: {
-    gap: brandSpacing.xs,
+  legalContainer: {
+    alignItems: "center",
+    paddingHorizontal: brandSpacing.sm,
+    paddingVertical: 6,
+    gap: 14,
+  },
+  legalText: {
+    ...brandTypography.meta,
+    fontSize: 11,
+    lineHeight: 16,
+    color: brandColors.textSecondary,
+    textAlign: "center",
+    opacity: 0.9,
+  },
+  legalLink: {
+    fontSize: 11,
+    color: brandColors.forest,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+  panelFooterGroup: {
+    gap: 18,
+    marginTop: "auto",
+    paddingTop: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: brandColors.divider,
+  },
+})
+
+const devModalStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: brandSpacing.lg,
+    paddingTop: 32,
+    backgroundColor: brandColors.canvas,
+    gap: brandSpacing.md,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: brandSpacing.sm,
+  },
+  title: {
+    ...brandTypography.sectionTitle,
+    fontSize: 18,
+    color: brandColors.textPrimary,
   },
   hint: {
     ...brandTypography.meta,
