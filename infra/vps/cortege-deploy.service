@@ -6,7 +6,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-User=freebox
-Environment=REPO_DIR=/home/freebox/cortege
-Environment=ENV_FILE=/home/freebox/.env.freebox
-ExecStart=/home/freebox/cortege/infra/freebox/update-stack.sh
+User=ubuntu
+Environment=REPO_DIR=/home/ubuntu/cortege
+Environment=ENV_FILE=/home/ubuntu/cortege.env
+ExecStart=/home/ubuntu/cortege/infra/vps/update-stack.sh

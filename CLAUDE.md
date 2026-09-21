@@ -15,9 +15,9 @@ Other top-level directories:
 
 | Directory | Description |
 |-----------|-------------|
-| `infra/` | Docker Compose files for local dev and Freebox deployment |
+| `infra/` | Docker Compose files for local dev and VPS deployment |
 | `docs/` | Technical architecture, API/data contracts, ADRs, product specs |
-| `.github/workflows/` | CI pipeline (`ci.yml`); deployment is pull-based, see `infra/freebox/` |
+| `.github/workflows/` | CI pipeline (`ci.yml`); deployment is pull-based, see `infra/vps/` |
 
 ---
 
@@ -315,11 +315,12 @@ npm run format:check
 
 **Deployment** — pull-based, no workflow:
 
-- `ci.yml` publishes `ghcr.io/florianlepont/cortege:latest` on `main` pushes touching `api/**`
-- A systemd timer on the Freebox polls the registry every 5 minutes and restarts the stack when the digest changes
-- GitHub never reaches into the machine: a self-hosted runner on a public repository can be made to execute a fork's code
-- Runtime secrets live in `/home/freebox/.env.freebox` on the Freebox machine
-- Setup and operations: `infra/freebox/README.md`
+- `ci.yml` publishes `ghcr.io/florianlepont/cortege:latest` (linux/amd64) on `main` pushes touching `api/**`
+- A systemd timer on the VPS polls the registry every 5 minutes and restarts the stack when the digest changes
+- The host's Caddy serves `api.algernon.ovh` and `files.algernon.ovh`; the stack publishes on the loopback only
+- Attachment URLs are presigned, so `OBJECT_STORAGE_ENDPOINT` must be the public name clients call
+- Runtime secrets live in `/home/ubuntu/cortege.env` on the VPS
+- Setup and operations: `infra/vps/README.md`
 
 ### Branch workflow
 

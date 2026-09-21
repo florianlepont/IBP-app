@@ -1,0 +1,77 @@
+# Cortege production stack for the VPS.
+#
+# No Caddy service here: the host already runs one, serving other projects on
+# ports 80 and 443. Everything is published on the loopback only, and the host
+# Caddy is the single entry point — see infra/vps/Caddyfile.snippet.
+#
+# Memory limits are deliberate: this machine is shared, so the stack must not
+# be able to starve what else runs on it.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: cortege-postgres
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cortege}
+      POSTGRES_USER: ${POSTGRES_USER:-cortege}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - cortege_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cortege}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  minio:
+    image: minio/minio:latest
+    container_name: cortege-minio
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+    command: server /data --console-address ":9001"
+    volumes:
+      - cortege_minio_data:/data
+    # Reachable from the host Caddy, which publishes it under a public name.
+    # Attachment URLs are presigned, so clients fetch objects directly and the
+    # signature covers the Host header — the public name and the endpoint the
+    # API signs with must be identical.
+    ports:
+      - "127.0.0.1:9000:9000"
+
+  api:
+    image: ghcr.io/florianlepont/cortege:latest
+    container_name: cortege-api
+    restart: unless-stopped
+    mem_limit: 768m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - /home/ubuntu/cortege.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      OBJECT_STORAGE_MODE: minio
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-cortege-media}
+      # Public name, not http://minio:9000: this value is what gets signed into
+      # attachment URLs handed to the mobile app.
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio}
+      OBJECT_STORAGE_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+
+volumes:
+  cortege_postgres_data:
+  cortege_minio_data:

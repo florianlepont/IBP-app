@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 #
-# Pull-based deployment for the Freebox host.
+# Pull-based deployment for the VPS.
 #
-# The repository is public, so GitHub Actions no longer reaches into this
-# machine to deploy: a self-hosted runner on a public repository can be made to
-# execute code from a fork. The direction is reversed instead — this host polls
-# the registry and updates itself, which needs no inbound access, no runner and
-# no credentials stored on GitHub.
+# This host polls the registry and updates itself rather than being deployed
+# into. Nothing has to be stored on GitHub — no SSH key, no deployment token —
+# and the machine needs no inbound access beyond what Caddy already serves.
 #
 # Install it with the systemd units next to this script; see README.md.
 
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/freebox/cortege}"
-ENV_FILE="${ENV_FILE:-/home/freebox/.env.freebox}"
+REPO_DIR="${REPO_DIR:-/home/ubuntu/cortege}"
+ENV_FILE="${ENV_FILE:-/home/ubuntu/cortege.env}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/v1/health}"
-COMPOSE_FILE="$REPO_DIR/infra/docker-compose.freebox.yml"
+COMPOSE_FILE="$REPO_DIR/infra/docker-compose.vps.yml"
 
 log() { printf '%s %s\n' "$(date -Is)" "$*"; }
 

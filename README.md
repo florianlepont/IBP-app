@@ -4,7 +4,7 @@ Monorepo for the IBP field-survey product:
 
 - `mobile/`: Expo / React Native client for field data collection
 - `api/`: NestJS API with PostgreSQL persistence
-- `infra/`: local Docker stack and Freebox deployment compose file
+- `infra/`: local Docker stack and VPS deployment
 - `docs/`: product, technical and design documentation
 
 ## Prerequisites
@@ -139,15 +139,15 @@ npm run test:e2e
 - `api/.env.production.example`: production-oriented API example
 - `mobile/.env.example`: Expo public variables
 - `infra/.env.example`: local infra defaults
-- `infra/.env.freebox.example`: Freebox deployment example
+- `infra/vps/env.example`: VPS runtime environment
 
 ## Deployment
 
 - CI builds and tests the repo on pushes and pull requests to `main`
-- Deployment is pull-based: the Freebox polls the registry and updates itself,
-  so nothing reaches into the machine from GitHub. See
-  [`infra/freebox/README.md`](infra/freebox/README.md)
-- Runtime secrets for Freebox live on the machine in `/home/freebox/.env.freebox`
+- Deployment is pull-based: the VPS polls the registry and updates itself, so
+  nothing reaches into the machine from GitHub. See
+  [`infra/vps/README.md`](infra/vps/README.md)
+- Runtime secrets live on the VPS in `/home/ubuntu/cortege.env`, outside the clone
 
 ## Documentation
 
