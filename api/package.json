@@ -52,7 +52,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.1",
-    "nodemailer": "^8.0.2",
+    "nodemailer": "^9.1.1",
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2"
   }
