@@ -1249,7 +1249,7 @@ export const styles = StyleSheet.create({
     backgroundColor: "#132434",
   },
   parcelEditorOverlayLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 18,

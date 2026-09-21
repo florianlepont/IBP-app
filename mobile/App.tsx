@@ -221,7 +221,7 @@ export default function App() {
 
 const overlayStyles = StyleSheet.create({
   fill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 100,
   },
 })

@@ -2,6 +2,7 @@
   "expo": {
     "name": "Cortege",
     "slug": "cortege",
+    "userInterfaceStyle": "light",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/logo-app.png",
@@ -29,11 +30,25 @@
         {
           "domain": "cortege-auth.algernon.ovh"
         }
-      ]
+      ],
+      "./plugins/with-scene-delegate"
     ],
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "fr.etatssauvages.cortege"
+      "bundleIdentifier": "fr.etatssauvages.cortege",
+      "infoPlist": {
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
+      }
     },
     "android": {
       "permissions": [
