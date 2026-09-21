@@ -1,4 +1,4 @@
-package fr.etatssauvages.ibpapp
+package fr.etatssauvages.cortege
 
 import android.os.Build
 import android.os.Bundle

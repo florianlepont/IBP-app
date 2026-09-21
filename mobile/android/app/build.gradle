@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'fr.etatssauvages.ibpapp'
+    namespace 'fr.etatssauvages.cortege'
     defaultConfig {
-        applicationId 'fr.etatssauvages.ibpapp'
+        applicationId 'fr.etatssauvages.cortege'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

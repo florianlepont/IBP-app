@@ -21,7 +21,7 @@ import zlib
 
 NOTICE = (
     "Copyright (c) Association Etats Sauvages. All rights reserved. "
-    "Not licensed for reuse - see NOTICE.md in the IBP app repository."
+    "Not licensed for reuse - see NOTICE.md in the project repository."
 )
 MARKER = "Association Etats Sauvages"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"

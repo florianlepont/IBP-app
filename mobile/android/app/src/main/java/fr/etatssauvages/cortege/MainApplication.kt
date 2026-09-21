@@ -1,4 +1,4 @@
-package fr.etatssauvages.ibpapp
+package fr.etatssauvages.cortege
 
 import android.app.Application
 import android.content.res.Configuration

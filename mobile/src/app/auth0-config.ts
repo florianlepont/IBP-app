@@ -1,7 +1,7 @@
 const DEFAULT_AUTH0_DOMAIN = "auth-ibp.algernon.ovh"
 const DEFAULT_AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
 const DEFAULT_AUTH0_AUDIENCE = "https://api.ibp-app"
-const IOS_BUNDLE_IDENTIFIER = "fr.etats-sauvages.ibp-app"
+const IOS_BUNDLE_IDENTIFIER = "fr.etatssauvages.cortege"
 
 function resolvePublicEnv(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim()

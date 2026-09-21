@@ -4,7 +4,7 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null
 
 export function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync("ibp-local.db")
+    dbPromise = SQLite.openDatabaseAsync("cortege-local.db")
   }
 
   return dbPromise

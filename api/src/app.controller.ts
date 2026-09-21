@@ -6,7 +6,7 @@ export class AppController {
   health(): { status: string; service: string; timestamp: string } {
     return {
       status: "ok",
-      service: "ibp-api",
+      service: "cortege-api",
       timestamp: new Date().toISOString(),
     }
   }

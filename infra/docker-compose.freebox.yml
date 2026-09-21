@@ -28,8 +28,8 @@ services:
       - ibp_minio_data:/data
 
   api:
-    image: ibp-api:latest
-    container_name: ibp-api
+    image: cortege-api:latest
+    container_name: cortege-api
     restart: unless-stopped
     depends_on:
       postgres:

@@ -24,8 +24,8 @@ jobs:
       - name: Pull API image
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker pull ghcr.io/florianlepont/ibp-app:latest
-          docker tag ghcr.io/florianlepont/ibp-app:latest ibp-api:latest
+          docker pull ghcr.io/florianlepont/cortege:latest
+          docker tag ghcr.io/florianlepont/cortege:latest cortege-api:latest
 
       - name: Restart API container
         run: |
@@ -46,5 +46,5 @@ jobs:
             sleep 5
           done
           echo "API did not become healthy in time"
-          docker logs ibp-api --tail 50
+          docker logs cortege-api --tail 50
           exit 1

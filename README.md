@@ -1,4 +1,4 @@
-# IBP App
+# Cortege
 
 Monorepo for the IBP field-survey product:
 
