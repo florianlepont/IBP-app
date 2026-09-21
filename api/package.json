@@ -1,6 +1,7 @@
 {
   "name": "ibp-api",
   "private": true,
+  "license": "UNLICENSED",
   "version": "0.1.0",
   "scripts": {
     "migrate": "node scripts/migrate.js",

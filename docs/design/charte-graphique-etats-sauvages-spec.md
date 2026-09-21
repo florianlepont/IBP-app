@@ -2,7 +2,7 @@
 
 Version: `v1.0`  
 Date: `2026-03-11`  
-Source: `0-CHARTE_GRAPHIQUE_ETATS_SAUVAGES.pdf` (2025-09-16)
+Source: Etats Sauvages graphic charter, `ETATS_SAUVAGES_CHARTE_EB_V2` (2025-09-16) — internal document, not redistributed in this repository.
 
 ## 1) Objective
 Define clear, implementation-ready UI rules to ensure the app consistently follows the **Etats Sauvages** visual identity on mobile (and web when relevant).
