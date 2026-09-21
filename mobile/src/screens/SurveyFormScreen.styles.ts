@@ -33,7 +33,7 @@ export const screenStyles = StyleSheet.create({
     backgroundColor: "rgba(176, 199, 142, 0.22)",
   },
   heroExpandedLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "space-between",
     paddingTop: 18,
     paddingBottom: 16,
@@ -76,7 +76,7 @@ export const screenStyles = StyleSheet.create({
     color: brandColors.white,
   },
   heroCompactLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-end",
     paddingHorizontal: 20,
     paddingRight: 64,
@@ -320,7 +320,7 @@ export const screenStyles = StyleSheet.create({
     backgroundColor: brandColors.canvas,
   },
   mapOverlayActions: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-start",
     alignItems: "flex-end",
     padding: 12,
@@ -392,7 +392,7 @@ export const screenStyles = StyleSheet.create({
     flex: 1,
   },
   fullscreenMapOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 24,

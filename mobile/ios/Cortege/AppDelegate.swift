@@ -1,9 +1,9 @@
-import Expo
+internal import Expo
 import React
 import ReactAppDependencyProvider
 
-@UIApplicationMain
-public class AppDelegate: ExpoAppDelegate {
+@main
+class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
@@ -19,15 +19,8 @@ public class AppDelegate: ExpoAppDelegate {
 
     reactNativeDelegate = delegate
     reactNativeFactory = factory
-    bindReactNativeFactory(factory)
 
-#if os(iOS) || os(tvOS)
-    window = UIWindow(frame: UIScreen.main.bounds)
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions)
-#endif
+    // The window is created by SceneDelegate, under the scene life cycle.
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -68,3 +61,10 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
 #endif
   }
 }
+
+/// Concrete class for Info.plist's UISceneDelegateClassName to point at.
+/// Everything is inherited: ExpoAppSceneDelegate builds the window from the
+/// connecting UIWindowScene, starts React Native into it, and forwards scene,
+/// URL and user-activity events back to the app delegate.
+@objc(SceneDelegate)
+class SceneDelegate: ExpoAppSceneDelegate {}

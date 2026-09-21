@@ -7,16 +7,20 @@ podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties
 def ccache_enabled?(podfile_properties)
   # Environment variable takes precedence
   return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
-  
+
   # Fall back to Podfile properties
   podfile_properties['apple.ccacheEnabled'] == 'true'
 end
 
-ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == 'false'
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
-ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
-ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
-platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+ENV['RCT_USE_RN_DEP'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
+ENV['RCT_HERMES_V1_ENABLED'] ||= '0' if podfile_properties['expo.useHermesV1'] == 'false'
+# An explicit `ios.usePrecompiledModules: false` must win even when the env var is already set
+# (e.g. EXPO_USE_PRECOMPILED_MODULES exported by EAS Build), so force-disable here before the default.
+ENV['EXPO_USE_PRECOMPILED_MODULES'] = '0' if podfile_properties['EXPO_USE_PRECOMPILED_MODULES'] == 'false'
+ENV['EXPO_USE_PRECOMPILED_MODULES'] ||= '1'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
 
 prepare_react_native_project!
 
@@ -59,91 +63,5 @@ target 'Cortege' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    fmt_base_header = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
-    if File.exist?(fmt_base_header)
-      original_block = <<~'BLOCK'
-        // Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.
-        #if !defined(__cpp_lib_is_constant_evaluated)
-        #  define FMT_USE_CONSTEVAL 0
-        #elif FMT_CPLUSPLUS < 201709L
-        #  define FMT_USE_CONSTEVAL 0
-        #elif FMT_GLIBCXX_RELEASE && FMT_GLIBCXX_RELEASE < 10
-        #  define FMT_USE_CONSTEVAL 0
-        #elif FMT_LIBCPP_VERSION && FMT_LIBCPP_VERSION < 10000
-        #  define FMT_USE_CONSTEVAL 0
-        #elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L
-        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in Apple clang < 14.
-        #elif FMT_MSC_VERSION && FMT_MSC_VERSION < 1929
-        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in MSVC VS2019 < 16.10.
-        #elif defined(__cpp_consteval)
-        #  define FMT_USE_CONSTEVAL 1
-        #elif FMT_GCC_VERSION >= 1002 || FMT_CLANG_VERSION >= 1101
-        #  define FMT_USE_CONSTEVAL 1
-        #else
-        #  define FMT_USE_CONSTEVAL 0
-        #endif
-      BLOCK
-      patched_block = <<~'BLOCK'
-        // Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.
-        #ifdef FMT_USE_CONSTEVAL
-        // Use the provided definition.
-        #elif !defined(__cpp_lib_is_constant_evaluated)
-        #  define FMT_USE_CONSTEVAL 0
-        #elif FMT_CPLUSPLUS < 201709L
-        #  define FMT_USE_CONSTEVAL 0
-        #elif FMT_GLIBCXX_RELEASE && FMT_GLIBCXX_RELEASE < 10
-        #  define FMT_USE_CONSTEVAL 0
-        #elif FMT_LIBCPP_VERSION && FMT_LIBCPP_VERSION < 10000
-        #  define FMT_USE_CONSTEVAL 0
-        #elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L
-        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in Apple clang < 14.
-        #elif FMT_MSC_VERSION && FMT_MSC_VERSION < 1929
-        #  define FMT_USE_CONSTEVAL 0  // consteval is broken in MSVC VS2019 < 16.10.
-        #elif defined(__cpp_consteval)
-        #  define FMT_USE_CONSTEVAL 1
-        #elif FMT_GCC_VERSION >= 1002 || FMT_CLANG_VERSION >= 1101
-        #  define FMT_USE_CONSTEVAL 1
-        #else
-        #  define FMT_USE_CONSTEVAL 0
-        #endif
-      BLOCK
-
-      fmt_base_contents = File.read(fmt_base_header)
-      if fmt_base_contents.include?(original_block)
-        fmt_base_mode = File.stat(fmt_base_header).mode & 0o777
-        File.chmod(fmt_base_mode | 0o200, fmt_base_header)
-        File.write(fmt_base_header, fmt_base_contents.sub(original_block, patched_block))
-        File.chmod(fmt_base_mode, fmt_base_header)
-      end
-    end
-
-    installer.pods_project.targets.each do |target|
-      next unless target.name == 'fmt'
-
-      target.build_configurations.each do |build_configuration|
-        definitions = build_configuration.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
-        definitions = [definitions] unless definitions.is_a?(Array)
-        unless definitions.include?('FMT_USE_CONSTEVAL=0')
-          definitions << 'FMT_USE_CONSTEVAL=0'
-        end
-        build_configuration.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
-      end
-    end
-
-    # Xcode 27 rejects deployment targets below 15.0. Some pods ship resource
-    # bundle targets that keep the very old target declared in their podspec
-    # (react-native-maps 11.0, RNSVG 12.4, Auth0 14.0), which fails the build
-    # even though the Podfile platform is 15.1. Raise every pod target to the
-    # Podfile minimum.
-    minimum_target = podfile_properties['ios.deploymentTarget'] || '15.1'
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |build_configuration|
-        current = build_configuration.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
-        if current.nil? || current.to_f < minimum_target.to_f
-          build_configuration.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = minimum_target
-        end
-      end
-    end
   end
 end

@@ -1175,7 +1175,7 @@ const styles = StyleSheet.create({
     right: -14,
   },
   heroExpandedLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-start",
     paddingTop: HERO_EXPANDED_PADDING_TOP,
     paddingBottom: HERO_EXPANDED_PADDING_BOTTOM,
@@ -1225,7 +1225,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   heroCompactLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingRight: 96,

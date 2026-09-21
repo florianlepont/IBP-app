@@ -224,7 +224,7 @@ const screenStyles = StyleSheet.create({
     backgroundColor: "#132434",
   },
   overlayLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-end",
     paddingHorizontal: 16,
   },

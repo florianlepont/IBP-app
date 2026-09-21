@@ -505,7 +505,7 @@ const screenStyles = StyleSheet.create({
     backgroundColor: brandColors.canvas,
   },
   map: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   overlayShell: {
     position: "absolute",
