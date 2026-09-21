@@ -15,8 +15,12 @@ Monorepo for the IBP field-survey product:
 
 For native builds:
 
-- **iOS** — Xcode and CocoaPods. Run `pod install` in `mobile/ios` after any
-  dependency change.
+The `mobile/ios` and `mobile/android` projects are generated, not committed —
+run `npx expo prebuild` in `mobile/`, or let `npx expo run:ios` do it. See
+[`mobile/README-native.md`](mobile/README-native.md).
+
+- **iOS** — Xcode and CocoaPods. Run `pod install` in `mobile/ios` after
+  generating or after any dependency change.
 - **Android** — Android Studio for the SDK, plus a **JDK 17**. Gradle 8.14
   cannot read the JDK 25 that Android Studio bundles (`Unsupported class file
   major version 69`), so command-line builds need it pointed elsewhere:
