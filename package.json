@@ -39,6 +39,9 @@
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-test-renderer": "19.2.3",
-    "multer": "^2.4.0"
+    "multer": "^2.4.0",
+    "@bottom-tabs/react-navigation": {
+      "color": "^4.2.3"
+    }
   }
 }
