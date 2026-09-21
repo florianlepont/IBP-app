@@ -161,7 +161,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
         setAccessToken(credentials.accessToken)
 
-        const user = await getMyProfile(apiUrlRef.current, credentials.accessToken).catch(() => null)
+        const user = await getMyProfile(apiUrlRef.current, credentials.accessToken).catch(
+          () => null,
+        )
         if (!active) return
 
         if (!user) {

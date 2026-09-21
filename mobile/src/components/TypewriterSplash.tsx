@@ -11,7 +11,12 @@ import {
   View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { brandColors, brandSemanticColors, brandSpacing, brandTypography } from "../app/brand-tokens"
+import {
+  brandColors,
+  brandSemanticColors,
+  brandSpacing,
+  brandTypography,
+} from "../app/brand-tokens"
 
 const SPECIES_NAMES = [
   "Fagus sylvatica",
@@ -99,12 +104,7 @@ export function TypewriterSplash({ logoSource }: { logoSource?: ImageSourcePropT
       <StatusBar barStyle="light-content" />
       <View style={[styles.top, { paddingTop: Math.max(insets.top, 12) + 18 }]}>
         {logoSource ? (
-          <Image
-            source={logoSource}
-            style={styles.logo}
-            resizeMode="contain"
-            accessible={false}
-          />
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" accessible={false} />
         ) : null}
       </View>
       <View style={styles.stage}>

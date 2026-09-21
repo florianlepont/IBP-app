@@ -162,7 +162,6 @@ function HeroSection({
   return (
     <View style={[authStyles.hero, { height }]}>
       <View style={authStyles.heroBackground}>
-
         <Image
           source={require("../../assets/auth/fougeres.png")}
           style={authStyles.heroFerns}
@@ -203,9 +202,27 @@ function HeroSection({
           ]}
         >
           <View style={authStyles.logoBlobContainer}>
-            <Animated.View style={[authStyles.heroBlob, authStyles.heroBlob1, makeBlobExpandStyle(blob1Anim, "-14deg")]} />
-            <Animated.View style={[authStyles.heroBlob, authStyles.heroBlob2, makeBlobExpandStyle(blob2Anim, "22deg")]} />
-            <Animated.View style={[authStyles.heroBlob, authStyles.heroBlob3, makeBlobExpandStyle(blob3Anim, "-4deg")]} />
+            <Animated.View
+              style={[
+                authStyles.heroBlob,
+                authStyles.heroBlob1,
+                makeBlobExpandStyle(blob1Anim, "-14deg"),
+              ]}
+            />
+            <Animated.View
+              style={[
+                authStyles.heroBlob,
+                authStyles.heroBlob2,
+                makeBlobExpandStyle(blob2Anim, "22deg"),
+              ]}
+            />
+            <Animated.View
+              style={[
+                authStyles.heroBlob,
+                authStyles.heroBlob3,
+                makeBlobExpandStyle(blob3Anim, "-4deg"),
+              ]}
+            />
             {onLogoPress ? (
               <Pressable onPress={onLogoPress} accessible={false}>
                 {logoImage}
@@ -221,12 +238,8 @@ function HeroSection({
             accessibilityRole="header"
             accessibilityLabel="Indice de Biodiversité Potentielle, un service proposé par Etats Sauvages."
           >
-            <Text style={authStyles.heroTitle}>
-              Indice de{"\n"}Biodiversité Potentielle
-            </Text>
-            <Text style={authStyles.heroBody}>
-              un service proposé par{"\n"}Etats Sauvages
-            </Text>
+            <Text style={authStyles.heroTitle}>Indice de{"\n"}Biodiversité Potentielle</Text>
+            <Text style={authStyles.heroBody}>un service proposé par{"\n"}Etats Sauvages</Text>
           </View>
         </View>
       </View>
@@ -377,7 +390,10 @@ export function AuthGateScreen({
           },
         ]}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
           <ScrollView
             style={authStyles.panelScroll}
             contentContainerStyle={[
@@ -394,7 +410,8 @@ export function AuthGateScreen({
                   Bienvenue
                 </Text>
                 <Text style={authStyles.panelSubtitle}>
-                  Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles hors-ligne.
+                  Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles
+                  hors-ligne.
                 </Text>
               </View>
 
@@ -447,8 +464,8 @@ export function AuthGateScreen({
                     accessibilityRole="link"
                   >
                     Conditions d&apos;utilisation
-                  </Text>
-                  {" "}et notre{" "}
+                  </Text>{" "}
+                  et notre{" "}
                   <Text
                     style={authStyles.legalLink}
                     onPress={() => {
