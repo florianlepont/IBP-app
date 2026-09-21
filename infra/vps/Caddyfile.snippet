@@ -4,7 +4,7 @@
 # Both names must resolve to this VPS before reloading, otherwise Caddy cannot
 # obtain a certificate and will retry in a loop.
 
-api.algernon.ovh {
+cortege.algernon.ovh {
 	reverse_proxy 127.0.0.1:3000
 }
 
@@ -12,7 +12,7 @@ api.algernon.ovh {
 # covers the Host header, so this name must match OBJECT_STORAGE_ENDPOINT
 # exactly. Caddy forwards the original Host by default, which is what MinIO
 # needs to validate the signature.
-files.algernon.ovh {
+cortege-files.algernon.ovh {
 	reverse_proxy 127.0.0.1:9000
 
 	# Objects are large and clients are on mobile networks.

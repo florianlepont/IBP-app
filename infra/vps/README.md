@@ -16,13 +16,13 @@ never the right place for this anyway.
 ## Shape of the deployment
 
 ```
-                  ┌──────────────── VPS ─────────────────┐
-  mobile app ──►  │  Caddy :443                          │
-                  │    api.algernon.ovh   → :3000  api   │
-                  │    files.algernon.ovh → :9000  minio │
-                  │                                      │
-                  │  postgres (no published port)        │
-                  └──────────────────────────────────────┘
+                  ┌──────────────────── VPS ─────────────────────┐
+  mobile app ──►  │  Caddy :443                                  │
+                  │    cortege.algernon.ovh       → :3000  api   │
+                  │    cortege-files.algernon.ovh → :9000  minio │
+                  │                                              │
+                  │  postgres (no published port)                │
+                  └──────────────────────────────────────────────┘
 ```
 
 Deployment is **pull-based**: a systemd timer polls the registry every five
@@ -34,7 +34,7 @@ on GitHub — no SSH key, no deployment token.
 Attachment URLs are **presigned by the API**, so the mobile app fetches objects
 from MinIO directly. The signature covers the `Host` header, which means
 `OBJECT_STORAGE_ENDPOINT` must be the public name clients call —
-`https://files.algernon.ovh`, never `http://minio:9000`. Caddy forwards the
+`https://cortege-files.algernon.ovh`, never `http://minio:9000`. Caddy forwards the
 original `Host` by default, so MinIO validates the signature correctly.
 
 The previous Freebox configuration used the internal address, so attachment
