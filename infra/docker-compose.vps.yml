@@ -27,7 +27,11 @@ services:
       start_period: 60s
 
   minio:
-    image: minio/minio:latest
+    # Docker Hub no longer serves minio/minio publicly — pulls fail with
+    # "repository does not exist". quay.io is MinIO's other official
+    # registry. Pinned rather than :latest because MinIO ships breaking
+    # changes in point releases.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: cortege-minio
     restart: unless-stopped
     mem_limit: 384m
