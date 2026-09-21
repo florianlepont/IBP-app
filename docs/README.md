@@ -13,4 +13,5 @@ The repository documentation is grouped under `docs/`:
   Design and brand-system documents.
 
 - `docs/references/`
-  Source PDFs and reference material used by the product and technical specs.
+  Links to third-party reference material (CNPF IBP methodology, brand charter).
+  The source PDFs are not redistributed here — see `docs/references/README.md`.

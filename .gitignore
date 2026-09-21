@@ -15,3 +15,6 @@ coverage/
 *.log
 .idea/
 .vscode/
+
+# Third-party reference PDFs must not be committed (see docs/references/README.md)
+docs/references/*.pdf

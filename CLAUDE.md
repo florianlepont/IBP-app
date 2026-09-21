@@ -356,7 +356,7 @@ docs/
 │   └── z-infrastructure.md                # Infrastructure tasks
 ├── design/
 │   └── charte-graphique-etats-sauvages-spec.md  # Brand & design system
-├── references/                            # Official IBP methodology PDFs
+├── references/                            # Links to CNPF IBP methodology (PDFs not redistributed)
 └── user-tests/                            # User testing reports
 ```
 
