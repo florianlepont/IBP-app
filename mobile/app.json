@@ -27,7 +27,7 @@
       [
         "react-native-auth0",
         {
-          "domain": "auth-ibp.algernon.ovh"
+          "domain": "cortege-auth.algernon.ovh"
         }
       ]
     ],

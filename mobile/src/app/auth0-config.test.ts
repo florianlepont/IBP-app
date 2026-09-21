@@ -10,11 +10,11 @@ describe("auth0-config", () => {
     const { AUTH0_AUDIENCE, AUTH0_CLIENT_ID, AUTH0_DOMAIN, AUTH0_IOS_CALLBACK_URL } =
       await import("./auth0-config")
 
-    expect(AUTH0_DOMAIN).toBe("auth-ibp.algernon.ovh")
+    expect(AUTH0_DOMAIN).toBe("cortege-auth.algernon.ovh")
     expect(AUTH0_CLIENT_ID).toBe("qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py")
     expect(AUTH0_AUDIENCE).toBe("https://api.ibp-app")
     expect(AUTH0_IOS_CALLBACK_URL).toBe(
-      "fr.etatssauvages.cortege.auth0://auth-ibp.algernon.ovh/ios/fr.etatssauvages.cortege/callback",
+      "fr.etatssauvages.cortege.auth0://cortege-auth.algernon.ovh/ios/fr.etatssauvages.cortege/callback",
     )
   })
 
