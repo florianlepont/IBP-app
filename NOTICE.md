@@ -19,13 +19,25 @@ purpose.
 
 | Path | Content |
 |------|---------|
-| `media/logo/` | Association logos and favicons |
-| `media/picto/` | Brand pictograms, fern and bump motifs, arrows |
-| `media/herbier/` | Herbarium plates (tree species illustrations) |
-| `media/animaux/` | Animal illustrations |
-| `media/frame/` | Decorative frames |
-| `mobile/assets/`, `mobile/android/.../splashscreen_logo.png`, `mobile/ios/.../AppIcon.appiconset/` | Derived app icons and splash screens |
+| `mobile/assets/herbier/`, `mobile/assets/herbier-transparent/` | Herbarium plates (tree species illustrations) |
+| `mobile/assets/animals/` | Animal illustrations |
+| `mobile/assets/auth/`, `mobile/assets/tabs/` | Fern motif, marten, navigation pictograms |
+| `mobile/assets/logo-app.png` | Association logo, app variant |
+| `mobile/android/app/src/main/res/drawable-*/splashscreen_logo.png` | Splash screen, derived from the logo |
+| `mobile/ios/IBPApp/Images.xcassets/AppIcon.appiconset/` | iOS app icon, derived from the logo |
 | `docs/design/charte-graphique-etats-sauvages-spec.md` | Implementation rules derived from the association's graphic charter |
+
+These files are present only because the application cannot be built without
+them. The association's **source assets** (high-resolution originals, unused
+variants) are deliberately kept out of this repository.
+
+Every image in this list carries the copyright notice embedded in its own
+metadata (PNG `tEXt` / JPEG `COM`). After adding a new asset, run:
+
+```bash
+python3 scripts/stamp-asset-copyright.py mobile/assets
+python3 scripts/stamp-asset-copyright.py --check mobile/assets   # CI-friendly
+```
 
 The graphic charter PDF itself is an internal document of the association and is
 not published in this repository.

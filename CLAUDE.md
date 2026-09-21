@@ -17,7 +17,6 @@ Other top-level directories:
 |-----------|-------------|
 | `infra/` | Docker Compose files for local dev and Freebox deployment |
 | `docs/` | Technical architecture, API/data contracts, ADRs, product specs |
-| `media/` | Design assets |
 | `.github/workflows/` | CI (`ci.yml`) and deploy (`deploy.yml`) pipelines |
 
 ---

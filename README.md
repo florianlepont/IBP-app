@@ -149,6 +149,6 @@ This repository is **source-available, not open source**: the code is published
 for transparency and review, and no reuse is permitted without prior written
 consent. See [LICENSE](LICENSE).
 
-Brand assets under `media/` belong to the association **Etats Sauvages** and the
+Brand assets under `mobile/assets/` belong to the association **Etats Sauvages** and the
 IBP methodology is the work of **CNPF / INRAE Dynafor** — neither is covered by
 the above. See [NOTICE.md](NOTICE.md).
