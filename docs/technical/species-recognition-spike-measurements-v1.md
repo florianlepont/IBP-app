@@ -166,17 +166,20 @@ and v3.2's 33/34-class table is that list.
 
 ## 3. Image corpus and licence provenance
 
-**Status as of this commit: IN PROGRESS.** 28 of 34 classes have downloaded images; 3 failed on a
-transient network error and are being retried; 3 had not yet been attempted at the time of this
-commit. This section is committed now, incomplete, on explicit instruction: the corpus-assembly
-work already done (script, partial corpus, per-class counts, the cause of every gap) must survive
-an interruption rather than exist only in an agent's context. It will be completed in a following
-commit once the remaining classes are fetched and the composition audit (Section 3a) is run.
+**Status: COMPLETE.** All 34 classes have downloaded, licence-filtered images. Six classes hit
+transient network failures during assembly (three `SSLError`, one stalled S3 read, one
+`ReadTimeout`) and all six recovered on retry with the resumable script — none needed a second
+retry, so no class carries a `network-failure-after-retry` exclusion. See "Six transient failures,
+cause by cause" below for the full account, kept separate per instruction from the two real
+corpus-quality findings this plan surfaced: composition (Section 3a) and seasonal skew (Section
+3b).
 
 ### Source
 
 GBIF occurrence media (`api.gbif.org/v1/occurrence/search`), filtered server-side to
-`license=CC0_1_0` and `license=CC_BY_4_0` only, `mediaType=StillImage`. This is RESEARCH.md's
+`license=CC0_1_0` and `license=CC_BY_4_0` only, `mediaType=StillImage` — the permissive,
+redistributable licence D-09 requires of both the model and any dataset used to build it. This is
+RESEARCH.md's
 first-recommended candidate source, re-verified here rather than trusted second-hand: every
 genus's licence-filtered availability was surveyed directly against the live API before any image
 was downloaded (see Methodology below), and Pl@ntNet-300K/GBIF-occurrence-media was chosen over
@@ -248,76 +251,288 @@ classes before downloading anything, to establish the ceiling before spending ti
 downloads. All 34 classes cleared at least 4,200 candidate occurrences — availability was never
 in doubt; see per-class counts below for what was actually retained.
 
-### Per-class corpus status (interim — 28 of 34 classes downloaded)
+### Per-class corpus status (final — all 34 classes downloaded)
 
-| class                | downloaded                         | train | val | test | status                                                                                                        |
-| -------------------- | ---------------------------------- | ----- | --- | ---- | ------------------------------------------------------------------------------------------------------------- |
-| Abies                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Acer                 | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Alnus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Arbutus              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Betula               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Carpinus             | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Castanea             | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Celtis               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Ceratonia            | 165                                | 112   | 26  | 27   | complete (below-220 target; test count 27, just under the 30-image reporting threshold)                       |
-| Cupressus            | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Fagus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Fraxinus             | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Juglans              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Juniperus            | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Larix                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Malus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Olea                 | 0 (421 raw files on disk, unsplit) | —     | —   | —    | **interrupted mid-download** (hung network read, killed and being resumed; not a licence or taxonomy failure) |
-| Ostrya               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Phillyrea            | 0                                  | 0     | 0   | 0    | **not yet attempted** at time of this commit                                                                  |
-| Picea                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Pinus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Pistacia             | 0                                  | 0     | 0   | 0    | **not yet attempted** at time of this commit                                                                  |
-| Populus              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Prunus               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Pyrus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Quercus_deciduae     | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Quercus_sempervirens | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Salix                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Sorbus               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Tamarix              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
-| Taxus                | 203                                | 138   | 32  | 33   | complete (below-220 target)                                                                                   |
-| Tilia                | 0                                  | 0     | 0   | 0    | **network-failure, being retried** — see below                                                                |
-| Ulmus                | 0                                  | 0     | 0   | 0    | **network-failure, being retried** — see below                                                                |
-| Cercis               | 0                                  | 0     | 0   | 0    | **network-failure, being retried** — see below                                                                |
+| class                | train | val | test | downloaded (of target 220) |
+| -------------------- | ----- | --- | ---- | -------------------------- |
+| Abies                | 150   | 35  | 35   | 220                        |
+| Acer                 | 150   | 35  | 35   | 220                        |
+| Alnus                | 150   | 35  | 35   | 220                        |
+| Arbutus              | 150   | 35  | 35   | 220                        |
+| Betula               | 150   | 35  | 35   | 220                        |
+| Carpinus             | 150   | 35  | 35   | 220                        |
+| Castanea             | 150   | 35  | 35   | 220                        |
+| Celtis               | 150   | 35  | 35   | 220                        |
+| Ceratonia            | 150   | 35  | 35   | 220                        |
+| Cercis               | 150   | 35  | 35   | 220                        |
+| Cupressus            | 150   | 35  | 35   | 220                        |
+| Fagus                | 150   | 35  | 35   | 220                        |
+| Fraxinus             | 150   | 35  | 35   | 220                        |
+| Juglans              | 150   | 35  | 35   | 220                        |
+| Juniperus            | 150   | 35  | 35   | 220                        |
+| Larix                | 150   | 35  | 35   | 220                        |
+| Malus                | 150   | 35  | 35   | 220                        |
+| Olea                 | 150   | 35  | 35   | 220                        |
+| Ostrya               | 150   | 35  | 35   | 220                        |
+| Phillyrea            | 150   | 35  | 35   | 220                        |
+| Picea                | 150   | 35  | 35   | 220                        |
+| Pinus                | 150   | 35  | 35   | 220                        |
+| Pistacia             | 139   | 32  | 33   | 204 (below-220 target)     |
+| Populus              | 150   | 35  | 35   | 220                        |
+| Prunus               | 150   | 35  | 35   | 220                        |
+| Pyrus                | 150   | 35  | 35   | 220                        |
+| Quercus_deciduae     | 150   | 35  | 35   | 220                        |
+| Quercus_sempervirens | 150   | 35  | 35   | 220                        |
+| Salix                | 150   | 35  | 35   | 220                        |
+| Sorbus               | 150   | 35  | 35   | 220                        |
+| Tamarix              | 150   | 35  | 35   | 220                        |
+| Taxus                | 150   | 35  | 35   | 220                        |
+| Tilia                | 150   | 35  | 35   | 220                        |
+| Ulmus                | 127   | 30  | 30   | 187 (below-220 target)     |
 
-### The five absent classes, cause by cause (not merged into one bucket)
+Every class's **raw** train count clears the 40-image usable-training threshold and every class's
+raw test count clears the 30-image D-02 reporting threshold. This raw-volume picture is not the
+final word — see Section 3a, which found composition problems severe enough to exclude two
+classes and materially shrink the effective (non-landscape, non-herbarium, non-in-hand) sample
+for every other class.
 
-Three distinct causes were considered for every absent class, per the coordinator's explicit
-instruction that they carry different meaning for the phase and must not be conflated:
+### Six transient failures, cause by cause (not merged into one bucket)
 
-1. **Licence scarcity** (too few CC0/CC-BY images on GBIF) — ruled out for all five. The coverage
-   survey above found 4,200+ candidates for every one of the 34 classes, including all five
-   currently absent ones, before any download was attempted.
+Three distinct causes were checked for every gap that appeared during assembly, per instruction
+that they carry different meaning for the phase and must not be conflated:
+
+1. **Licence scarcity** (too few CC0/CC-BY images on GBIF) — ruled out for all six. The coverage
+   survey above found 4,200+ CC0/CC-BY candidates for every one of the 34 classes, including all
+   six that hit a failure, before any download was attempted.
 2. **Taxon-key resolution bug** (a homonym or lookup failure specific to this script) — ruled out
-   for all five. `species/match?name=<genus>&kingdom=Plantae` resolves correctly for all of them
-   when the network call succeeds (confirmed manually during the coverage survey).
-3. **Transient network failure** — confirmed as the cause for **Tilia, Ulmus, and Cercis**: each
-   failed with `requests.exceptions.SSLError` / `SSLEOFError: EOF occurred in violation of
-protocol` against `api.gbif.org`, immediately following a successful request for the
-   alphabetically-preceding class (Ceratonia succeeded immediately before Cercis failed), which
-   rules out a sustained outage. **Olea** was interrupted separately: its connection to an
-   S3-hosted image host (`s3-1-w.amazonaws.com`) stalled with the socket `ESTABLISHED` but 0% CPU
-   and no progress for several minutes — a slow trickle of bytes that reset `requests`' per-read
-   timeout on every partial read without ever completing, which the process-level `timeout=`
-   parameter does not bound (a known `requests`/`urllib3` limitation). This was fixed in
-   `prepare_dataset.py::download_and_resize` by streaming with an explicit wall-clock deadline
-   instead of relying on the per-read socket timeout. **Phillyrea and Pistacia** were never
-   reached in this run (they are last in `genus_labels.txt`'s iteration order) and carry no
-   failure of any kind yet — they are simply retried in the next pass along with the other four.
+   for all six. `species/match?name=<genus>&kingdom=Plantae` resolves correctly for all of them
+   whenever the network call itself succeeds (confirmed both during the coverage survey and on
+   retry).
+3. **Transient network failure** — confirmed as the cause for all six, in three different failure
+   modes:
+   - **Tilia, Ulmus, Cercis:** `requests.exceptions.SSLError` / `SSLEOFError: EOF occurred in
+violation of protocol` against `api.gbif.org`. Each failure followed a successful request for
+     the immediately-preceding class in the fetch order (e.g. Ceratonia succeeded immediately
+     before Cercis failed), which rules out a sustained outage.
+   - **Olea:** a connection to an S3-hosted image host (`s3-1-w.amazonaws.com`) stalled with the
+     socket `ESTABLISHED`, 0% CPU, and no progress for several minutes — a slow trickle of bytes
+     resetting `requests`' per-read timeout on every partial read without the transfer ever
+     completing, which the process-level `timeout=` parameter does not bound (a known
+     `requests`/`urllib3` limitation, not a GBIF-side problem). Fixed in
+     `prepare_dataset.py::download_and_resize` by streaming with an explicit 15s wall-clock
+     deadline instead of relying on the per-read socket timeout.
+   - **Pistacia:** `requests.exceptions.ReadTimeout` against `api.gbif.org` (30s read timeout hit
+     on a single occurrence-search page) — a different transient mode again, recovered
+     unconditionally on the next run with no further failures.
 
-None of the five is licence-scarce and none is a resolution bug. All five are infrastructure
-gaps, not corpus-coverage findings, and none should reduce the classes-usable count without a
-second confirmed failure (`network-failure-after-retry`).
+All six recovered on the very next retry attempt once the resumable script was re-run — none
+required a second retry, so none is labelled `network-failure-after-retry`. None of the six is a
+licence-scarcity finding and none is a resolution bug; all six were pure infrastructure blips,
+resolved before the corpus was considered complete.
 
-_(Composition audit, seasonal-skew estimate, and the final complete per-class table with all 34
-classes: added in a following commit once the retry completes.)_
+---
+
+## 3a. Corpus composition audit (per-genus, ~30-image sample)
+
+**Why this section exists.** `prepare_dataset.py`'s first draft asserted, without checking, that
+GBIF `StillImage` occurrence media are "specimen/observation photographs of one organism — never
+stand or multi-tree survey photography." That claim was checked by eye against six images sampled
+from the downloaded corpus and found false on the first sample: a landscape/stand photograph (a
+hillside with roughly a dozen birches), a catkins-only seasonal shot, an in-hand detached-part
+photo with no tree visible, and only two genuinely single-subject images out of six. The false
+claim has been removed from the script's docstring (see `prepare_dataset.py`, corrected
+2026-09-22); this section replaces the assumption with a measurement.
+
+**Method.** For each of the 34 classes, 30 images were sampled at random (not the first N — a
+fixed per-class random seed, distinct from the train/val/test split seed, was used to draw from
+the full downloaded set) and classified by direct visual inspection into one of five categories:
+
+- `usable-single-subject` — whole tree, trunk/bark close-up, leaf or branch close-up; what an
+  ecologist would actually photograph in the field per D-10's single-subject scope
+- `landscape-or-stand` — several trees or a habitat/scene shot where no single subject dominates;
+  this is precisely the multi-tree stand case D-10 (amended) removed from this phase's scope, so
+  its presence in the training corpus is itself a quality problem, not just an odd photo
+- `in-hand-specimen` — a leaf, twig or fruit held in a hand, detached from the plant, no tree
+  visible; plausible for teaching leaf-shape features but not what an ecologist's in-field camera
+  frame looks like
+- `herbarium-or-label` — a pressed, dried, mounted specimen sheet (often with a ruler, colour
+  card, barcode or handwritten label), or a scanned museum record; visually nothing like a live
+  phone-camera field photo
+- `other-unusable` — no identifiable plant part in frame, or the composition otherwise does not
+  support any of the above (e.g. a pure scenic landscape with no discernible subject)
+
+Each of the 34 contact sheets (one image grid per genus, 30 numbered thumbnails) was inspected
+directly; classifications are a single reviewer's direct visual judgement, not an automated
+filter, and are therefore a measurement with normal single-rater uncertainty — not exact ground
+truth, but a real check against the false assumption the script previously encoded.
+
+**Composition-adjusted counts are estimates, not exact counts.** The "adjusted train/test" columns
+below extrapolate the 30-image sample's usable rate onto the full per-class train/test counts
+(e.g. a class with train=150 and a 70% usable rate is shown as adj_train≈105). This is a
+sampling-based estimate with a margin of error that shrinks the smaller the sample — it is not a
+substitute for classifying every downloaded image, which was explicitly out of scope for this
+measurement task (plan 01-02 Task 3, coordinator guidance 2026-09-22: "do NOT start building an
+image classifier to clean the corpus, and do NOT hand-delete images at scale").
+
+| genus (label)        | usable-single-subject | landscape-or-stand | in-hand-specimen | herbarium-or-label | other-unusable | usable rate | adj. train | adj. test | verdict                                |
+| -------------------- | --------------------- | ------------------ | ---------------- | ------------------ | -------------- | ----------- | ---------- | --------- | -------------------------------------- |
+| Abies                | 23                    | 2                  | 5                | 0                  | 0              | 77%         | 115        | 27        | usable                                 |
+| Acer                 | 21                    | 5                  | 4                | 0                  | 0              | 70%         | 105        | 24        | usable                                 |
+| Alnus                | 21                    | 5                  | 4                | 0                  | 0              | 70%         | 105        | 24        | usable                                 |
+| Arbutus              | 24                    | 4                  | 2                | 0                  | 0              | 80%         | 120        | 28        | usable                                 |
+| Betula               | 13                    | 13                 | 4                | 0                  | 0              | 43%         | 65         | 15        | EXCLUDED (majority non-single-subject) |
+| Carpinus             | 18                    | 8                  | 4                | 0                  | 0              | 60%         | 90         | 21        | usable                                 |
+| Castanea             | 18                    | 2                  | 10               | 0                  | 0              | 60%         | 90         | 21        | usable                                 |
+| Celtis               | 23                    | 4                  | 3                | 0                  | 0              | 77%         | 115        | 27        | usable                                 |
+| Ceratonia            | 16                    | 0                  | 1                | 12                 | 1              | 53%         | 80         | 19        | marginal                               |
+| Cercis               | 22                    | 2                  | 6                | 0                  | 0              | 73%         | 110        | 26        | usable                                 |
+| Cupressus            | 26                    | 3                  | 1                | 0                  | 0              | 87%         | 130        | 30        | usable                                 |
+| Fagus                | 21                    | 6                  | 3                | 0                  | 0              | 70%         | 105        | 24        | usable                                 |
+| Fraxinus             | 22                    | 5                  | 3                | 0                  | 0              | 73%         | 110        | 26        | usable                                 |
+| Juglans              | 21                    | 3                  | 5                | 0                  | 1              | 70%         | 105        | 24        | usable                                 |
+| Juniperus            | 25                    | 2                  | 3                | 0                  | 0              | 83%         | 125        | 29        | usable                                 |
+| Larix                | 15                    | 6                  | 1                | 0                  | 8              | 50%         | 75         | 18        | marginal                               |
+| Malus                | 23                    | 2                  | 4                | 0                  | 1              | 77%         | 115        | 27        | usable                                 |
+| Olea                 | 29                    | 1                  | 0                | 0                  | 0              | 97%         | 145        | 34        | usable                                 |
+| Ostrya               | 25                    | 2                  | 3                | 0                  | 0              | 83%         | 125        | 29        | usable                                 |
+| Phillyrea            | 9                     | 0                  | 0                | 20                 | 1              | 30%         | 45         | 10        | EXCLUDED (majority non-single-subject) |
+| Picea                | 21                    | 8                  | 1                | 0                  | 0              | 70%         | 105        | 24        | usable                                 |
+| Pinus                | 23                    | 5                  | 2                | 0                  | 0              | 77%         | 115        | 27        | usable                                 |
+| Pistacia             | 26                    | 0                  | 3                | 0                  | 1              | 87%         | 120        | 29        | usable                                 |
+| Populus              | 19                    | 7                  | 4                | 0                  | 0              | 63%         | 95         | 22        | usable                                 |
+| Prunus               | 28                    | 0                  | 1                | 0                  | 1              | 93%         | 140        | 33        | usable                                 |
+| Pyrus                | 25                    | 1                  | 4                | 0                  | 0              | 83%         | 125        | 29        | usable                                 |
+| Quercus_deciduae     | 26                    | 0                  | 2                | 2                  | 0              | 87%         | 130        | 30        | usable                                 |
+| Quercus_sempervirens | 23                    | 7                  | 0                | 0                  | 0              | 77%         | 115        | 27        | usable                                 |
+| Salix                | 20                    | 3                  | 7                | 0                  | 0              | 67%         | 100        | 23        | usable                                 |
+| Sorbus               | 27                    | 1                  | 2                | 0                  | 0              | 90%         | 135        | 32        | usable                                 |
+| Tamarix              | 26                    | 1                  | 3                | 0                  | 0              | 87%         | 130        | 30        | usable                                 |
+| Taxus                | 27                    | 1                  | 2                | 0                  | 0              | 90%         | 135        | 32        | usable                                 |
+| Tilia                | 24                    | 1                  | 5                | 0                  | 0              | 80%         | 120        | 28        | usable                                 |
+| Ulmus                | 23                    | 3                  | 4                | 0                  | 0              | 77%         | 97         | 23        | usable                                 |
+
+**Two classes excluded from the usable-class count on composition grounds.**
+
+- **Betula** — 13/30 (43%) usable-single-subject, 13/30 (43%) landscape-or-stand. Composition is
+  split almost exactly between real specimen photos and forest/grove scenes with multiple birch
+  trunks — the majority (17/30, 57%) of the sample is _not_ a usable single-subject image. This is
+  the same stand-photo composition D-10 (amended) explicitly removed from this phase's scope; a
+  corpus built to measure the single-subject case should not be more than half stand photos for
+  any one genus.
+- **Phillyrea** — 9/30 (30%) usable-single-subject, 20/30 (67%) herbarium-or-label. Two-thirds of
+  the sampled corpus for this genus is pressed, mounted, scanned herbarium specimens — visually
+  nothing like a phone-camera field photo — sourced from a natural-history-collection dataset that
+  happened to clear the CC0/CC-BY licence filter. Raw download volume (220) said nothing about
+  this; only visual inspection caught it.
+
+**Two further classes flagged marginal, kept in the usable count but noted for caution.**
+
+- **Larix** — exactly 15/30 (50%) usable-single-subject. The other half splits between
+  landscape-or-stand (6) and, more strikingly, `other-unusable` (8/30, 27%) — pure scenic
+  mountain-lake photographs with no discernible Larix subject in frame at all, most likely from a
+  dataset of location-tagged tourist/landscape photography rather than field-identification
+  photos. A 50% split is not "mostly unusable" by the letter of the exclusion rule above, but it
+  is not a comfortable pass either.
+- **Ceratonia** — 16/30 (53%) usable-single-subject, 12/30 (40%) herbarium-or-label. Clears the
+  50% bar but carries the second-largest herbarium fraction of any class after Phillyrea; both are
+  the Mediterranean-case supplementary genera (Section 2), suggesting herbarium-heavy source
+  datasets may correlate with less-photographed Mediterranean taxa rather than being independent
+  per-genus noise.
+
+**What this means for the gate.** `CLASSES-USABLE` in `spike/species-recognition/data/GATE`
+reflects usable **composition**, not raw download volume: 34 raw-usable classes minus the two
+excluded above (Betula, Phillyrea) = **32**. Both exclusions are composition failures, not
+licence, resolution, or network failures — a materially different, and better-evidenced, finding
+than a raw undercount would have produced. Larix and Ceratonia remain counted but are flagged
+above; a reader relying on either genus's accuracy figure in plan 04 should re-check this
+section first.
+
+**What this means for plan 04's accuracy evaluation.** The composition-adjusted test counts above
+are estimates from a 30-image sample, not exact per-image classifications — but even taken as
+rough estimates, most classes' _effective_ single-subject test count falls below the 30-image D-02
+reporting threshold once landscape/in-hand/herbarium images are notionally excluded, despite every
+class's _raw_ test count clearing it. Plan 04 evaluating accuracy against the raw (uncomposition-
+filtered) corpus will measure something broader than "accuracy on a single-subject field photo" —
+whatever the model does with a landscape or herbarium image in the test set is not what D-02's
+top-3/95% bar is asking about. This is a decision for plan 04 to make explicitly (composition-
+filter the actual test images before evaluating, or report the raw-corpus figure with this caveat
+attached) rather than one this measurement task resolves by itself.
+
+---
+
+## 3b. Seasonal skew (from GBIF event dates)
+
+**Why this matters.** IBP surveys are conducted in the field across the association's active
+season, but Factor A specifically depends on genus-level foliage/bark recognition working under
+whatever conditions the ecologist encounters — and the published schedule (Section "Spike
+window") points at field tests starting **October**, i.e. autumn. A training corpus dominated by
+spring flowering and summer foliage photographs, with next to no autumn representation, risks a
+model that performs well in the lab measurement (Section 5, drawn from this same corpus) and
+collapses in the field precisely because the visual conditions it will actually meet — turning or
+fallen leaves, bare branches, autumn bark — are barely represented in training. This risk was not
+named by anyone before the corpus was inspected; it is a direct consequence of building a corpus
+from whatever citizen-science photos happen to be CC0/CC-BY licensed, which skew toward flowering
+season (the most commonly photographed phenological stage).
+
+**Method.** For the same 30-image-per-class sample used in Section 3a, each image's GBIF
+`eventDate` was retrieved (100% coverage — all 1,020 sampled images carried a usable date) and
+bucketed into meteorological seasons (winter: Dec–Feb, spring: Mar–May, summer: Jun–Aug, autumn:
+Sep–Nov).
+
+| genus (label)        | winter | spring | summer | autumn | autumn % |
+| -------------------- | ------ | ------ | ------ | ------ | -------- |
+| Abies                | 11     | 7      | 12     | 0      | 0%       |
+| Acer                 | 15     | 15     | 0      | 0      | 0%       |
+| Alnus                | 16     | 14     | 0      | 0      | 0%       |
+| Arbutus              | 14     | 11     | 5      | 0      | 0%       |
+| Betula               | 9      | 21     | 0      | 0      | 0%       |
+| Carpinus             | 2      | 24     | 4      | 0      | 0%       |
+| Castanea             | 3      | 10     | 17     | 0      | 0%       |
+| Celtis               | 5      | 7      | 17     | 1      | 3%       |
+| Ceratonia            | 2      | 16     | 4      | 8      | 27%      |
+| Cercis               | 6      | 19     | 5      | 0      | 0%       |
+| Cupressus            | 13     | 10     | 2      | 5      | 17%      |
+| Fagus                | 15     | 15     | 0      | 0      | 0%       |
+| Fraxinus             | 14     | 16     | 0      | 0      | 0%       |
+| Juglans              | 5      | 7      | 18     | 0      | 0%       |
+| Juniperus            | 12     | 18     | 0      | 0      | 0%       |
+| Larix                | 8      | 8      | 14     | 0      | 0%       |
+| Malus                | 0      | 18     | 11     | 1      | 3%       |
+| Olea                 | 7      | 12     | 7      | 4      | 13%      |
+| Ostrya               | 4      | 7      | 13     | 6      | 20%      |
+| Phillyrea            | 2      | 20     | 4      | 4      | 13%      |
+| Picea                | 12     | 18     | 0      | 0      | 0%       |
+| Pinus                | 30     | 0      | 0      | 0      | 0%       |
+| Pistacia             | 3      | 12     | 7      | 8      | 27%      |
+| Populus              | 4      | 26     | 0      | 0      | 0%       |
+| Prunus               | 18     | 12     | 0      | 0      | 0%       |
+| Pyrus                | 3      | 20     | 7      | 0      | 0%       |
+| Quercus_deciduae     | 5      | 14     | 7      | 4      | 13%      |
+| Quercus_sempervirens | 2      | 17     | 8      | 3      | 10%      |
+| Salix                | 3      | 27     | 0      | 0      | 0%       |
+| Sorbus               | 1      | 23     | 6      | 0      | 0%       |
+| Tamarix              | 12     | 12     | 5      | 1      | 3%       |
+| Taxus                | 10     | 15     | 5      | 0      | 0%       |
+| Tilia                | 1      | 14     | 15     | 0      | 0%       |
+| Ulmus                | 2      | 28     | 0      | 0      | 0%       |
+
+**Finding.** 23 of 34 classes (23/34) have **zero** autumn-dated
+images in their 30-image sample: Abies, Acer, Alnus, Arbutus, Betula, Carpinus, Castanea, Cercis, Fagus, Fraxinus, Juglans, Juniperus, Larix, Picea, Pinus, Populus, Prunus, Pyrus, Salix, Sorbus, Taxus, Tilia, Ulmus. Every temperate genus in the corpus
+shows this pattern; the only classes with meaningful autumn representation are the Mediterranean
+supplementary genera (Ceratonia, Pistacia both 27%; Ostrya 20%; Cupressus 17%; Olea, Phillyrea,
+Quercus_deciduae 13%), and even the highest, Ceratonia at 27%, is a small
+minority of that genus's sample. This is a corpus-wide skew, not a per-genus anomaly — it affects
+every class this phase measured, and it compounds the D-16 gap already recorded in Section 6/9 (no
+field-photo validation available): the public-dataset accuracy figure this phase produces is not
+just unvalidated against field conditions in general, it is specifically thin on the exact season
+the field tests are scheduled to start in.
+
+**What this means for the ADR.** This is a new, previously-unstated confidence cap on any accuracy
+figure this phase reports (Section 5), additive to the two gaps Section 9 already records
+(no field-photo validation, unconfirmed benchmark devices). It should be recorded as its own
+caveat rather than folded into the existing field-photo gap, because it is a property of the
+_training_ corpus's seasonal composition, not only of the _validation_ step's absence — even a
+full field-photo validation pass would not fix a model trained on almost no autumn imagery.
 
 ---
 
@@ -366,7 +581,21 @@ _Filled by plan 05._
 
 ## 9. Recorded gaps and confidence caveats
 
-Two gaps are already known before any measurement takes place.
+**Corpus gate (plan 01-02).** `spike/species-recognition/data/GATE` reads:
+
+```
+GATE-CORPUS: PASS
+CLASSES-USABLE: 32
+```
+
+32 of 34 classes clear both the raw usable-training threshold and the composition-adjusted
+majority-usable bar (Section 3a); Betula and Phillyrea are excluded on composition grounds
+(majority landscape/stand and majority herbarium-sheet content respectively), not on licence,
+resolution, or network-failure grounds. Plan 01-04 refuses to run without a first line reading
+exactly `GATE-CORPUS: PASS` — this token is written verbatim here and into `01-02-SUMMARY.md` so
+the committed record and the machine-readable gate file cannot drift apart.
+
+Beyond the gate itself, several further gaps and confidence caveats are recorded below.
 
 **1. The stand-photo case is not measured at all (D-10, amended 2026-09-22).** The original
 decision was to measure both a single subject and a stand photo containing several trees. Research
@@ -387,4 +616,34 @@ filled before the ADR is written.
 measured against a documented floor, not against the observers' real phones. This caps confidence
 in the latency evidence until the association confirms a device pair.
 
-_(Additional gaps recorded here as plans 02, 03, 04 and 05 execute.)_
+**4. The corpus is not composition-filtered before evaluation (plan 01-02).** See Section 3a. A
+30-image-per-class visual audit found the raw GBIF corpus is NOT reliably single-subject — two
+classes (Betula, Phillyrea) were excluded from the usable-class count entirely on composition
+grounds (majority landscape/stand and majority herbarium-sheet content respectively), and every
+other class's _effective_ single-subject sample is materially smaller than its raw download count
+suggests. Plan 04 measuring accuracy against the raw corpus measures something broader than "top-3
+accuracy on a single-subject field photo" (D-02) unless it composition-filters the test images
+first — a decision Section 3a explicitly leaves to plan 04 rather than resolving here.
+
+**5. The training corpus is seasonally skewed away from autumn (plan 01-02).** See Section 3b. 23
+of 34 classes have zero autumn-dated images in their sample; field tests are scheduled to start in
+October. This is a confidence cap on top of gap 2 above (no field-photo validation) — even a full
+field-photo pass would not correct a model trained on almost no autumn imagery, so this is recorded
+as its own caveat, not folded into gap 2.
+
+**6. A source-document inconsistency was found while transcribing the genus list (plan 01-02, not
+a spike-corpus gap but worth carrying forward).** See Section 2. The Factor A genus definition
+(IBP FR v3.2 p.2) names Pistacia as one of the 33 genera, but no Pistacia species appears in the
+same document's Table 1 (native species list) — its species are listed instead under Table 2
+(shrub species not counted in Factor A). `Pistacia` was kept in the 34-class label set per the
+genus-level definition on p.2, flagged for a later reader to re-check against CNPF directly.
+
+**7. First-hand confirmation of the v3.0/v3.2 methodology-version drift (plan 01-02, informational
+only — out of scope for this phase to resolve).** Retrieving the current IBP FR v3.2 PDF directly
+(Section 2) to transcribe the genus list is itself first-hand evidence that CNPF's live, currently
+published document is v3.2 while this repository's own reference documents cite v3.0 — the same
+drift Phase 1.1 exists to resolve. Noted here for traceability since this plan is where the v3.2
+PDF was actually opened and read; no action taken on it beyond what Section 2 already records, per
+instruction that resolving the drift is out of scope for this plan.
+
+_(Additional gaps recorded here as plans 03, 04 and 05 execute.)_
