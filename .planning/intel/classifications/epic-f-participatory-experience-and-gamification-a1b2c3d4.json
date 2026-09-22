@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-f-participatory-experience-and-gamification.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic F - Participatory Experience and Gamification",
+  "summary": "V1 epic of user stories covering public IBP map, contributor points, leaderboards, badges and community engagement features.",
+  "scope": ["France-wide IBP map", "contributor profile", "points system", "leaderboard", "badges and milestones", "gamification", "public survey visibility"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

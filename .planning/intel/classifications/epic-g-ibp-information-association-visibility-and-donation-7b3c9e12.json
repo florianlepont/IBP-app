@@ -1,0 +1,20 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-g-ibp-information-association-visibility-and-donation.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic G - IBP Information, Association Visibility and Donation",
+  "summary": "V1 epic covering in-app IBP educational content, Etats-Sauvages association visibility, and donation conversion flows.",
+  "scope": [
+    "IBP educational content section",
+    "association mission and impact section",
+    "donation CTAs and secure donation flow",
+    "CMS/configurable content source",
+    "conversion analytics events",
+    "main navigation entry points"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

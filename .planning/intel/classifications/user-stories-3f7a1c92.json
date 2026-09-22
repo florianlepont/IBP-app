@@ -1,0 +1,27 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/user-stories.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Product Specifications - IBP Mobile",
+  "summary": "Product vision, goals, personas, V1 scope, V2 backlog, and cross-epic business rules for the IBP mobile biodiversity survey app.",
+  "scope": [
+    "IBP survey entry",
+    "user authentication",
+    "user profile management",
+    "cadastral parcel linkage",
+    "longitudinal parcel tracking",
+    "survey versioning",
+    "photo attachments and geolocation",
+    "offline mode and synchronization",
+    "survey statuses and visibility",
+    "explore map",
+    "gamification and points",
+    "association visibility and donation flows",
+    "community moderation"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

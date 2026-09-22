@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/ibp-form-spec.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Functional Specification - IBP Form (France)",
+  "summary": "Defines the complete IBP form structure: 10 factors, classes, scores, validation rules, subscores and submission data contract.",
+  "scope": [
+    "IBP form",
+    "IBP factors A-J",
+    "scoring and subscores",
+    "region versions ACA/M",
+    "vegetation stage typology",
+    "draft expiry",
+    "cadastral parcel linkage",
+    "survey visibility",
+    "submission data contract",
+    "mobile entry validation"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 1,
+  "notes": ""
+}

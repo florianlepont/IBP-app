@@ -1,0 +1,25 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/project/presentation-association.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Application IBP — Présentation du projet",
+  "summary": "Stakeholder-facing project presentation for the Etats Sauvages IBP mobile app: rationale, features, current status, roadmap, and launch/running costs.",
+  "scope": [
+    "IBP mobile app",
+    "guided 10-factor (A-J) survey entry",
+    "cadastral parcel selection on map",
+    "offline mode and synchronization",
+    "photos and attachments",
+    "public survey map",
+    "secure accounts (Auth0, Google/Apple sign-in)",
+    "national forest database and aggregated analytics",
+    "MVP status and V1/V2 roadmap",
+    "timeline",
+    "launch and annual operating costs (App Store, Google Play, alwaysdata, Cloudflare R2, Auth0)"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

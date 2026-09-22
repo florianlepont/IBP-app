@@ -1,0 +1,20 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/design/charte-graphique-etats-sauvages-spec.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Graphic Charter Specification - Etats Sauvages",
+  "summary": "Implementation-ready UI specification defining the Etats Sauvages brand identity: color tokens, typography, logo rules, and visual language for the mobile app.",
+  "scope": [
+    "design system",
+    "color palette tokens",
+    "typography",
+    "logo usage rules",
+    "visual language elements",
+    "mobile UI"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 1,
+  "notes": ""
+}

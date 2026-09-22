@@ -1,0 +1,22 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-b-survey-preparation.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic B - Survey Preparation",
+  "summary": "MVP user stories for listing, viewing, managing, and map-exploring personal IBP surveys and parcel study status before data entry.",
+  "scope": [
+    "survey list",
+    "survey detail view",
+    "parcel history",
+    "survey visibility and deletion",
+    "cadastral parcel status on maps",
+    "Explore parcel analysis surface",
+    "offline survey visibility",
+    "IBP score comparison"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}
