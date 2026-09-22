@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-09-22T18:12:11.499Z"
+stopped_at: "Completed 01-03-PLAN.md (device harness; GATE-HARNESS: BUILD-FAILED, device-unreachable)"
+last_updated: "2026-09-22T18:42:52.239Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-09-22 — Phase 1 execution started
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01 P01 | 25min | 3 tasks | 5 files |
 | Phase 01 P02 | ~4h | 3 tasks | 2 files |
+| Phase 01-species-recognition-approach-decision P03 | 50min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Decisions table. Decisions affecting current work:
 - [Phase 01]: Field photographs (D-16) fallback: no-field-photos. Spike reports the public-dataset accuracy figure only; field validation deferred and recorded as a stated gap in the measurement document, not silently dropped. — No field photo set was available at the Task 1 checkpoint.
 - [Phase 01]: 34-class corpus assembled from GBIF occurrence media (CC0/CC-BY only); composition audit found the corpus is NOT reliably single-subject, excluding Betula and Phillyrea from the usable-class count (CLASSES-USABLE: 32, GATE-CORPUS: PASS)
 - [Phase 01]: Seasonal-skew measurement found 23 of 34 classes have zero autumn-dated images in the training corpus, despite field tests starting in October -- recorded as a new confidence cap on any accuracy figure this phase reports
+- [Phase 01]: GATE-HARNESS BUILD-FAILED (device-unreachable, not build-failure) -- native build succeeds on both platforms with react-native-fast-tflite, no substitution needed, but no real iOS/Android device reachable from this machine
+- [Phase 01]: react-native-vision-camera@5.2.3 ships no Expo config plugin; fixed with a project-local plugin injecting camera permissions directly
+- [Phase 01]: pod install must run once after all expo install calls finish, not interleaved -- interleaving left a stale Podfile.lock path that broke the iOS build
 
 ### Pending Todos
 
@@ -85,6 +89,7 @@ None yet.
 - **Schedule.** The published plan put MVP finalization at September 2026 (today) with field tests October–December. Phases 1–3 are unstarted unknowns; the December field-test window is at risk.
 - **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): string-interpolated SQL in `users.service.ts`, 9 of 12 screens untested, missing indexes — all scheduled in Phases 6 and 7.
 - **Next-milestone prerequisite:** Epics E and G need a back-office / CMS surface that no spec or architecture doc defines.
+- 01-03: plan 05 (device latency measurement) is blocked until a real iOS device and a real Android device are reachable from a development machine
 
 ### Roadmap Evolution
 
@@ -101,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-22T18:11:40.308Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-09-22T18:42:52.235Z
+Stopped at: Completed 01-03-PLAN.md (device harness; GATE-HARNESS: BUILD-FAILED, device-unreachable)
 Resume file: None
