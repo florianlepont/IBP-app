@@ -29,10 +29,14 @@
   an **explicit message and falls back to normal manual entry**. Silent fallback was rejected.
 - **D-09:** The model licence must be **permissive and redistributable**. The association is a
   non-profit with a near-zero budget and the app ships on public stores.
-- **D-10:** **Both photo subjects are to be measured**: a single subject (one tree, a leaf or
-  bark close-up) *and* a stand photo containing several trees. The stand case requires detection
-  before classification and is materially harder — it is the scenario most likely to drive a
-  no-go. The ADR decides on the measured figures rather than on intuition.
+- **D-10 (AMENDED 2026-09-22, after this research was written):** **Single subject only** — one
+  tree, a leaf or a bark close-up. The stand-photo / multi-tree case is **NOT measured**. This
+  research's own findings (see State of the Art below) drove the amendment: no licence-clean
+  ground-level multi-tree detector covering CNPF genera exists, and building one is a multi-week
+  effort rather than a 2–3 day spike task. The ADR must still record the stand case as out of
+  reach for this milestone, citing SilvaScenes and ForTrunkDet by name.
+  *The original wording — "both photo subjects are to be measured" — is superseded. See
+  `01-CONTEXT.md` D-10 for the authoritative text.*
 - **D-11:** The screen shows the **most likely genus first with its confidence**, with the
   remaining candidates listed underneath — not three genera presented as equal options.
 - **D-12:** Confidence is shown **in plain words — strong / medium / weak**, not as a percentage.
@@ -88,7 +92,7 @@ The runtime question has a clear, low-risk answer: **`react-native-fast-tflite`*
 
 The model question has no shortcut: **no pretrained, permissively-licensed, tree-genus classifier exists off the shelf.** Nothing found in this research — not Pl@ntNet, not PlantCLEF, not any Hugging Face plant model — ships a ready model restricted to the ~33-genus CNPF list with a licence clear enough to redistribute in a public app. The realistic path is transfer learning: fine-tune an ImageNet-pretrained mobile backbone (MobileNetV3-Small or EfficientNet-Lite0, both Apache-2.0 architectures with no data-licence entanglement) on a permissively-licensed image set filtered to the CNPF genera, then convert to `.tflite`. This is a 1-day task for someone comfortable with a basic PyTorch/Keras transfer-learning script, which fits inside the spike's timebox for the single-subject case only.
 
-The stand-photo case (D-10) is the one most likely to produce a no-go, and this research found nothing to contradict that expectation. Ground-level multi-tree detection is a niche research problem: the closest published datasets (SilvaScenes — Quebec, non-European species, unconfirmed licence; ForTrunkDet — CC-BY but only two species, Eucalyptus and Pinus) do not cover the CNPF genus list and are not proven ready-to-use models. Building and validating a custom trunk detector from scratch is a multi-week research effort on its own, not a 2–3 day spike task. The honest recommendation is to spend the spike's budget on the single-subject case, measure the stand case with whatever time remains (even a naive whole-image classification run without detection, clearly labelled as informal), and let the ADR state plainly that the stand case is unproven and likely out of scope for this milestone.
+The stand-photo case (D-10) is the one most likely to produce a no-go, and this research found nothing to contradict that expectation. Ground-level multi-tree detection is a niche research problem: the closest published datasets (SilvaScenes — Quebec, non-European species, unconfirmed licence; ForTrunkDet — CC-BY but only two species, Eucalyptus and Pinus) do not cover the CNPF genus list and are not proven ready-to-use models. Building and validating a custom trunk detector from scratch is a multi-week research effort on its own, not a 2–3 day spike task. The honest recommendation is to spend the spike's budget on the single-subject case, and let the ADR state plainly that the stand case is unproven and out of scope for this milestone. **Decision taken 2026-09-22 after this research:** the user chose to spend no spike time on the stand case at all — not even a naive whole-image run — on the grounds that two weak results are worse than one solid one, and because a whole-image classifier on a stand photo returns a confident meaningless answer (see Pitfall 3). D-10 was amended accordingly.
 
 The CNPF genus list itself was not previously available in the codebase (D-15's "discovered gap") but **is publicly reproducible from the official IBP FR v3.2 methodology PDF** (`cnpf.fr`, dated 2026-02-02) — its Factor A table lists 33 genera (34 counting the mandatory Quercus deciduous/evergreen split) with Latin binomials. This is the classification target set, and 33–34 classes is a tractable, closed-set problem — far more achievable than open-set species identification. The one caveat: the repository's own reference documents (`docs/references/README.md`, `docs/specs/ibp-form-spec.md`) cite **IBP Fr v3.0**, while CNPF's currently published document is **v3.2**. This version drift predates this phase and should be flagged, not silently resolved, in the ADR.
 
@@ -161,7 +165,7 @@ Applies to the runtime libraries a Phase 3 implementation (or this phase's throw
 
 ```
  [Ecologist's phone camera]
-          │  (single-subject OR stand photo — D-10)
+          │  (single-subject only — D-10 as amended)
           ▼
  [VisionCamera capture / frame processor]
           │  raw image buffer
