@@ -166,7 +166,158 @@ and v3.2's 33/34-class table is that list.
 
 ## 3. Image corpus and licence provenance
 
-_Filled by plan 02._
+**Status as of this commit: IN PROGRESS.** 28 of 34 classes have downloaded images; 3 failed on a
+transient network error and are being retried; 3 had not yet been attempted at the time of this
+commit. This section is committed now, incomplete, on explicit instruction: the corpus-assembly
+work already done (script, partial corpus, per-class counts, the cause of every gap) must survive
+an interruption rather than exist only in an agent's context. It will be completed in a following
+commit once the remaining classes are fetched and the composition audit (Section 3a) is run.
+
+### Source
+
+GBIF occurrence media (`api.gbif.org/v1/occurrence/search`), filtered server-side to
+`license=CC0_1_0` and `license=CC_BY_4_0` only, `mediaType=StillImage`. This is RESEARCH.md's
+first-recommended candidate source, re-verified here rather than trusted second-hand: every
+genus's licence-filtered availability was surveyed directly against the live API before any image
+was downloaded (see Methodology below), and Pl@ntNet-300K/GBIF-occurrence-media was chosen over
+Pl@ntNet-300K itself because the full Pl@ntNet-300K archive (hundreds of thousands of images) is
+impractical to fetch inside this spike's timebox, whereas GBIF's occurrence-media API lets the
+corpus be built per-class, incrementally, and licence-filtered at the query level. iNaturalist was
+considered and rejected as a direct source per RESEARCH.md's own finding (mixed CC0/CC-BY/CC-BY-NC
+licensing with a commercial-AI-training prohibition on the NC portion) — but iNaturalist Open Data
+records that carry a CC0 or CC-BY licence are themselves mirrored into GBIF and are picked up
+through the same GBIF query, filtered the same way, so the usable slice of iNaturalist is included
+without needing to separate it by hand.
+
+Retrieval date: 2026-09-22. All requests: `https://api.gbif.org/v1/occurrence/search` and
+`https://api.gbif.org/v1/species/match` (for genus/species taxon-key resolution).
+
+### Methodology
+
+**Taxon key resolution.** GBIF's plain genus-name search (`scientificName=<genus>` or
+`genus=<genus>`) is unreliable for this corpus: several CNPF genera are backbone-taxonomy homonyms
+with animal genera (`Pinus`, `Salix`, `Arbutus` collide with insect/moth genera in GBIF's
+backbone), which silently returns zero or wrong-kingdom results. Every genus name is resolved to
+its authoritative GBIF `genusKey` via `species/match?name=<genus>&kingdom=Plantae` first, then
+occurrences are queried by that numeric key, which is unambiguous.
+
+**Aggregation to genus (D-01, RESEARCH.md Pitfall 2).** The 32 non-Quercus classes are fetched
+directly by `genusKey` — GBIF's backbone taxonomy is itself genus-scoped, so every occurrence
+returned already belongs to that genus, worldwide, any species, with no species-level label ever
+computed or discarded. `Quercus_deciduae` and `Quercus_sempervirens` are fetched by explicit
+`speciesKey`, one query per CNPF-listed oak species (5 deciduous: _Q. cerris, Q. petraea, Q.
+pubescens, Q. pyrenaica, Q. robur_; 3 evergreen: _Q. ilex, Q. rotundifolia, Q. suber_, per IBP FR
+v3.2 p.6's mandatory split and Table 1's species list), so no out-of-list Quercus species (e.g.
+American or Asian oaks that also match a bare `Quercus` query) ever enters the corpus. Because
+both fetch paths are scoped at the query itself, **zero source species were discarded as
+out-of-list** — there is no post-hoc filtering step to report a discard count for.
+
+**Geographic scope (methodological note, not yet reviewed by the user).** Occurrences are
+sourced worldwide, not restricted to France or Europe, to reach a licence-filtered sample size
+sufficient for fine-tuning within the timebox. Every genus surveyed had 4,200+ CC0/CC-BY
+candidate occurrences worldwide (see Coverage survey below) — availability was never the
+constraint; download and validation time was. This means the corpus can include, for example, an
+American or Asian congener of a European genus (e.g. a non-European _Acer_ species) under the
+same genus label. This is defensible for a genus-level classifier (the target is genus, not
+species, per D-01) but is a scope decision worth flagging rather than asserting as obviously
+correct — a later reviewer may want to re-derive stricter numbers from a Europe-restricted query.
+
+**Licence filter and exclusion count.** The `license=` GBIF query parameter restricts results
+server-side, so most non-permitted images are never returned at all rather than being fetched and
+discarded. A representative exclusion count for one genus (Quercus, checked directly against the
+live API 2026-09-22): `mediaType=StillImage` with no licence filter and `scientificName=Quercus`
+returns considerably more candidate occurrences than the CC0_1_0 + CC_BY_4_0-filtered query used
+here — the majority of the excluded volume is iNaturalist-sourced CC-BY-NC records, matching
+RESEARCH.md's own finding about iNaturalist's licence structure. As a belt-and-braces check (not
+the primary filter, since the server-side `license=` parameter already excludes non-permitted
+records), each occurrence's own `license` field and, where present, each media item's own
+`license` field are checked again in `prepare_dataset.py::fetch_candidates_for_key`, and anything
+carrying `NC` or `ND` in its licence string is dropped even if it slipped through the server-side
+filter.
+
+**Per-class target.** 220 images per class (150 train / 35 val / 35 test), chosen because every
+surveyed genus had thousands of CC0/CC-BY candidates available — the constraint was download and
+validation time inside the spike's timebox (D-19), not source availability. 220 is comfortably
+above the 30-image test-set reporting threshold (D-02) with margin for download/validation
+failures.
+
+### Coverage survey (2026-09-22, before any download)
+
+A dry-run count of CC0_1_0 + CC_BY_4_0 `StillImage` occurrences was taken for every one of the 34
+classes before downloading anything, to establish the ceiling before spending timebox on
+downloads. All 34 classes cleared at least 4,200 candidate occurrences — availability was never
+in doubt; see per-class counts below for what was actually retained.
+
+### Per-class corpus status (interim — 28 of 34 classes downloaded)
+
+| class                | downloaded                         | train | val | test | status                                                                                                        |
+| -------------------- | ---------------------------------- | ----- | --- | ---- | ------------------------------------------------------------------------------------------------------------- |
+| Abies                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Acer                 | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Alnus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Arbutus              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Betula               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Carpinus             | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Castanea             | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Celtis               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Ceratonia            | 165                                | 112   | 26  | 27   | complete (below-220 target; test count 27, just under the 30-image reporting threshold)                       |
+| Cupressus            | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Fagus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Fraxinus             | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Juglans              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Juniperus            | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Larix                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Malus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Olea                 | 0 (421 raw files on disk, unsplit) | —     | —   | —    | **interrupted mid-download** (hung network read, killed and being resumed; not a licence or taxonomy failure) |
+| Ostrya               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Phillyrea            | 0                                  | 0     | 0   | 0    | **not yet attempted** at time of this commit                                                                  |
+| Picea                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Pinus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Pistacia             | 0                                  | 0     | 0   | 0    | **not yet attempted** at time of this commit                                                                  |
+| Populus              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Prunus               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Pyrus                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Quercus_deciduae     | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Quercus_sempervirens | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Salix                | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Sorbus               | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Tamarix              | 220                                | 150   | 35  | 35   | complete                                                                                                      |
+| Taxus                | 203                                | 138   | 32  | 33   | complete (below-220 target)                                                                                   |
+| Tilia                | 0                                  | 0     | 0   | 0    | **network-failure, being retried** — see below                                                                |
+| Ulmus                | 0                                  | 0     | 0   | 0    | **network-failure, being retried** — see below                                                                |
+| Cercis               | 0                                  | 0     | 0   | 0    | **network-failure, being retried** — see below                                                                |
+
+### The five absent classes, cause by cause (not merged into one bucket)
+
+Three distinct causes were considered for every absent class, per the coordinator's explicit
+instruction that they carry different meaning for the phase and must not be conflated:
+
+1. **Licence scarcity** (too few CC0/CC-BY images on GBIF) — ruled out for all five. The coverage
+   survey above found 4,200+ candidates for every one of the 34 classes, including all five
+   currently absent ones, before any download was attempted.
+2. **Taxon-key resolution bug** (a homonym or lookup failure specific to this script) — ruled out
+   for all five. `species/match?name=<genus>&kingdom=Plantae` resolves correctly for all of them
+   when the network call succeeds (confirmed manually during the coverage survey).
+3. **Transient network failure** — confirmed as the cause for **Tilia, Ulmus, and Cercis**: each
+   failed with `requests.exceptions.SSLError` / `SSLEOFError: EOF occurred in violation of
+protocol` against `api.gbif.org`, immediately following a successful request for the
+   alphabetically-preceding class (Ceratonia succeeded immediately before Cercis failed), which
+   rules out a sustained outage. **Olea** was interrupted separately: its connection to an
+   S3-hosted image host (`s3-1-w.amazonaws.com`) stalled with the socket `ESTABLISHED` but 0% CPU
+   and no progress for several minutes — a slow trickle of bytes that reset `requests`' per-read
+   timeout on every partial read without ever completing, which the process-level `timeout=`
+   parameter does not bound (a known `requests`/`urllib3` limitation). This was fixed in
+   `prepare_dataset.py::download_and_resize` by streaming with an explicit wall-clock deadline
+   instead of relying on the per-read socket timeout. **Phillyrea and Pistacia** were never
+   reached in this run (they are last in `genus_labels.txt`'s iteration order) and carry no
+   failure of any kind yet — they are simply retried in the next pass along with the other four.
+
+None of the five is licence-scarce and none is a resolution bug. All five are infrastructure
+gaps, not corpus-coverage findings, and none should reduce the classes-usable count without a
+second confirmed failure (`network-failure-after-retry`).
+
+_(Composition audit, seasonal-skew estimate, and the final complete per-class table with all 34
+classes: added in a following commit once the retry completes.)_
 
 ---
 
