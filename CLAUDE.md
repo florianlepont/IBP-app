@@ -355,8 +355,7 @@ docs/
 │   ├── epic-f-participatory-experience-and-gamification.md  # Engagement (V1)
 │   ├── epic-g-ibp-information-association-visibility-and-donation.md  # Public info (V1)
 │   ├── epic-h-forest-insights-and-analytics.md  # Analytics & explore (V2)
-│   ├── epic-i-workshops-training-ma-foret-vivante.md  # Training flows (V1)
-│   └── z-infrastructure.md                # Infrastructure tasks
+│   └── epic-i-workshops-training-ma-foret-vivante.md  # Training flows (V1)
 ├── design/
 │   └── charte-graphique-etats-sauvages-spec.md  # Brand & design system
 ├── references/                            # Links to CNPF IBP methodology (PDFs not redistributed)

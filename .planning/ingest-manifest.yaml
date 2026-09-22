@@ -60,9 +60,6 @@ docs:
   - path: docs/specs/epic-i-workshops-training-ma-foret-vivante.md
     type: PRD
     precedence: 2
-  - path: docs/specs/z-infrastructure.md
-    type: PRD
-    precedence: 2
 
   # --- DOC: descriptive context ---
   - path: docs/technical/technical-architecture-v1.md

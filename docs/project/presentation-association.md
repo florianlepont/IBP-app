@@ -1,6 +1,14 @@
 # Application IBP — Présentation du projet
 ### Etats Sauvages · Mai 2026
 
+> **Note de statut — 22 septembre 2026.** Ce document reflète l'état et les hypothèses de mai 2026.
+> Le périmètre du MVP a depuis été recentré sur un usage interne : la dimension communautaire
+> (gamification, modération, carte publique, dons) passe au milestone suivant. La cible
+> d'hébergement annoncée ici (alwaysdata + Cloudflare R2, ~346 €/an) n'est pas celle du plan en
+> cours — voir `.planning/ROADMAP.md`. Les engagements RGPD et la position sur la propriété des
+> données restent valides sur le fond ; les mentions d'hébergement qu'ils contiennent suivent la
+> même réserve.
+
 ---
 
 ## 1. Pourquoi cette application ?
