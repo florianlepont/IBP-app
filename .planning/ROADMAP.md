@@ -52,11 +52,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The ADR states an explicit go/no-go for US-C9 in this milestone, and if it is a no-go, describes the fallback (manual species entry) and what moves to the next milestone.
   4. The ADR adds no recurring inference cost to the ~€346/yr budget, or states plainly what it would cost.
 
-**Plans**: 1/6 plans executed
+**Plans**: 2/6 plans executed
 Plans:
 
 - [x] 01-01-PLAN.md — Spike scaffold, benchmark-device and field-photo asks, measurement document skeleton
-- [ ] 01-02-PLAN.md — CNPF Factor A genus label set (34 classes) and a licence-clean image corpus
+- [x] 01-02-PLAN.md — CNPF Factor A genus label set (34 classes) and a licence-clean image corpus
 - [ ] 01-03-PLAN.md — On-device TFLite harness on real iOS and Android, proven with a stock model
 - [ ] 01-04-PLAN.md — Fine-tune, export quantised .tflite, measure top-1/top-3 accuracy per genus
 - [ ] 01-05-PLAN.md — Real-device latency against the 3 s budget and field-photograph validation
@@ -185,7 +185,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Species Recognition — Approach Decision | 1/6 | In Progress|  |
+| 1. Species Recognition — Approach Decision | 2/6 | In Progress|  |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
