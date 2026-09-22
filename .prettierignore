@@ -6,3 +6,6 @@ coverage
 android
 ios
 *.lock
+
+# Species-recognition spike (Phase 1) is throwaway — never held to format:check
+spike/
