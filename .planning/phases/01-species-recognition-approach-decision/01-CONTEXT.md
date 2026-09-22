@@ -31,9 +31,9 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
   genera from the closed CNPF regional list (`docs/specs/ibp-form-spec.md` §Factor A), so genus is
   both what the score needs and a far more tractable classification problem.
 - **D-02:** The bar for "it works" is **the correct genus among the top 3 most likely, 95% of the
-  time**. This is an *evaluation* metric, not a screen design — see D-07.
+  time**. This is an *evaluation* metric, not a screen design — see D-11.
 - **D-03:** Accuracy must be reported **per genus, never as a single average**. The user chose to
-  measure across the whole CNPF regional list (D-12); without a per-genus breakdown, rare genera
+  measure across the whole CNPF regional list (D-17); without a per-genus breakdown, rare genera
   drag the average down and hide the fact that frequent genera work. The partial-go rule (D-04)
   is unusable without this breakdown.
 - **D-04:** If results are mixed, the decision rule is a **partial go**: enable suggestions only
@@ -60,10 +60,16 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
 
 ### What the ecologist sees
 
-- **D-10:** **Both photo subjects are to be measured**: a single subject (one tree, a leaf or bark
-  close-up) *and* a stand photo containing several trees. The stand case requires detection before
-  classification and is materially harder — it is the scenario most likely to drive a no-go. The
-  ADR decides on the measured figures rather than on intuition.
+- **D-10:** **Single subject only** — one tree, a leaf or a bark close-up.
+  *Amended 2026-09-22 after research (`01-RESEARCH.md`).* The original decision was to measure both
+  a single subject and a stand photo containing several trees. Research found no licence-clean,
+  ground-level multi-tree detector covering CNPF genera, and no suitable labelled dataset: the
+  nearest candidates are SilvaScenes (Quebec species, licence unconfirmed) and ForTrunkDet (CC-BY
+  but only Eucalyptus and Pinus). Building a detector from scratch is a multi-week effort, not a
+  2–3 day spike. The user chose to measure the single-subject case properly rather than produce two
+  weak results. **The stand case is therefore not measured, and the ADR must record it as out of
+  reach for this milestone, citing the missing datasets by name** — the question is settled with
+  evidence, not dropped. See Deferred Ideas.
 - **D-11:** The screen shows the **most likely genus first with its confidence**, with the
   remaining candidates listed underneath. *User correction during discussion:* an earlier option
   proposed displaying three genera; that conflated the top-3 evaluation bar (D-02) with the screen
@@ -103,7 +109,7 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
   into the forest would invalidate the result. *Open item for the spike: establish which phones
   the association's observers actually use.*
 - **D-19:** The spike is **timeboxed to two or three days**. Enough for two or three candidate
-  models across both photo subjects on two phones. The published schedule is already at its
+  models on the single-subject case (D-10) across two phones. The published schedule is already at its
   September 2026 deadline with field tests due to start in October.
 
 ### Claude's Discretion
@@ -225,6 +231,10 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
 - **Capturing the ecologist's corrections of wrong suggestions** to build an improvement dataset.
   It needs storage, a GDPR position and a retraining story — a capability of its own, belonging to
   a later milestone rather than this phase.
+- **Stand-photo recognition** — identifying several trees in one photograph of a stand. Requires
+  object detection before classification, and no licence-clean model or dataset covering CNPF
+  genera exists today (see D-10). A multi-week effort with its own data-acquisition problem; it
+  belongs to a later milestone, if at all.
 - **Species-level identification** (beyond genus). D-01 scopes this phase to genus because that is
   what Factor A counts. Species could serve future uses — rare-species gamification in US-F5, for
   one — but that is next-milestone territory and the deferred Epic F.
