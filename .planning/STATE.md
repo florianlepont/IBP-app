@@ -6,13 +6,13 @@ current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: planning
 stopped_at: Phase 1 context gathered
-last_updated: "2026-09-22T09:01:30.506Z"
+last_updated: "2026-09-22T14:55:56.369Z"
 last_activity: 2026-09-22
-last_activity_desc: Project initialized from ingested docs and codebase maps; PROJECT.md, REQUIREMENTS.md and ROADMAP.md written
+last_activity_desc: Phase 1 discussed, researched and planned (6 plans, plan-checker passed); Phase 1.1 inserted for the IBP method version drift
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 ## Current Position
 
-Phase: 1 of 7 (Species Recognition — Approach Decision)
-Plan: 0 of 0 in current phase
+Phase: 1 of 8 (Species Recognition — Approach Decision)
+Plan: 0 of 6 in current phase
 Status: Ready to plan
-Last activity: 2026-09-22 — Project initialized from ingested docs and codebase maps; PROJECT.md, REQUIREMENTS.md and ROADMAP.md written
+Last activity: 2026-09-22 — Phase 1 discussed, researched and planned (6 plans, plan-checker passed); Phase 1.1 inserted for the IBP method version drift
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -79,6 +79,10 @@ None yet.
 - **Schedule.** The published plan put MVP finalization at September 2026 (today) with field tests October–December. Phases 1–3 are unstarted unknowns; the December field-test window is at risk.
 - **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): string-interpolated SQL in `users.service.ts`, 9 of 12 screens untested, missing indexes — all scheduled in Phases 6 and 7.
 - **Next-milestone prerequisite:** Epics E and G need a back-office / CMS surface that no spec or architecture doc defines.
+
+### Roadmap Evolution
+
+- Phase 01.1 inserted after Phase 1: Reconcile the IBP method version — repo implements Fr v3.0, CNPF publishes FR v3.2 (URGENT)
 
 ## Deferred Items
 

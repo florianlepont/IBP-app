@@ -85,6 +85,7 @@ every binding contract (conflict-report warning 5).
 
 ### QA — Quality and Defects
 
+- [ ] **REQ-QA-ibp-version** — The IBP method version the app implements is established and ratified. The repo cites IBP Fr v3.0 (PDFs dated 2023-03-23); the CNPF's current publication is FR v3.2 (dated 2026-02-02). All ten factors are compared, every divergence is recorded against `ibp-rules.service.ts`, `ibp-scoring.ts` and the 17-case validation matrix, and a documented decision either migrates to v3.2 or stays on v3.0 for stated reasons. *(New — surfaced by Phase 1 research)*
 - [ ] **REQ-QA-sql-injection** — Account deletion in `api/src/users/users.service.ts` no longer builds SQL by string interpolation; all subqueries are fully parameterized. *(New — highest-severity item in `.planning/codebase/CONCERNS.md`)*
 - [ ] **REQ-QA-indexes** — The missing indexes exist: `attachments(survey_id, created_at)`, `survey_parcels(survey_id)`, `users(auth0_sub)`. *(New)*
 - [ ] **REQ-QA-screen-tests** — The survey list, survey detail, survey form and map screens have tests covering sync-status, filter and error states. 9 of 12 screens have no coverage today. *(New)*
@@ -205,6 +206,7 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 | REQ-INF-backups | New | Phase 6 | Build |
 | REQ-INF-migrations | New | Phase 6 | Build |
 | REQ-INF-deadcode | New | Phase 6 | Build |
+| REQ-QA-ibp-version | New | Phase 1.1 | Build |
 | REQ-QA-sql-injection | New | Phase 6 | Build |
 | REQ-QA-indexes | New | Phase 6 | Build |
 | REQ-DOC-taxonomy | New | Phase 7 | Build |
