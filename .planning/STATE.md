@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-22T14:55:56.369Z"
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-22T15:13:05.178Z"
 last_activity: 2026-09-22
-last_activity_desc: Phase 1 discussed, researched and planned (6 plans, plan-checker passed); Phase 1.1 inserted for the IBP method version drift
+last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** An ecologist can complete a full IBP survey offline on a real parcel and have it reach the server intact on reconnection — no data loss, no duplicates.
-**Current focus:** Phase 1 — Species Recognition: Approach Decision
+**Current focus:** Phase 1 — Species Recognition — Approach Decision
 
 ## Current Position
 
-Phase: 1 of 8 (Species Recognition — Approach Decision)
-Plan: 0 of 6 in current phase
-Status: Ready to plan
-Last activity: 2026-09-22 — Phase 1 discussed, researched and planned (6 plans, plan-checker passed); Phase 1.1 inserted for the IBP method version drift
+Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-09-22 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P01 | 25min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Decisions table. Decisions affecting current work:
 - **Shipped status enum wins** (`draft|submitted|synced|error|expired`, `submitted_at`/`deleted_at`); `ibp-form-spec.md` §10.1 is stale
 - US-C9 species recognition stays in MVP but is gated behind an ML ADR (Phase 1) and a contract extension (Phase 2)
 - The current VPS is ratified as the hosting target, not migrated (Phase 6)
+- [Phase 01]: Benchmark devices (D-18) fallback: lowest-spec real iOS (iPhone SE 2nd/3rd gen or iPhone 11 class) and lowest-spec real Android (2022-2023 mid-range, Galaxy A-series class); no flagship. Recorded as a provisional confidence cap, not a phase failure. — Association did not confirm which phones its observers carry; RESEARCH.md Pitfall 4 rules out flagship test devices.
+- [Phase 01]: Field photographs (D-16) fallback: no-field-photos. Spike reports the public-dataset accuracy figure only; field validation deferred and recorded as a stated gap in the measurement document, not silently dropped. — No field photo set was available at the Task 1 checkpoint.
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-22T09:01:30.500Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-species-recognition-approach-decision/01-CONTEXT.md
+Last session: 2026-09-22T15:13:05.174Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
