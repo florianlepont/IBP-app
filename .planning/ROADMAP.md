@@ -116,7 +116,7 @@ Plans:
 - [x] 01.2-03-PLAN.md — Mobile test tooling (RNTL) and Auth0 error classification in useAuth0Session, forced refresh on 401 (wave 1)
 - [x] 01.2-04-PLAN.md — Mobile quick fixes: dev tools only in __DEV__, nearby-parcels bbox order (wave 1)
 - [x] 01.2-05-PLAN.md — DebugModule and HS256 path absent in production, /v1/debug/* 404 (wave 2)
-- [ ] 01.2-06-PLAN.md — Session end never purges; retry-later handling; pre-Auth0 stubs removed (wave 2)
+- [x] 01.2-06-PLAN.md — Session end never purges; retry-later handling; pre-Auth0 stubs removed (wave 2)
 - [ ] 01.2-07-PLAN.md — Local-data owner marker, unsynced-work count, useLocalDataOwner hook (wave 2)
 - [ ] 01.2-08-PLAN.md — Confirmed-purge logout, owner-gated sync, blocking conflict screen (wave 3)
 - [ ] 01.2-09-PLAN.md — Phase gate and on-device verification (wave 4, checkpoint)
@@ -344,7 +344,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 |-------|----------------|--------|-----------|
 | 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
-| 1.2. Stop field data loss and account exposure | 5/9 | In Progress|  |
+| 1.2. Stop field data loss and account exposure | 6/9 | In Progress|  |
 | 1.3. CI and test safety net | 0/TBD | Not started | - |
 | 1.4. API sync integrity | 0/TBD | Not started | - |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
