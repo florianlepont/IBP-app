@@ -124,6 +124,7 @@ loss, no duplicates — or that expose accounts run first (Phases 1.2–1.5), th
 - [ ] **REQ-AUD-local-storage** — Multi-statement SQLite writes are transactional, the local schema is versioned with `PRAGMA user_version`, queue rows carry an explicit operation type, and the queue is indexed. *(Audit ARCH-3 mobile, ARCH-5. Lot L11b)*
 - [ ] **REQ-AUD-photos** — Photos are resized and persisted in the document directory at capture, uploaded by streaming, network errors do not consume the retry cap, and a missing local file is surfaced instead of silently dropped. Attachments pulled from the server are displayable, and thumbnails render through `expo-image` from downsized sources. *(Audit M-H2 and the remote-attachment and image findings. Lot L12)*
 
+- [ ] **REQ-AUD-offline-start** — A cold start with no network and valid stored credentials opens the signed-in app with the last known profile (cached locally) instead of the login overlay; the profile refreshes from `/me` when the API is reachable. *(Found while planning Phase 1.2: `isAuthenticated` depends on a successful `/me` call)*
 - [ ] **REQ-AUD-changes-feed** — `/sync/changes` pages on a monotonic sequence and still accepts the old cursor; same-version replays with different content are conflicts; the per-poll re-send of event-less surveys is gone. *(Audit ARCH-6. Lot L10)*
 - [ ] **REQ-AUD-object-storage** — One `StorageService` for surveys, attachments and users; profile pictures in object storage; storage keys contained; upload size enforced; MIME allow-list checked by own property. *(Audit A-H3, A-M3, A-M4. Lot L13)*
 - [ ] **REQ-AUD-config** — Validated configuration schema, bounded `pg` pool with an error listener, strict CORS in production, Nest `Logger` everywhere, dead token secrets removed. *(Audit A-M8. Lot L14)*
@@ -236,6 +237,7 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 | REQ-AUD-sync-engine | New | Phase 1.5 | Build |
 | REQ-AUD-local-storage | New | Phase 1.5 | Build |
 | REQ-AUD-photos | New | Phase 1.5 | Build |
+| REQ-AUD-offline-start | New | Phase 1.5 | Build |
 | REQ-AUD-changes-feed | New | Phase 1.6 | Build |
 | REQ-AUD-object-storage | New | Phase 1.6 | Build |
 | REQ-AUD-config | New | Phase 1.7 | Build |
@@ -291,10 +293,10 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 
 **Coverage:**
 
-- MVP requirements: **65** total
-- Mapped to phases: **65** ✓
+- MVP requirements: **66** total
+- Mapped to phases: **66** ✓
 - Unmapped: **0** ✓
-- Of which carry build work: **46** (19 are already built and are verified in Phase 7)
+- Of which carry build work: **47** (19 are already built and are verified in Phase 7)
 - Deferred to next milestone: 19 · Deferred to V2: 4
 
 ---

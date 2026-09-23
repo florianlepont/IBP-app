@@ -157,7 +157,7 @@ Plans:
 
 **Goal**: The queue on the phone drains exactly once, in bounded batches, survives crashes, and never loses or silently drops a photo.
 **Depends on**: Phase 01.3
-**Requirements**: REQ-AUD-sync-engine, REQ-AUD-local-storage, REQ-AUD-photos
+**Requirements**: REQ-AUD-sync-engine, REQ-AUD-local-storage, REQ-AUD-photos, REQ-AUD-offline-start
 **Source**: audit lots L11a, L11b, L12, findings M-H1, M-H2, M-H4, ARCH-3 (mobile), ARCH-5, and the retry-cap, timeout, pull-overwrite, autosave and ID findings
 **Success Criteria** (what must be TRUE):
 
@@ -167,6 +167,7 @@ Plans:
   4. SQLite writes that span several statements run in a transaction, the schema is versioned with `PRAGMA user_version`, and new IDs are UUIDs.
   5. Photos are resized (2048 px, JPEG 0.7) and copied to the document directory at capture, uploaded by streaming, and a missing local file is shown to the user instead of being deleted silently.
   6. Attachments pulled from the server are displayable (no more `local_uri=""` dead rows: fetched on demand through their presigned URL and cached), and thumbnails and the detail carousel render through `expo-image` from downsized sources.
+  7. A cold start with no network and valid stored credentials opens the app on the signed-in screens with the last known profile, instead of the login overlay; the profile refreshes from `/me` once the API is reachable.
 
 **Plans**: TBD
 
@@ -359,7 +360,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 ## Coverage
 
-All 65 MVP requirements map to exactly one phase. 46 carry build work across Phases 1–7 (23 of them
+All 66 MVP requirements map to exactly one phase. 47 carry build work across Phases 1–7 (24 of them
 from the 2026-09 code audit, Phases 1.2–1.9); the other 19 are already built and are verified in Phase 7's field tests. Full mapping in
 `.planning/REQUIREMENTS.md` → Traceability.
 
