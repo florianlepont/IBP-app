@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-09-23T14:32:42.866Z"
-last_activity: 2026-09-23 -- Phase 01.2 planning complete
+last_updated: "2026-09-23T14:34:42.365Z"
+last_activity: 2026-09-23 -- Phase 01.2 execution started
 progress:
   total_phases: 16
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** An ecologist can complete a full IBP survey offline on a real parcel and have it reach the server intact on reconnection — no data loss, no duplicates.
-**Current focus:** Phase 1 — Species Recognition: Approach Decision
+**Current focus:** Phase 01.2 — Stop field data loss and account exposure
 
 ## Current Position
 
-Phase: 1.2 of 16 (Stop field data loss and account exposure) — Phase 1 is also planned (6 plans) and waits on real devices
-Plan: 0 of 9 in current phase
-Status: Ready to execute
-Last activity: 2026-09-23 -- Phase 01.2 planning complete
+Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
+Plan: 1 of 9
+Status: Executing Phase 01.2
+Last activity: 2026-09-23 -- Phase 01.2 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
