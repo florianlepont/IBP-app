@@ -20,6 +20,8 @@ import { DEFAULT_API_URL } from "./src/app/constants"
 import type { SurveyStats } from "./src/app/types"
 import { AuthGateScreen } from "./src/screens/AuthGateScreen"
 import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
+import { LocalDataOwnerConflictScreen } from "./src/screens/LocalDataOwnerConflictScreen"
+import { formatUnsyncedWorkSummary } from "./src/app/local-data-owner"
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL)
@@ -146,7 +148,10 @@ export default function App() {
     !surveySync.currentUser.last_name
 
   const showAuthOverlay = !surveySync.isAuthenticated
-  const showProfileSetupOverlay = surveySync.isAuthenticated && needsProfileSetup
+  const showOwnerConflictOverlay =
+    surveySync.isAuthenticated && surveySync.localDataOwnerStatus === "conflict"
+  const showProfileSetupOverlay =
+    surveySync.isAuthenticated && needsProfileSetup && !showOwnerConflictOverlay
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -196,6 +201,17 @@ export default function App() {
                 sessionRestoring={surveySync.sessionRestoring}
                 logoSource={require("./assets/logo-app.png")}
                 heroMartenSource={require("./assets/auth/marten.png")}
+              />
+            </View>
+          )}
+          {showOwnerConflictOverlay && (
+            <View style={overlayStyles.fill}>
+              <LocalDataOwnerConflictScreen
+                foreignWorkSummary={formatUnsyncedWorkSummary(surveySync.foreignWork)}
+                foreignOwnerEmail={surveySync.foreignOwnerEmail}
+                onSwitchAccount={() => void surveySync.handleSwitchToOwnerAccount()}
+                onDiscard={() => void surveySync.handleDiscardForeignData()}
+                logoSource={require("./assets/logo-app.png")}
               />
             </View>
           )}
