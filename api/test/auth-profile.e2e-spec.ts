@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
 import request = require("supertest")
 import { AppModule } from "../src/app.module"
+import { AuthGuard } from "../src/auth/auth.guard"
 import { DatabaseService } from "../src/database/database.service"
 
 describe("Auth + profile (e2e)", () => {
@@ -161,5 +162,113 @@ describe("Auth + profile (e2e)", () => {
       .get("/v1/me")
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(401)
+  })
+})
+
+describe("first-login provisioning (e2e)", () => {
+  let app: INestApplication
+  let db: DatabaseService
+  let guard: AuthGuard
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile()
+
+    app = moduleFixture.createNestApplication()
+    app.setGlobalPrefix("v1")
+    await app.init()
+    db = app.get(DatabaseService)
+    guard = new AuthGuard(db)
+  })
+
+  afterAll(async () => {
+    if (app) {
+      await app.close()
+    }
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  function invoke(payload: Record<string, unknown>, rawToken = "raw-token") {
+    return (
+      guard as unknown as {
+        getOrProvisionUser: (
+          payload: Record<string, unknown>,
+          rawToken: string,
+        ) => Promise<{ id: string; auth0_sub: string }>
+      }
+    ).getOrProvisionUser(payload, rawToken)
+  }
+
+  function mockFetchUserInfo(userInfo: Record<string, unknown>) {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => userInfo,
+    } as Response)
+  }
+
+  it("converges 5 concurrent first logins for the same sub on exactly one user row", async () => {
+    const sub = `auth0|race-${Date.now()}`
+    const email = `e2e-race-${Date.now()}@ibp.local`
+    mockFetchUserInfo({ email, email_verified: true })
+
+    const results = await Promise.all(Array.from({ length: 5 }, () => invoke({ sub })))
+    const ids = new Set(results.map((r) => r.id))
+    expect(ids.size).toBe(1)
+
+    const count = await db.query<{ count: string }>(
+      `SELECT count(*)::text FROM users WHERE auth0_sub = $1`,
+      [sub],
+    )
+    expect(count.rows[0].count).toBe("1")
+  })
+
+  it("refuses to link an unverified email to an existing account and leaves auth0_sub unchanged", async () => {
+    const email = `e2e-unverified-${Date.now()}@ibp.local`
+    await request(app.getHttpServer()).post("/v1/debug/test-token").send({ email }).expect(201)
+
+    const before = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(before.rows[0].auth0_sub).toBe(`test|${email}`)
+
+    mockFetchUserInfo({ email, email_verified: false })
+    const newSub = `auth0|unverified-${Date.now()}`
+
+    await expect(invoke({ sub: newSub })).rejects.toThrow()
+
+    const after = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(after.rows[0].auth0_sub).toBe(`test|${email}`)
+  })
+
+  it("links a verified email to the existing account and updates auth0_sub", async () => {
+    const email = `e2e-verified-${Date.now()}@ibp.local`
+    const login = await request(app.getHttpServer())
+      .post("/v1/debug/test-token")
+      .send({ email })
+      .expect(201)
+    const existingUser = await db
+      .query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])
+      .then((r) => r.rows[0])
+    expect(login.status).toBe(201)
+
+    mockFetchUserInfo({ email, email_verified: true })
+    const newSub = `auth0|verified-${Date.now()}`
+
+    const result = await invoke({ sub: newSub })
+    expect(result.id).toBe(existingUser.id)
+
+    const after = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(after.rows[0].auth0_sub).toBe(newSub)
   })
 })

@@ -103,3 +103,127 @@ describe("AuthGuard", () => {
     )
   })
 })
+
+describe("getOrProvisionUser", () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  function invoke(guard: AuthGuard, payload: Record<string, unknown>, rawToken = "raw-token") {
+    return (
+      guard as unknown as {
+        getOrProvisionUser: (payload: Record<string, unknown>, rawToken: string) => Promise<unknown>
+      }
+    ).getOrProvisionUser(payload, rawToken)
+  }
+
+  function mockFetchUserInfo(userInfo: Record<string, unknown>) {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => userInfo,
+    } as Response)
+  }
+
+  it("returns the existing row and never calls fetch when the sub is already known", async () => {
+    const { guard, db } = buildGuard()
+    const fetchSpy = jest.spyOn(global, "fetch")
+    db.query.mockResolvedValueOnce({ rows: [AUTH_USER] })
+
+    const result = await invoke(guard, { sub: AUTH_USER.auth0_sub })
+
+    expect(result).toEqual(AUTH_USER)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("links to the existing email row when email_verified is true", async () => {
+    const { guard, db } = buildGuard()
+    mockFetchUserInfo({ email: AUTH_USER.email, email_verified: true })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
+      .mockResolvedValueOnce({ rows: [AUTH_USER] }) // UPDATE ... RETURNING
+
+    const result = await invoke(guard, { sub: "auth0|new-sub" })
+
+    expect(result).toEqual(AUTH_USER)
+    const updateCall = db.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === "string" && call[0].includes("UPDATE users"),
+    )
+    expect(updateCall).toBeDefined()
+    expect(updateCall?.[0]).toContain("SET auth0_sub = $1 WHERE email = $2")
+    expect(updateCall?.[1]).toEqual(["auth0|new-sub", AUTH_USER.email])
+  })
+
+  it("rejects linking when email_verified is false and the email already exists", async () => {
+    const { guard, db } = buildGuard()
+    mockFetchUserInfo({ email: AUTH_USER.email, email_verified: false })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
+      .mockResolvedValueOnce({ rows: [{ id: AUTH_USER.id }] }) // SELECT 1 FROM users WHERE email
+
+    await expect(invoke(guard, { sub: "auth0|new-sub" })).rejects.toThrow()
+    const updateCall = db.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === "string" && call[0].includes("UPDATE users"),
+    )
+    expect(updateCall).toBeUndefined()
+  })
+
+  it("rejects linking when email_verified is absent and the email already exists", async () => {
+    const { guard, db } = buildGuard()
+    mockFetchUserInfo({ email: AUTH_USER.email })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
+      .mockResolvedValueOnce({ rows: [{ id: AUTH_USER.id }] }) // SELECT 1 FROM users WHERE email
+
+    await expect(invoke(guard, { sub: "auth0|new-sub" })).rejects.toThrow()
+    const updateCall = db.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === "string" && call[0].includes("UPDATE users"),
+    )
+    expect(updateCall).toBeUndefined()
+  })
+
+  it("inserts a new user via ON CONFLICT (auth0_sub) when no row exists with that email", async () => {
+    const { guard, db } = buildGuard()
+    mockFetchUserInfo({ email: "brand-new@example.com", email_verified: true })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
+      .mockResolvedValueOnce({ rows: [] }) // no email match branch is skipped for verified+no-row... see INSERT
+      .mockResolvedValueOnce({ rows: [AUTH_USER] }) // INSERT ... RETURNING
+
+    const result = await invoke(guard, { sub: "auth0|brand-new" })
+
+    expect(result).toEqual(AUTH_USER)
+    const insertCall = db.query.mock.calls.find(
+      (call: unknown[]) =>
+        typeof call[0] === "string" && call[0].includes("ON CONFLICT (auth0_sub)"),
+    )
+    expect(insertCall).toBeDefined()
+  })
+
+  it("re-selects by auth0_sub when INSERT raises 23505 from a concurrent insert, and resolves", async () => {
+    const { guard, db } = buildGuard()
+    mockFetchUserInfo({ email: "racer@example.com", email_verified: true })
+    const conflictError = Object.assign(new Error("duplicate key"), { code: "23505" })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub (first)
+      .mockResolvedValueOnce({ rows: [] }) // UPDATE ... RETURNING (no matching email row)
+      .mockRejectedValueOnce(conflictError) // INSERT ... ON CONFLICT (auth0_sub) races with another insert
+      .mockResolvedValueOnce({ rows: [AUTH_USER] }) // re-SELECT by auth0_sub
+
+    const result = await invoke(guard, { sub: "auth0|racer" })
+
+    expect(result).toEqual(AUTH_USER)
+  })
+
+  it("rejects when INSERT raises 23505 and the re-select finds no row", async () => {
+    const { guard, db } = buildGuard()
+    mockFetchUserInfo({ email: "racer2@example.com", email_verified: true })
+    const conflictError = Object.assign(new Error("duplicate key"), { code: "23505" })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub (first)
+      .mockResolvedValueOnce({ rows: [] }) // UPDATE ... RETURNING (no matching email row)
+      .mockRejectedValueOnce(conflictError) // INSERT ... ON CONFLICT (auth0_sub)
+      .mockResolvedValueOnce({ rows: [] }) // re-SELECT by auth0_sub finds nothing
+
+    await expect(invoke(guard, { sub: "auth0|racer2" })).rejects.toThrow()
+  })
+})
