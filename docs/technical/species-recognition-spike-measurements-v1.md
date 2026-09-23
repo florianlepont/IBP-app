@@ -649,26 +649,174 @@ ADR has the measured number in front of it when that question is raised.
 
 ## 5. Per-genus accuracy — public held-out test split
 
-_Filled by plan 04._
+**Status: complete (plan 01-04).**
+
+**Source model:** `spike/species-recognition/train/genus_classifier.tflite` (2,000,768 bytes,
+Section 4). **Test split:** the held-out test manifests plan 02 wrote
+(`spike/species-recognition/data/splits/<class>/test.txt`), 1,183 images across 34 classes,
+never touched during training or validation. **Measured:** 2026-09-23, via
+`spike/species-recognition/eval/evaluate_accuracy.py`, writing
+`eval/results/per_genus_accuracy.csv`.
+
+**Composition-filtering decision (explicit, per Section 3a's hand-off to this plan): NOT
+applied. The table below evaluates the raw test split, not a composition-filtered
+subset.** Justification: composition-filtering the actual 1,183 test images would require
+the same manual, per-image visual classification Section 3a's 30-image-per-class contact-
+sheet audit did — at full test-split scale, not a sample — which is exactly the
+"hand-classify images at scale" work plan 02's coordinator guidance explicitly ruled out
+of scope for this measurement task ("do NOT start building an image classifier to clean
+the corpus, and do NOT hand-delete images at scale"). Beyond the scope objection, the
+raw results below make the practical case moot: every genus falls well short of the 95%
+bar (the closest, Olea, misses by a single image — see "Resolution limit" below), so a
+composition-adjusted subset — which by Section 3a's estimates would typically remove
+20–30% of a class's images, not more — would need an implausibly large accuracy swing to
+change the go/no-go picture for the great majority of genera. Section 3a's adjusted-count
+estimates remain the correct **interpretive lens** for reading the table below: a genus
+with a lower usable-composition rate (Betula 43%, Phillyrea 30%, Larix 50%, Ceratonia
+53%) is being scored partly against images that are not a single-subject field photo at
+all, and its number below should be read with that in mind rather than taken as a clean
+single-subject figure.
+
+**Per-genus top-1 / top-3 accuracy, all 34 classes (D-03 — no single overall figure is
+computed or presented anywhere in this section):**
+
+| genus (label)         | test n | top-1 hits | top-1 acc | top-3 hits | top-3 acc | clears 95% bar | status   |
+| ---------------------- | -----: | ---------: | --------: | ---------: | --------: | :-------------: | -------- |
+| Abies                  |     35 |         16 |    45.71% |         21 |    60.00% | No               | measured |
+| Acer                   |     35 |          5 |    14.29% |          9 |    25.71% | No               | measured |
+| Alnus                  |     35 |         11 |    31.43% |         19 |    54.29% | No               | measured |
+| Arbutus                |     35 |         19 |    54.29% |         28 |    80.00% | No               | measured |
+| Betula                 |     35 |         15 |    42.86% |         18 |    51.43% | No               | measured |
+| Carpinus               |     35 |         13 |    37.14% |         18 |    51.43% | No               | measured |
+| Castanea                |     35 |         13 |    37.14% |         18 |    51.43% | No               | measured |
+| Celtis                  |     35 |         11 |    31.43% |         17 |    48.57% | No               | measured |
+| Cupressus               |     35 |         13 |    37.14% |         26 |    74.29% | No               | measured |
+| Fagus                   |     35 |         18 |    51.43% |         25 |    71.43% | No               | measured |
+| Fraxinus                |     35 |          2 |     5.71% |          8 |    22.86% | No               | measured |
+| Juglans                 |     35 |          5 |    14.29% |         15 |    42.86% | No               | measured |
+| Juniperus               |     35 |          9 |    25.71% |         21 |    60.00% | No               | measured |
+| Larix                   |     35 |         15 |    42.86% |         19 |    54.29% | No               | measured |
+| Malus                   |     35 |         19 |    54.29% |         25 |    71.43% | No               | measured |
+| Ostrya                  |     35 |          8 |    22.86% |         12 |    34.29% | No               | measured |
+| Pinus                   |     35 |         15 |    42.86% |         26 |    74.29% | No               | measured |
+| Picea                   |     35 |         12 |    34.29% |         23 |    65.71% | No               | measured |
+| Populus                 |     35 |          6 |    17.14% |         14 |    40.00% | No               | measured |
+| Prunus                  |     35 |         11 |    31.43% |         17 |    48.57% | No               | measured |
+| Pyrus                   |     35 |          7 |    20.00% |         15 |    42.86% | No               | measured |
+| Quercus_deciduae        |     35 |         14 |    40.00% |         21 |    60.00% | No               | measured |
+| Quercus_sempervirens    |     35 |         13 |    37.14% |         22 |    62.86% | No               | measured |
+| Salix                   |     35 |         13 |    37.14% |         21 |    60.00% | No               | measured |
+| Sorbus                  |     35 |         13 |    37.14% |         22 |    62.86% | No               | measured |
+| Tamarix                 |     35 |         18 |    51.43% |         23 |    65.71% | No               | measured |
+| Taxus                   |     35 |         16 |    45.71% |         24 |    68.57% | No               | measured |
+| Tilia                   |     35 |          9 |    25.71% |         21 |    60.00% | No               | measured |
+| Ulmus                   |     30 |          0 |     0.00% |          5 |    16.67% | No               | measured |
+| Ceratonia               |     35 |         23 |    65.71% |         30 |    85.71% | No               | measured |
+| Cercis                  |     35 |         15 |    42.86% |         23 |    65.71% | No               | measured |
+| Olea                    |     35 |         21 |    60.00% |         33 |    94.29% | No               | measured |
+| Phillyrea               |     35 |         21 |    60.00% |         31 |    88.57% | No               | measured |
+| Pistacia                |     33 |         16 |    48.48% |         27 |    81.82% | No               | measured |
+
+**0 of 34 genera clear the top-3 95% bar (D-02, D-04). 34 miss it. 0 could not be
+assessed** (every class had a raw test count comfortably above the 30-image reporting
+threshold — the `insufficient-samples`/`no-samples` statuses this script supports never
+triggered on this corpus; see `evaluate_accuracy.py`'s status logic for what would happen
+if a future corpus revision produced a thinner class). **The partial-go column (D-04) is
+therefore empty in its useful sense: there is no genus for which this document can
+recommend enabling suggestions while manual entry stays default for the rest.** Whether
+that reads as a full no-go or is qualified further is the ADR's call (plan 01-06), not
+this document's — this section records the measurement, not the decision.
+
+**Resolution limit (statistical honesty at ~30–35 samples/class).** At n=35, clearing
+95% requires at least 34/35 correct (97.14%) — 95.00% itself is not achievable at exactly
+this sample size, so "clears the bar" in practice meant "at most one top-3 miss out of
+35." **Olea is the sharpest illustration: 33/35 (94.29%), exactly one image short of
+clearing.** A single different test image could have flipped that genus's row. Every
+percentage in the table above should be read with its raw hit/sample count alongside it,
+not in isolation — a 94% on 35 images and a 94% on 350 images are not the same strength
+of evidence, and this corpus only ever offers the former.
+
+**Confidence-band analysis (D-12 — strong/medium/weak bands from measurement, not
+invented round numbers).** Across all 1,183 test predictions (`eval/results/confidence_bands.json`),
+overall top-1 accuracy was 36.77% and top-1 confidence separated correct from incorrect
+predictions in a real, usable way: precision (fraction correct) stays at or above 90%
+only for predictions with confidence ≥ **0.799**, and stays at or above 50% down to
+confidence ≥ **0.280**. Proposed cut points and their cost in each direction:
+
+- confidence ≥ 0.799 ("strong"): n=133 of 1,183, 120 correct, 90.2% accuracy in-band
+- confidence 0.280–0.799 ("medium"): n=609 of 1,183, 251 correct, 41.2% accuracy in-band
+- confidence < 0.280 ("weak"): n=441 of 1,183, 64 correct, 14.5% accuracy in-band
+
+At these cut points, "strong" is a genuinely reliable label (90.2% correct when shown) but
+covers only 133/1,183 (11.2%) of predictions — most predictions this model makes would be
+labelled medium or weak, which is consistent with the per-genus table above rather than
+contradicting it. The cost of the strong threshold: some correct predictions (of the
+251+64=315 correct predictions below it) are shown as medium/weak despite being right —
+a conservative failure mode (the ecologist under-trusts a correct suggestion) rather than
+the reverse. The cost of the weak threshold: 64 of 441 weak-band predictions (14.5%) are
+still correct, so "weak" is not "always wrong," only "usually wrong" — consistent with
+showing it as a hedge rather than suppressing it outright. These are proposed cut points
+for plan 06 to use, not a claim that they are optimal; they are the first data-derived
+candidates rather than round numbers picked without evidence.
+
+**Candidate-ordering observation (D-11 — is candidate 2/3 a plausible neighbour or
+noise?).** Of 748 wrong top-1 predictions, the true genus appeared at rank 2 in 155
+(20.7%), at rank 3 in 107 (14.3%), and was absent from the top-3 entirely in 486 (65.0%)
+— so when the model is wrong, roughly two-thirds of the time the correct answer isn't in
+the candidate list at all, and about one time in three it's the second or third
+candidate. The most frequent true→predicted confusion pairs
+(`eval/results/candidate_ordering_sample.json`) are a mixed signal: some are
+botanically coherent near-neighbours that a plausible-candidate-list design would want —
+Picea↔Abies (conifers, both 4–5 count each direction), Juniperus↔Tamarix (7 and 6) — while
+others look like generic visual confusion with no obvious taxonomic relationship —
+Salix→Olea (8), Prunus→Arbutus (6), Ceratonia→Arbutus (6). **This is not a clean "the
+candidate list is useful" result nor a clean "it's noise" result — it is a genuinely mixed
+one, and the ADR should not claim more consistency here than the data shows.**
+
+**The three corpus caveats from plan 02 apply in full to every number in this section, not
+diluted by the measurement step:**
+
+1. **Composition.** See "Composition-filtering decision" above and Section 3a. The raw
+   corpus is not reliably single-subject; Betula and Phillyrea were already excluded from
+   `CLASSES-USABLE` on this basis, and every other class's effective single-subject rate is
+   below its raw count. This section's figures are raw-corpus figures, by explicit choice,
+   not composition-filtered ones.
+2. **Seasonal skew.** See Section 3b. 23 of 34 classes had zero autumn-dated images in
+   their composition-audit sample, while the field-test window starts in October. A model
+   trained on this corpus has seen almost no autumn foliage/bark for most genera; nothing
+   in this section's measurement corrects for that, because the correction would require
+   autumn-dated training data this corpus does not have.
+3. **No field photographs.** See Section 6. This section is a public-dataset (lab) figure
+   only. The field-validation half of D-16 was not performed — `no-field-photos` was the
+   answer at the Task 1 checkpoint (plan 02) and remains true here; no field photo set was
+   supplied before this plan ran either.
+
+**No go/no-go recommendation appears in this section.** This document records what was
+measured; the go/no-go and its terms belong to the ADR in plan 01-06.
 
 ---
 
 ## 6. Per-genus accuracy — field photographs
 
-**Status: PROVISIONAL — no field photos supplied yet (D-16 gap).**
+**Status: PROVISIONAL — still no field photos supplied (D-16 gap, confirmed unchanged at plan 04).**
 
 No field photograph set was available at the time of the Task 1 checkpoint (2026-09-22); the
-answer was `no-field-photos`. This spike therefore reports the public-dataset figure (Section 5)
-only. The field-validation half of D-16 — the step that catches lab figures collapsing under real
-conditions — was not performed in this round.
+answer was `no-field-photos`. `spike/species-recognition/data/field/` remained empty when plan 04
+ran (2026-09-23) — no field photographs were dropped in before this plan's evaluation. This spike
+therefore reports the public-dataset figure (Section 5) only. The field-validation half of D-16 —
+the step that catches lab figures collapsing under real conditions — was not performed in this
+round, and given Section 5's result (0 of 34 genera clear the bar on the lab figure alone), a field
+pass would in any case only be able to make the picture worse, not better — there is no lab-passing
+genus for field validation to confirm or refute yet.
 
 This section stays empty rather than being marked not-applicable. If field photographs are
-supplied and dropped into the gitignored `spike/species-recognition/data/field/` before wave 4,
-this section is filled in without restructuring the document. If it remains empty when the ADR is
-written, the ADR must record this gap plainly as a stated limit on how much weight the go/no-go can
-carry — not glossed over.
+supplied and dropped into the gitignored `spike/species-recognition/data/field/` before the ADR is
+written, this section can still be filled in without restructuring the document. If it remains
+empty when the ADR is written, the ADR must record this gap plainly as a stated limit on how much
+weight the go/no-go can carry — not glossed over.
 
-_(Filled by plan 04, if field photographs become available before wave 4.)_
+_(Filled by plan 04 if field photographs become available before the ADR is written; none were
+supplied as of 2026-09-23.)_
 
 ---
 
@@ -792,10 +940,13 @@ milestone, citing these missing datasets by name. This document carries no stand
 or otherwise.
 
 **2. The field-photograph validation half of D-16 was not performed in this round.** See Section 6.
-No field photo set was supplied at the Task 1 checkpoint (`no-field-photos`); the accuracy figure
-in Section 5 is a public-dataset figure only, without the field-condition validation pass D-16
-calls for. This is a provisional gap, not a closed one — see Section 6 for how it could still be
-filled before the ADR is written.
+No field photo set was supplied at the Task 1 checkpoint (`no-field-photos`), and none had been
+supplied by the time plan 04 ran either; the accuracy figure in Section 5 is a public-dataset
+figure only, without the field-condition validation pass D-16 calls for. Given Section 5's result
+(0 of 34 genera clear the bar on the lab figure), a field pass would only be able to confirm or
+worsen an already-failing picture, not rescue it — there is nothing lab-passing left for field
+validation to validate. This is a provisional gap in form; in substance, plan 04's result makes it
+largely moot for this milestone.
 
 **3. The benchmark-device pair is unconfirmed.** See Section 1. Latency figures in Section 7 are
 measured against a documented floor, not against the observers' real phones. This caps confidence
@@ -816,34 +967,55 @@ own instructions call for once real hardware finally became reachable (device ac
 intermittent and prioritised toward capturing any real benchmark numbers at all). Plan 05 should
 close this explicitly with the device physically in airplane mode during a run.
 
-**4. The corpus is not composition-filtered before evaluation (plan 01-02).** See Section 3a. A
-30-image-per-class visual audit found the raw GBIF corpus is NOT reliably single-subject — two
-classes (Betula, Phillyrea) were excluded from the usable-class count entirely on composition
-grounds (majority landscape/stand and majority herbarium-sheet content respectively), and every
+**6. The corpus is not composition-filtered before evaluation — resolved by plan 01-04, not left
+open.** See Section 3a and Section 5's "Composition-filtering decision." A 30-image-per-class
+visual audit found the raw GBIF corpus is NOT reliably single-subject — two classes (Betula,
+Phillyrea) were excluded from the usable-class count entirely on composition grounds, and every
 other class's _effective_ single-subject sample is materially smaller than its raw download count
-suggests. Plan 04 measuring accuracy against the raw corpus measures something broader than "top-3
-accuracy on a single-subject field photo" (D-02) unless it composition-filters the test images
-first — a decision Section 3a explicitly leaves to plan 04 rather than resolving here.
+suggests. Section 3a left the filtering decision to plan 04 rather than resolving it; plan 04
+decided explicitly **not** to composition-filter the test images (manual per-image classification
+at full test-split scale is the same "hand-classify at scale" work plan 02's coordinator guidance
+ruled out, and every genus already misses the 95% bar by a wide margin except Olea, which misses
+by exactly one image — no plausible composition-filtered subset changes that picture). Section 5's
+per-genus figures are raw-corpus figures by this explicit choice; a lower composition-usable rate
+(Betula 43%, Phillyrea 30%, Larix 50%, Ceratonia 53%, Section 3a) should be read as a caveat on
+that genus's row, not as a hidden filter already applied.
 
-**5. The training corpus is seasonally skewed away from autumn (plan 01-02).** See Section 3b. 23
-of 34 classes have zero autumn-dated images in their sample; field tests are scheduled to start in
-October. This is a confidence cap on top of gap 2 above (no field-photo validation) — even a full
-field-photo pass would not correct a model trained on almost no autumn imagery, so this is recorded
-as its own caveat, not folded into gap 2.
+**7. The training corpus is seasonally skewed away from autumn.** See Section 3b. 23 of 34 classes
+have zero autumn-dated images in their sample; field tests are scheduled to start in October. This
+is a confidence cap on top of gap 2 above (no field-photo validation) — even a full field-photo
+pass would not correct a model trained on almost no autumn imagery, so this is recorded as its own
+caveat, not folded into gap 2.
 
-**6. A source-document inconsistency was found while transcribing the genus list (plan 01-02, not
+**8. A source-document inconsistency was found while transcribing the genus list (plan 01-02, not
 a spike-corpus gap but worth carrying forward).** See Section 2. The Factor A genus definition
 (IBP FR v3.2 p.2) names Pistacia as one of the 33 genera, but no Pistacia species appears in the
 same document's Table 1 (native species list) — its species are listed instead under Table 2
 (shrub species not counted in Factor A). `Pistacia` was kept in the 34-class label set per the
 genus-level definition on p.2, flagged for a later reader to re-check against CNPF directly.
 
-**7. First-hand confirmation of the v3.0/v3.2 methodology-version drift (plan 01-02, informational
+**9. First-hand confirmation of the v3.0/v3.2 methodology-version drift (plan 01-02, informational
 only — out of scope for this phase to resolve).** Retrieving the current IBP FR v3.2 PDF directly
 (Section 2) to transcribe the genus list is itself first-hand evidence that CNPF's live, currently
 published document is v3.2 while this repository's own reference documents cite v3.0 — the same
 drift Phase 1.1 exists to resolve. Noted here for traceability since this plan is where the v3.2
 PDF was actually opened and read; no action taken on it beyond what Section 2 already records, per
 instruction that resolving the drift is out of scope for this plan.
+
+**10. No genus clears the D-02/D-04 top-3 95% bar on the lab figure (plan 01-04).** See Section 5.
+0 of 34 genera cleared it; the closest, Olea, missed by a single test image (33/35, 94.29%, versus
+the 34/35 needed). This is the central finding this plan exists to produce — recorded here for
+traceability alongside the other caveats, not as a decision (the ADR in plan 01-06 makes the
+decision).
+
+**11. The exported model's on-disk size (2.0 MB) materially weakens the premise behind D-07's
+separate-download choice (plan 01-04).** See Section 4. D-07 (locked) chose to download the model
+on first launch rather than bundle it, specifically to keep the app binary light on the stores;
+D-08 (locked) added an explicit model-unavailable UI state as the cost of that choice. At 2.0 MB,
+this model is well within the range many app binaries already ship as bundled assets, which would
+let a future implementation remove the download flow, the on-device cache-path handling and the
+unavailable-state UI entirely. This document does not re-decide D-07 or D-08 — both are locked and
+the ADR is where any change to them would be proposed to the user — but the ADR should have this
+number in front of it.
 
 _(Additional gaps recorded here as plans 03, 04 and 05 execute.)_
