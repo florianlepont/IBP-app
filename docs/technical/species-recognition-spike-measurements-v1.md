@@ -1375,3 +1375,43 @@ by this evidence, but it is also not proven to clear the 95% bar within this mil
 spike timebox with the data and compute available. Whether that supports a no-go, a
 conditional/deferred go pending a further data-collection effort, or something else is the ADR's
 decision to make with this evidence in hand — not this document's.
+
+---
+
+## 11. Iteration 3 — data alone, backbone held constant
+
+**Status: IN PROGRESS (started 2026-09-23, user approved a further extension after reviewing
+iteration 2's data-limited result).**
+
+**Why this iteration changes exactly one variable.** Iteration 2 changed both the corpus (9x more
+images) and the backbone (MobileNetV3-Small → Large) at once, so its +19.9pp mean gain cannot be
+attributed to either alone. Iteration 3 holds the backbone, hyperparameters, the shuffle fix, and
+`EarlyStopping` all identical to iteration 2's `finetune.py` and only expands the data further —
+so the iteration-2→3 delta is a clean read of what more data alone still buys with a fixed model.
+That is the number that tells the ADR whether this approach is still climbing or has started to
+saturate.
+
+**Target: the true per-class ceiling, not a round number.** `TARGET_TOTAL_PER_CLASS` raised to
+6,000 — deliberately above the ~4,200–5,300 candidate ceiling iteration 2 actually observed per
+class, so classes exhaust their real GBIF CC0/CC-BY `StillImage` candidate pool under the licence
+filter rather than hitting an artificial cap. A class that runs out below 6,000 is itself the
+finding: that is this approach's real per-class data ceiling under this licence filter, not a
+corpus-assembly shortfall.
+
+**Plan, same discipline as iteration 2:**
+1. Expand the corpus toward the per-class ceiling, reusing every image already on disk from
+   iterations 1–2, season-stratifying new downloads via GBIF `eventDate`.
+2. Confirm or refute, at this larger scale, whether Acer/Pinus/Prunus genuinely have zero autumn
+   CC0/CC-BY imagery on GBIF (iteration 2's finding) — if a much larger pool still returns zero,
+   that is a property of the source data, not of this corpus-assembly effort.
+3. Train MobileNetV3-Large with iteration 2's exact hyperparameters, shuffle fix, and
+   `EarlyStopping(monitor='val_top3', restore_best_weights=True)` — no other change.
+4. Re-measure per-genus top-1/top-3 on the same rules as iterations 1–2 (D-03, D-04, raw counts).
+5. **A three-way per-genus comparison table (iterations 1, 2, 3), with the mean delta 1→2 and
+   2→3 so the diminishing-returns question is answerable at a glance.** This is iteration 3's
+   central deliverable.
+6. Update `eval/GATE` and the plan's SUMMARY, preserving all three iterations' numbers separately.
+   The iteration-3 model is promoted to the canonical path only if it actually beats iteration 2 —
+   stated explicitly either way, not assumed.
+
+**This subsection is filled in as each step completes, same resumability discipline as Section 10.**
