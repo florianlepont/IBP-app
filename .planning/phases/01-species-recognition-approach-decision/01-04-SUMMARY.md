@@ -20,13 +20,14 @@ requires:
   - phase: 01-species-recognition-approach-decision (plan 03)
     provides: on-device model cache path convention (Paths.document/models/genus_classifier.tflite), device-harness proof
 provides:
-  - "A fine-tuned, quantised genus classifier: spike/species-recognition/train/genus_classifier.tflite (2,000,768 bytes, float16, 34 output classes)"
-  - "spike/species-recognition/train/finetune.py and export_tflite.py: gitignored transfer-learning and TFLite-export scripts (MobileNetV3-Small, ImageNet-pretrained)"
-  - "spike/species-recognition/eval/evaluate_accuracy.py: gitignored per-genus top-1/top-3 evaluation harness against the held-out test split"
-  - "spike/species-recognition/eval/results/per_genus_accuracy.csv: 34-row per-genus accuracy table with raw hit counts, clears-bar flag, status"
-  - "spike/species-recognition/eval/GATE: GATE-MODEL: PASS"
-  - "Measurement document Section 4 (model, licence chain, quantisation choice) and Section 5 (per-genus accuracy, confidence bands, candidate ordering) filled in full"
-  - "Central finding: 0 of 34 genera clear the D-02 top-3 95% bar; closest (Olea) misses by one test image (33/35, 94.29%)"
+  - "ITERATION 1: MobileNetV3-Small fine-tuned on 220 images/class, exported to spike/species-recognition/train/genus_classifier_iteration1.tflite (2,000,768 bytes, float16, 34 classes). 0/34 genera clear the D-02 95% top-3 bar; closest (Olea) misses by one test image (33/35, 94.29%). Preserved on disk (gitignored) and in Sections 4-5 of the measurement document, unmodified by iteration 2."
+  - "ITERATION 2 (deviation, coordinator-directed after user rejected iteration 1's no-go as premature): MobileNetV3-Large fine-tuned on ~1,500/class (63,863 images total, season-stratified via GBIF eventDate), exported to spike/species-recognition/train/genus_classifier_v2.tflite (6,127,976 bytes, float16, 34 classes), PROMOTED to the canonical spike/species-recognition/train/genus_classifier.tflite path. 0/34 genera still clear the bar, but 32/34 improved by a mean of +19.9pp top-3 (range +0.5pp to +53.9pp) against an enlarged ~200-image/class test split -- a data-limited, not approach-limited, result."
+  - "spike/species-recognition/train/prepare_dataset.py rewritten: reuses already-downloaded images, season-stratifies new downloads via GBIF eventDate with an achieved-vs-attempted report per class"
+  - "spike/species-recognition/train/finetune.py, export_tflite.py, eval/evaluate_accuracy.py: gitignored scripts, parameterised (--backbone, --output-suffix, --model, --output-dir) to run either iteration without overwriting the other's artefacts"
+  - "spike/species-recognition/eval/results/ (canonical, promoted to iteration 2) and eval/results_iteration1/ (iteration 1, preserved): both 34-row per-genus accuracy CSVs with raw hit counts, clears-bar flag, status"
+  - "spike/species-recognition/eval/GATE: GATE-MODEL: PASS (referencing the promoted iteration-2 model)"
+  - "Measurement document Section 4-9 (iteration 1, unmodified) and new Section 10 (iteration 2: corpus expansion, training, side-by-side per-genus comparison) filled in full"
+  - "A genuine training-data shuffle bug found and fixed mid-iteration-2 (see key-decisions) -- the first iteration-2 attempt was discarded, not reported"
 affects: [01-05, 01-06]
 
 tech-stack:
@@ -42,36 +43,43 @@ key-files:
     - spike/species-recognition/train/export_tflite.py (gitignored)
     - spike/species-recognition/eval/evaluate_accuracy.py (gitignored)
   modified:
-    - docs/technical/species-recognition-spike-measurements-v1.md (Sections 4, 5, 6, 9)
+    - docs/technical/species-recognition-spike-measurements-v1.md (Sections 4, 5, 6, 9, 10)
+    - spike/species-recognition/train/prepare_dataset.py (gitignored -- iteration 2 corpus expansion)
 
 key-decisions:
   - "Float16 quantisation shipped instead of int8 dynamic-range, after measuring: int8 gave only 79.4% top-1 export-parity agreement with the trained model (a real accuracy cost, not noise -- probability shifts up to 2x on the same predicted class), float16 gave 100% agreement at roughly 2x the file size (2.0 MB vs 1.16 MB) -- still single-digit MB either way"
-  - "Test images evaluated against the RAW (composition-unfiltered) test split, not a composition-filtered subset -- explicit decision, justified in Section 5: per-image classification at full test-split scale (1,183 images) is the same 'hand-classify at scale' work plan 02's coordinator guidance ruled out, and every genus already misses the 95% bar by a wide margin except Olea's one-image miss, so no plausible filtered subset changes the outcome"
-  - "Second candidate model (EfficientNet-Lite0) not run -- MobileNetV3-Small's full pipeline (two training attempts, export, quantisation comparison, evaluation) consumed well under the remaining timebox, and the time was judged better spent tuning the first candidate and investigating the quantisation-parity finding than running a second, equally shallow candidate (D-19)"
-  - "Fixed a broken tensorflow.lite import path (empty tensorflow/lite/__init__.py in this TF 2.21.0 wheel, a documented TF packaging quirk as tf.lite.Interpreter is being deprecated in favour of ai_edge_litert) by re-exporting the same public names into that file from the already-approved, already-installed tensorflow package -- no new package installed, purely a same-package bug fix so both the plan's own automated verify script and this plan's export/eval scripts could use the from tensorflow.lite import Interpreter path the plan's verify script expects on its happy path"
+  - "Test images evaluated against the RAW (composition-unfiltered) test split in both iterations, not a composition-filtered subset -- explicit decision, justified in Section 5: per-image classification at full test-split scale is the same 'hand-classify at scale' work plan 02's coordinator guidance ruled out"
+  - "Second candidate model (EfficientNet-Lite0) not run in iteration 1 -- time better spent tuning the first candidate and investigating the quantisation-parity finding (D-19)"
+  - "Fixed a broken tensorflow.lite import path (empty tensorflow/lite/__init__.py in this TF 2.21.0 wheel) by re-exporting the same public names from the already-approved, already-installed tensorflow package -- no new package installed"
+  - "ITERATION 2 (deviation): user rejected iteration 1's no-go as premature -- iteration 1 used 150 training images/class against >4,200 surveyed CC0/CC-BY candidates, the smallest mobile backbone against 36x unused latency headroom, and a 35-image test split whose 95% bar flips on one image. Coordinator directed a second iteration: corpus expanded to ~2,000/class (season-stratified via GBIF eventDate), test split enlarged to ~200/class, MobileNetV3-Large substituted for MobileNetV3-Small. Iteration 1's result was NOT overwritten -- both are recorded side by side in Section 10"
+  - "Found and fixed a genuine training-data shuffle bug mid-iteration-2: tf.data's windowed shuffle(2048) could not adequately mix ~1,200-1,600-image class blocks (vs iteration 1's ~150-image blocks, where the same window worked fine), producing per-genus test accuracy that correlated with class position in genus_labels.txt (r=0.85) rather than reflecting real model capability. Fixed by globally shuffling the (file, label) list in Python before it reaches tf.data. The first iteration-2 training run was discarded entirely (archived, not reported); the corrected retrain (r=0.36, matching iteration 1's own baseline noise level) is what Section 10 reports"
+  - "Iteration 2's model promoted to the canonical spike/species-recognition/train/genus_classifier.tflite path (and eval/results/) that plan 03's cache-path convention and plan 05 expect, since it is the more capable, more current candidate. Iteration 1's model/results preserved separately (gitignored, *_iteration1* suffix) and its numbers in Sections 4-5 are unmodified regardless of what sits at the canonical path"
 
 requirements-completed: []
 
-duration: ~50min (two training runs ~245s and ~576s CPU-only, plus quantisation investigation, evaluation, and write-up)
+duration: ~50min for iteration 1 (two training runs ~245s and ~576s CPU-only), plus ~5.5h for iteration 2 (corpus expansion ~2.5h, two training attempts ~88min + ~84min including a discarded run, evaluation and write-up) -- both within the same execution session
 completed: 2026-09-23
 status: complete
 ---
 
 # Phase 1 Plan 04: Genus Classifier Fine-Tuning and Per-Genus Accuracy Measurement Summary
 
-**MobileNetV3-Small fine-tuned on the 34-class CNPF genus corpus and exported to a 2.0 MB float16-quantised `.tflite`; per-genus top-1/top-3 accuracy measured on the held-out test split found 0 of 34 genera clear the D-02 95% top-3 bar, with the closest (Olea) missing by a single test image — `GATE-MODEL: PASS`.**
+**Two iterations. Iteration 1: MobileNetV3-Small on 220 images/class found 0/34 genera clearing the D-02 95% top-3 bar (closest, Olea, missing by one test image). The user rejected that no-go as premature; iteration 2 (MobileNetV3-Large, ~2,000 images/class, season-stratified, ~200-image test split) still found 0/34 clearing the bar, but 32/34 genera improved by a mean of +19.9pp top-3 — a data-limited result, not an approach-limited one. Both iterations' full numbers are preserved; iteration 2's model is promoted to the canonical path. `GATE-MODEL: PASS`.**
 
 ## Performance
 
 - **Started:** 2026-09-23 (continuation of phase 01, wave 3)
 - **Completed:** 2026-09-23
-- **Duration:** ~50 min wall-clock, including two full training runs (~245s and ~576s, CPU-only,
-  10-core Mac, no GPU) and a quantisation-scheme investigation
-- **Tasks:** 2 (both `type="auto"`)
+- **Duration:** ~50 min for iteration 1 (two training runs ~245s and ~576s, CPU-only, 10-core Mac,
+  no GPU, plus quantisation-scheme investigation), then a coordinator-directed extension:
+  ~6h for iteration 2 (corpus expansion ~2.5h; a first training attempt ~88min later discarded for
+  a data-pipeline bug; a corrected retrain ~84min; export, evaluation and write-up) — all within
+  the same execution session, no restart
+- **Tasks:** 2 planned (`type="auto"`) + the iteration-2 deviation described below
 - **Files modified:** 1 tracked (`docs/technical/species-recognition-spike-measurements-v1.md`),
   plus the gitignored spike tree (`train/finetune.py`, `train/export_tflite.py`,
-  `eval/evaluate_accuracy.py`, the trained SavedModel, the exported `.tflite`, evaluation results
-  CSV/JSON, `eval/GATE`)
+  `train/prepare_dataset.py`, `eval/evaluate_accuracy.py`, both iterations' trained SavedModels,
+  exported `.tflite` files, evaluation results CSV/JSON, `eval/GATE`)
 
 ## Accomplishments
 
@@ -95,7 +103,13 @@ status: complete
   (D-12) and a candidate-ordering/confusion analysis (D-11). Wrote
   `eval/results/per_genus_accuracy.csv` (34 rows) and `eval/GATE` (`GATE-MODEL: PASS`).
 
-## The central finding
+## Iteration 1 (as originally planned)
+
+The sections below through "Corpus caveats carried forward" describe iteration 1 exactly as
+executed and committed (`1490ec6`, `ff07741`) — unmodified by iteration 2. See "Iteration 2"
+further down for the coordinator-directed extension and its own findings.
+
+## The central finding (iteration 1)
 
 **0 of 34 genera clear the D-02/D-04 top-3 95% bar.** The closest is **Olea at 33/35 (94.29%) —
 exactly one test image short of clearing**, illustrating the resolution limit this sample size
@@ -138,17 +152,121 @@ Section 9 rather than diluted:
    half was not performed, and given the lab figure's result, a field pass would only be able to
    confirm or worsen it, not rescue it (Section 6).
 
+## Iteration 2 (deviation: coordinator-directed extension, user rejected iteration 1's no-go)
+
+**Why.** The user reviewed iteration 1's 0/34 result and rejected it as premature: iteration 1
+used 150 training images/class against >4,200 surveyed CC0/CC-BY candidates (3.6% utilisation),
+the smallest available mobile backbone (MobileNetV3-Small) against 36x unused latency headroom
+(83ms measured vs the 3,000ms D-05 budget), a 2.0 MB model against no real size ceiling, and a
+35-image test split whose 95% bar flips on a single image. The coordinator directed a second,
+larger iteration rather than accepting the first as final — recorded here as a documented
+deviation extending this plan, not a silent redo. **Iteration 1's result is not overwritten
+anywhere** — Sections 4–5 of the measurement document and the "Iteration 1" section above remain
+exactly as originally committed.
+
+**What changed.** `prepare_dataset.py` was rewritten to expand the corpus toward ~2,000
+images/class (from 220), reusing every image already on disk rather than re-fetching it, and
+deliberately season-stratifying new downloads via GBIF `eventDate` — specifically targeting the
+zero-autumn-representation gap Section 3b found. Result: 63,863 images across 34 classes (up from
+~7,432), 51,089 train / 6,387 val / 6,387 test (an 80/10/10 split, versus 150/35/35 per class
+nominal in iteration 1). Train/val/test fractions changed accordingly. `finetune.py`,
+`export_tflite.py` and `evaluate_accuracy.py` were parameterised (`--backbone`, `--output-suffix`,
+`--model`, `--output-dir`) so iteration 2 could run without overwriting iteration 1's artefacts.
+
+**Seasonal stratification result.** 9 of 34 classes reached a perfectly balanced 500/500/500/500
+season split (quota attempted: 500/season). Three genera (Acer, Pinus, Prunus) returned **zero**
+autumn images even from a ~5,000-candidate fetch — now confirmed, at ~170x iteration 1's 30-image
+sample size, as a likely genuine absence in GBIF's CC0/CC-BY `StillImage` collection for those
+genera rather than a small-sample artefact. Five more remain thin (Fagus, Fraxinus, Juniperus,
+Populus, Salix, all under 4% autumn). The remaining 22 classes show meaningfully improved autumn
+representation versus iteration 1's near-total absence. Full table: measurement document Section
+10.1.
+
+**A genuine data-pipeline bug was found and fixed mid-iteration, not silently absorbed.** The
+first iteration-2 training attempt (MobileNetV3-Large, 6+8 epochs) finished with validation
+top1/top3 of 0.325/0.590 — numerically close to iteration 1's, which alone would have already
+been an interesting data point. Per-genus test evaluation, however, showed accuracy strongly
+correlated with a class's position in `genus_labels.txt` (Pearson r=0.85) — an implausible
+pattern with no botanical basis. Root cause: `tf.data`'s windowed `shuffle(buffer_size=2048)`
+could not adequately mix a training list whose per-class blocks (~1,200–1,600 images at the new
+scale) now approach or exceed the shuffle window, unlike iteration 1's ~150-image blocks where
+the same window gave adequate cross-class mixing (iteration 1's own residual correlation is a much
+weaker r=0.36, consistent with normal windowed-shuffle imprecision, not the same bug). **Fixed**
+by globally shuffling the full (file, label) list in Python (`finetune.py::collect_split`) before
+it ever reaches `tf.data`, verified directly (per-class mean position in the shuffled list now
+within ~1.3% of the expected midpoint). The invalid first attempt's artefacts are archived on disk
+(gitignored, `_INVALID_shuffle_bug` suffix) for traceability; none of its numbers are reported
+anywhere. Also added `EarlyStopping(monitor='val_top3', restore_best_weights=True)` to the
+retrain, since the first attempt's own curve showed genuine overfitting (val_top3 peaked at 0.6127
+partway through, declined to 0.5901 by the final epoch) that would otherwise have silently
+discarded the actual best checkpoint.
+
+**Retrained result: validation top1=0.5920, top3=0.7951, still climbing at the final epoch (best
+epoch = last epoch; `EarlyStopping` never triggered).** Label-index/accuracy correlation on the
+corrected model: r=0.36, statistically indistinguishable from iteration 1's own baseline —
+confirms the fix worked and this result is trustworthy. Exported to
+`spike/species-recognition/train/genus_classifier_v2.tflite`, 6,127,976 bytes (5.84 MB,
+float16 — same quantisation scheme as iteration 1, for the same reasons), **100%** export parity
+on a 68-image sample.
+
+**Per-genus test accuracy (6,387-image test split, ~200/class): 0 of 34 genera still clear the
+D-02 95% bar — but 32 of 34 improved, by a mean of +19.9 percentage points top-3** (range +0.5pp
+to +53.9pp). Only 2 regressed, both narrowly and both already iteration 1's two best-performing
+genera (Olea −5.7pp, Phillyrea −0.1pp) — consistent with a ceiling/ranking-shuffle effect among
+already-strong classes, not a real capability loss. The largest individual gains (Acer +53.9pp,
+Ulmus +50.8pp, Fraxinus +40.3pp) landed on iteration 1's worst-performing classes — exactly the
+pattern a **data-limited, not approach-limited**, result produces. Full 34-row side-by-side
+comparison table: measurement document Section 10.3.
+
+**Confidence bands (D-12) and candidate ordering (D-11) both improved.** Strong-band coverage
+(≈90% in-band precision) rose from 11.2% of predictions to 38.4%. Top confusion pairs became more
+botanically coherent (Picea↔Abies, both conifers; Pyrus→Prunus and Prunus→Malus, both Rosaceae;
+Phillyrea↔Olea, both Oleaceae) versus iteration 1's more mixed pattern — evidence the larger model
+is learning real morphological structure, not noise.
+
+**Resolution limit improved substantially.** At n≈200/class, the 95% bar tolerates up to 10
+misses, versus iteration 1's single-image knife-edge at n=35.
+
+**Model size (5.84 MB, up from 2.0 MB) still leaves D-07's separate-download premise weakened**,
+just less dramatically — both numbers are on record in Section 4/10 for the ADR; neither D-07 nor
+D-08 is re-decided here.
+
+**Promotion.** `genus_classifier_v2.tflite` was promoted to the canonical path
+(`spike/species-recognition/train/genus_classifier.tflite`, `genus_classifier_keras/`) that plan
+03's cache-path convention and plan 05 expect, and `eval/results/` was updated to iteration 2's
+CSV/JSON. Iteration 1's model, keras export and results remain separately archived (gitignored,
+`*_iteration1*` suffix) and its numbers in Sections 4–5 are unaffected. `eval/GATE` reads
+`GATE-MODEL: PASS`, referencing the promoted (iteration 2) model.
+
+**What this means for the ADR.** The no-go was data-limited, not approach-limited — accuracy
+moved broadly and substantially with more data and a larger backbone. It still did not cross the
+D-02 bar for any genus at the larger, more statistically solid test-split resolution. This is
+neither a clean go nor a clean no-go: on-device genus recognition is not proven infeasible, but it
+is also not proven to clear the bar within this milestone's timebox and available compute/data.
+That judgement call belongs to the ADR (plan 01-06), not this document.
+
 ## Task Commits
 
-1. **Task 1: fine-tune and export the genus classifier** — `1490ec6` (feat) — measurement document
-   Section 4 (model, licence chain, quantisation-scheme investigation, size finding)
-2. **Task 2: measure per-genus accuracy** — `ff07741` (docs) — measurement document Sections 5, 6,
-   9 (per-genus table, confidence bands, candidate ordering, corpus caveats, model-size finding)
+1. **Task 1: fine-tune and export the genus classifier (iteration 1)** — `1490ec6` (feat) —
+   measurement document Section 4 (model, licence chain, quantisation-scheme investigation, size
+   finding)
+2. **Task 2: measure per-genus accuracy (iteration 1)** — `ff07741` (docs) — measurement document
+   Sections 5, 6, 9 (per-genus table, confidence bands, candidate ordering, corpus caveats,
+   model-size finding)
+3. **Iteration 2 deviation, interim: begin corpus expansion** — `5288c0b` (docs) — Section 10
+   scaffold recording the user's rejection and the plan
+4. **Iteration 2 deviation: corpus expansion complete** — `faadc55` (docs) — Section 10.1
+   (63,863 images, season-stratification results)
+5. **Iteration 2 deviation: shuffle bug found and fixed** — `1d38b72` (docs) — Section 10.2 bug
+   writeup, before the retrain completed
+6. **Iteration 2 deviation: training/export/evaluation complete** — `32df24c` (docs) —
+   Section 10.2–10.5 (results, promotion, side-by-side comparison)
+7. **Iteration 2 deviation: fix a stray cross-reference** — `56816f3` (docs) — minor follow-up
 
-Both commits are on the measurement document only. `finetune.py`, `export_tflite.py`,
-`evaluate_accuracy.py` and all model/results artefacts live in the gitignored `spike/` tree, per
-the phase's explicit "throwaway spike" scope (`01-CONTEXT.md`: "Spike code is throwaway by design
-and is not a deliverable").
+All seven commits are on the measurement document only. `finetune.py`, `export_tflite.py`,
+`evaluate_accuracy.py`, `prepare_dataset.py` and all model/results artefacts (both iterations)
+live in the gitignored `spike/` tree, per the phase's explicit "throwaway spike" scope
+(`01-CONTEXT.md`: "Spike code is throwaway by design and is not a deliverable").
 
 ## Files Created/Modified
 
@@ -156,18 +274,35 @@ and is not a deliverable").
   licence chain, quantisation-scheme investigation, exported size, D-07/D-08 size finding),
   Section 5 (34-row per-genus accuracy table, composition-filtering decision, resolution limit,
   confidence-band analysis, candidate-ordering observation, corpus caveats), Section 6 (confirmed
-  still no field photos at plan 04), Section 9 (renumbered to fix a pre-existing duplicate-number
-  bug from plan 02's edits, updated the composition item to record plan 04's resolution, added the
-  central-finding and model-size-finding entries)
-- `spike/species-recognition/train/finetune.py` (gitignored) — transfer-learning script
-- `spike/species-recognition/train/export_tflite.py` (gitignored) — TFLite export + parity check
-- `spike/species-recognition/eval/evaluate_accuracy.py` (gitignored) — per-genus evaluation harness
-- `spike/species-recognition/train/genus_classifier_keras/` (gitignored) — trained SavedModel
-- `spike/species-recognition/train/genus_classifier.tflite` (gitignored) — exported model, 2,000,768 bytes
-- `spike/species-recognition/train/training_report.json`, `export_report.json` (gitignored) —
-  training/export metrics
-- `spike/species-recognition/eval/results/per_genus_accuracy.csv`, `confidence_bands.json`,
-  `candidate_ordering_sample.json` (gitignored) — evaluation outputs
+  still no field photos), Section 9 (renumbered to fix a pre-existing duplicate-number bug from
+  plan 02's edits, added the central-finding and model-size-finding entries, plus iteration-2
+  entries), new Section 10 (iteration 2: corpus expansion, shuffle-bug fix, training, export,
+  side-by-side comparison, promotion)
+- `spike/species-recognition/train/finetune.py` (gitignored) — transfer-learning script,
+  parameterised for `--backbone`/`--output-suffix` across iterations; fixed the shuffle bug in
+  `collect_split()`; added `EarlyStopping`
+- `spike/species-recognition/train/export_tflite.py` (gitignored) — TFLite export + parity check,
+  parameterised for `--output-suffix`
+- `spike/species-recognition/eval/evaluate_accuracy.py` (gitignored) — per-genus evaluation
+  harness, parameterised for `--model`/`--output-dir`
+- `spike/species-recognition/train/prepare_dataset.py` (gitignored) — corpus-assembly script,
+  rewritten for iteration 2's season-stratified expansion (reuses existing downloads, `eventDate`
+  capture, quota-based selection)
+- `spike/species-recognition/train/genus_classifier_keras/`, `genus_classifier.tflite` (gitignored)
+  — canonical paths, now iteration 2's model (6,127,976 bytes); iteration 1's originals preserved
+  at `*_iteration1*` suffix
+- `spike/species-recognition/train/genus_classifier_keras_v2/`, `genus_classifier_v2.tflite`
+  (gitignored) — iteration 2's model under its own suffix (identical content to the promoted
+  canonical files, kept for traceability)
+- `spike/species-recognition/train/training_report{,_v2}.json`, `export_report{,_v2}.json`
+  (gitignored) — training/export metrics per iteration
+- `spike/species-recognition/eval/results/` (canonical, promoted to iteration 2),
+  `eval/results_iteration1/`, `eval/results_v2/` (gitignored) — per_genus_accuracy.csv,
+  confidence_bands.json, candidate_ordering_sample.json for each iteration
+- `spike/species-recognition/data/splits/seasonal_balance_report.json` (gitignored) —
+  per-class, per-season achieved-vs-attempted counts for iteration 2's corpus expansion
+- `spike/species-recognition/.venv/lib/python3.12/site-packages/tensorflow/lite/__init__.py`
+  (gitignored, inside the venv) — bug fix, see Deviations
 - `spike/species-recognition/eval/GATE` (gitignored) — `GATE-MODEL: PASS`
 - `spike/species-recognition/.venv/lib/python3.12/site-packages/tensorflow/lite/__init__.py`
   (gitignored, inside the venv) — bug fix, see Deviations
@@ -269,30 +404,40 @@ run. No external service configuration required.
 
 ## Next Phase Readiness
 
-- `spike/species-recognition/eval/GATE` reads `GATE-MODEL: PASS` — plan 01-05 (device latency
-  measurement) may proceed. Plan 01-05 does not need this model's *accuracy* to be good to do its
-  own job (measuring inference latency of whatever model is present), but should be aware the
-  model it is timing is not one that would ship as-is.
-- The measurement document Sections 4–6 and 9 give plan 01-06 (the ADR) everything it needs: the
-  full licence chain, the exported model's measured size (2.0 MB, bearing on D-07/D-08), the
-  complete 34-row per-genus accuracy table with raw counts, the confidence-band cut points for
-  D-12, the candidate-ordering evidence for D-11, and all corpus caveats carried forward intact.
-- **The central number plan 01-06 needs to reckon with:** 0 of 34 genera clear the D-02 95%
-  top-3 bar. This is very likely a no-go signal for US-C9 in this milestone, though the ADR
-  authors that decision, not this plan. The evidence is unusually clean for a no-go: every genus
-  misses by a wide margin except one (Olea, missing by exactly one test image), so this does not
-  read as "the measurement was too noisy to tell" — it reads as "the approach, on this corpus,
-  with this backbone, in this timebox, did not clear the bar."
-- **Possible confounds for the ADR to weigh, all already flagged in the measurement document and
-  not resolved by this plan:** the corpus composition problem (Section 3a — some genera's raw test
-  images are substantially landscape/herbarium/in-hand rather than single-subject), the seasonal
-  skew (Section 3b — almost no autumn training data against an autumn field season), and the
-  possibility that a longer training run, a different backbone, or more/cleaner data would improve
-  the picture. None of these were tested further here, per D-19's timebox discipline — the ADR
-  should decide whether any of them are worth a follow-up spike in a later milestone, or whether
-  the result stands as measured.
-- No blockers for plan 01-05. Plan 01-06 should read this plan's Section 4/5/6/9 in full before
-  drafting the ADR.
+- `spike/species-recognition/eval/GATE` reads `GATE-MODEL: PASS`, referencing the **promoted
+  iteration-2 model** (`genus_classifier.tflite`, 6,127,976 bytes, MobileNetV3-Large) — plan 01-05
+  (device latency measurement) may proceed and should time this model, not iteration 1's smaller
+  one. Expect meaningfully higher latency than iteration 1's 83ms measured figure (Section 8) given
+  the larger backbone, though iteration 1's 36x latency headroom against the 3,000ms D-05 budget
+  makes it very unlikely this alone becomes a blocker — plan 05 should still measure it directly
+  rather than assume.
+- The measurement document Sections 4–10 give plan 01-06 (the ADR) everything it needs: the full
+  licence chain, both iterations' exported model sizes (2.0 MB then 5.84 MB, bearing on D-07/D-08),
+  both iterations' complete 34-row per-genus accuracy tables with raw counts, confidence-band cut
+  points for D-12, candidate-ordering evidence for D-11, all corpus caveats carried forward, and
+  the 34-row side-by-side comparison (Section 10.3) that is this plan's central deliverable for
+  the ADR to reason from.
+- **The central number plan 01-06 needs to reckon with, updated by iteration 2:** 0 of 34 genera
+  clear the D-02 95% top-3 bar in EITHER iteration — but iteration 2's mean +19.9pp top-3
+  improvement (32/34 genera) across a 9x-larger corpus and larger backbone shows this is a
+  **data-limited result, not an approach-limited one**. The user's rejection of iteration 1's
+  no-go as premature was evidenced correct: under-resourcing, not a fundamental ceiling, explains
+  most of iteration 1's shortfall. Whether the remaining gap (still short of 95% for every genus,
+  even at the improved test-split resolution) supports a no-go, a conditional/deferred go pending
+  further data collection, or something else is squarely the ADR's decision — this plan's job was
+  to make sure that decision is made with the trajectory in evidence, not just a single flat
+  reading.
+- **Possible confounds for the ADR to weigh, still not resolved by either iteration:** the corpus
+  composition problem (Section 3a — not re-audited at iteration 2's scale), the seasonal skew
+  (Section 3b/10.1 — substantially improved for most classes but still genuinely zero for three:
+  Acer, Pinus, Prunus), and whether further data collection or more training epochs (iteration 2's
+  retrain was still improving at its final epoch, not plateaued) would close more of the remaining
+  gap. None of these were tested further here, per D-19's timebox discipline and the practical
+  limits of a single execution session — the ADR should decide whether a further iteration belongs
+  in this milestone or a later one.
+- No blockers for plan 01-05. Plan 01-06 should read this plan's Section 4–10 in full, and
+  specifically Section 10.3's comparison table and Section 10.5's promotion note, before drafting
+  the ADR.
 
 ---
 
@@ -301,8 +446,12 @@ _Completed: 2026-09-23_
 
 ## Self-Check: PASSED
 
-All claimed files found on disk: `docs/technical/species-recognition-spike-measurements-v1.md`,
-the gitignored `spike/species-recognition/train/finetune.py`, `export_tflite.py`,
-`spike/species-recognition/eval/evaluate_accuracy.py`, `train/genus_classifier.tflite`,
-`eval/results/per_genus_accuracy.csv`, `eval/GATE`, and this SUMMARY.md. Both task commits
-(`1490ec6`, `ff07741`) verified present in `git log`.
+All claimed files found on disk for both iterations: `docs/technical/species-recognition-spike-
+measurements-v1.md`, the gitignored `spike/species-recognition/train/finetune.py`,
+`export_tflite.py`, `prepare_dataset.py`, `spike/species-recognition/eval/evaluate_accuracy.py`,
+`train/genus_classifier.tflite` (promoted, iteration 2), `train/genus_classifier_iteration1.tflite`,
+`train/genus_classifier_v2.tflite`, `eval/results/per_genus_accuracy.csv` (promoted),
+`eval/results_iteration1/per_genus_accuracy.csv`, `eval/results_v2/per_genus_accuracy.csv`,
+`eval/GATE`, `data/splits/seasonal_balance_report.json`, and this SUMMARY.md. All seven commits
+(`1490ec6`, `ff07741`, `5288c0b`, `faadc55`, `1d38b72`, `32df24c`, `56816f3`) verified present in
+`git log`.
