@@ -14,6 +14,7 @@ import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
 import { useNearbyParcels } from "./src/hooks/useNearbyParcels"
+import { shouldShowDevTools } from "./src/app/dev-tools"
 import { loadStoredApiUrl, saveStoredApiUrl } from "./src/app/api-url-storage"
 import { DEFAULT_API_URL } from "./src/app/constants"
 import type { SurveyStats } from "./src/app/types"
@@ -28,6 +29,7 @@ export default function App() {
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>("summary")
 
   useEffect(() => {
+    if (!shouldShowDevTools()) return
     void loadStoredApiUrl()
       .then((stored) => {
         if (stored) setApiUrl(stored)

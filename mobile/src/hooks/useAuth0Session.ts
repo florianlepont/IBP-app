@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import * as Network from "expo-network"
 import Auth0 from "react-native-auth0"
 import { ApiError } from "../api/client"
 import { getMyProfile } from "../api/ibp-api"
@@ -9,14 +10,34 @@ import {
   buildApiTokenRejectedMessage,
   buildAuth0UnauthorizedMessage,
 } from "../app/auth0-config"
+import { extractIdTokenClaims, IdTokenClaims } from "../app/id-token"
 import { AuthUser } from "../app/types"
+import {
+  AUTH_REQUIRED_ERROR,
+  AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
+  classifyCredentialsError,
+} from "./auth-errors"
 import { OperationScope, OperationState } from "./operation-status"
+import { isOnlineNetworkState } from "./survey-sync/utils"
 
-export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
+export { AUTH_REQUIRED_ERROR, AUTH_TEMPORARILY_UNAVAILABLE_ERROR } from "./auth-errors"
+
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
   if (error instanceof Error) return /401|unauthorized|auth_required/i.test(error.message)
   return false
+}
+
+// Any exception here means "unknown" — treat it as offline, the safe side:
+// a genuine session-ending error (e.g. RENEW_FAILED) is retried later rather
+// than incorrectly ending the session (D-01a).
+async function isDeviceOnline(): Promise<boolean> {
+  try {
+    const state = await Network.getNetworkStateAsync()
+    return isOnlineNetworkState(state)
+  } catch {
+    return false
+  }
 }
 
 function extractLoginErrorMessage(error: unknown): string {
@@ -55,6 +76,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [sessionRestoring, setSessionRestoring] = useState(true)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState("Not logged in")
+  const [sessionOwner, setSessionOwner] = useState<IdTokenClaims | null>(null)
   const auth0Ref = useRef<Auth0 | null>(null)
 
   const apiUrlRef = useRef(apiUrl)
@@ -78,35 +100,55 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     setSessionRestoring(false)
     setCurrentUser(null)
     setProfile("Not logged in")
+    setSessionOwner(null)
     await onSessionCleared?.()
   }, [onSessionCleared])
 
-  const getValidAccessToken = useCallback(async (): Promise<string | null> => {
-    try {
-      const credentials = await getAuth0().credentialsManager.getCredentials()
-      if (credentials?.accessToken) {
-        setAccessToken(credentials.accessToken)
-        return credentials.accessToken
+  // Never returns null and never calls clearSession: a network/timeout/unknown
+  // error means "retry later", only a genuine refresh-token rejection ends the
+  // session (thrown as AUTH_REQUIRED, handled by the caller).
+  const getValidAccessToken = useCallback(
+    async (options?: { forceRefresh?: boolean }): Promise<string> => {
+      const forceRefresh = options?.forceRefresh ?? false
+
+      let credentials
+      try {
+        const credentialsManager = getAuth0().credentialsManager
+        credentials = forceRefresh
+          ? await credentialsManager.getCredentials(undefined, undefined, undefined, true)
+          : await credentialsManager.getCredentials()
+      } catch (error) {
+        const kind = classifyCredentialsError(error, {
+          phase: "refresh",
+          isOnline: await isDeviceOnline(),
+        })
+        throw new Error(
+          kind === "session-ended" ? AUTH_REQUIRED_ERROR : AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
+        )
       }
-      return null
-    } catch {
-      return null
-    }
-  }, [getAuth0])
+
+      if (!credentials?.accessToken) {
+        throw new Error(AUTH_TEMPORARILY_UNAVAILABLE_ERROR)
+      }
+
+      setAccessToken(credentials.accessToken)
+      setSessionOwner(extractIdTokenClaims(credentials.idToken))
+      return credentials.accessToken
+    },
+    [getAuth0],
+  )
 
   const withAuthRetry = useCallback(
     async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
       const token = await getValidAccessToken()
-      if (!token) throw new Error(AUTH_REQUIRED_ERROR)
 
       try {
         return await operation(token)
       } catch (error) {
         if (!isUnauthorizedError(error)) throw error
 
-        // Force a fresh token on 401
-        const refreshed = await getValidAccessToken()
-        if (!refreshed) throw new Error(AUTH_REQUIRED_ERROR)
+        // Force a fresh token on 401 instead of reusing the (still-cached) one.
+        const refreshed = await getValidAccessToken({ forceRefresh: true })
         return operation(refreshed)
       }
     },
@@ -142,7 +184,6 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     const restore = async (): Promise<void> => {
       try {
         if (active) setSessionRestoring(true)
-        // DEV ONLY: slow down session restore to test the loading screen
         const auth0 = getAuth0()
         const hasCredentials = await auth0.credentialsManager.hasValidCredentials()
         if (!hasCredentials) {
@@ -160,6 +201,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         }
 
         setAccessToken(credentials.accessToken)
+        const sessionOwner = extractIdTokenClaims(credentials.idToken)
+        setSessionOwner(sessionOwner)
 
         const user = await getMyProfile(apiUrlRef.current, credentials.accessToken).catch(
           () => null,
@@ -181,8 +224,26 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         setSessionRestoring(false)
       } catch (error) {
         if (!active) return
-        await clearSession().catch(() => undefined)
-        reportStatus("session", "error", `Session restore error: ${(error as Error).message}`)
+
+        const kind = classifyCredentialsError(error, {
+          phase: "restore",
+          isOnline: await isDeviceOnline(),
+        })
+
+        if (kind === "session-ended") {
+          await clearSession().catch(() => undefined)
+          reportStatus(
+            "session",
+            "error",
+            "Session expirée : reconnectez-vous. Vos relevés locaux sont conservés.",
+          )
+        } else {
+          reportStatus(
+            "session",
+            "idle",
+            "Session non restaurée (réseau indisponible). Vos relevés locaux sont conservés.",
+          )
+        }
         setSessionRestoring(false)
       }
     }
@@ -204,6 +265,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
+      setSessionOwner(extractIdTokenClaims(credentials.idToken))
 
       let user: AuthUser
       try {
@@ -250,6 +312,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
+      setSessionOwner(extractIdTokenClaims(credentials.idToken))
 
       let user: AuthUser
       try {
@@ -293,6 +356,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       // If the user ended up logging in during the reset flow, treat it as a login
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
+      setSessionOwner(extractIdTokenClaims(credentials.idToken))
       const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
       if (user) {
         setProfileFromUser(user)
@@ -320,9 +384,13 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     accessToken: string
     refreshToken: string
   } | null> => {
-    const token = await getValidAccessToken()
-    if (!token) return null
-    return { accessToken: token, refreshToken: "" }
+    try {
+      const token = await getValidAccessToken({ forceRefresh: true })
+      return { accessToken: token, refreshToken: "" }
+    } catch (error) {
+      if (error instanceof Error && error.message === AUTH_REQUIRED_ERROR) return null
+      throw error
+    }
   }, [getValidAccessToken])
 
   return {
@@ -331,13 +399,13 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     sessionRestoring,
     currentUser,
     profile,
+    sessionOwner,
     isAuthenticated: Boolean(currentUser),
     pendingEmailVerification: null,
     devVerificationToken: null,
     setProfileFromUser,
     clearSession,
     refreshSessionTokens,
-    ensureAccessToken: getValidAccessToken,
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
