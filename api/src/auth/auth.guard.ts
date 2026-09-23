@@ -142,9 +142,12 @@ export class AuthGuard implements CanActivate {
 
     if (userInfo.email_verified === true) {
       // Verified email: safe to link this Auth0 identity to an existing account
-      // (needed for Google/Apple social login, REQ-A-social-login).
+      // (needed for Google/Apple social login, REQ-A-social-login) — but only
+      // to a pre-Auth0/unlinked row. An account already linked to another sub
+      // is never re-pointed (D-08): the INSERT below then trips the email index
+      // and the request is refused.
       const linked = await this.db.query<AuthenticatedUser>(
-        `UPDATE users SET auth0_sub = $1 WHERE email = $2
+        `UPDATE users SET auth0_sub = $1 WHERE email = $2 AND auth0_sub IS NULL
          RETURNING id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url`,
         [auth0Sub, email],
       )

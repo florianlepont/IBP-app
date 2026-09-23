@@ -149,7 +149,7 @@ describe("getOrProvisionUser", () => {
       (call: unknown[]) => typeof call[0] === "string" && call[0].includes("UPDATE users"),
     )
     expect(updateCall).toBeDefined()
-    expect(updateCall?.[0]).toContain("SET auth0_sub = $1 WHERE email = $2")
+    expect(updateCall?.[0]).toContain("SET auth0_sub = $1 WHERE email = $2 AND auth0_sub IS NULL")
     expect(updateCall?.[1]).toEqual(["auth0|new-sub", AUTH_USER.email])
   })
 
