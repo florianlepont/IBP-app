@@ -546,7 +546,104 @@ full field-photo validation pass would not fix a model trained on almost no autu
 
 ## 4. Model candidates and on-disk size
 
-_Filled by plan 02._
+**Status: complete (plan 01-04).**
+
+**Backbone: MobileNetV3-Small, the primary candidate named in RESEARCH.md's Standard Stack.**
+Loaded via `tensorflow.keras.applications.MobileNetV3Small` (`spike/species-recognition/train/finetune.py`),
+ImageNet-pretrained, `include_preprocessing=True` so the model's own input-scaling
+(raw `[0,255]` pixel floats in, no separate `preprocess_input` call needed) is baked into
+the exported graph rather than left to drift between training, export and the on-device
+harness.
+
+**Second candidate (EfficientNet-Lite0) was not run.** MobileNetV3-Small trained,
+exported and evaluated cleanly inside a small fraction of the remaining timebox (D-19):
+total wall-clock for the two training attempts below was under 14 minutes on a 10-core
+CPU with no GPU, and export/evaluation added only a few more minutes. The time saved was
+spent instead on tuning MobileNetV3-Small itself (see "Two training attempts" below) and
+on the export-quantisation investigation, both of which materially changed the reported
+numbers. Per D-19 ("one candidate model measured properly beats two measured badly"),
+that tuning and the quantisation-parity investigation were judged the better use of the
+remaining time than a second, equally shallow candidate. This is recorded as a deliberate
+timebox choice, not an oversight.
+
+**Licence chain (D-09 — permissive, redistributable, traced end to end):**
+
+| Link | Source | Licence |
+|------|--------|---------|
+| Architecture (MobileNetV3-Small) | `tensorflow.keras.applications.MobileNetV3Small` — TensorFlow/Keras, based on Howard et al., "Searching for MobileNetV3" (ICCV 2019) | Apache License 2.0 (TensorFlow's own licence; the architecture itself is published research, not separately licensed) |
+| Pretrained weights | Fetched over HTTPS by the official `tf.keras.applications` API from `https://storage.googleapis.com/tensorflow/keras-applications/mobilenet_v3/` (Google-hosted, no custom download URL — satisfies threat T-01-10's mitigation directly), trained on ImageNet (ILSVRC-2012) | Apache License 2.0 (ships as part of the `tensorflow` package's official weight distribution) |
+| Training images | GBIF occurrence media, CC0-1.0 / CC-BY-4.0 only, licence-filtered at the query level (Section 3) | CC0-1.0 / CC-BY-4.0 per image, recorded per-image in `data/splits/manifest.csv` |
+
+All three links are permissive and redistributable; no restrictive licence enters the
+chain at any point, so D-09 is satisfied by construction rather than asserted after the
+fact.
+
+**Training configuration.** Class order read from `train/genus_labels.txt` (34 classes,
+never a directory listing — threat T-01-11's mitigation), input resolution 224x224,
+batch size 32, Adam optimiser, `sparse_categorical_crossentropy` loss, augmentation
+(train split only: random horizontal flip, random brightness ±0.15, random contrast
+0.85–1.15). Two-phase recipe: freeze the backbone and train a `Dropout(0.2)` +
+`Dense(34, softmax)` head, then unfreeze the trailing backbone layers and fine-tune at a
+lower learning rate. Train/val split sizes: 5,066 train images / 1,182 val images across
+all 34 classes (Pistacia and Ulmus below the 220-image target per Section 3, everyone
+else at the target); 0 images were dropped by the PIL-verify corruption filter in either
+split — the corpus decoded cleanly.
+
+**Two training attempts were run; the second is the one exported and evaluated.** The
+first (12 head-only epochs + 10 fine-tune epochs unfreezing the last 30 backbone layers,
+lr 1e-3 → 1e-5) reached validation top-1/top-3 of 0.335/0.553 and had clearly plateaued
+in validation while training accuracy kept climbing (val_top3 moved only 0.548→0.553→
+0.555→...→0.553 across the ten fine-tune epochs while train_top3 rose 0.50→0.61). A
+second attempt (20 head-only epochs + 15 fine-tune epochs, unfreezing the last 60
+backbone layers for more fine-tuning capacity, lr 1e-3 → 3e-5) reached validation
+top-1/top-3 of **0.3816 / 0.5897**, still rising slightly at the final epoch, and was
+kept as the trained model. Total training wall-clock: 225.5s (attempt 1) + 575.7s
+(attempt 2) ≈ 13.4 minutes, all CPU-only (no GPU available in the spike environment).
+
+**Validation figures are a training sanity check, not the reportable result.**
+`validation_top1_accuracy = 0.3816`, `validation_top3_accuracy = 0.5897`
+(`train/training_report.json`), measured on the val split plan 02 wrote. These numbers
+exist to confirm training converged at all; the reportable per-genus figures the ADR
+actually cites are the held-out **test**-split numbers in Section 5, measured by a
+completely separate script (`eval/evaluate_accuracy.py`) that never touched train or val
+data.
+
+**Quantisation scheme: float16, not int8 dynamic-range — chosen after measuring, not
+assumed.** `train/export_tflite.py` tried both. Post-training int8 dynamic-range
+quantisation (`tf.lite.Optimize.DEFAULT` with no `target_spec.supported_types` override —
+weights quantised to int8, activations computed in float32) produced a smaller file
+(1,162,304 bytes) but failed this plan's own export-parity requirement: only **79.4%**
+top-1 agreement between the trained model and the exported one on a 68-image sample
+(2 images/class), with individual class probabilities shifting by as much as 2x on the
+same predicted class in a manual spot-check (0.211 → 0.417) and outright top-1 label
+flips. That is a real accuracy cost of quantisation, not measurement noise — plausibly
+sharper here than it would be for a more confident model, because Section 3a/3b's
+composition and seasonal-skew problems already push many of this model's class
+probabilities close together, and int8 rounding is exactly what flips a close call.
+Float16 quantisation (`target_spec.supported_types = [tf.float16]`) gave **100%** top-1
+agreement (68/68) on the same sample. Given the plan's own instruction to verify parity
+"before trusting it" rather than assume a conversion is safe, float16 is what
+`export_tflite.py` actually ships.
+
+**Exported file: `spike/species-recognition/train/genus_classifier.tflite`, 2,000,768
+bytes (≈1.91 MiB / 2.0 MB).** Output layer has exactly 34 classes, in `genus_labels.txt`
+order, confirmed both by this plan's own automated verify step and by a direct
+interpreter check. For reference, the unquantised (no `Optimize.DEFAULT`) conversion of
+the same trained model is 3,843,364 bytes (≈3.7 MiB) — float16 is roughly 52% of that,
+int8 dynamic-range would have been roughly 30% of it at the accuracy cost measured above.
+
+**This measured size is a finding that bears directly on D-07/D-08, without re-deciding
+either.** D-07 (locked) chose a separate first-launch download specifically to keep the
+app binary light on the stores; D-08 (locked) added an explicit "model not present yet"
+state as the cost of that choice. RESEARCH.md's own assumption A1 flagged the on-disk
+size as unverified and exactly this kind of number to settle. At 2.0 MB, this model is
+comfortably in the range that could instead be bundled directly in the app binary — many
+mobile app binaries already ship tens of megabytes of assets — which would remove the
+download step, the on-device cache-path handling (`Paths.document/models/genus_classifier.tflite`,
+Section 8) and the model-unavailable UI state entirely. **This document does not
+re-decide D-07 or D-08** — both are locked user decisions and the ADR (plan 01-06) is
+where any change to them is proposed to the user, not here. This paragraph exists so the
+ADR has the measured number in front of it when that question is raised.
 
 ---
 
