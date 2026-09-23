@@ -1,29 +1,14 @@
 import "reflect-metadata"
 import "dotenv/config"
 import { NestFactory } from "@nestjs/core"
-import { ValidationPipe } from "@nestjs/common"
-import helmet from "helmet"
+import { NestExpressApplication } from "@nestjs/platform-express"
 import { AppModule } from "./app.module"
+import { configureApp } from "./app.setup"
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create<NestExpressApplication>(AppModule)
 
-  app.use(helmet())
-  app.setGlobalPrefix("v1")
-  const corsOrigin = process.env.CORS_ORIGIN
-  app.enableCors({
-    origin: corsOrigin ? corsOrigin.split(",").map((o) => o.trim()) : true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    credentials: true,
-  })
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  )
+  configureApp(app)
 
   const port = Number(process.env.PORT ?? 3000)
   await app.listen(port, "0.0.0.0")

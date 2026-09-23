@@ -1,8 +1,10 @@
 import { Module } from "@nestjs/common"
 import { APP_GUARD } from "@nestjs/core"
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
+import { ThrottlerModule } from "@nestjs/throttler"
 import { AppController } from "./app.controller"
 import { AuthModule } from "./auth/auth.module"
+import { ClientAwareThrottlerGuard } from "./auth/throttler.guard"
+import { buildThrottlerOptions } from "./common/rate-limit.config"
 import { DatabaseModule } from "./database/database.module"
 import { DebugModule } from "./debug/debug.module"
 import { ReportsModule } from "./reports/reports.module"
@@ -11,12 +13,7 @@ import { UsersModule } from "./users/users.module"
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: process.env.NODE_ENV === "production" ? 10 : 10_000,
-      },
-    ]),
+    ThrottlerModule.forRoot(buildThrottlerOptions()),
     DatabaseModule,
     AuthModule,
     UsersModule,
@@ -25,6 +22,6 @@ import { UsersModule } from "./users/users.module"
     DebugModule,
   ],
   controllers: [AppController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: ClientAwareThrottlerGuard }],
 })
 export class AppModule {}

@@ -14,10 +14,12 @@ import {
   UseInterceptors,
 } from "@nestjs/common"
 import { FileInterceptor } from "@nestjs/platform-express"
+import { Throttle } from "@nestjs/throttler"
 import { memoryStorage } from "multer"
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
+import { UPLOAD_THROTTLE } from "../common/rate-limit.config"
 import { SurveysService } from "./surveys.service"
 import { SurveysAttachmentsService } from "./surveys-attachments.service"
 import { SurveyUpsertDto } from "./dtos/survey-upsert.dto"
@@ -85,6 +87,7 @@ export class SurveysController {
   }
 
   @Post(":id/attachments")
+  @Throttle(UPLOAD_THROTTLE)
   async createAttachment(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
@@ -99,6 +102,7 @@ export class SurveysController {
   }
 
   @Put(":id/attachments/:attachmentId/upload")
+  @Throttle(UPLOAD_THROTTLE)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),

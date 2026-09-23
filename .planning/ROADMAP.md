@@ -107,7 +107,19 @@ Plans:
   6. Developer tools (API URL override, data reset) are absent from production builds, and the nearby-parcels bbox is sent as `minLng,minLat,maxLng,maxLat`.
   7. The pre-Auth0 session stubs are gone (`handleVerifyEmail`, `handleResendVerification`, `handleCancelEmailVerification`, `pendingEmailVerification`, `devVerificationToken`, `refreshToken: ""`), and no caller still tests `accessToken || refreshToken`.
 
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+
+- [x] 01.2-01-PLAN.md — API rate limiting: per-client tracker (bearer hash / trusted IP), trust proxy, raised production limits, tighter /sync and upload limits (wave 1)
+- [ ] 01.2-02-PLAN.md — API identity and reports: email_verified-gated linking, race-free provisioning, private reported events, reason bound, migration 013 (wave 1)
+- [ ] 01.2-03-PLAN.md — Mobile test tooling (RNTL) and Auth0 error classification in useAuth0Session, forced refresh on 401 (wave 1)
+- [ ] 01.2-04-PLAN.md — Mobile quick fixes: dev tools only in __DEV__, nearby-parcels bbox order (wave 1)
+- [ ] 01.2-05-PLAN.md — DebugModule and HS256 path absent in production, /v1/debug/* 404 (wave 2)
+- [ ] 01.2-06-PLAN.md — Session end never purges; retry-later handling; pre-Auth0 stubs removed (wave 2)
+- [ ] 01.2-07-PLAN.md — Local-data owner marker, unsynced-work count, useLocalDataOwner hook (wave 2)
+- [ ] 01.2-08-PLAN.md — Confirmed-purge logout, owner-gated sync, blocking conflict screen (wave 3)
+- [ ] 01.2-09-PLAN.md — Phase gate and on-device verification (wave 4, checkpoint)
 
 ### Phase 01.3: CI and test safety net (INSERTED)
 
@@ -146,7 +158,7 @@ Plans:
 
 **Goal**: The queue on the phone drains exactly once, in bounded batches, survives crashes, and never loses or silently drops a photo.
 **Depends on**: Phase 01.3
-**Requirements**: REQ-AUD-sync-engine, REQ-AUD-local-storage, REQ-AUD-photos
+**Requirements**: REQ-AUD-sync-engine, REQ-AUD-local-storage, REQ-AUD-photos, REQ-AUD-offline-start
 **Source**: audit lots L11a, L11b, L12, findings M-H1, M-H2, M-H4, ARCH-3 (mobile), ARCH-5, and the retry-cap, timeout, pull-overwrite, autosave and ID findings
 **Success Criteria** (what must be TRUE):
 
@@ -156,6 +168,7 @@ Plans:
   4. SQLite writes that span several statements run in a transaction, the schema is versioned with `PRAGMA user_version`, and new IDs are UUIDs.
   5. Photos are resized (2048 px, JPEG 0.7) and copied to the document directory at capture, uploaded by streaming, and a missing local file is shown to the user instead of being deleted silently.
   6. Attachments pulled from the server are displayable (no more `local_uri=""` dead rows: fetched on demand through their presigned URL and cached), and thumbnails and the detail carousel render through `expo-image` from downsized sources.
+  7. A cold start with no network and valid stored credentials opens the app on the signed-in screens with the last known profile, instead of the login overlay; the profile refreshes from `/me` once the API is reachable.
 
 **Plans**: TBD
 
@@ -331,7 +344,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 |-------|----------------|--------|-----------|
 | 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
-| 1.2. Stop field data loss and account exposure | 0/TBD | Not started | - |
+| 1.2. Stop field data loss and account exposure | 1/9 | In Progress|  |
 | 1.3. CI and test safety net | 0/TBD | Not started | - |
 | 1.4. API sync integrity | 0/TBD | Not started | - |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
@@ -348,7 +361,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 ## Coverage
 
-All 65 MVP requirements map to exactly one phase. 46 carry build work across Phases 1–7 (23 of them
+All 66 MVP requirements map to exactly one phase. 47 carry build work across Phases 1–7 (24 of them
 from the 2026-09 code audit, Phases 1.2–1.9); the other 19 are already built and are verified in Phase 7's field tests. Full mapping in
 `.planning/REQUIREMENTS.md` → Traceability.
 
