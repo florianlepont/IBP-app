@@ -107,10 +107,10 @@ every binding contract (conflict-report warning 5).
 ### AUD — Code Audit Remediation (2026-09)
 
 Source: `docs/audits/audit-2026-09-code-complet.md` (findings) and `docs/audits/plan-remediation-2026-09.md`
-(lots L1–L20). Only the lots that threaten the core value — no data loss, no duplicates — or that
-expose accounts are in this milestone; the rest is deferred below.
+(lots L1–L20). All twenty lots are in this milestone: the lots that threaten the core value — no data
+loss, no duplicates — or that expose accounts run first (Phases 1.2–1.5), the rest right after (Phases 1.6–1.9).
 
-- [ ] **REQ-AUD-session-data-loss** — A token-refresh failure caused by the network, a timeout or an unknown error never deletes local surveys, photos or the sync queue; only an explicit refresh-token rejection ends the session, the queue survives re-login with the same account, and logout with unsynced work purges only after a confirmation that counts it. The 401 retry forces a token refresh. *(Audit M-C1 — critical. Lot L1)*
+- [ ] **REQ-AUD-session-data-loss** — A token-refresh failure caused by the network, a timeout or an unknown error never deletes local surveys, photos or the sync queue; only an explicit refresh-token rejection ends the session, the queue survives re-login with the same account, and logout with unsynced work purges only after a confirmation that counts it. The 401 retry forces a token refresh. The pre-Auth0 session stubs are removed. *(Audit M-C1 — critical. Lot L1)*
 - [ ] **REQ-AUD-rate-limit** — Rate limiting keys on the real client behind Caddy (`trust proxy` loopback, per-user tracker) with production limits that one syncing device cannot exhaust for everyone. *(Audit A-C1 — critical. Lot L2)*
 - [ ] **REQ-AUD-debug-surface** — `DebugModule` and the HS256 test-token path are not loaded in production. *(Audit A-H4. Lot L2)*
 - [ ] **REQ-AUD-identity** — Email-based account linking requires `email_verified === true`; first-login provisioning is race-free; a report does not expose the reporter to the reported surveyor; report reasons are length-bounded. *(Audit A-H1, A-M6. Lot L3)*
@@ -122,7 +122,18 @@ expose accounts are in this milestone; the rest is deferred below.
 - [ ] **REQ-AUD-transactions** — Every multi-statement API write runs in one transaction with its event, the upsert is guarded on `sync_version`, concurrent submits on a parcel resolve to one success and one 409, and account deletion commits in the database before deleting the Auth0 user. *(Audit ARCH-3, A-M1, A-M7, A-M9. Lot L9)*
 - [ ] **REQ-AUD-sync-engine** — The mobile queue drains single-flight, in batches of at most 100, marks a survey synced only when its queue is empty, honours the documented retry cap without counting network/5xx errors, times out every request, and never lets a pull overwrite pending or blocked local changes; autosave reschedules instead of skipping; new IDs are UUIDs. *(Audit M-H1, M-H4 and the mobile medium findings. Lot L11a)*
 - [ ] **REQ-AUD-local-storage** — Multi-statement SQLite writes are transactional, the local schema is versioned with `PRAGMA user_version`, queue rows carry an explicit operation type, and the queue is indexed. *(Audit ARCH-3 mobile, ARCH-5. Lot L11b)*
-- [ ] **REQ-AUD-photos** — Photos are resized and persisted in the document directory at capture, uploaded by streaming, network errors do not consume the retry cap, and a missing local file is surfaced instead of silently dropped. *(Audit M-H2. Lot L12)*
+- [ ] **REQ-AUD-photos** — Photos are resized and persisted in the document directory at capture, uploaded by streaming, network errors do not consume the retry cap, and a missing local file is surfaced instead of silently dropped. Attachments pulled from the server are displayable, and thumbnails render through `expo-image` from downsized sources. *(Audit M-H2 and the remote-attachment and image findings. Lot L12)*
+
+- [ ] **REQ-AUD-changes-feed** — `/sync/changes` pages on a monotonic sequence and still accepts the old cursor; same-version replays with different content are conflicts; the per-poll re-send of event-less surveys is gone. *(Audit ARCH-6. Lot L10)*
+- [ ] **REQ-AUD-object-storage** — One `StorageService` for surveys, attachments and users; profile pictures in object storage; storage keys contained; upload size enforced; MIME allow-list checked by own property. *(Audit A-H3, A-M3, A-M4. Lot L13)*
+- [ ] **REQ-AUD-config** — Validated configuration schema, bounded `pg` pool with an error listener, strict CORS in production, Nest `Logger` everywhere, dead token secrets removed. *(Audit A-M8. Lot L14)*
+- [ ] **REQ-AUD-surveys-split** — `SurveysService` split into repository, survey, events, parcels and public-map services; batched parcel writes; column-scoped ownership checks; cursor pagination; cached, fully timed-out IGN fetch. *(Audit ARCH-2 and API efficiency findings. Lot L15)*
+- [ ] **REQ-AUD-db-tuning** — Public-surveys partial index, generated centroid columns with a btree index (no PostGIS), migration advisory lock, dead `auth_sessions` tables dropped. *(Audit efficiency findings, ARCH-7. Remainder of lot L16)*
+- [ ] **REQ-AUD-ibp-domain** — A shared `ibp-domain` workspace package holds the IBP rules and sync contract types used by both API and mobile, verified by one parity fixture. *(Audit ARCH-1, T6. Lot L17)*
+- [ ] **REQ-AUD-test-infra-rest** — The RS256 path of `AuthGuard` is tested against a local JWKS; the catch-all E2E suite is split by feature and uses random UUIDs. *(Audit T2, T5. Remainder of lot L7)*
+- [ ] **REQ-AUD-mobile-state** — Memoised contexts replace the prop funnel; the survey list is virtualised; completion is precomputed; screens are split under 400 lines; unused styles are removed; navigation is typed; the map requests by bbox and clusters markers. *(Audit ARCH-4 and mobile efficiency findings. Lot L18)*
+- [ ] **REQ-AUD-i18n-a11y** — Every user-facing string comes from a French i18n catalogue, status messages are user-facing, and interactive elements carry accessibility roles and labels. *(Audit i18n and accessibility findings. Lot L19)*
+- [ ] **REQ-AUD-hygiene** — Root package, tsconfig and unused dependencies cleaned up; `CLAUDE.md` and technical docs match the code; the audit links each finding to its closing PR. *(Audit ARCH-7, ARCH-8. Remainder of lot L20)*
 
 ## Cross-Cutting Business Rules
 
@@ -184,24 +195,6 @@ updatable without an app release. No SPEC or architecture document defines this 
 its own ADR, architecture block and contract before Epics E and G can be planned
 (conflict-report warning 6, moot for this milestone).
 
-## Deferred — Next Milestone (Code Audit Remainder)
-
-Audit lots that do not threaten data integrity or account safety for an internal-only milestone.
-Details in `docs/audits/plan-remediation-2026-09.md`.
-
-| Requirement | Lot | Note |
-|-------------|-----|------|
-| `REQ-AUD-changes-feed` | L10 | `/sync/changes` paged on a monotonic sequence; same-version replays compared by content |
-| `REQ-AUD-object-storage` | L13 | One `StorageService`; profile pictures in object storage (lost on redeploy today); storage-key containment; enforced upload size |
-| `REQ-AUD-config` | L14 | Validated config schema, `pg` pool limits and error listener, CORS, structured logging |
-| `REQ-AUD-surveys-split` | L15 | Split `SurveysService`, batch parcel writes, cursor pagination, IGN cache and body timeout |
-| `REQ-AUD-db-tuning` | L16 | Public-map partial index, generated centroid columns (btree, no PostGIS), migration advisory lock — becomes relevant with the public map |
-| `REQ-AUD-ibp-domain` | L17 | Shared `ibp-domain` workspace package for rules and contract types; parity fixture between API and mobile |
-| `REQ-AUD-mobile-state` | L18 | Contexts instead of prop funnel, `FlatList`, memoisation, screen split, map clustering |
-| `REQ-AUD-i18n-a11y` | L19 | French catalogue with i18n ready for other languages; accessibility props |
-| `REQ-AUD-hygiene` | L20 | Root package and tsconfig cleanup, unused dependencies, CLAUDE.md accuracy |
-| `REQ-AUD-test-infra-rest` | L7 | RS256 guard test with a local JWKS, E2E suite split by feature |
-
 ## Deferred — V2
 
 | Requirement | Note |
@@ -243,6 +236,16 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 | REQ-AUD-sync-engine | New | Phase 1.5 | Build |
 | REQ-AUD-local-storage | New | Phase 1.5 | Build |
 | REQ-AUD-photos | New | Phase 1.5 | Build |
+| REQ-AUD-changes-feed | New | Phase 1.6 | Build |
+| REQ-AUD-object-storage | New | Phase 1.6 | Build |
+| REQ-AUD-config | New | Phase 1.7 | Build |
+| REQ-AUD-surveys-split | New | Phase 1.7 | Build |
+| REQ-AUD-db-tuning | New | Phase 1.7 | Build |
+| REQ-AUD-ibp-domain | New | Phase 1.8 | Build |
+| REQ-AUD-test-infra-rest | New | Phase 1.8 | Build |
+| REQ-AUD-mobile-state | New | Phase 1.9 | Build |
+| REQ-AUD-i18n-a11y | New | Phase 1.9 | Build |
+| REQ-AUD-hygiene | New | Phase 1.9 | Build |
 | REQ-ML-contracts | New | Phase 2 | Build |
 | REQ-DOC-form-spec | New | Phase 2 | Build |
 | REQ-C-species-recognition | New | Phase 3 | Build |
@@ -288,12 +291,12 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 
 **Coverage:**
 
-- MVP requirements: **55** total
-- Mapped to phases: **55** ✓
+- MVP requirements: **65** total
+- Mapped to phases: **65** ✓
 - Unmapped: **0** ✓
-- Of which carry build work: **36** (19 are already built and are verified in Phase 7)
-- Deferred to next milestone: 19 community/social + 10 audit remainder · Deferred to V2: 4
+- Of which carry build work: **46** (19 are already built and are verified in Phase 7)
+- Deferred to next milestone: 19 · Deferred to V2: 4
 
 ---
 *Requirements defined: 2026-09-22*
-*Last updated: 2026-09-23 — code audit remediation inserted as Phases 1.2–1.5*
+*Last updated: 2026-09-23 — full code audit remediation inserted as Phases 1.2–1.9*

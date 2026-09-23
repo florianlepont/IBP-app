@@ -35,6 +35,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1.3: CI and test safety net** (INSERTED) - Typecheck in CI, reproducible image, tests that run real SQL
 - [ ] **Phase 1.4: API sync integrity** (INSERTED) - Validated sync payloads, no submit bypass, transactional writes
 - [ ] **Phase 1.5: Mobile sync engine reliability** (INSERTED) - Single-flight drain, bounded batches, durable photos
+- [ ] **Phase 1.6: Sync feed ordering and unified object storage** (INSERTED) - No skipped change between devices; one bounded storage service
+- [ ] **Phase 1.7: API configuration, service split and database tuning** (INSERTED) - Fail-fast config, split SurveysService, bounded and indexed queries
+- [ ] **Phase 1.8: Shared IBP domain package and test completeness** (INSERTED) - IBP rules defined once; RS256 path tested
+- [ ] **Phase 1.9: Mobile state architecture, i18n, accessibility and hygiene** (INSERTED) - Targeted re-renders, French catalogue, accessible controls, accurate docs
 - [ ] **Phase 2: Species Contracts & Data-Contract Corrections** - Give species a data model, an API surface and a migration; correct the stale form spec
 - [ ] **Phase 3: Species Recognition for Factor A** - Photograph a tree, get a species suggestion, keep or reject it
 - [ ] **Phase 4: Offline Map & Own-Survey Navigation** - Navigate a parcel with no network, and see your own surveys on the map
@@ -101,6 +105,7 @@ Plans:
   4. `DebugModule` and the HS256 test-token path are not loaded in production; `/v1/debug/*` returns 404 there.
   5. An unknown Auth0 `sub` is linked to an existing account by email only when Auth0 reports `email_verified === true` (Google/Apple social login keeps working); first-login provisioning is race-free (`INSERT … ON CONFLICT`); a report no longer exposes the reporter's identity to the reported surveyor.
   6. Developer tools (API URL override, data reset) are absent from production builds, and the nearby-parcels bbox is sent as `minLng,minLat,maxLng,maxLat`.
+  7. The pre-Auth0 session stubs are gone (`handleVerifyEmail`, `handleResendVerification`, `handleCancelEmailVerification`, `pendingEmailVerification`, `devVerificationToken`, `refreshToken: ""`), and no caller still tests `accessToken || refreshToken`.
 
 **Plans**: TBD
 
@@ -117,6 +122,7 @@ Plans:
   3. The API image is built from the repo root with `npm ci` against the root lockfile, runs as a non-root user, is tagged with the commit SHA as well as `latest`, and can only be pushed from `main`.
   4. Mobile unit tests execute real SQL (in-memory SQLite behind the `expo-sqlite` mock), hooks are tested with `renderHook`, `*.test.tsx` files are picked up, and the E2E database is reset before each run.
   5. Coverage runs in CI with per-directory thresholds set at today's measured values (ratchet).
+  6. Mobile changes run `expo-doctor` and `expo export`; a dependency audit fails CI on `high` vulnerabilities; CodeQL scans JavaScript/TypeScript.
 
 **Plans**: TBD
 
@@ -149,6 +155,73 @@ Plans:
   3. The documented retry cap applies (8 attempts then `sync_blocked`), network and 5xx errors do not consume it, every sync request has a timeout, and a pull never overwrites a survey that has a pending or blocked local change.
   4. SQLite writes that span several statements run in a transaction, the schema is versioned with `PRAGMA user_version`, and new IDs are UUIDs.
   5. Photos are resized (2048 px, JPEG 0.7) and copied to the document directory at capture, uploaded by streaming, and a missing local file is shown to the user instead of being deleted silently.
+  6. Attachments pulled from the server are displayable (no more `local_uri=""` dead rows: fetched on demand through their presigned URL and cached), and thumbnails and the detail carousel render through `expo-image` from downsized sources.
+
+**Plans**: TBD
+
+### Phase 01.6: Sync feed ordering and unified object storage (INSERTED)
+
+**Goal**: No change is ever skipped or silently dropped between devices, and every stored file lives in object storage behind one service that bounds what it accepts.
+**Depends on**: Phase 01.4
+**Requirements**: REQ-AUD-changes-feed, REQ-AUD-object-storage
+**Source**: audit lots L10, L13, findings ARCH-6, A-H3, A-M3, A-M4, the `isAllowedMimeType` finding, the unbounded `/sync/changes` fallback
+**Success Criteria** (what must be TRUE):
+
+  1. `/v1/sync/changes` pages on a monotonic sequence (`survey_events.seq`), still accepts the old `(created_at, id)` cursor, and an event committed late is never skipped (E2E test).
+  2. Two devices sending the same `sync_version` with different content get a `sync_version_conflict` instead of a silent replay; the fallback that re-sends event-less surveys on every poll is gone.
+  3. One `StorageService` owns the S3 client, bucket and local mode for surveys, attachments and users; profile pictures are in object storage and survive a container restart.
+  4. Storage keys are built only from validated identifiers and stay inside the upload directory in local mode; the presigned PUT enforces `ContentLength` and confirmation rejects a size mismatch with 422.
+  5. `isAllowedMimeType` uses an own-property check, so `"constructor"` and other prototype keys are rejected.
+  6. `sync-conflict-resolution-v1.md` and `api-contract-v1.md` describe the new cursor and same-version rule.
+
+**Plans**: TBD
+
+### Phase 01.7: API configuration, service split and database tuning (INSERTED)
+
+**Goal**: The API fails fast on bad configuration, its survey logic is split into reviewable units, and its queries are bounded and indexed.
+**Depends on**: Phase 01.6
+**Requirements**: REQ-AUD-config, REQ-AUD-surveys-split, REQ-AUD-db-tuning
+**Source**: audit lots L14, L15, the remainder of L16, findings A-M8, ARCH-2, CORS and logging findings, every API efficiency finding
+**Success Criteria** (what must be TRUE):
+
+  1. Configuration is read through `@nestjs/config` with a schema validated at startup; production refuses to start on default credentials or an empty `AUTH0_AUDIENCE`; `CORS_ORIGIN` is required in production; `REFRESH_TOKEN_SECRET` and `ACCESS_TOKEN_*` are gone.
+  2. The `pg` pool has `max`, `idleTimeoutMillis`, `statement_timeout` and an `error` listener; services log through the Nest `Logger`, and a failed authentication logs only its message and code.
+  3. `SurveysService` is split into a repository, survey, events, parcels (merging the internal IGN client with `CadastreProviderService`) and public-map services; `getSurveyForUser` and `insertEvent` exist once.
+  4. Parcel ids are written in one batched statement, ownership checks select only the columns they need, list endpoints (`listForUser`, `getEvents`, `listReports`) paginate by cursor while still answering unpaginated callers, and the IGN fetch caches per tile and times out on the body as well as the headers. A 100-operation sync batch issues at least three times fewer queries than today.
+  5. The public-surveys partial index and generated `centroid_lat`/`centroid_lng` columns with a btree index exist (no PostGIS), migrations take a `pg_advisory_lock`, and the dead `auth_sessions` tables are dropped — `EXPLAIN ANALYZE` on 10 000 surveys attached to the PR.
+
+**Plans**: TBD
+
+### Phase 01.8: Shared IBP domain package and test completeness (INSERTED)
+
+**Goal**: The IBP rules and the sync contract types are defined once and proven identical on both sides, and the API's authentication path is tested for real.
+**Depends on**: Phase 01.3. Should follow Phase 01.1, so the extracted rules are the ratified method version.
+**Requirements**: REQ-AUD-ibp-domain, REQ-AUD-test-infra-rest
+**Source**: audit lot L17 and the remainder of L7, findings ARCH-1, T6, the untested RS256 path, the catch-all E2E suite
+**Success Criteria** (what must be TRUE):
+
+  1. A `packages/ibp-domain` workspace exports the factor keys, allowed sets, scoring and draft/submit validation as pure functions, plus the sync contract types; `IbpRulesService` and `mobile/src/app/ibp-scoring.ts` delegate to it and `mobile/src/app/types.ts` imports its contract types.
+  2. One parity fixture runs in the package, and the known drift (`factor_f_group_capped` exists only in the API today) is resolved.
+  3. The API image builds with the package and `expo export` resolves it in CI.
+  4. `AuthGuard`'s RS256 path is tested against a locally served JWKS: valid, expired, wrong audience and unknown `kid` tokens.
+  5. `surveys-idempotency.e2e-spec.ts` is split by feature (submit, visibility, public map, attachments, parcel history) and uses `randomUUID()` instead of `Date.now()`.
+
+**Plans**: TBD
+
+### Phase 01.9: Mobile state architecture, i18n, accessibility and hygiene (INSERTED)
+
+**Goal**: The app renders only what changed, reads in one language with proper accessibility, and the repository and its docs describe what is actually there.
+**Depends on**: Phase 01.5, Phase 01.8
+**Requirements**: REQ-AUD-mobile-state, REQ-AUD-i18n-a11y, REQ-AUD-hygiene
+**Source**: audit lots L18, L19, the remainder of L20, findings ARCH-4, ARCH-7, ARCH-8, every mobile efficiency finding, the i18n and accessibility findings
+**Success Criteria** (what must be TRUE):
+
+  1. Session, sync and surveys state come from memoised contexts; `useSurveySync` no longer returns a new ~60-key object each render, and a status update no longer re-renders every mounted tab (React DevTools profile before/after attached).
+  2. The survey list is a `FlatList` with memoised rows and stays fluid with 500 surveys; completion is precomputed at write time instead of parsing every payload; no screen file exceeds 400 lines; the 158 unused style keys are gone; navigation is typed (no `useNavigation() as any`).
+  3. The map requests by bbox, clusters markers, memoises them and debounces region changes.
+  4. Every user-facing string comes from a French i18n catalogue, status messages carry no ids or technical text, and every `Pressable` in the survey detail, survey form and map screens has an accessibility role and label.
+  5. The root `App.tsx`, the root runtime dependencies and the Expo-flavoured root tsconfig are gone; `bcryptjs`, `@nestjs/schedule` and the unused tab library are removed and `@expo/ngrok` is a dev dependency, with native iOS and Android builds still passing.
+  6. `CLAUDE.md` and the technical docs match the final state (versions, `/v1/sync`, `local_meta`, test conventions, CI steps, new modules), and the audit report links each finding to the PR that closed it.
 
 **Plans**: TBD
 
@@ -232,7 +305,7 @@ Plans:
 ### Phase 7: Field Validation
 
 **Goal**: An ecologist completes a full IBP survey offline on a real parcel, and it syncs back with no data loss and no duplicates — on record.
-**Depends on**: Phases 1.2, 1.4, 1.5 (field tests must not run on the data-loss and sync defects), 3, 4, 5, 6
+**Depends on**: Phases 1.2, 1.4, 1.5, 1.6 (field tests must not run on the data-loss and sync defects), 3, 4, 5, 6
 **Requirements**: REQ-FT-field-tests, REQ-QA-bug-a3-4, REQ-QA-bug-a6-2, REQ-QA-screen-tests, REQ-DOC-taxonomy, REQ-DOC-epicd-ids
 **Success Criteria** (what must be TRUE):
 
@@ -247,9 +320,9 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 1.1 → 1.2 → … → 1.9 → 2 → 3 → 4 → 5 → 6 → 7
 
-Phases 1.2–1.5 (audit remediation) do not depend on the species-recognition track and should run while Phase 1 waits on real devices.
+Phases 1.2–1.9 (audit remediation) do not depend on the species-recognition track and should run while Phase 1 waits on real devices. Phases 2–6 do not depend on 1.6–1.9 either, so they can interleave if the schedule requires it.
 
 Phases 4, 5 and 6 declare no dependency on the species-recognition track and can be reordered ahead
 of it if Phase 1 returns a no-go, or run in parallel with it.
@@ -262,6 +335,10 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.3. CI and test safety net | 0/TBD | Not started | - |
 | 1.4. API sync integrity | 0/TBD | Not started | - |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
+| 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |
+| 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
+| 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 0/TBD | Not started | - |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
@@ -271,8 +348,8 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 ## Coverage
 
-All 55 MVP requirements map to exactly one phase. 36 carry build work across Phases 1–7 (13 of them
-from the 2026-09 code audit, Phases 1.2–1.5); the other 19 are already built and are verified in Phase 7's field tests. Full mapping in
+All 65 MVP requirements map to exactly one phase. 46 carry build work across Phases 1–7 (23 of them
+from the 2026-09 code audit, Phases 1.2–1.9); the other 19 are already built and are verified in Phase 7's field tests. Full mapping in
 `.planning/REQUIREMENTS.md` → Traceability.
 
 ## Deferred
