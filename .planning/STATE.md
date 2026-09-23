@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-23T07:00:18.638Z"
+stopped_at: Completed 01-04-PLAN.md plus iteration-2 deviation
+last_updated: "2026-09-23T13:36:50.263Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 1 execution started
 progress:
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | ~4h | 3 tasks | 2 files |
 | Phase 01-species-recognition-approach-decision P03 | ~3h | 2 tasks | 18 files |
 | Phase 01 P04 | 50min | 2 tasks | 8 files |
+| Phase 01 P04b | ~5.5h | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Decisions table. Decisions affecting current work:
 - [Phase 01]: iOS 26+ scene-lifecycle-adoption crash (EXC_BREAKPOINT/SIGTRAP) is invisible on Simulator and only appears on a real device -- fixed by porting mobile/plugins/with-scene-delegate.js into the harness; this is the clearest evidence for why D-18's real-hardware requirement exists
 - [Phase 01-04]: Shipped float16 quantisation instead of int8 dynamic-range after measuring int8 caused a real 79.4% parity-agreement drop vs 100% for float16 — Export-parity check required by the plan caught real prediction degradation from int8, not noise
 - [Phase 01-04]: Evaluated per-genus accuracy against the raw, composition-unfiltered test split rather than hand-filtering it — Per-image filtering at 1,183-image test-split scale is the same hand-classify-at-scale work plan 02's coordinator guidance ruled out, and results already miss the bar by wide margins except one genus
+- [Phase 01-04-iter2]: User rejected iteration 1's no-go as premature (150 img/class vs 4200+ available, smallest backbone vs 36x unused latency headroom); coordinator directed a second iteration rather than accepting the first result — Iteration 1 constrained itself by assumptions its own measurements invalidated
+- [Phase 01-04-iter2]: Iteration 2 (MobileNetV3-Large, ~2000 img/class, season-stratified) found a data-limited result: 32/34 genera improved by mean +19.9pp top-3, still 0/34 clearing the 95% bar — Distinguishes data-limited from approach-limited for the ADR; neither a clean go nor a clean no-go
 
 ### Pending Todos
 
@@ -111,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T07:00:12.156Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-09-23T13:36:50.259Z
+Stopped at: Completed 01-04-PLAN.md plus iteration-2 deviation
 Resume file: None
