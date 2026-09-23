@@ -107,7 +107,18 @@ Plans:
   6. Developer tools (API URL override, data reset) are absent from production builds, and the nearby-parcels bbox is sent as `minLng,minLat,maxLng,maxLat`.
   7. The pre-Auth0 session stubs are gone (`handleVerifyEmail`, `handleResendVerification`, `handleCancelEmailVerification`, `pendingEmailVerification`, `devVerificationToken`, `refreshToken: ""`), and no caller still tests `accessToken || refreshToken`.
 
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+- [ ] 01.2-01-PLAN.md — API rate limiting: per-client tracker (bearer hash / trusted IP), trust proxy, raised production limits, tighter /sync and upload limits (wave 1)
+- [ ] 01.2-02-PLAN.md — API identity and reports: email_verified-gated linking, race-free provisioning, private reported events, reason bound, migration 013 (wave 1)
+- [ ] 01.2-03-PLAN.md — Mobile test tooling (RNTL) and Auth0 error classification in useAuth0Session, forced refresh on 401 (wave 1)
+- [ ] 01.2-04-PLAN.md — Mobile quick fixes: dev tools only in __DEV__, nearby-parcels bbox order (wave 1)
+- [ ] 01.2-05-PLAN.md — DebugModule and HS256 path absent in production, /v1/debug/* 404 (wave 2)
+- [ ] 01.2-06-PLAN.md — Session end never purges; retry-later handling; pre-Auth0 stubs removed (wave 2)
+- [ ] 01.2-07-PLAN.md — Local-data owner marker, unsynced-work count, useLocalDataOwner hook (wave 2)
+- [ ] 01.2-08-PLAN.md — Confirmed-purge logout, owner-gated sync, blocking conflict screen (wave 3)
+- [ ] 01.2-09-PLAN.md — Phase gate and on-device verification (wave 4, checkpoint)
 
 ### Phase 01.3: CI and test safety net (INSERTED)
 
