@@ -37,6 +37,7 @@ jest.mock("expo-network", () => ({
 
 import React from "react"
 import { useSurveySyncNetwork } from "./useSurveySyncNetwork"
+import { createSyncActivity } from "./sync-activity"
 
 function useBuildHook(overrides: Record<string, unknown> = {}) {
   const params = {
@@ -54,6 +55,7 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     ensureSyncOwner: jest.fn().mockResolvedValue(true),
     ownerStatus: "ok",
     recheckOwner: jest.fn().mockResolvedValue(undefined),
+    syncActivity: createSyncActivity(),
     ...overrides,
   }
   const hook = useSurveySyncNetwork(params as never)

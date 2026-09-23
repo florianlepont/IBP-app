@@ -5,6 +5,7 @@ import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from 
 import { isAuthRequiredError, isAuthTemporarilyUnavailableError } from "../auth-errors"
 import type { LocalDataOwnerStatus } from "../useLocalDataOwner"
 import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
+import { isSyncSuspendedError, SyncActivity } from "./sync-activity"
 import { isOnlineNetworkState } from "./utils"
 
 const RETRY_LATER_MESSAGE =
@@ -20,6 +21,10 @@ const OWNER_SUSPENDED_MESSAGE =
 // check has not approved this session yet (WR-07).
 const OWNER_CHECK_PENDING_MESSAGE =
   "Vérification des données locales en cours… La synchronisation reprendra ensuite."
+
+// WR-08: a local-data purge (logout, account switch) is in progress.
+const PURGE_IN_PROGRESS_MESSAGE =
+  "Synchronisation suspendue : suppression des données locales en cours."
 
 function ownerGateMessage(ownerStatus: LocalDataOwnerStatus): string {
   return ownerStatus === "conflict" ? OWNER_SUSPENDED_MESSAGE : OWNER_CHECK_PENDING_MESSAGE
@@ -43,6 +48,7 @@ type UseSurveySyncNetworkParams = {
   ensureSyncOwner: EnsureSyncOwner
   ownerStatus: LocalDataOwnerStatus
   recheckOwner: () => Promise<void>
+  syncActivity: SyncActivity
 }
 
 export function useSurveySyncNetwork({
@@ -58,6 +64,7 @@ export function useSurveySyncNetwork({
   ensureSyncOwner,
   ownerStatus,
   recheckOwner,
+  syncActivity,
 }: UseSurveySyncNetworkParams) {
   const syncInProgressRef = useRef(false)
   const pullInProgressRef = useRef(false)
@@ -99,7 +106,7 @@ export function useSurveySyncNetwork({
         }
         const result = await withAuthRetry(async (token, tokenSub) => {
           await assertSyncOwner(ensureSyncOwner, tokenSub)
-          return syncPending(apiUrl, token)
+          return syncActivity.run(() => syncPending(apiUrl, token))
         })
         await refreshLocalSurveys()
         await refreshLocalAttachments()
@@ -107,6 +114,12 @@ export function useSurveySyncNetwork({
           `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`,
         )
       } catch (error) {
+        if (isSyncSuspendedError(error)) {
+          if (mode === "manual") {
+            setStatus(PURGE_IN_PROGRESS_MESSAGE)
+          }
+          return
+        }
         if (isSyncOwnerMismatchError(error)) {
           setStatus(OWNER_RECHECK_MESSAGE)
           return
@@ -135,6 +148,7 @@ export function useSurveySyncNetwork({
       refreshLocalSurveys,
       retryFailedOwnerCheck,
       setStatus,
+      syncActivity,
       syncAllowed,
       withAuthRetry,
     ],
@@ -176,7 +190,7 @@ export function useSurveySyncNetwork({
       try {
         const result = await withAuthRetry(async (token, tokenSub) => {
           await assertSyncOwner(ensureSyncOwner, tokenSub)
-          return pullRemoteChanges(apiUrl, token)
+          return syncActivity.run(() => pullRemoteChanges(apiUrl, token))
         })
         if (result.surveys > 0 || result.attachments > 0) {
           await refreshLocalSurveys()
@@ -186,7 +200,7 @@ export function useSurveySyncNetwork({
           )
         }
       } catch (error) {
-        if (isSyncOwnerMismatchError(error)) {
+        if (isSyncOwnerMismatchError(error) || isSyncSuspendedError(error)) {
           return
         }
         if (isAuthTemporarilyUnavailableError(error)) {
@@ -211,6 +225,7 @@ export function useSurveySyncNetwork({
       refreshLocalSurveys,
       runSync,
       setStatus,
+      syncActivity,
       syncAllowed,
       withAuthRetry,
     ],
@@ -230,7 +245,7 @@ export function useSurveySyncNetwork({
       setStatus("Pulling server changes...")
       const result = await withAuthRetry(async (token, tokenSub) => {
         await assertSyncOwner(ensureSyncOwner, tokenSub)
-        return pullRemoteChanges(apiUrl, token)
+        return syncActivity.run(() => pullRemoteChanges(apiUrl, token))
       })
       await refreshLocalSurveys()
       await refreshLocalAttachments()
@@ -238,6 +253,10 @@ export function useSurveySyncNetwork({
         `Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`,
       )
     } catch (error) {
+      if (isSyncSuspendedError(error)) {
+        setStatus(PURGE_IN_PROGRESS_MESSAGE)
+        return
+      }
       if (isSyncOwnerMismatchError(error)) {
         setStatus(OWNER_RECHECK_MESSAGE)
         return
@@ -261,6 +280,7 @@ export function useSurveySyncNetwork({
     refreshLocalSurveys,
     retryFailedOwnerCheck,
     setStatus,
+    syncActivity,
     syncAllowed,
     withAuthRetry,
   ])

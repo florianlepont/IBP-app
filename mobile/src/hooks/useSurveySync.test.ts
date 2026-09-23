@@ -116,7 +116,9 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
   return useSurveySync({ ...DEFAULT_PARAMS, ...overrides } as never)
 }
 
-async function flushAsyncWork(turns = 5): Promise<void> {
+// The debug-reset and logout purges run behind the sync-activity tracker
+// (WR-08), which adds a few microtask hops before clearLocalIbpData.
+async function flushAsyncWork(turns = 20): Promise<void> {
   for (let index = 0; index < turns; index += 1) {
     await Promise.resolve()
   }
@@ -471,7 +473,8 @@ describe("useSurveySync", () => {
       const resetButton = mockAlert.mock.calls[0][2].find(
         (b: Record<string, unknown>) => b.text === "Reset",
       )
-      await resetButton.onPress()
+      resetButton.onPress()
+      await flushAsyncWork()
 
       expect(mockResetIbpData).toHaveBeenCalled()
       expect(mockClearLocalIbpData).toHaveBeenCalled()
@@ -603,11 +606,7 @@ describe("useSurveySync", () => {
         (b: Record<string, unknown>) => b.text === "Reset",
       )
       resetButton.onPress()
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
+      await flushAsyncWork()
 
       expect(onStopEditing).toHaveBeenCalled()
     })

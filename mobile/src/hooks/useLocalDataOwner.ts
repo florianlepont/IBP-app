@@ -7,6 +7,7 @@ import {
   setLocalDataOwner,
 } from "../storage/local-owner"
 import { clearLocalIbpData } from "../storage/surveys"
+import { purgeWhileSyncSuspended, SyncActivity } from "./survey-sync/sync-activity"
 
 export type LocalDataOwnerStatus = "idle" | "checking" | "ok" | "conflict" | "error"
 
@@ -30,8 +31,10 @@ const OWNER_CHECK_RETRY_MAX_MS = 60_000
 export function useLocalDataOwner(params: {
   sessionOwner: IdTokenClaims | null
   onLocalDataPurged: () => Promise<void>
+  /** When given, purges wait for in-flight syncs and block new ones (WR-08). */
+  syncActivity?: SyncActivity
 }) {
-  const { sessionOwner, onLocalDataPurged } = params
+  const { sessionOwner, onLocalDataPurged, syncActivity } = params
   const [status, setStatus] = useState<LocalDataOwnerStatus>("idle")
   const [foreignWork, setForeignWork] = useState<UnsyncedLocalWork>(EMPTY_WORK)
   const [foreignOwnerEmail, setForeignOwnerEmail] = useState<string | null>(null)
@@ -48,6 +51,23 @@ export function useLocalDataOwner(params: {
     approvedSubRef.current = sub
     setApprovedSub(sub)
   }, [])
+
+  // Purge another account's data and adopt it for `owner`, after any sync
+  // still writing that account's data has finished.
+  const purgeAndAdopt = useCallback(
+    async (owner: IdTokenClaims): Promise<void> => {
+      const purge = async (): Promise<void> => {
+        await clearLocalIbpData()
+        await setLocalDataOwner(owner)
+      }
+      if (syncActivity) {
+        await purgeWhileSyncSuspended(syncActivity, purge)
+      } else {
+        await purge()
+      }
+    },
+    [syncActivity],
+  )
 
   const recheck = useCallback(async () => {
     const currentOwner = sessionOwnerRef.current
@@ -103,8 +123,7 @@ export function useLocalDataOwner(params: {
           break
         }
         case "purge-and-adopt": {
-          await clearLocalIbpData()
-          await setLocalDataOwner(currentOwner)
+          await purgeAndAdopt(currentOwner)
           await onLocalDataPurged()
           markOk()
           break
@@ -126,7 +145,7 @@ export function useLocalDataOwner(params: {
         setStatus("error")
       }
     }
-  }, [approve, onLocalDataPurged])
+  }, [approve, onLocalDataPurged, purgeAndAdopt])
 
   // Called only after the user explicitly confirms discarding another
   // account's local data (plan 08's confirmation dialog) — it must never run
@@ -137,13 +156,12 @@ export function useLocalDataOwner(params: {
       return
     }
 
-    await clearLocalIbpData()
-    await setLocalDataOwner(currentOwner)
+    await purgeAndAdopt(currentOwner)
     await onLocalDataPurged()
     setForeignWork(EMPTY_WORK)
     approve(currentOwner.sub)
     setStatus("ok")
-  }, [approve, onLocalDataPurged])
+  }, [approve, onLocalDataPurged, purgeAndAdopt])
 
   const ensureSyncOwner = useCallback(async (tokenSub: string | null): Promise<boolean> => {
     const owner = sessionOwnerRef.current

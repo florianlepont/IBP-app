@@ -58,6 +58,7 @@ import { cleanup, renderHook, waitFor } from "@testing-library/react-native/pure
 import { IdTokenClaims } from "../app/id-token"
 import { useLocalDataOwner } from "./useLocalDataOwner"
 import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
+import { createSyncActivity } from "./survey-sync/sync-activity"
 
 afterEach(async () => {
   await cleanup()
@@ -77,6 +78,7 @@ let credentials: { token: string; sub: string | null } = { token: "", sub: null 
 const noopAsync = async (): Promise<void> => undefined
 const noop = (): void => undefined
 const SURVEYS: never[] = []
+const syncActivity = createSyncActivity()
 const withAuthRetry = <T>(fn: (token: string, tokenSub: string | null) => Promise<T>) =>
   fn(credentials.token, credentials.sub)
 
@@ -98,6 +100,7 @@ function useHarness(props: HarnessProps) {
     ensureSyncOwner: owner.ensureSyncOwner,
     ownerStatus: owner.status,
     recheckOwner: owner.recheck,
+    syncActivity,
   } as never)
   return { owner, network }
 }

@@ -54,6 +54,7 @@ import React from "react"
 import * as ImagePicker from "expo-image-picker"
 import { Alert } from "react-native"
 import { useSurveySyncSurveyOperations } from "./useSurveySyncSurveyOperations"
+import { createSyncActivity } from "./sync-activity"
 
 function useBuildHook(overrides: Record<string, unknown> = {}) {
   const params = {
@@ -76,6 +77,7 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     handleLoadCanonicalDetails: jest.fn().mockResolvedValue(undefined),
     syncAllowed: true,
     ensureSyncOwner: jest.fn().mockResolvedValue(true),
+    syncActivity: createSyncActivity(),
     ...overrides,
   }
   const hook = useSurveySyncSurveyOperations(params as never)

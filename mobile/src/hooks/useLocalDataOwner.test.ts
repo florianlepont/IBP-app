@@ -27,6 +27,7 @@ jest.mock("../storage/surveys", () => ({
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react-native/pure"
 import { IdTokenClaims } from "../app/id-token"
 import { useLocalDataOwner } from "./useLocalDataOwner"
+import { createSyncActivity } from "./survey-sync/sync-activity"
 
 // `cleanup()` is async (it awaits each mounted tree's unmount); awaiting it
 // here (rather than the fire-and-forget `afterEach(() => { cleanup() })`
@@ -130,6 +131,50 @@ describe("useLocalDataOwner", () => {
     expect(onLocalDataPurged).toHaveBeenCalledTimes(1)
     expect(result.current.status).toBe("ok")
     expect(result.current.syncAllowed).toBe(true)
+  })
+
+  test("WR-08: discardForeignData waits for an in-flight sync before purging", async () => {
+    mockGetLocalDataOwner.mockResolvedValue({ sub: "a", email: "a@b.fr" })
+    mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 2, attachments: 0, deletions: 0 })
+    const syncActivity = createSyncActivity()
+    const onLocalDataPurged = jest.fn().mockResolvedValue(undefined)
+    const events: string[] = []
+    mockClearLocalIbpData.mockImplementation(async () => {
+      events.push("purge")
+    })
+
+    const { result } = await renderHook(
+      (props: { sessionOwner: IdTokenClaims | null }) =>
+        useLocalDataOwner({ sessionOwner: props.sessionOwner, onLocalDataPurged, syncActivity }),
+      { initialProps: { sessionOwner: { sub: "b", email: "b@c.fr" } } },
+    )
+    await waitFor(() => expect(result.current.status).toBe("conflict"))
+
+    let finishSync!: () => void
+    void syncActivity.run(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSync = () => {
+            events.push("sync-write")
+            resolve()
+          }
+        }),
+    )
+
+    let discard: Promise<void> = Promise.resolve()
+    await act(async () => {
+      discard = result.current.discardForeignData()
+      await Promise.resolve()
+    })
+    expect(mockClearLocalIbpData).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishSync()
+      await discard
+    })
+
+    expect(events).toEqual(["sync-write", "purge"])
+    expect(result.current.status).toBe("ok")
   })
 
   test("storage rejection -> error, then recheck recovers", async () => {

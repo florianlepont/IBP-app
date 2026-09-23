@@ -18,6 +18,7 @@ import {
 } from "../../storage"
 import { isAuthRequiredError } from "../auth-errors"
 import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
+import { isSyncSuspendedError, SyncActivity } from "./sync-activity"
 import { formatSubmitReadinessError, guessMimeType, isUnauthorizedResultMessage } from "./utils"
 
 // D-04: these paths drain the whole sync_queue, so they honour the same owner
@@ -43,6 +44,7 @@ type UseSurveySyncSurveyOperationsParams = {
   handleLoadCanonicalDetails: (surveyId: string, options?: { silent?: boolean }) => Promise<void>
   syncAllowed: boolean
   ensureSyncOwner: EnsureSyncOwner
+  syncActivity: SyncActivity
 }
 
 export function useSurveySyncSurveyOperations({
@@ -62,6 +64,7 @@ export function useSurveySyncSurveyOperations({
   handleLoadCanonicalDetails,
   syncAllowed,
   ensureSyncOwner,
+  syncActivity,
 }: UseSurveySyncSurveyOperationsParams) {
   // Drains the queue only after the execution-time owner check passed for the
   // exact token about to be used (CR-01 / WR-01).
@@ -69,9 +72,9 @@ export function useSurveySyncSurveyOperations({
     () =>
       withAuthRetry(async (token, tokenSub) => {
         await assertSyncOwner(ensureSyncOwner, tokenSub)
-        return syncPending(apiUrl, token)
+        return syncActivity.run(() => syncPending(apiUrl, token))
       }),
-    [apiUrl, ensureSyncOwner, withAuthRetry],
+    [apiUrl, ensureSyncOwner, syncActivity, withAuthRetry],
   )
 
   const queueAttachmentAsset = useCallback(
@@ -285,7 +288,7 @@ export function useSurveySyncSurveyOperations({
             setStatus("Login required before changing visibility")
             return
           }
-          if (isSyncOwnerMismatchError(error)) {
+          if (isSyncOwnerMismatchError(error) || isSyncSuspendedError(error)) {
             setStatus(`Visibility queued locally (${visibility}); ${OWNER_GATE_SUFFIX}`)
             return
           }
@@ -459,7 +462,7 @@ export function useSurveySyncSurveyOperations({
               setStatus("Attachment removed locally. Login and sync to propagate server deletion.")
               return
             }
-            if (isSyncOwnerMismatchError(error)) {
+            if (isSyncOwnerMismatchError(error) || isSyncSuspendedError(error)) {
               await refreshLocalSurveys()
               await refreshLocalAttachments()
               setStatus(`Attachment removed locally; delete queued (${OWNER_GATE_SUFFIX})`)
