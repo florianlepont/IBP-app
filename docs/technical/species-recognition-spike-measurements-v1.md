@@ -1360,8 +1360,11 @@ Iteration 1's original file is preserved separately
 recorded in Sections 4–5 regardless of what sits at the canonical path — nothing about iteration 1's
 evidence depends on that file continuing to exist there. Iteration 2 is promoted because it is
 the more capable, more current candidate and the one the ADR (plan 01-06) and any further device
-measurement (plan 01-05) should reason about going forward; `eval/GATE` is updated to
-`GATE-MODEL: PASS` referencing this promoted model (Section 10.6).
+measurement (plan 01-05) should reason about going forward; `eval/GATE` reads
+`GATE-MODEL: PASS`, referencing this promoted (iteration 2) model. `eval/results/` (canonical,
+no suffix) was also updated to iteration 2's per-genus CSV/JSON outputs, matching the promoted
+model; iteration 1's own results remain separately archived at `eval/results_iteration1/`
+(gitignored) and unmodified in Sections 4–5 above.
 
 **What this means for the ADR.** Iteration 2 answers the question the user's rejection asked:
 the no-go was data-limited, not approach-limited — accuracy moved broadly and substantially
