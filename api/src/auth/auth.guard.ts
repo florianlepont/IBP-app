@@ -13,6 +13,10 @@ const AUTH0_ACCEPTED_ISSUERS = Array.from(
   new Set(AUTH0_JWKS_DOMAINS.map((domain) => `https://${domain}/`)),
 )
 
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "23505"
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly jwksClients: JwksClient[]
@@ -147,17 +151,11 @@ export class AuthGuard implements CanActivate {
       if (linked.rows.length > 0) {
         return linked.rows[0]
       }
-    } else {
-      // Unverified (or unknown) email: never link to an existing account — that would
-      // be an account takeover path. Refuse if the email is already taken.
-      const byEmail = await this.db.query<{ id: string }>(`SELECT 1 FROM users WHERE email = $1`, [
-        email,
-      ])
-      if (byEmail.rows.length > 0) {
-        throw new Error("Refusing to link an unverified email to an existing account")
-      }
     }
 
+    // Insert first, then classify a conflict (D-09). No SELECT-by-email guard
+    // runs before the insert: a concurrent first login for the same sub would
+    // otherwise find the row its twin just created and be refused.
     try {
       const inserted = await this.db.query<AuthenticatedUser>(
         `INSERT INTO users (id, auth0_sub, email, display_name, first_name, last_name, role)
@@ -168,19 +166,23 @@ export class AuthGuard implements CanActivate {
       )
       return inserted.rows[0]
     } catch (err) {
-      if (typeof err === "object" && err !== null && "code" in err && err.code === "23505") {
-        // A concurrent first login for the same sub raced us past the ON-CONFLICT insert
-        // by tripping the email UNIQUE index instead. Re-read the row the winner created.
-        const retry = await this.db.query<AuthenticatedUser>(
-          `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
-           FROM users WHERE auth0_sub = $1`,
-          [auth0Sub],
-        )
-        if (retry.rows.length > 0) {
-          return retry.rows[0]
-        }
+      if (!isUniqueViolation(err)) {
+        throw err
       }
-      throw err
+
+      // The email UNIQUE index tripped. Either a concurrent first login for the
+      // same sub created the row first (return it), or the email belongs to a
+      // different account: an unverified (or unknown) email is never linked to
+      // it — that would be an account takeover path.
+      const retry = await this.db.query<AuthenticatedUser>(
+        `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
+         FROM users WHERE auth0_sub = $1`,
+        [auth0Sub],
+      )
+      if (retry.rows.length > 0) {
+        return retry.rows[0]
+      }
+      throw new Error("Refusing to link this email to an existing account")
     }
   }
 
