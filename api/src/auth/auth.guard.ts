@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common"
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common"
 import { Request } from "express"
 import * as jwt from "jsonwebtoken"
 import { JwksClient } from "jwks-rsa"
@@ -12,6 +18,14 @@ const AUTH0_JWKS_DOMAINS = Array.from(new Set([AUTH0_PUBLIC_DOMAIN, AUTH0_DOMAIN
 const AUTH0_ACCEPTED_ISSUERS = Array.from(
   new Set(AUTH0_JWKS_DOMAINS.map((domain) => `https://${domain}/`)),
 )
+
+/**
+ * Stable error code returned (HTTP 403) when first-login provisioning refuses
+ * to attach an Auth0 identity to an email that already belongs to another
+ * account (D-08). It is a policy refusal, not an invalid token: clients must
+ * not refresh and retry.
+ */
+export const EMAIL_ALREADY_LINKED_CODE = "email_already_linked"
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && err.code === "23505"
@@ -53,6 +67,9 @@ export class AuthGuard implements CanActivate {
       request.user = user
       return true
     } catch (err) {
+      if (err instanceof ForbiddenException) {
+        throw err
+      }
       console.error("[AuthGuard] Token validation failed:", err)
       throw new UnauthorizedException()
     }
@@ -185,7 +202,12 @@ export class AuthGuard implements CanActivate {
       if (retry.rows.length > 0) {
         return retry.rows[0]
       }
-      throw new Error("Refusing to link this email to an existing account")
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "Forbidden",
+        code: EMAIL_ALREADY_LINKED_CODE,
+        message: "This email address already belongs to another account",
+      })
     }
   }
 

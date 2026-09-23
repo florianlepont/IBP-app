@@ -1,4 +1,4 @@
-import { UnauthorizedException } from "@nestjs/common"
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
 import * as jwt from "jsonwebtoken"
 import { AuthGuard } from "../src/auth/auth.guard"
 
@@ -99,6 +99,55 @@ describe("AuthGuard", () => {
     const token = makeToken(AUTH_USER.id)
 
     await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
+  })
+})
+
+describe("canActivate with Auth0 tokens (WR-04)", () => {
+  let originalNodeEnv: string | undefined
+
+  beforeEach(() => {
+    originalNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+  })
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    jest.restoreAllMocks()
+  })
+
+  it("refusing to link an email returns 403 email_already_linked, not 401", async () => {
+    const { guard, db } = buildGuard()
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockResolvedValue({ sub: "auth0|attacker" })
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: AUTH_USER.email, email_verified: false }),
+    } as Response)
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
+      .mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "23505" })) // INSERT
+      .mockResolvedValueOnce({ rows: [] }) // re-SELECT by auth0_sub
+
+    const error = await guard.canActivate(makeContext("rs256-token")).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ForbiddenException)
+    expect((error as ForbiddenException).getStatus()).toBe(403)
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      code: "email_already_linked",
+    })
+  })
+
+  it("an invalid token is still a 401", async () => {
+    const { guard } = buildGuard()
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockRejectedValue(new Error("jwt expired"))
+
+    await expect(guard.canActivate(makeContext("rs256-token"))).rejects.toBeInstanceOf(
       UnauthorizedException,
     )
   })

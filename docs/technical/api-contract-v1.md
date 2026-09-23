@@ -34,7 +34,20 @@ Authentication is fully delegated to **Auth0**. The backend does not expose logi
 2. Auth0 issues a signed JWT access token (RS256).
 3. The mobile sends this token as `Authorization: Bearer <token>` on every API request.
 4. The backend's `AuthGuard` validates the JWT against Auth0's JWKS endpoint (`/.well-known/jwks.json`).
-5. On first login, the backend auto-provisions a DB user record from Auth0's `/userinfo` endpoint. If a user with the same email already exists, the Auth0 `sub` is linked to that record.
+5. On first login, the backend auto-provisions a DB user record from Auth0's `/userinfo` endpoint (race-free: concurrent first requests for the same `sub` all resolve to the same user).
+   - If `/userinfo` reports `email_verified: true` and a user with the same email exists **and is not yet linked** to any Auth0 identity (`auth0_sub IS NULL`, e.g. a pre-Auth0 account), the Auth0 `sub` is linked to that record.
+   - An account already linked to another `sub` is never re-pointed, and an unverified (or missing) email is never linked to an existing account. In both cases the request is refused with **403**, not 401 (the token is valid; this is a policy refusal):
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "code": "email_already_linked",
+  "message": "This email address already belongs to another account"
+}
+```
+
+Clients must match on `code`, must **not** refresh the token and retry on this 403, and should tell the user to sign in with the method used to create the account. Every other authentication failure (missing, expired or invalid token) remains **401**.
 
 ### Logout
 

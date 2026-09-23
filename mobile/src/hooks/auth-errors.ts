@@ -1,4 +1,5 @@
 import { CredentialsManagerError, CredentialsManagerErrorCodes } from "react-native-auth0"
+import { ApiError } from "../api/client"
 
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
 export const AUTH_TEMPORARILY_UNAVAILABLE_ERROR = "AUTH_TEMPORARILY_UNAVAILABLE"
@@ -54,4 +55,26 @@ export function isAuthRequiredError(error: unknown): boolean {
 
 export function isAuthTemporarilyUnavailableError(error: unknown): boolean {
   return error instanceof Error && error.message === AUTH_TEMPORARILY_UNAVAILABLE_ERROR
+}
+
+/**
+ * The API refuses (HTTP 403, code "email_already_linked") to attach this Auth0
+ * identity to an email that already belongs to another account. It is a policy
+ * refusal, not an invalid token: never refresh and retry.
+ */
+export const EMAIL_ALREADY_LINKED_CODE = "email_already_linked"
+
+export const EMAIL_ALREADY_LINKED_MESSAGE =
+  "Cette adresse e-mail est déjà associée à un autre compte. Connectez-vous avec la méthode utilisée lors de la création de ce compte."
+
+export function isEmailAlreadyLinkedError(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 403) {
+    return false
+  }
+  const body = error.body
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    (body as { code?: unknown }).code === EMAIL_ALREADY_LINKED_CODE
+  )
 }

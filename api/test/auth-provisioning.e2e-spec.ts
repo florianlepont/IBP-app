@@ -118,7 +118,10 @@ describe("Auth0 first-login provisioning (e2e, real DB)", () => {
       json: async () => ({ email, email_verified: true }),
     } as Response)
 
-    await expect(provision(guard, `google-oauth2|other-${runId}`)).rejects.toThrow()
+    await expect(provision(guard, `google-oauth2|other-${runId}`)).rejects.toMatchObject({
+      status: 403,
+      response: { code: "email_already_linked" },
+    })
 
     const row = await db.query<{ auth0_sub: string | null }>(
       `SELECT auth0_sub FROM users WHERE id = $1`,
@@ -158,7 +161,10 @@ describe("Auth0 first-login provisioning (e2e, real DB)", () => {
       json: async () => ({ email, email_verified: false }),
     } as Response)
 
-    await expect(provision(guard, `auth0|attacker-${runId}`)).rejects.toThrow()
+    await expect(provision(guard, `auth0|attacker-${runId}`)).rejects.toMatchObject({
+      status: 403,
+      response: { code: "email_already_linked" },
+    })
 
     const row = await db.query<{ auth0_sub: string | null }>(
       `SELECT auth0_sub FROM users WHERE id = $1`,
