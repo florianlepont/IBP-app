@@ -1,4 +1,5 @@
-import { IsOptional, IsString } from "class-validator"
+import { IsOptional, IsString, MaxLength } from "class-validator"
+import { REPORT_REASON_MAX_LENGTH } from "../reports.types"
 
 export class CreateReportDto {
   @IsOptional()
@@ -7,5 +8,6 @@ export class CreateReportDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(REPORT_REASON_MAX_LENGTH)
   reason?: string
 }

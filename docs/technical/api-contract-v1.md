@@ -1,17 +1,20 @@
 # V1 API Contract
 
 ## Status
+
 Accepted for V1 baseline (validated on 2026-03-08, non-exhaustive by design). V1.1 parcel/history extension proposed on 2026-03-10. Auth section updated on 2026-04-06 to reflect Auth0 delegation. `/me` endpoints updated to match implementation. `DELETE /me` added (US-A7).
 
 Base path: `/v1`
 
 ## Principles
+
 - JSON request/response format
 - Bearer token authentication for protected endpoints
 - Idempotent survey upsert via (`id`, `sync_version`)
 - UTC timestamps in ISO-8601 format
 
 ## Entity Coverage (Data Contract -> API)
+
 - `User`: covered
 - `Auth Session`: covered
 - `Survey`: covered
@@ -26,6 +29,7 @@ Base path: `/v1`
 Authentication is fully delegated to **Auth0**. The backend does not expose login, register, refresh, or logout endpoints. All token issuance and session lifecycle (access token, refresh token, rotation, revocation) are handled by Auth0.
 
 ### How it works
+
 1. The mobile app authenticates via Auth0 (Universal Login, social providers, or email/password).
 2. Auth0 issues a signed JWT access token (RS256).
 3. The mobile sends this token as `Authorization: Bearer <token>` on every API request.
@@ -33,17 +37,21 @@ Authentication is fully delegated to **Auth0**. The backend does not expose logi
 5. On first login, the backend auto-provisions a DB user record from Auth0's `/userinfo` endpoint. If a user with the same email already exists, the Auth0 `sub` is linked to that record.
 
 ### Logout
+
 Handled client-side: the mobile clears its local token storage. Token revocation (refresh token) is performed directly against Auth0.
 
 ### Social / SSO providers
+
 Supported providers (Apple, Google, etc.) are configured in the Auth0 tenant. No backend changes are needed to add or remove providers.
 
 ## 1.1) User Profile
 
 ### GET /me
+
 Get current authenticated user profile.
 
 Response `200`:
+
 ```json
 {
   "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
@@ -58,14 +66,17 @@ Response `200`:
 ```
 
 ### PATCH /me
+
 Partially update editable profile fields.
 Editable fields in V1: `first_name`, `last_name`, `display_name`, `profile_picture_url`.
 
 Notes:
+
 - `email` is **not** editable via this endpoint. Use `PATCH /me/email` instead.
 - Setting `profile_picture_url` to `null` removes the profile picture URL.
 
 Request:
+
 ```json
 {
   "first_name": "Florian",
@@ -76,6 +87,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
@@ -90,9 +102,11 @@ Response `200`:
 ```
 
 ### PATCH /me/email
+
 Change the authenticated user's email address.
 
 Request:
+
 ```json
 {
   "email": "florian@example.com"
@@ -102,6 +116,7 @@ Request:
 Response `204`.
 
 Rules:
+
 - New email must differ from current email (`400` otherwise).
 - Email is updated on Auth0 first (triggers a verification email), then in the DB.
 - If the DB update fails with a uniqueness conflict, the Auth0 change is rolled back.
@@ -109,18 +124,22 @@ Rules:
 - Returns `400` with code `Email already taken` if the email conflicts in the DB.
 
 ### POST /me/password-reset
+
 Trigger a password reset email for the authenticated user (email/password accounts only).
 
 Response `204`.
 
 Notes:
+
 - Sends a secure reset link to the user's current email via Auth0's password reset flow.
 - No-op for users authenticated exclusively via social providers (no password set).
 
 ### PUT /me/profile-picture
+
 Upload user profile picture (`multipart/form-data`, field name: `file`).
 
 Response `200`:
+
 ```json
 {
   "profile_picture_url": "/me/profile-picture?v=1741525200",
@@ -140,21 +159,25 @@ Response `200`:
 ```
 
 ### GET /me/profile-picture
+
 Download current authenticated user profile picture.
 
 Response `200`: binary image stream.
 
 ### DELETE /me/profile-picture
+
 Remove current authenticated user profile picture.
 
 Response `204`.
 
 ### DELETE /me
+
 Permanently delete the authenticated user's account.
 
 Response `204`.
 
 Rules:
+
 - Immediate and irreversible — no grace period.
 - The user is deleted from Auth0 (`DELETE /api/v2/users/{auth0_sub}`). Requires M2M token with `delete:users` scope.
 - All personal identity data (name, email, profile picture) is deleted from the DB.
@@ -167,9 +190,11 @@ Rules:
 ## 2) Surveys
 
 ### POST /surveys
+
 Create or update one survey (idempotent upsert).
 
 Request:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -198,6 +223,7 @@ Request:
 Map centering metadata stays client-local. Server map display is derived from linked parcel centroids (`display_location`).
 
 V1.1 addendum fields:
+
 - `parcel_ids`: French cadastral parcel identifiers (at least one required at submit).
 - `parcel_id`: compatibility primary parcel pointer.
 - `observation_year`: integer year used for longitudinal history.
@@ -205,6 +231,7 @@ V1.1 addendum fields:
 - `previous_survey_id`: optional link to previous survey version on same parcel.
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -216,9 +243,11 @@ Response `200`:
 ```
 
 ### GET /surveys?status=&from=&to=&q=
+
 List current user surveys with filters.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -238,9 +267,11 @@ Response `200`:
 ```
 
 ### GET /surveys/{id}
+
 Get one survey with full payload.
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -271,14 +302,17 @@ Response `200`:
 ```
 
 ### PATCH /surveys/{id}
+
 Partially update survey fields.
 
 Lifecycle rule in V1:
+
 - While `status=draft`, business fields are editable (`site_name`, parcel linkage, region/stage, factors, visibility).
 - While `status=submitted`, observation payload is read-only.
 - For `submitted`, only publication visibility changes are allowed (use dedicated endpoint below).
 
 Request:
+
 ```json
 {
   "site_name": "Foret de Rambouillet - Secteur Nord",
@@ -295,6 +329,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -306,9 +341,11 @@ For submitted surveys, patching non-publication fields must return `422`
 with a business error (example: `submitted_read_only_fields`).
 
 ### PATCH /surveys/{id}/visibility
+
 Toggle publication visibility for a survey (`private` <-> `public`).
 
 Request:
+
 ```json
 {
   "visibility": "public"
@@ -316,6 +353,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -325,6 +363,7 @@ Response `200`:
 ```
 
 Rules:
+
 - Allowed for survey owner (and moderators/admins where applicable by auth policy).
 - Allowed in both `draft` and `submitted` states.
 - Must write an audit event: `visibility_changed` with `{ from, to }`.
@@ -332,13 +371,16 @@ Rules:
 - Mobile offline mode may queue this as `survey.visibility_update` inside `POST /sync`.
 
 ### POST /surveys/{id}/submit
+
 Attempt submission transition (`draft` -> `submitted`) with server-side checks.
 Blocking checks include:
+
 - all required IBP factors complete and valid
 - survey not expired
 - parcel linkage complete and valid (`parcel_ids[]`, `observation_year`, `version_number`)
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -356,17 +398,21 @@ Response `200`:
 If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 
 ### DELETE /surveys/{id}
+
 Soft-delete a survey.
 
 Response `204`.
 
 Notes:
+
 - Idempotent in V1: returns `204` even if survey was already deleted or not found.
 
 ### GET /surveys/{id}/events
+
 Get survey audit trail events.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -382,9 +428,11 @@ Response `200`:
 ## 2.1) Attachments
 
 ### POST /surveys/{id}/attachments
+
 Create an attachment record and return an upload target URL.
 
 Request:
+
 ```json
 {
   "mime_type": "image/jpeg",
@@ -398,6 +446,7 @@ Request:
 ```
 
 Response `201`:
+
 ```json
 {
   "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
@@ -408,15 +457,18 @@ Response `201`:
 ```
 
 Rules:
+
 - `size_bytes` must be a positive integer and <= 25MB in V1
 - `upload_url` is the generated upload target for binary data
 - `confirm_url` must be called after upload to mark `uploaded_at`
 - In local mode, `upload_url` can be the same API upload endpoint as `confirm_url`
 
 ### GET /surveys/{id}/attachments
+
 List non-deleted attachments for one survey.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -434,13 +486,16 @@ Response `200`:
 ```
 
 ### PUT /surveys/{id}/attachments/{attachment_id}/upload?token=
+
 Consume the upload target with a real file upload and mark attachment as uploaded.
 
 Request:
+
 - Content type: `multipart/form-data`
 - Field: `file` (binary image payload)
 
 Response `200`:
+
 ```json
 {
   "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
@@ -449,6 +504,7 @@ Response `200`:
 ```
 
 ### DELETE /surveys/{id}/attachments/{attachment_id}
+
 Remove attachment link (and optionally underlying object).
 
 Response `204`.
@@ -456,9 +512,11 @@ Response `204`.
 ## 3) Sync (Batch, Recommended)
 
 ### POST /sync
+
 Submit multiple operations in one request.
 
 Request:
+
 ```json
 {
   "operations": [
@@ -496,6 +554,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "results": [
@@ -551,6 +610,7 @@ Response `200`:
 ```
 
 Rules:
+
 - Batch size max in V1: `100` operations.
 - Each operation is processed independently.
 - Supported operation set in V1:
@@ -575,13 +635,16 @@ Rules:
 - For idempotency in sync path, deleting a missing attachment can still return `synced` with `missing=true`.
 
 ### GET /sync/changes?cursor=&limit=
+
 Fetch user-scoped incremental changes for downsync (server -> mobile).
 
 Query params:
+
 - `cursor` (optional): opaque cursor from previous response (`{timestamp}|{event_id}`)
 - `limit` (optional): default `50`, max `200`
 
 Response `200`:
+
 ```json
 {
   "cursor_in": "2026-03-09T10:12:00.123+00|d4f...",
@@ -626,9 +689,11 @@ Response `200`:
 ## 4) Reports
 
 ### POST /reports
+
 Report suspicious survey content.
 
 Request:
+
 ```json
 {
   "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -637,6 +702,7 @@ Request:
 ```
 
 Response `201`:
+
 ```json
 {
   "id": "e81fbbab-06a8-49a0-87f8-e9b7f0c8dca5",
@@ -644,13 +710,20 @@ Response `201`:
 }
 ```
 
+`reason` is required, trimmed, and at most 2000 characters (400 if longer). The survey owner's
+`GET /surveys/{id}/events` feed shows a `reported` event without the reporter's identity or reason;
+that data is kept only in the `reports` table, visible to moderators/admins.
+
 ### GET /reports?status=open
+
 List reports (moderator/admin).
 
 ### PATCH /reports/{id}
+
 Review a report (moderator/admin).
 
 Request:
+
 ```json
 {
   "status": "reviewed"
@@ -658,6 +731,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "e81fbbab-06a8-49a0-87f8-e9b7f0c8dca5",
@@ -669,14 +743,17 @@ Response `200`:
 ## 5) Public Map (Optional in V1)
 
 ### GET /public/map-items?from=&to=&region=
+
 Return anonymized public survey map items.
 
 Inclusion rules in V1:
+
 - `visibility = public`
 - survey is not deleted
 - survey is considered publishable (recommended policy: `status=submitted`)
 
 Query + formatting rules in V1:
+
 - `from` and `to` expect `YYYY-MM-DD`; invalid values are ignored (not rejected).
 - `region` filters by exact `region_version` match.
 - Results are ordered by `submitted_at DESC` and capped to `500` items.
@@ -684,6 +761,7 @@ Query + formatting rules in V1:
 - Surveys missing parcel-centroid coordinates are excluded.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -699,14 +777,17 @@ Response `200`:
 ```
 
 ### GET /public/parcels/status?bbox=&zoom=&year=
+
 Return parcel study status for high zoom map rendering.
 
 Rules:
+
 - Endpoint is enabled only from configured zoom threshold (for example `zoom >= 15`).
 - Output excludes personal data.
 - `study_status` is derived from submitted surveys history.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -722,9 +803,11 @@ Response `200`:
 ```
 
 ### GET /parcels/resolve?lat=&lng=
+
 Resolve a cadastral parcel candidate from coordinates.
 
 Response `200`:
+
 ```json
 {
   "parcel": {
@@ -738,9 +821,11 @@ Response `200`:
 ```
 
 ### GET /parcels/{parcel_id}/surveys/history?limit=
+
 Return longitudinal survey history for one parcel.
 
 Response `200`:
+
 ```json
 {
   "parcel_id": "75101AB0123",
@@ -776,9 +861,11 @@ Response `200`:
 ## 6) Analytics (V2 Addendum, Out of MVP)
 
 ### GET /analytics/regions?year_from=&year_to=
+
 Return aggregated IBP metrics by region.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -798,9 +885,11 @@ Response `200`:
 ```
 
 ### GET /analytics/factors/distribution?region=&year_from=&year_to=
+
 Return factor distribution analytics (A..J) for selected scope.
 
 Response `200`:
+
 ```json
 {
   "region_code": "ACA",
@@ -816,9 +905,11 @@ Response `200`:
 ```
 
 ### GET /analytics/parcels/trends?parcel_id=
+
 Return score trend for one parcel over years/versions.
 
 Response `200`:
+
 ```json
 {
   "parcel_id": "75101AB0123",
@@ -830,6 +921,7 @@ Response `200`:
 ```
 
 ## Standard Error Codes
+
 - `400` validation error
 - `401` unauthorized
 - `403` forbidden
@@ -840,6 +932,7 @@ Response `200`:
 - `500` internal server error
 
 Common business error codes (non-exhaustive):
+
 - `parcel_required`
 - `parcel_invalid`
 - `parcel_version_conflict`

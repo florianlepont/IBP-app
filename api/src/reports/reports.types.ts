@@ -1,3 +1,5 @@
+export const REPORT_REASON_MAX_LENGTH = 2000
+
 export type ReportStatus = "open" | "reviewed"
 
 export type ReportRow = {
