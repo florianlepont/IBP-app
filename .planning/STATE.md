@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: "Completed 01-03-PLAN.md (device harness; GATE-HARNESS: PASS on real iPhone 15 Pro, flagship-flagged; Android build-only gap)"
-last_updated: "2026-09-23T04:54:31.469Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-23T07:00:18.638Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-09-22 — Phase 1 execution started
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 25min | 3 tasks | 5 files |
 | Phase 01 P02 | ~4h | 3 tasks | 2 files |
 | Phase 01-species-recognition-approach-decision P03 | ~3h | 2 tasks | 18 files |
+| Phase 01 P04 | 50min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Decisions table. Decisions affecting current work:
 - [Phase 01]: pod install must run once after all expo install calls finish, not interleaved -- interleaving left a stale Podfile.lock path that broke the iOS build
 - [Phase 01]: TensorFlowLiteC/RCTDeprecation deployment targets (12.0/4.3) fall below Xcode 27's real-device floor (15.0) -- invisible on Simulator, fixed with a Podfile post_install hook plugin
 - [Phase 01]: iOS 26+ scene-lifecycle-adoption crash (EXC_BREAKPOINT/SIGTRAP) is invisible on Simulator and only appears on a real device -- fixed by porting mobile/plugins/with-scene-delegate.js into the harness; this is the clearest evidence for why D-18's real-hardware requirement exists
+- [Phase 01-04]: Shipped float16 quantisation instead of int8 dynamic-range after measuring int8 caused a real 79.4% parity-agreement drop vs 100% for float16 — Export-parity check required by the plan caught real prediction degradation from int8, not noise
+- [Phase 01-04]: Evaluated per-genus accuracy against the raw, composition-unfiltered test split rather than hand-filtering it — Per-image filtering at 1,183-image test-split scale is the same hand-classify-at-scale work plan 02's coordinator guidance ruled out, and results already miss the bar by wide margins except one genus
 
 ### Pending Todos
 
@@ -108,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T04:54:31.465Z
-Stopped at: Completed 01-03-PLAN.md (device harness; GATE-HARNESS: PASS on real iPhone 15 Pro, flagship-flagged; Android build-only gap)
+Last session: 2026-09-23T07:00:12.156Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
