@@ -136,36 +136,66 @@ export class AuthGuard implements CanActivate {
     const email = userInfo.email ?? `user+${auth0Sub.replace(/[^a-zA-Z0-9]/g, "")}@unknown`
     const displayName = email.split("@")[0]
 
-    // Check if a user with this email already exists (migration case)
-    const byEmail = await this.db.query<AuthenticatedUser>(
-      `SELECT id, email, role, first_name, last_name, display_name, profile_picture_url
-       FROM users WHERE email = $1`,
-      [email],
-    )
-
-    if (byEmail.rows.length > 0) {
-      // Link existing user to Auth0
-      await this.db.query(`UPDATE users SET auth0_sub = $1 WHERE email = $2`, [auth0Sub, email])
-      return byEmail.rows[0]
+    if (userInfo.email_verified === true) {
+      // Verified email: safe to link this Auth0 identity to an existing account
+      // (needed for Google/Apple social login, REQ-A-social-login).
+      const linked = await this.db.query<AuthenticatedUser>(
+        `UPDATE users SET auth0_sub = $1 WHERE email = $2
+         RETURNING id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url`,
+        [auth0Sub, email],
+      )
+      if (linked.rows.length > 0) {
+        return linked.rows[0]
+      }
+    } else {
+      // Unverified (or unknown) email: never link to an existing account — that would
+      // be an account takeover path. Refuse if the email is already taken.
+      const byEmail = await this.db.query<{ id: string }>(`SELECT 1 FROM users WHERE email = $1`, [
+        email,
+      ])
+      if (byEmail.rows.length > 0) {
+        throw new Error("Refusing to link an unverified email to an existing account")
+      }
     }
 
-    const inserted = await this.db.query<AuthenticatedUser>(
-      `INSERT INTO users (id, auth0_sub, email, display_name, first_name, last_name, role)
-       VALUES (gen_random_uuid(), $1, $2, $3, '', '', 'contributor')
-       RETURNING id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url`,
-      [auth0Sub, email, displayName],
-    )
-
-    return inserted.rows[0]
+    try {
+      const inserted = await this.db.query<AuthenticatedUser>(
+        `INSERT INTO users (id, auth0_sub, email, display_name, first_name, last_name, role)
+         VALUES (gen_random_uuid(), $1, $2, $3, '', '', 'contributor')
+         ON CONFLICT (auth0_sub) DO UPDATE SET auth0_sub = EXCLUDED.auth0_sub
+         RETURNING id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url`,
+        [auth0Sub, email, displayName],
+      )
+      return inserted.rows[0]
+    } catch (err) {
+      if (typeof err === "object" && err !== null && "code" in err && err.code === "23505") {
+        // A concurrent first login for the same sub raced us past the ON-CONFLICT insert
+        // by tripping the email UNIQUE index instead. Re-read the row the winner created.
+        const retry = await this.db.query<AuthenticatedUser>(
+          `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
+           FROM users WHERE auth0_sub = $1`,
+          [auth0Sub],
+        )
+        if (retry.rows.length > 0) {
+          return retry.rows[0]
+        }
+      }
+      throw err
+    }
   }
 
   private async fetchUserInfo(
     token: string,
-  ): Promise<{ email?: string; name?: string; nickname?: string }> {
+  ): Promise<{ email?: string; name?: string; nickname?: string; email_verified?: boolean }> {
     const response = await fetch(`https://${AUTH0_PUBLIC_DOMAIN}/userinfo`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!response.ok) throw new Error("Failed to fetch Auth0 userinfo")
-    return response.json() as Promise<{ email?: string; name?: string; nickname?: string }>
+    return response.json() as Promise<{
+      email?: string
+      name?: string
+      nickname?: string
+      email_verified?: boolean
+    }>
   }
 }
