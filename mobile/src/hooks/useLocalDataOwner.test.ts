@@ -28,8 +28,12 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react-native
 import { IdTokenClaims } from "../app/id-token"
 import { useLocalDataOwner } from "./useLocalDataOwner"
 
-afterEach(() => {
-  cleanup()
+// `cleanup()` is async (it awaits each mounted tree's unmount); awaiting it
+// here (rather than the fire-and-forget `afterEach(() => { cleanup() })`
+// pattern) prevents one test's unmount from racing the next test's mount,
+// which otherwise cross-contaminates renderHook state between tests.
+afterEach(async () => {
+  await cleanup()
 })
 
 function setup(sessionOwner: IdTokenClaims | null, onLocalDataPurged = jest.fn()) {
