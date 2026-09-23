@@ -17,13 +17,11 @@ const mockUpdateOperationStatus = jest.fn()
 // useAuth0Session mock return value (shared, mutated per test via mockReturnValue)
 const mockAuth0Session = {
   accessToken: "token-abc",
-  refreshToken: "refresh-xyz",
   sessionRestoring: false,
   currentUser: null,
   profile: null,
   isAuthenticated: true,
-  pendingEmailVerification: false,
-  devVerificationToken: null,
+  sessionOwner: null,
   setProfileFromUser: jest.fn(),
   clearSession: jest.fn(),
   refreshSessionTokens: jest.fn(),
@@ -32,9 +30,6 @@ const mockAuth0Session = {
   handleLogin: jest.fn(),
   handleRegister: jest.fn(),
   handleLogout: jest.fn(),
-  handleCancelEmailVerification: jest.fn(),
-  handleVerifyEmail: jest.fn(),
-  handleResendVerification: jest.fn(),
 }
 
 const mockUseAuth0Session = jest.fn()
@@ -180,6 +175,15 @@ describe("useSurveySync", () => {
       expect(hook).toHaveProperty("setStatus")
     })
 
+    test("does not return the removed pre-Auth0 stubs (D-02/ROADMAP criterion 7)", () => {
+      const hook = useBuildHook()
+      expect(hook).not.toHaveProperty("pendingEmailVerification")
+      expect(hook).not.toHaveProperty("devVerificationToken")
+      expect(hook).not.toHaveProperty("handleVerifyEmail")
+      expect(hook).not.toHaveProperty("handleResendVerification")
+      expect(hook).not.toHaveProperty("handleCancelEmailVerification")
+    })
+
     test("calls useAuth0Session with correct params", () => {
       useBuildHook()
       expect(mockUseAuth0Session).toHaveBeenCalledWith(
@@ -198,12 +202,22 @@ describe("useSurveySync", () => {
   // ─── clearSurveySessionState ──────────────────────────────────────────────
 
   describe("clearSurveySessionState (via onSessionCleared callback)", () => {
-    test("calls clearLocalIbpData", async () => {
+    test("never calls clearLocalIbpData (D-02): a session end must not purge local data", async () => {
       mockClearLocalIbpData.mockResolvedValue(undefined)
       useBuildHook()
       const { onSessionCleared } = mockUseAuth0Session.mock.calls[0][0]
       await onSessionCleared()
-      expect(mockClearLocalIbpData).toHaveBeenCalled()
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
+    })
+
+    test("still resolves without purging when the session ends via RENEW_FAILED", async () => {
+      // clearSurveySessionState has no knowledge of *why* the session ended
+      // (AUTH_REQUIRED vs RENEW_FAILED) — it only resets UI state either way.
+      mockClearLocalIbpData.mockResolvedValue(undefined)
+      useBuildHook()
+      const { onSessionCleared } = mockUseAuth0Session.mock.calls[0][0]
+      await expect(onSessionCleared()).resolves.toBeUndefined()
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
     })
   })
 

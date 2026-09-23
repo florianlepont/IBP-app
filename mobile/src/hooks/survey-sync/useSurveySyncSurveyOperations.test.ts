@@ -18,7 +18,12 @@ const mockQueueDeleteAttachment = jest.fn()
 const mockMarkSurveyExpiredLocally = jest.fn()
 const mockSyncPending = jest.fn()
 
-jest.mock("../useAuth0Session", () => ({ AUTH_REQUIRED_ERROR: "AUTH_REQUIRED" }))
+// auth-errors.ts imports react-native-auth0 for CredentialsManagerError; mock it
+// minimally so the module resolves under the node test environment (no native code).
+jest.mock("react-native-auth0", () => ({
+  CredentialsManagerError: class MockCredentialsManagerError extends Error {},
+  CredentialsManagerErrorCodes: {},
+}))
 jest.mock("react-native", () => ({ Alert: { alert: jest.fn() } }))
 jest.mock("expo-image-picker", () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(),
@@ -54,14 +59,11 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
   const params = {
     apiUrl: "http://localhost:3000",
     accessToken: "access-token",
-    refreshToken: "refresh-token",
     selectedSurveyId: null,
     editingSurveyId: null,
     surveys: [],
     clearSession: jest.fn().mockResolvedValue(undefined),
-    refreshSessionTokens: jest
-      .fn()
-      .mockResolvedValue({ accessToken: "new-token", refreshToken: "" }),
+    refreshSessionTokens: jest.fn().mockResolvedValue({ accessToken: "new-token" }),
     withAuthRetry: jest.fn((fn: (token: string) => unknown) => fn("token")),
     refreshLocalSurveys: jest.fn().mockResolvedValue(undefined),
     refreshLocalAttachments: jest.fn().mockResolvedValue(undefined),

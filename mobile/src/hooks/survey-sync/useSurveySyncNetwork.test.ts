@@ -20,8 +20,11 @@ jest.mock("../../api/ibp-api", () => ({
   createSurveyReport: mockCreateSurveyReport,
 }))
 
-jest.mock("../useAuth0Session", () => ({
-  AUTH_REQUIRED_ERROR: "AUTH_REQUIRED",
+// auth-errors.ts imports react-native-auth0 for CredentialsManagerError; mock it
+// minimally so the module resolves under the node test environment (no native code).
+jest.mock("react-native-auth0", () => ({
+  CredentialsManagerError: class MockCredentialsManagerError extends Error {},
+  CredentialsManagerErrorCodes: {},
 }))
 
 jest.mock("expo-network", () => ({
@@ -39,7 +42,6 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
   const params = {
     apiUrl: "http://localhost:3000",
     accessToken: "access-token",
-    refreshToken: null,
     surveys: [],
     clearSession: jest.fn().mockResolvedValue(undefined),
     withAuthRetry: jest.fn((fn: (token: string) => unknown) => fn("token")),
@@ -101,6 +103,17 @@ describe("useSurveySyncNetwork", () => {
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Login required"))
     })
 
+    test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and reports retry-later", async () => {
+      const { handleSync, clearSession, setStatus } = useBuildHook({
+        withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_TEMPORARILY_UNAVAILABLE")),
+      })
+
+      await handleSync()
+
+      expect(clearSession).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Synchronisation reportée"))
+    })
+
     test("sets error status on generic error", async () => {
       const { handleSync, setStatus } = useBuildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Network timeout")),
@@ -133,6 +146,17 @@ describe("useSurveySyncNetwork", () => {
       await handlePullChanges()
 
       expect(clearSession).toHaveBeenCalled()
+    })
+
+    test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and reports retry-later", async () => {
+      const { handlePullChanges, clearSession, setStatus } = useBuildHook({
+        withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_TEMPORARILY_UNAVAILABLE")),
+      })
+
+      await handlePullChanges()
+
+      expect(clearSession).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Synchronisation reportée"))
     })
 
     test("sets error status on generic error", async () => {
@@ -185,6 +209,18 @@ describe("useSurveySyncNetwork", () => {
 
       expect(clearSession).toHaveBeenCalled()
       expect(result.ok).toBe(false)
+    })
+
+    test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and returns ok:false", async () => {
+      const { handleReportSurvey, clearSession } = useBuildHook({
+        withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_TEMPORARILY_UNAVAILABLE")),
+      })
+
+      const result = await handleReportSurvey("survey-1", "spam reason")
+
+      expect(clearSession).not.toHaveBeenCalled()
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain("Signalement non envoyé")
     })
 
     test("returns ok:false and sets error status on generic failure", async () => {
