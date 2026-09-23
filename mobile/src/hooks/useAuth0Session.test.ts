@@ -252,3 +252,44 @@ describe("withAuthRetry", () => {
     expect(mockGetCredentials).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("pre-Auth0 stub removal (D-02, ROADMAP criterion 7)", () => {
+  test("the returned object has no refreshToken / pendingEmailVerification / devVerificationToken keys", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(result.current).not.toHaveProperty("refreshToken")
+    expect(result.current).not.toHaveProperty("pendingEmailVerification")
+    expect(result.current).not.toHaveProperty("devVerificationToken")
+    expect(result.current).not.toHaveProperty("handleVerifyEmail")
+    expect(result.current).not.toHaveProperty("handleResendVerification")
+    expect(result.current).not.toHaveProperty("handleCancelEmailVerification")
+  })
+})
+
+describe("refreshSessionTokens", () => {
+  test("resolves { accessToken } and forces a refresh via getCredentials(..., true)", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({ accessToken: "refreshed-token" })
+
+    const refreshed = await result.current.refreshSessionTokens()
+
+    expect(refreshed).toEqual({ accessToken: "refreshed-token" })
+    expect(refreshed).not.toHaveProperty("refreshToken")
+    expect(mockGetCredentials).toHaveBeenCalledWith(undefined, undefined, undefined, true)
+  })
+
+  test("resolves null when the refresh is a genuine AUTH_REQUIRED rejection", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockRejectedValue(credErr("NO_REFRESH_TOKEN"))
+
+    await expect(result.current.refreshSessionTokens()).resolves.toBeNull()
+  })
+})

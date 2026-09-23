@@ -1,4 +1,5 @@
 import { getDb } from "./db"
+import { LOCAL_OWNER_SUB_KEY, LOCAL_OWNER_EMAIL_KEY } from "./local-owner"
 import {
   LocalSurvey,
   LocalAttachment,
@@ -434,6 +435,10 @@ export async function clearLocalIbpData(): Promise<void> {
   await db.runAsync(`DELETE FROM local_attachments`)
   await db.runAsync(`DELETE FROM local_surveys`)
   await db.runAsync(`DELETE FROM local_meta WHERE key = 'downsync_cursor'`)
+  await db.runAsync(`DELETE FROM local_meta WHERE key IN (?, ?)`, [
+    LOCAL_OWNER_SUB_KEY,
+    LOCAL_OWNER_EMAIL_KEY,
+  ])
 }
 
 export async function hasPendingSyncWork(): Promise<boolean> {

@@ -382,11 +382,10 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
   const refreshSessionTokens = useCallback(async (): Promise<{
     accessToken: string
-    refreshToken: string
   } | null> => {
     try {
       const token = await getValidAccessToken({ forceRefresh: true })
-      return { accessToken: token, refreshToken: "" }
+      return { accessToken: token }
     } catch (error) {
       if (error instanceof Error && error.message === AUTH_REQUIRED_ERROR) return null
       throw error
@@ -395,14 +394,11 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
   return {
     accessToken,
-    refreshToken: "", // Managed internally by Auth0 CredentialsManager
     sessionRestoring,
     currentUser,
     profile,
     sessionOwner,
     isAuthenticated: Boolean(currentUser),
-    pendingEmailVerification: null,
-    devVerificationToken: null,
     setProfileFromUser,
     clearSession,
     refreshSessionTokens,
@@ -412,8 +408,5 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     handleRegister,
     handleForgotPassword,
     handleLogout,
-    handleCancelEmailVerification: async () => undefined,
-    handleVerifyEmail: async (_token: string) => undefined,
-    handleResendVerification: async () => undefined,
   }
 }
