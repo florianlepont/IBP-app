@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01.2-03-PLAN.md
-last_updated: "2026-09-23T15:04:21.200Z"
+stopped_at: Completed 01.2-04-PLAN.md
+last_updated: "2026-09-23T15:12:35.386Z"
 last_activity: 2026-09-23
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 15
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-09-23
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01.2 P01 | 45min | 3 tasks | 13 files |
 | Phase 01.2 P02 | 55min | 2 tasks | 9 files |
 | Phase 01.2 P03 | 55min | 3 tasks | 9 files |
+| Phase 01.2 P04 | 12min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Decisions table. Decisions affecting current work:
 - [Phase 01.2]: First-login provisioning uses INSERT ... ON CONFLICT (auth0_sub) with a 23505 re-select fallback for race-free user creation
 - [Phase 01.2]: Reported survey events carry only {report_id}; reporter identity and reason stay in the moderator-only reports table, with migration 013 scrubbing historic rows
 - [Phase 01.2]: sessionOwner (Auth0 sub+email) exposed from useAuth0Session for the D-04 local-data owner check in later plans
+- [Phase 01.2]: buildBboxAroundPoint shares map-viewport's formatBbox helper with computeRegionBbox (D-12)
+- [Phase 01.2]: shouldShowDevTools(isDev = __DEV__) gates the Settings dev-tools section and the App.tsx stored API URL override (D-11)
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T15:04:21.196Z
-Stopped at: Completed 01.2-03-PLAN.md
+Last session: 2026-09-23T15:12:35.381Z
+Stopped at: Completed 01.2-04-PLAN.md
 Resume file: None
