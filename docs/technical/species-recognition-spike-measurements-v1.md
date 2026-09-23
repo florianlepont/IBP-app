@@ -737,8 +737,11 @@ not in isolation — a 94% on 35 images and a 94% on 350 images are not the same
 of evidence, and this corpus only ever offers the former.
 
 **Confidence-band analysis (D-12 — strong/medium/weak bands from measurement, not
-invented round numbers).** Across all 1,183 test predictions (`eval/results/confidence_bands.json`),
-overall top-1 accuracy was 36.77% and top-1 confidence separated correct from incorrect
+invented round numbers).** This paragraph's one pooled-across-all-predictions figure is
+context for the confidence-threshold computation below, not a per-genus result and not a
+decision input — D-03's per-genus table above is the only accuracy figure this document
+treats as a result. Across all 1,183 test predictions (`eval/results/confidence_bands.json`),
+pooled top-1 accuracy was 36.77% and top-1 confidence separated correct from incorrect
 predictions in a real, usable way: precision (fraction correct) stays at or above 90%
 only for predictions with confidence ≥ **0.799**, and stays at or above 50% down to
 confidence ≥ **0.280**. Proposed cut points and their cost in each direction:
