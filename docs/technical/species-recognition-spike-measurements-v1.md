@@ -1022,3 +1022,49 @@ the ADR is where any change to them would be proposed to the user — but the AD
 number in front of it.
 
 _(Additional gaps recorded here as plans 03, 04 and 05 execute.)_
+
+---
+
+## 10. Iteration 2 — expanded corpus, larger backbone, side-by-side comparison
+
+**Status: IN PROGRESS (started 2026-09-23, after iteration 1's result was reviewed).**
+
+**Why this section exists.** Iteration 1 (Sections 4–5 above, git commits `1490ec6`/`ff07741`)
+found 0 of 34 genera clearing the D-02 95% top-3 bar. The user reviewed that result and rejected
+it as premature rather than accepting it as a finished no-go, on the following basis — the
+numbers support the objection:
+
+| | iteration 1 used | actually available/possible |
+|---|---|---|
+| training images per genus | 150 | >4,200 CC0/CC-BY candidates surveyed on GBIF per class |
+| backbone | MobileNetV3-**Small** | the smallest mobile classifier that exists |
+| latency budget consumed (Section 8, flagship device) | 83 ms | 3,000 ms (D-05) |
+| model on-disk size | 2.0 MB | no real constraint — D-07 assumed a large model |
+| test images per genus | 35 | resolution: one image flips a genus's pass/fail |
+
+Iteration 1 picked the smallest backbone specifically to protect a latency budget it then beat by
+a factor of ~36, and trained on 3.6% of the licence-clean data actually available. **Iteration 1's
+result stands, unmodified, in Sections 4–5 above — this section does not overwrite it.** This is a
+second, larger measurement run alongside the first, so the ADR can see whether the no-go is
+data-limited (accuracy improves substantially with ~13x the training data and a larger backbone)
+or approach-limited (accuracy barely moves despite both). That delta is itself the finding.
+
+**Plan.** Documented as a deviation extending plan 01-04, directed by the coordinator following
+the user's explicit rejection of the iteration-1 no-go as premature:
+
+1. Expand the corpus toward ~2,000 images/class (from 220), same CC0-1.0/CC-BY-4.0 licence filter,
+   reusing already-downloaded images rather than re-fetching them.
+2. Season-stratify the expansion using GBIF `eventDate`, specifically targeting autumn
+   representation where Section 3b found none, and reporting achieved-vs-attempted per class.
+3. Enlarge the test split to ~200 images/class (from 35) for a coarser, more meaningful resolution
+   limit.
+4. Train a substantially larger backbone (MobileNetV3-Large or EfficientNet-B0/Lite0), still
+   exported to `.tflite` and float16-quantised, keeping the export-parity check that caught
+   iteration 1's int8 degradation.
+5. Re-measure per-genus top-1/top-3 on the same rules as iteration 1 (D-03, D-04, raw counts).
+6. Present iteration 1 and iteration 2 side by side, per genus.
+7. Update `eval/GATE` and the plan's SUMMARY with both iterations' numbers intact.
+
+**This subsection will be filled in as each step completes; if interrupted, the corpus-assembly
+script (`prepare_dataset.py`) is resumable by design (see 01-02-SUMMARY.md's precedent) and this
+section records progress rather than only a final result.**
