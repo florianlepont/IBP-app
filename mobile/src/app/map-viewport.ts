@@ -25,6 +25,10 @@ export function areRegionsNearlyEqual(a: Region, b: Region, epsilon = 0.00001): 
   )
 }
 
+function formatBbox(minLng: number, minLat: number, maxLng: number, maxLat: number): string {
+  return `${minLng.toFixed(6)},${minLat.toFixed(6)},${maxLng.toFixed(6)},${maxLat.toFixed(6)}`
+}
+
 export function computeRegionBbox(region: Region): string {
   const halfLat = region.latitudeDelta / 2
   const halfLng = region.longitudeDelta / 2
@@ -32,5 +36,16 @@ export function computeRegionBbox(region: Region): string {
   const maxLat = Math.min(90, region.latitude + halfLat)
   const minLng = Math.max(-180, region.longitude - halfLng)
   const maxLng = Math.min(180, region.longitude + halfLng)
-  return `${minLng.toFixed(6)},${minLat.toFixed(6)},${maxLng.toFixed(6)},${maxLat.toFixed(6)}`
+  return formatBbox(minLng, minLat, maxLng, maxLat)
+}
+
+export function buildBboxAroundPoint(
+  center: { lat: number; lng: number },
+  radiusDeg: number,
+): string {
+  const minLat = Math.max(-90, center.lat - radiusDeg)
+  const maxLat = Math.min(90, center.lat + radiusDeg)
+  const minLng = Math.max(-180, center.lng - radiusDeg)
+  const maxLng = Math.min(180, center.lng + radiusDeg)
+  return formatBbox(minLng, minLat, maxLng, maxLat)
 }
