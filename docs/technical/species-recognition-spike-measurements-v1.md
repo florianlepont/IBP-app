@@ -1068,3 +1068,130 @@ the user's explicit rejection of the iteration-1 no-go as premature:
 **This subsection will be filled in as each step completes; if interrupted, the corpus-assembly
 script (`prepare_dataset.py`) is resumable by design (see 01-02-SUMMARY.md's precedent) and this
 section records progress rather than only a final result.**
+
+### 10.1 Corpus expansion — complete
+
+**Steps 1–3 done.** `prepare_dataset.py` was rewritten to (a) reuse every image already on disk
+from iteration 1 rather than re-fetching it, backfilling `eventDate` for those via a cheap
+JSON-only GBIF lookup, (b) fetch a much larger new-candidate pool per class (up to 5,000,
+excluding anything already downloaded) with `eventDate` captured directly from the occurrence
+search response, and (c) select the final ~2,000/class from the combined existing+new pool with a
+season quota (500/season, attempted) rather than a plain shuffle, falling back to whatever is left
+when a season's quota can't be filled. Train/val/test fractions changed to 80%/10%/10% (from
+150/35/35 → 1600/200/200 nominal).
+
+**Result: 63,863 images downloaded across 34 classes (up from ~7,432 in iteration 1), 51,089
+train / 6,387 val / 6,387 test.** Per-class candidate pools ranged 4,566–5,303 (close to the
+5,000-candidate fetch ceiling for nearly every class, confirming the corpus really was
+volume-constrained, not availability-constrained, exactly as iteration 1's `prepare_dataset.py`
+comment already asserted). A handful of classes (Celtis, Cupressus, Fagus, Fraxinus, Juniperus,
+Populus, Salix, Tamarix) landed below the full 2,000 target (1,122–1,798) because their combined
+existing+new candidate pool, after licence filtering and download failures, simply ran out —
+still 5–8x iteration 1's count for every one of them.
+
+| genus | candidates fetched | downloaded | train | val | test | winter | spring | summer | autumn |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Abies | 5122 | 1982 | 1586 | 198 | 198 | 513 | 597 | 581 | 309 |
+| Acer | 5122 | 1915 | 1532 | 192 | 191 | 553 | 1447 | 0 | 0 |
+| Alnus | 5122 | 1988 | 1590 | 199 | 199 | 511 | 534 | 548 | 406 |
+| Arbutus | 5122 | 1970 | 1576 | 197 | 197 | 500 | 500 | 500 | 500 |
+| Betula | 5122 | 1910 | 1528 | 191 | 191 | 502 | 609 | 584 | 305 |
+| Carpinus | 5122 | 1990 | 1592 | 199 | 199 | 380 | 570 | 536 | 514 |
+| Castanea | 5122 | 1913 | 1530 | 191 | 192 | 280 | 550 | 629 | 541 |
+| Celtis | 5122 | 1698 | 1358 | 170 | 170 | 500 | 500 | 500 | 500 |
+| Cupressus | 5124 | 1657 | 1326 | 166 | 165 | 500 | 500 | 500 | 500 |
+| Fagus | 5122 | 1683 | 1346 | 168 | 169 | 524 | 790 | 629 | 57 |
+| Fraxinus | 5122 | 1403 | 1122 | 140 | 141 | 371 | 772 | 824 | 32 |
+| Juglans | 5122 | 1790 | 1432 | 179 | 179 | 360 | 536 | 604 | 500 |
+| Juniperus | 5122 | 1764 | 1411 | 176 | 177 | 586 | 881 | 512 | 21 |
+| Larix | 5122 | 1766 | 1413 | 177 | 176 | 329 | 540 | 617 | 514 |
+| Malus | 5124 | 1909 | 1527 | 191 | 191 | 102 | 691 | 655 | 552 |
+| Ostrya | 5122 | 1855 | 1484 | 186 | 185 | 483 | 506 | 510 | 500 |
+| Pinus | 5122 | 1889 | 1511 | 189 | 189 | 822 | 773 | 405 | 0 |
+| Picea | 5122 | 1867 | 1494 | 187 | 186 | 502 | 503 | 501 | 494 |
+| Populus | 5122 | 1910 | 1528 | 191 | 191 | 510 | 899 | 573 | 18 |
+| Prunus | 5122 | 1970 | 1576 | 197 | 197 | 586 | 1347 | 67 | 0 |
+| Pyrus | 5122 | 1882 | 1506 | 188 | 188 | 389 | 573 | 524 | 514 |
+| Quercus_deciduae | 5123 | 1966 | 1573 | 197 | 196 | 480 | 513 | 505 | 502 |
+| Quercus_sempervirens | 5122 | 1950 | 1560 | 195 | 195 | 500 | 500 | 500 | 500 |
+| Salix | 5122 | 1958 | 1566 | 196 | 196 | 340 | 894 | 708 | 58 |
+| Sorbus | 5122 | 1934 | 1547 | 193 | 194 | 106 | 719 | 754 | 421 |
+| Tamarix | 5234 | 1783 | 1426 | 178 | 179 | 500 | 500 | 500 | 500 |
+| Taxus | 5303 | 1965 | 1572 | 196 | 197 | 516 | 547 | 522 | 415 |
+| Tilia | 5242 | 1990 | 1592 | 199 | 199 | 223 | 610 | 656 | 511 |
+| Ulmus | 5186 | 1975 | 1580 | 198 | 197 | 442 | 591 | 565 | 402 |
+| Ceratonia | 4566 | 1928 | 1542 | 193 | 193 | 500 | 500 | 500 | 500 |
+| Cercis | 5241 | 1911 | 1529 | 191 | 191 | 334 | 630 | 527 | 509 |
+| Olea | 5158 | 1932 | 1546 | 193 | 193 | 500 | 500 | 500 | 500 |
+| Phillyrea | 5248 | 1992 | 1594 | 199 | 199 | 500 | 500 | 500 | 500 |
+| Pistacia | 5240 | 1868 | 1494 | 187 | 187 | 500 | 500 | 500 | 500 |
+
+**Seasonal balance achieved vs attempted (Step 2).** Quota attempted was 500/season/class
+(2,000/4). **9 of 34 classes reached a perfectly even 500/500/500/500 split** (Arbutus, Celtis,
+Cupressus, Quercus_sempervirens, Tamarix, Ceratonia, Olea, Phillyrea, Pistacia) — every one of
+these is either a Mediterranean supplementary genus (Section 2) or a genus with an unusually deep
+candidate pool relative to its download target. For the rest, the shortfall is real and, at this
+scale (up to 5,303 candidates fetched per class, close to the fetch ceiling for most), it looks
+like a genuine property of what GBIF holds rather than a sampling artefact:
+
+- **Three genera returned ZERO autumn images even from a ~5,000-candidate pool: Acer, Pinus,
+  Prunus.** Iteration 1's Section 3b already found 0% autumn in a 30-image sample for all three;
+  this is now confirmed at ~170x the sample size (5,122 candidates each) rather than being a small-
+  sample artefact. These three genera's CC0/CC-BY GBIF imagery may simply not include autumn
+  photographs at all, at least not under the `StillImage` media type this corpus draws from.
+- **Five more are thin but not zero: Fagus (57), Fraxinus (32), Juniperus (21), Populus (18),
+  Salix (58)** — autumn representation improved from iteration 1's near-total absence but remains
+  under 4% of each class's total, nowhere near the 500-quota target.
+- **The remaining 17 non-perfect classes landed with meaningfully more autumn representation than
+  iteration 1's ~0%** — e.g. Malus 552, Larix 514, Pyrus 514, Carpinus 514, Cercis 509, Tilia 511,
+  Castanea 541 — genuinely closing (not just narrowing) the seasonal gap Section 3b identified,
+  for those classes specifically. The leftover-fill mechanism (Section 3a of `prepare_dataset.py`'s
+  `season_stratified_select`) means some of these exceed the 500 quota (autumn surplus absorbed the
+  shortfall from a thinner season elsewhere in the same class, e.g. Tilia's thin winter at 223).
+
+**What this means going in to training.** The corpus is no longer near-zero on autumn for the
+great majority of classes — a real, substantial improvement on the seasonal-skew caveat (Section
+3b/Section 9 item 7) for 25 of 34 classes. It remains genuinely absent for 3 (Acer, Pinus, Prunus)
+and thin for 5 more — this is not a corpus-assembly shortfall to fix with more downloading, it
+appears to be what GBIF's CC0/CC-BY `StillImage` collection actually contains for those genera.
+Full detail: `spike/species-recognition/data/splits/seasonal_balance_report.json` (gitignored).
+
+`data/GATE` was recomputed automatically at the end of the expansion run and still reads
+`GATE-CORPUS: PASS`, `CLASSES-USABLE: 32` — the same composition exclusions (Betula, Phillyrea)
+apply; composition was not re-audited at the new scale (out of scope for this iteration, see
+"What was not re-done" below).
+
+### 10.2 Training — in progress
+
+Backbone: MobileNetV3-Large (`tensorflow.keras.applications.MobileNetV3Large`, same
+ImageNet-pretrained, Apache-2.0, Google-hosted-weights pattern as iteration 1's Small variant —
+same licence chain, only the architecture size changed). 3,029,026 total params (2,996,352 in the
+frozen/partially-frozen backbone) versus iteration 1's smaller MobileNetV3-Small. Same
+freeze-then-fine-tune recipe, same `include_preprocessing=True`, same augmentation, same
+`UNFREEZE_LAST_N_LAYERS=60` (kept identical to iteration 1's final configuration for a controlled
+comparison — only the backbone and data changed). Head epochs 6, fine-tune epochs 8 — fewer total
+epochs than iteration 1's 20+15, deliberately: iteration 2 has ~10x the distinct training images,
+so a full dataset pass carries far more information per epoch and iteration 1's own validation
+curve (Section 4) had already shown diminishing returns past a certain point. A CPU-only
+per-epoch timing benchmark (run on the already-downloaded Abies class before committing to the
+full 34-class run) measured ~95-120ms/step for the frozen-head phase and ~218ms/step for the
+60-layer-unfrozen fine-tune phase, projecting to roughly 3 and 6 minutes/epoch respectively across
+the full ~51,000-image train set — this sized the epoch counts above to fit a practical wall-clock
+budget rather than being picked arbitrarily.
+
+_(Training results, export, and the side-by-side per-genus comparison table are filled in next.)_
+
+### 10.3 What was not re-done in iteration 2
+
+- **Composition audit (Section 3a) was not re-run at the new scale.** The original 30-image-per-
+  class visual audit and its Betula/Phillyrea exclusions are carried forward unchanged. A larger
+  corpus does not change what fraction of any one class's images are landscape/herbarium/in-hand
+  rather than single-subject — that is a property of the source dataset's composition, not its
+  volume, and re-auditing thousands of images per class by eye was judged out of scope for this
+  extension (consistent with plan 02's original coordinator guidance against hand-classifying
+  images at scale).
+- **Test-split evaluation is still NOT composition-filtered**, for the same reason as iteration 1
+  (Section 5) — now at a much larger, more informative sample size (200/class instead of 35), which
+  is itself part of why iteration 2 was requested.
+- **No field photographs were added.** The no-field-photos gap (Section 6, Section 9 item 2)
+  is unchanged by this iteration; it is a data-source gap, not a corpus-volume gap.
