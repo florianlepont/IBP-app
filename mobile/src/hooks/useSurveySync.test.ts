@@ -11,8 +11,10 @@ const mockLoadSurveyDetail = jest.fn()
 const mockLoadSurveyEvents = jest.fn()
 const mockResetIbpData = jest.fn()
 const mockResetUserData = jest.fn()
+const mockDeleteMyAccount = jest.fn()
 const mockCreateInitialOperationStatus = jest.fn()
 const mockUpdateOperationStatus = jest.fn()
+const mockCountUnsyncedLocalWork = jest.fn()
 
 // useAuth0Session mock return value (shared, mutated per test via mockReturnValue)
 const mockAuth0Session = {
@@ -32,7 +34,18 @@ const mockAuth0Session = {
   handleLogout: jest.fn(),
 }
 
+// useLocalDataOwner mock return value (shared, mutated per test via mockReturnValue)
+const mockLocalDataOwner = {
+  status: "ok" as const,
+  syncAllowed: true,
+  foreignWork: { surveys: 0, attachments: 0 },
+  foreignOwnerEmail: null as string | null,
+  discardForeignData: jest.fn(),
+  recheck: jest.fn(),
+}
+
 const mockUseAuth0Session = jest.fn()
+const mockUseLocalDataOwner = jest.fn()
 const mockUseSurveySyncProfile = jest.fn()
 const mockUseSurveySyncNetwork = jest.fn()
 const mockUseSurveySyncSurveyOperations = jest.fn()
@@ -46,10 +59,15 @@ jest.mock("../api/ibp-api", () => ({
   loadSurveyEvents: (...args: unknown[]) => mockLoadSurveyEvents(...args),
   resetIbpData: (...args: unknown[]) => mockResetIbpData(...args),
   resetUserData: (...args: unknown[]) => mockResetUserData(...args),
+  deleteMyAccount: (...args: unknown[]) => mockDeleteMyAccount(...args),
 }))
 
 jest.mock("../storage/surveys", () => ({
   clearLocalIbpData: (...args: unknown[]) => mockClearLocalIbpData(...args),
+}))
+
+jest.mock("../storage/local-owner", () => ({
+  countUnsyncedLocalWork: (...args: unknown[]) => mockCountUnsyncedLocalWork(...args),
 }))
 
 jest.mock("./operation-status", () => ({
@@ -60,6 +78,10 @@ jest.mock("./operation-status", () => ({
 jest.mock("./useAuth0Session", () => ({
   AUTH_REQUIRED_ERROR: "AUTH_REQUIRED",
   useAuth0Session: (...args: unknown[]) => mockUseAuth0Session(...args),
+}))
+
+jest.mock("./useLocalDataOwner", () => ({
+  useLocalDataOwner: (...args: unknown[]) => mockUseLocalDataOwner(...args),
 }))
 
 jest.mock("./survey-sync/useSurveySyncProfile", () => ({
@@ -111,6 +133,13 @@ describe("useSurveySync", () => {
     mockCreateInitialOperationStatus.mockReturnValue({ session: { state: "idle" } })
     mockUpdateOperationStatus.mockReturnValue({ session: { state: "running" } })
     mockUseAuth0Session.mockReturnValue(mockAuth0Session)
+    mockLocalDataOwner.status = "ok"
+    mockLocalDataOwner.syncAllowed = true
+    mockLocalDataOwner.foreignWork = { surveys: 0, attachments: 0 }
+    mockLocalDataOwner.foreignOwnerEmail = null
+    mockUseLocalDataOwner.mockReturnValue(mockLocalDataOwner)
+    mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 0, attachments: 0 })
+    mockDeleteMyAccount.mockResolvedValue(undefined)
     mockUseSurveySyncProfile.mockReturnValue({
       profileUpdating: false,
       handleUpdateProfile: jest.fn(),
@@ -580,6 +609,143 @@ describe("useSurveySync", () => {
       await Promise.resolve()
 
       expect(onStopEditing).toHaveBeenCalled()
+    })
+  })
+
+  // ─── handleLogout (D-03 confirmed-purge logout) ───────────────────────────
+
+  describe("handleLogout", () => {
+    test("with unsynced work: shows a counted Alert and does not log out or purge until confirmed", async () => {
+      mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 2, attachments: 5 })
+      const hook = useBuildHook()
+
+      await hook.handleLogout()
+
+      expect(mockAlert).toHaveBeenCalledTimes(1)
+      expect(mockAlert).toHaveBeenCalledWith(
+        "Données non synchronisées",
+        expect.stringContaining("2 relevés et 5 photos"),
+        expect.any(Array),
+      )
+      expect(mockAuth0Session.handleLogout).not.toHaveBeenCalled()
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
+
+      const buttons = mockAlert.mock.calls[0][2]
+      const destructiveButton = buttons.find(
+        (b: Record<string, unknown>) => b.style === "destructive",
+      )
+      destructiveButton.onPress()
+      await flushAsyncWork()
+
+      expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
+      expect(mockClearLocalIbpData).toHaveBeenCalledTimes(1)
+    })
+
+    test("with unsynced work: pressing cancel calls neither auth logout nor purge", async () => {
+      mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 1, attachments: 0 })
+      const hook = useBuildHook()
+
+      await hook.handleLogout()
+
+      const buttons = mockAlert.mock.calls[0][2]
+      const cancelButton = buttons.find((b: Record<string, unknown>) => b.style === "cancel")
+      if (cancelButton.onPress) {
+        cancelButton.onPress()
+      }
+      await flushAsyncWork()
+
+      expect(mockAuth0Session.handleLogout).not.toHaveBeenCalled()
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
+    })
+
+    test("with nothing unsynced: no Alert, logs out and purges directly", async () => {
+      mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 0, attachments: 0 })
+      const hook = useBuildHook()
+
+      await hook.handleLogout()
+
+      expect(mockAlert).not.toHaveBeenCalled()
+      expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
+      expect(mockClearLocalIbpData).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // ─── performDeleteAccount (purges without the unsynced alert) ─────────────
+
+  describe("performDeleteAccount (via handleDeleteAccount)", () => {
+    test("success path purges local data without the unsynced-work alert", async () => {
+      const hook = useBuildHook()
+      await hook.handleDeleteAccount()
+
+      const deleteButton = mockAlert.mock.calls[0][2].find(
+        (b: Record<string, unknown>) => b.text === "Delete my account",
+      )
+      deleteButton.onPress()
+      await flushAsyncWork()
+
+      // Only the "Delete account" confirmation Alert fired — never the
+      // unsynced-work count Alert (countUnsyncedLocalWork is not consulted).
+      expect(mockAlert).toHaveBeenCalledTimes(1)
+      expect(mockCountUnsyncedLocalWork).not.toHaveBeenCalled()
+      expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
+      expect(mockClearLocalIbpData).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // ─── syncAllowed wiring ────────────────────────────────────────────────────
+
+  describe("syncAllowed wiring to useSurveySyncNetwork", () => {
+    test("passes localDataOwner.syncAllowed through", () => {
+      mockLocalDataOwner.syncAllowed = false
+      useBuildHook()
+
+      expect(mockUseSurveySyncNetwork).toHaveBeenCalledWith(
+        expect.objectContaining({ syncAllowed: false }),
+      )
+    })
+  })
+
+  // ─── handleDiscardForeignData (D-04 conflict: delete the other account's data) ───
+
+  describe("handleDiscardForeignData", () => {
+    test("shows an Alert with the foreign work summary; only destructive onPress calls discardForeignData", () => {
+      mockLocalDataOwner.foreignWork = { surveys: 3, attachments: 1 }
+      const hook = useBuildHook()
+
+      hook.handleDiscardForeignData()
+
+      expect(mockAlert).toHaveBeenCalledTimes(1)
+      expect(mockAlert).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining("3 relevés et 1 photo"),
+        expect.any(Array),
+      )
+      expect(mockLocalDataOwner.discardForeignData).not.toHaveBeenCalled()
+
+      const buttons = mockAlert.mock.calls[0][2]
+      const cancelButton = buttons.find((b: Record<string, unknown>) => b.style === "cancel")
+      if (cancelButton.onPress) cancelButton.onPress()
+      expect(mockLocalDataOwner.discardForeignData).not.toHaveBeenCalled()
+
+      const destructiveButton = buttons.find(
+        (b: Record<string, unknown>) => b.style === "destructive",
+      )
+      destructiveButton.onPress()
+
+      expect(mockLocalDataOwner.discardForeignData).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // ─── handleSwitchToOwnerAccount (D-04 conflict: log back in with the owner) ───
+
+  describe("handleSwitchToOwnerAccount", () => {
+    test("calls auth handleLogout and never clearLocalIbpData", async () => {
+      const hook = useBuildHook()
+
+      await hook.handleSwitchToOwnerAccount()
+
+      expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
     })
   })
 })

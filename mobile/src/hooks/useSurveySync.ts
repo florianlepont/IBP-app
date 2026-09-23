@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Alert } from "react-native"
 import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from "../app/types"
+import { formatUnsyncedWorkSummary, hasUnsyncedWork } from "../app/local-data-owner"
 import {
   deleteMyAccount,
   loadSurveyDetail,
@@ -9,9 +10,11 @@ import {
   resetUserData,
 } from "../api/ibp-api"
 import { clearLocalIbpData } from "../storage/surveys"
+import { countUnsyncedLocalWork } from "../storage/local-owner"
 import type { LocalSurvey } from "../storage/types"
 import { createInitialOperationStatus, updateOperationStatus } from "./operation-status"
 import { AUTH_REQUIRED_ERROR, useAuth0Session } from "./useAuth0Session"
+import { useLocalDataOwner } from "./useLocalDataOwner"
 import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
 import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
 import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
@@ -97,6 +100,7 @@ export function useSurveySync({
     sessionRestoring,
     currentUser,
     profile,
+    sessionOwner,
     isAuthenticated,
     setProfileFromUser,
     clearSession,
@@ -106,12 +110,83 @@ export function useSurveySync({
     handleLogin,
     handleRegister,
     handleForgotPassword,
-    handleLogout,
+    handleLogout: handleAuthLogout,
   } = useAuth0Session({
     apiUrl,
     reportStatus,
     onSessionCleared: clearSurveySessionState,
   })
+
+  // D-04: local data owned by another account suspends sync until the user
+  // resolves the conflict (log back in with the owning account, or delete).
+  const onLocalDataPurged = useCallback(async (): Promise<void> => {
+    await refreshLocalSurveys()
+    await refreshLocalAttachments()
+    setSurveyDetails({})
+    setSurveyEvents({})
+  }, [refreshLocalAttachments, refreshLocalSurveys])
+
+  const localDataOwner = useLocalDataOwner({ sessionOwner, onLocalDataPurged })
+
+  // D-03: logout with unsynced work purges local data only after the user
+  // explicitly confirms, having seen how many surveys/photos will be lost.
+  const performLogoutAndPurge = useCallback(async (): Promise<void> => {
+    try {
+      await handleAuthLogout()
+      await clearLocalIbpData()
+      await refreshLocalSurveys()
+      await refreshLocalAttachments()
+      setStatus("Déconnecté")
+    } catch (error) {
+      setStatus(`Erreur de déconnexion : ${(error as Error).message}`)
+    }
+  }, [handleAuthLogout, refreshLocalAttachments, refreshLocalSurveys, setStatus])
+
+  const handleLogout = useCallback(async (): Promise<void> => {
+    const work = await countUnsyncedLocalWork()
+    if (hasUnsyncedWork(work)) {
+      Alert.alert(
+        "Données non synchronisées",
+        `Non synchronisé : ${formatUnsyncedWorkSummary(work)}. Si vous vous déconnectez maintenant, ces données seront définitivement supprimées de cet appareil.`,
+        [
+          { text: "Annuler", style: "cancel" },
+          {
+            text: "Supprimer et se déconnecter",
+            style: "destructive",
+            onPress: () => {
+              void performLogoutAndPurge()
+            },
+          },
+        ],
+      )
+      return
+    }
+
+    await performLogoutAndPurge()
+  }, [performLogoutAndPurge])
+
+  const handleSwitchToOwnerAccount = useCallback(async (): Promise<void> => {
+    // Local data and the owner marker stay untouched — logging back in with
+    // the owning account will resolve to "match" and resume sync.
+    await handleAuthLogout()
+  }, [handleAuthLogout])
+
+  const handleDiscardForeignData = useCallback((): void => {
+    Alert.alert(
+      "Supprimer les données de l'autre compte ?",
+      `${formatUnsyncedWorkSummary(localDataOwner.foreignWork)} seront définitivement supprimés de cet appareil. Cette action est irréversible.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: () => {
+            void localDataOwner.discardForeignData()
+          },
+        },
+      ],
+    )
+  }, [localDataOwner])
 
   const {
     profileUpdating,
@@ -135,7 +210,10 @@ export function useSurveySync({
     try {
       setStatus("Deleting account...")
       await withAuthRetry((token) => deleteMyAccount(apiUrl, token))
-      await handleLogout()
+      // The account no longer exists on the server, so the data can never
+      // sync — purge without the unsynced-work alert (the delete dialog
+      // already warned this action is irreversible).
+      await performLogoutAndPurge()
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession()
@@ -149,7 +227,7 @@ export function useSurveySync({
         { text: "OK" },
       ])
     }
-  }, [apiUrl, clearSession, handleLogout, setStatus, withAuthRetry])
+  }, [apiUrl, clearSession, performLogoutAndPurge, setStatus, withAuthRetry])
 
   const handleDeleteAccount = useCallback(async (): Promise<void> => {
     Alert.alert(
@@ -178,6 +256,7 @@ export function useSurveySync({
       refreshLocalSurveys,
       refreshLocalAttachments,
       setStatus,
+      syncAllowed: localDataOwner.syncAllowed,
     },
   )
 
@@ -418,6 +497,11 @@ export function useSurveySync({
     detailsLoadingSurveyId,
     surveyEvents,
     eventsLoadingSurveyId,
+    localDataOwnerStatus: localDataOwner.status,
+    foreignWork: localDataOwner.foreignWork,
+    foreignOwnerEmail: localDataOwner.foreignOwnerEmail,
+    handleSwitchToOwnerAccount,
+    handleDiscardForeignData,
     handleLogin,
     handleRegister,
     handleForgotPassword,

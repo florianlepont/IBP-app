@@ -8,6 +8,12 @@ import { isOnlineNetworkState } from "./utils"
 const RETRY_LATER_MESSAGE =
   "Synchronisation reportée : authentification momentanément indisponible. Vos relevés locaux sont conservés."
 
+// D-04: local data owned by another account suspends every automatic and
+// manual sync/pull path until the conflict is resolved (owner-check status
+// leaves "conflict" or turns "ok").
+const OWNER_SUSPENDED_MESSAGE =
+  "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte."
+
 type UseSurveySyncNetworkParams = {
   apiUrl: string
   accessToken: string | null
@@ -17,6 +23,7 @@ type UseSurveySyncNetworkParams = {
   refreshLocalSurveys: () => Promise<void>
   refreshLocalAttachments: () => Promise<void>
   setStatus: (message: string) => void
+  syncAllowed: boolean
 }
 
 export function useSurveySyncNetwork({
@@ -28,6 +35,7 @@ export function useSurveySyncNetwork({
   refreshLocalSurveys,
   refreshLocalAttachments,
   setStatus,
+  syncAllowed,
 }: UseSurveySyncNetworkParams) {
   const syncInProgressRef = useRef(false)
   const pullInProgressRef = useRef(false)
@@ -36,6 +44,13 @@ export function useSurveySyncNetwork({
 
   const runSync = useCallback(
     async (mode: "manual" | "auto", trigger?: string): Promise<void> => {
+      if (!syncAllowed) {
+        if (mode === "manual") {
+          setStatus(OWNER_SUSPENDED_MESSAGE)
+        }
+        return
+      }
+
       if (syncInProgressRef.current) {
         if (mode === "manual") {
           setStatus("Sync already in progress...")
@@ -73,11 +88,22 @@ export function useSurveySyncNetwork({
         syncInProgressRef.current = false
       }
     },
-    [apiUrl, clearSession, refreshLocalAttachments, refreshLocalSurveys, setStatus, withAuthRetry],
+    [
+      apiUrl,
+      clearSession,
+      refreshLocalAttachments,
+      refreshLocalSurveys,
+      setStatus,
+      syncAllowed,
+      withAuthRetry,
+    ],
   )
 
   const maybeAutoSync = useCallback(
     async (trigger: string): Promise<void> => {
+      if (!syncAllowed) {
+        return
+      }
       if (lastOnlineStateRef.current !== true) {
         return
       }
@@ -137,6 +163,7 @@ export function useSurveySyncNetwork({
       refreshLocalSurveys,
       runSync,
       setStatus,
+      syncAllowed,
       withAuthRetry,
     ],
   )
@@ -146,6 +173,10 @@ export function useSurveySyncNetwork({
   }, [runSync])
 
   const handlePullChanges = useCallback(async (): Promise<void> => {
+    if (!syncAllowed) {
+      setStatus(OWNER_SUSPENDED_MESSAGE)
+      return
+    }
     try {
       setStatus("Pulling server changes...")
       const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token))
@@ -166,7 +197,15 @@ export function useSurveySyncNetwork({
       }
       setStatus(`Pull error: ${(error as Error).message}`)
     }
-  }, [apiUrl, clearSession, refreshLocalAttachments, refreshLocalSurveys, setStatus, withAuthRetry])
+  }, [
+    apiUrl,
+    clearSession,
+    refreshLocalAttachments,
+    refreshLocalSurveys,
+    setStatus,
+    syncAllowed,
+    withAuthRetry,
+  ])
 
   const handleReportSurvey = useCallback(
     async (surveyId: string, reason: string): Promise<{ ok: boolean; message: string }> => {
@@ -250,7 +289,7 @@ export function useSurveySyncNetwork({
       return
     }
     void maybeAutoSync("auth-ready")
-  }, [accessToken, maybeAutoSync])
+  }, [accessToken, syncAllowed, maybeAutoSync])
 
   useEffect(() => {
     if (!accessToken) {
@@ -271,7 +310,7 @@ export function useSurveySyncNetwork({
       return
     }
     void maybeAutoSync("local-queue-updated")
-  }, [surveys, accessToken, maybeAutoSync])
+  }, [surveys, accessToken, syncAllowed, maybeAutoSync])
 
   return {
     handleSync,

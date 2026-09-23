@@ -48,6 +48,7 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     refreshLocalSurveys: jest.fn().mockResolvedValue(undefined),
     refreshLocalAttachments: jest.fn().mockResolvedValue(undefined),
     setStatus: jest.fn(),
+    syncAllowed: true,
     ...overrides,
   }
   const hook = useSurveySyncNetwork(params as never)
@@ -250,6 +251,79 @@ describe("useSurveySyncNetwork", () => {
       // lastOnlineStateRef starts as null (from useRef spy)
       await maybeAutoSync("startup")
       expect(withAuthRetry).not.toHaveBeenCalled()
+    })
+  })
+
+  // ─── D-04 owner gate (syncAllowed) ────────────────────────────────────────
+
+  describe("syncAllowed gate (D-04)", () => {
+    test("handleSync does not call withAuthRetry and sets the suspension status when syncAllowed is false", async () => {
+      const { handleSync, setStatus, withAuthRetry } = useBuildHook({ syncAllowed: false })
+
+      await handleSync()
+
+      expect(withAuthRetry).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(
+        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
+      )
+    })
+
+    test("maybeAutoSync does not call syncPending or pullRemoteChanges when syncAllowed is false, even online with pending work", async () => {
+      // Force lastOnlineStateRef (3rd useRef call) to start "online" so the
+      // syncAllowed gate — not the online gate — is what's under test.
+      let refCallIndex = 0
+      useRefSpy.mockRestore()
+      useRefSpy = jest.spyOn(React, "useRef").mockImplementation(((initial: unknown) => {
+        refCallIndex += 1
+        if (refCallIndex === 3) {
+          return { current: true }
+        }
+        return { current: initial }
+      }) as never)
+      mockHasPendingSyncWork.mockResolvedValue(true)
+
+      const { maybeAutoSync } = useBuildHook({ syncAllowed: false })
+      await maybeAutoSync("auth-ready")
+
+      expect(mockHasPendingSyncWork).not.toHaveBeenCalled()
+      expect(mockSyncPending).not.toHaveBeenCalled()
+      expect(mockPullRemoteChanges).not.toHaveBeenCalled()
+    })
+
+    test("handlePullChanges does not call pullRemoteChanges when syncAllowed is false", async () => {
+      const { handlePullChanges, setStatus, withAuthRetry } = useBuildHook({ syncAllowed: false })
+
+      await handlePullChanges()
+
+      expect(withAuthRetry).not.toHaveBeenCalled()
+      expect(mockPullRemoteChanges).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(
+        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
+      )
+    })
+
+    test("handleReportSurvey is not gated by syncAllowed", async () => {
+      mockCreateSurveyReport.mockResolvedValue({})
+      const { handleReportSurvey } = useBuildHook({ syncAllowed: false })
+
+      const result = await handleReportSurvey("survey-1", "reason text")
+
+      expect(result.ok).toBe(true)
+      expect(mockCreateSurveyReport).toHaveBeenCalled()
+    })
+
+    test("syncAllowed true preserves existing handleSync behavior", async () => {
+      mockSyncPending.mockResolvedValue({
+        synced: 1,
+        failed: 0,
+        pulled_surveys: 0,
+        pulled_attachments: 0,
+      })
+      const { handleSync, setStatus } = useBuildHook({ syncAllowed: true })
+
+      await handleSync()
+
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Sync complete"))
     })
   })
 })
