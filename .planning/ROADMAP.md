@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR
 - [ ] **Phase 1.1: Reconcile the IBP method version** (INSERTED) - Establish whether the app still implements the current CNPF method, and what changes if not
-- [ ] **Phase 1.2: Stop field data loss and account exposure** (INSERTED) - Session errors never delete offline data; no account takeover or open debug surface
+- [x] **Phase 1.2: Stop field data loss and account exposure** (INSERTED) - Session errors never delete offline data; no account takeover or open debug surface (completed 2026-09-23)
 - [ ] **Phase 1.3: CI and test safety net** (INSERTED) - Typecheck in CI, reproducible image, tests that run real SQL
 - [ ] **Phase 1.4: API sync integrity** (INSERTED) - Validated sync payloads, no submit bypass, transactional writes
 - [ ] **Phase 1.5: Mobile sync engine reliability** (INSERTED) - Single-flight drain, bounded batches, durable photos
@@ -119,7 +119,7 @@ Plans:
 - [x] 01.2-06-PLAN.md — Session end never purges; retry-later handling; pre-Auth0 stubs removed (wave 2)
 - [x] 01.2-07-PLAN.md — Local-data owner marker, unsynced-work count, useLocalDataOwner hook (wave 2)
 - [x] 01.2-08-PLAN.md — Confirmed-purge logout, owner-gated sync, blocking conflict screen (wave 3)
-- [ ] 01.2-09-PLAN.md — Phase gate and on-device verification (wave 4, checkpoint)
+- [x] 01.2-09-PLAN.md — Phase gate and on-device verification (wave 4, checkpoint)
 
 ### Phase 01.3: CI and test safety net (INSERTED)
 
@@ -344,7 +344,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 |-------|----------------|--------|-----------|
 | 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
-| 1.2. Stop field data loss and account exposure | 8/9 | In Progress|  |
+| 1.2. Stop field data loss and account exposure | 9/9 | Complete   | 2026-09-23 |
 | 1.3. CI and test safety net | 0/TBD | Not started | - |
 | 1.4. API sync integrity | 0/TBD | Not started | - |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
