@@ -12,6 +12,11 @@ export type LocalDataOwnerStatus = "idle" | "checking" | "ok" | "conflict" | "er
 
 const EMPTY_WORK: UnsyncedLocalWork = { surveys: 0, attachments: 0, deletions: 0 }
 
+// WR-07: a failed check (e.g. a transient SQLite error) is retried with
+// exponential backoff instead of suspending sync for the rest of the session.
+const OWNER_CHECK_RETRY_BASE_MS = 2_000
+const OWNER_CHECK_RETRY_MAX_MS = 60_000
+
 /**
  * D-04 owner-check state machine. Never calls the API, never shows UI —
  * `syncAllowed` is default-deny: it is true only when the owner check approved
@@ -36,6 +41,8 @@ export function useLocalDataOwner(params: {
   const approvedSubRef = useRef<string | null>(null)
   const sessionOwnerRef = useRef<IdTokenClaims | null>(sessionOwner)
   sessionOwnerRef.current = sessionOwner
+  const retryAttemptRef = useRef(0)
+  const sessionSub = sessionOwner?.sub ?? null
 
   const approve = useCallback((sub: string | null): void => {
     approvedSubRef.current = sub
@@ -77,6 +84,7 @@ export function useLocalDataOwner(params: {
         if (sessionOwnerRef.current?.sub !== expectedSub) {
           return
         }
+        retryAttemptRef.current = 0
         approve(expectedSub)
         setStatus("ok")
       }
@@ -102,6 +110,7 @@ export function useLocalDataOwner(params: {
           break
         }
         case "conflict": {
+          retryAttemptRef.current = 0
           setForeignWork(unsynced)
           setForeignOwnerEmail(storedOwner?.email ?? null)
           setStatus("conflict")
@@ -158,6 +167,7 @@ export function useLocalDataOwner(params: {
   }, [])
 
   useEffect(() => {
+    retryAttemptRef.current = 0
     if (!sessionOwner) {
       approve(null)
       setStatus("idle")
@@ -168,6 +178,21 @@ export function useLocalDataOwner(params: {
     // reads the latest sessionOwner via sessionOwnerRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionOwner?.sub, recheck])
+
+  useEffect(() => {
+    if (status !== "error" || !sessionSub) {
+      return
+    }
+    const attempt = retryAttemptRef.current
+    retryAttemptRef.current = attempt + 1
+    const delayMs = Math.min(OWNER_CHECK_RETRY_BASE_MS * 2 ** attempt, OWNER_CHECK_RETRY_MAX_MS)
+    const timeoutId = setTimeout(() => {
+      void recheck()
+    }, delayMs)
+    return () => {
+      clearTimeout(timeoutId)
+    }
+  }, [status, sessionSub, recheck])
 
   return {
     status,

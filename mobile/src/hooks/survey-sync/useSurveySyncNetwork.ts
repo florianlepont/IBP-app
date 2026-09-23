@@ -3,6 +3,7 @@ import * as Network from "expo-network"
 import { createSurveyReport } from "../../api/ibp-api"
 import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from "../../storage"
 import { isAuthRequiredError, isAuthTemporarilyUnavailableError } from "../auth-errors"
+import type { LocalDataOwnerStatus } from "../useLocalDataOwner"
 import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
 import { isOnlineNetworkState } from "./utils"
 
@@ -11,9 +12,18 @@ const RETRY_LATER_MESSAGE =
 
 // D-04: local data owned by another account suspends every automatic and
 // manual sync/pull path until the conflict is resolved (owner-check status
-// leaves "conflict" or turns "ok").
+// leaves "conflict" or turns "ok"). Only the "conflict" status may say so.
 const OWNER_SUSPENDED_MESSAGE =
   "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte."
+
+// Any other status that blocks sync ("checking", "error", "idle"): the owner
+// check has not approved this session yet (WR-07).
+const OWNER_CHECK_PENDING_MESSAGE =
+  "Vérification des données locales en cours… La synchronisation reprendra ensuite."
+
+function ownerGateMessage(ownerStatus: LocalDataOwnerStatus): string {
+  return ownerStatus === "conflict" ? OWNER_SUSPENDED_MESSAGE : OWNER_CHECK_PENDING_MESSAGE
+}
 
 // The execution-time owner check refused (the token's account, the session
 // owner and the stored local-data owner disagree): nothing was sent.
@@ -31,6 +41,8 @@ type UseSurveySyncNetworkParams = {
   setStatus: (message: string) => void
   syncAllowed: boolean
   ensureSyncOwner: EnsureSyncOwner
+  ownerStatus: LocalDataOwnerStatus
+  recheckOwner: () => Promise<void>
 }
 
 export function useSurveySyncNetwork({
@@ -44,17 +56,29 @@ export function useSurveySyncNetwork({
   setStatus,
   syncAllowed,
   ensureSyncOwner,
+  ownerStatus,
+  recheckOwner,
 }: UseSurveySyncNetworkParams) {
   const syncInProgressRef = useRef(false)
   const pullInProgressRef = useRef(false)
   const lastOnlineStateRef = useRef<boolean | null>(null)
   const lastAutoSyncAtRef = useRef<number>(0)
+  const ownerStatusRef = useRef<LocalDataOwnerStatus>(ownerStatus)
+  ownerStatusRef.current = ownerStatus
+
+  // A manual sync or a new token retries a failed owner check (WR-07).
+  const retryFailedOwnerCheck = useCallback((): void => {
+    if (ownerStatusRef.current === "error") {
+      void recheckOwner()
+    }
+  }, [recheckOwner])
 
   const runSync = useCallback(
     async (mode: "manual" | "auto", trigger?: string): Promise<void> => {
       if (!syncAllowed) {
         if (mode === "manual") {
-          setStatus(OWNER_SUSPENDED_MESSAGE)
+          retryFailedOwnerCheck()
+          setStatus(ownerGateMessage(ownerStatusRef.current))
         }
         return
       }
@@ -109,6 +133,7 @@ export function useSurveySyncNetwork({
       ensureSyncOwner,
       refreshLocalAttachments,
       refreshLocalSurveys,
+      retryFailedOwnerCheck,
       setStatus,
       syncAllowed,
       withAuthRetry,
@@ -197,7 +222,8 @@ export function useSurveySyncNetwork({
 
   const handlePullChanges = useCallback(async (): Promise<void> => {
     if (!syncAllowed) {
-      setStatus(OWNER_SUSPENDED_MESSAGE)
+      retryFailedOwnerCheck()
+      setStatus(ownerGateMessage(ownerStatusRef.current))
       return
     }
     try {
@@ -233,6 +259,7 @@ export function useSurveySyncNetwork({
     ensureSyncOwner,
     refreshLocalAttachments,
     refreshLocalSurveys,
+    retryFailedOwnerCheck,
     setStatus,
     syncAllowed,
     withAuthRetry,
@@ -321,6 +348,13 @@ export function useSurveySyncNetwork({
     }
     void maybeAutoSync("auth-ready")
   }, [accessToken, syncAllowed, maybeAutoSync])
+
+  // A new/refreshed token ("auth-ready") also retries a failed owner check.
+  useEffect(() => {
+    if (accessToken) {
+      retryFailedOwnerCheck()
+    }
+  }, [accessToken, retryFailedOwnerCheck])
 
   useEffect(() => {
     if (!accessToken) {

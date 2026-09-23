@@ -52,6 +52,8 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     setStatus: jest.fn(),
     syncAllowed: true,
     ensureSyncOwner: jest.fn().mockResolvedValue(true),
+    ownerStatus: "ok",
+    recheckOwner: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   }
   const hook = useSurveySyncNetwork(params as never)
@@ -261,7 +263,10 @@ describe("useSurveySyncNetwork", () => {
 
   describe("syncAllowed gate (D-04)", () => {
     test("handleSync does not call withAuthRetry and sets the suspension status when syncAllowed is false", async () => {
-      const { handleSync, setStatus, withAuthRetry } = useBuildHook({ syncAllowed: false })
+      const { handleSync, setStatus, withAuthRetry } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "conflict",
+      })
 
       await handleSync()
 
@@ -285,7 +290,7 @@ describe("useSurveySyncNetwork", () => {
       }) as never)
       mockHasPendingSyncWork.mockResolvedValue(true)
 
-      const { maybeAutoSync } = useBuildHook({ syncAllowed: false })
+      const { maybeAutoSync } = useBuildHook({ syncAllowed: false, ownerStatus: "conflict" })
       await maybeAutoSync("auth-ready")
 
       expect(mockHasPendingSyncWork).not.toHaveBeenCalled()
@@ -294,7 +299,10 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("handlePullChanges does not call pullRemoteChanges when syncAllowed is false", async () => {
-      const { handlePullChanges, setStatus, withAuthRetry } = useBuildHook({ syncAllowed: false })
+      const { handlePullChanges, setStatus, withAuthRetry } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "conflict",
+      })
 
       await handlePullChanges()
 
@@ -305,9 +313,37 @@ describe("useSurveySyncNetwork", () => {
       )
     })
 
+    test("WR-07: a failed owner check retries it on manual sync and does not blame another account", async () => {
+      const { handleSync, setStatus, withAuthRetry, recheckOwner } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "error",
+      })
+
+      await handleSync()
+
+      expect(withAuthRetry).not.toHaveBeenCalled()
+      expect(recheckOwner).toHaveBeenCalled()
+      expect(setStatus).not.toHaveBeenCalledWith(
+        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
+      )
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+    })
+
+    test("WR-07: a manual pull during the owner check reports the check, not a conflict", async () => {
+      const { handlePullChanges, setStatus, recheckOwner } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "checking",
+      })
+
+      await handlePullChanges()
+
+      expect(recheckOwner).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+    })
+
     test("handleReportSurvey is not gated by syncAllowed", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey } = useBuildHook({ syncAllowed: false })
+      const { handleReportSurvey } = useBuildHook({ syncAllowed: false, ownerStatus: "conflict" })
 
       const result = await handleReportSurvey("survey-1", "reason text")
 

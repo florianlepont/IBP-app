@@ -150,6 +150,27 @@ describe("useLocalDataOwner", () => {
     expect(result.current.status).toBe("ok")
   })
 
+  test("WR-07: an owner-check error is retried automatically with backoff", async () => {
+    jest.useFakeTimers()
+    try {
+      mockGetLocalDataOwner.mockRejectedValueOnce(new Error("SQLITE_BUSY"))
+      mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 0, attachments: 0, deletions: 0 })
+
+      const { result } = await setup({ sub: "a", email: "a@b.fr" })
+      await waitFor(() => expect(result.current.status).toBe("error"))
+
+      mockGetLocalDataOwner.mockResolvedValue({ sub: "a", email: "a@b.fr" })
+      await act(async () => {
+        jest.advanceTimersByTime(60_000)
+      })
+
+      await waitFor(() => expect(result.current.status).toBe("ok"))
+      expect(result.current.syncAllowed).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   test("sessionOwner changes from present to null -> idle", async () => {
     mockGetLocalDataOwner.mockResolvedValue({ sub: "a", email: "a@b.fr" })
     mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 0, attachments: 0 })

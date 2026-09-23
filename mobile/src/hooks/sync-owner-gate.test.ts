@@ -96,6 +96,8 @@ function useHarness(props: HarnessProps) {
     setStatus: noop,
     syncAllowed: owner.syncAllowed,
     ensureSyncOwner: owner.ensureSyncOwner,
+    ownerStatus: owner.status,
+    recheckOwner: owner.recheck,
   } as never)
   return { owner, network }
 }

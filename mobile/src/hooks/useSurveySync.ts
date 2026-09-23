@@ -257,6 +257,8 @@ export function useSurveySync({
       setStatus,
       syncAllowed: localDataOwner.syncAllowed,
       ensureSyncOwner: localDataOwner.ensureSyncOwner,
+      ownerStatus: localDataOwner.status,
+      recheckOwner: localDataOwner.recheck,
     },
   )
 
