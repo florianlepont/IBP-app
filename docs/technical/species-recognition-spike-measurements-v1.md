@@ -1179,7 +1179,45 @@ full 34-class run) measured ~95-120ms/step for the frozen-head phase and ~218ms/
 the full ~51,000-image train set — this sized the epoch counts above to fit a practical wall-clock
 budget rather than being picked arbitrarily.
 
-_(Training results, export, and the side-by-side per-genus comparison table are filled in next.)_
+**First training attempt found a genuine data-pipeline bug, not a genuine model result —
+discarded and retrained, not reported as evidence.** The first attempt (6 head epochs, 8
+fine-tune epochs, no early stopping) finished with validation top1/top3 of 0.3253/0.5901 —
+numerically close to iteration 1's 0.3816/0.5897, which on its face would already have been an
+interesting "barely moved" data point. Per-genus test evaluation on that model, however, showed
+an implausible pattern: accuracy correlated with a class's position in `genus_labels.txt`
+(Pearson r=0.85 between label index and top-3 accuracy) — classes early in the file
+(Abies…Cupressus) scored 21–54% top-3, classes late in the file (Tamarix, Taxus, Tilia, Ceratonia)
+scored 87–95%, with no botanical reason to expect that split. Root cause: `make_dataset`'s
+`tf.data` `.shuffle(buffer_size=2048)` only shuffles within a sliding window, and
+`collect_split()` concatenates each class's files in `genus_labels.txt` order before that shuffle
+ever runs. Iteration 1's ~150 images/class meant the 2048-window still spanned >10 classes at
+once, giving adequate cross-class mixing despite being windowed (iteration 1's own label-index/
+accuracy correlation is a much weaker r=0.36, consistent with normal windowed-shuffle imprecision,
+not a systematic bug — iteration 1's result is not affected and is not being revisited). Iteration
+2's ~1,200–1,600 images/class made the same 2048-window barely span a single class's block, so
+early-epoch batches were overwhelmingly whichever class starts the file and late-epoch batches
+were overwhelmingly whichever class ends it — a training-order recency bias, not a capability
+signal. **Fixed in `finetune.py`'s `collect_split()`: the full (file, label) list is now globally
+shuffled in Python before it ever reaches `tf.data`, with the windowed shuffle widened to 8192 as
+a secondary per-epoch re-randomisation on top.** Verified directly: post-fix, every class's mean
+position in the shuffled 51,089-file training list falls within ~1.3% of the expected midpoint
+(stdev of per-class mean positions: 328, versus a maximum possible range of ~51,089). The invalid
+first attempt's artefacts are kept on disk (gitignored, suffixed `_INVALID_shuffle_bug`) for
+traceability but are not used anywhere in this document's reported numbers.
+
+**Also added for the retrained run: `EarlyStopping(monitor='val_top3', patience=3,
+restore_best_weights=True)` on the fine-tune phase.** The first attempt's own validation curve
+showed a clear reason to add this regardless of the shuffle bug: val_top3 peaked at
+0.6127 partway through the 8 fine-tune epochs, then declined to 0.5901 by the final epoch while
+training accuracy kept climbing (0.51→0.92 top3) — textbook overfitting once the corpus is large
+enough for the head+partial-backbone to start memorising rather than generalising further. Without
+early stopping, the exported model would have been silently the last (already-past-peak) epoch's
+weights rather than the best one found during the run — the same category of measurement risk
+this plan's parity-check requirement is designed to catch on the export side, applied here on the
+training side.
+
+_(Retrained-run results, export, and the side-by-side per-genus comparison table are filled in
+next.)_
 
 ### 10.3 What was not re-done in iteration 2
 
