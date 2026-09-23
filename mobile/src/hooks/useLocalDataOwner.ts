@@ -10,7 +10,7 @@ import { clearLocalIbpData } from "../storage/surveys"
 
 export type LocalDataOwnerStatus = "idle" | "checking" | "ok" | "conflict" | "error"
 
-const EMPTY_WORK: UnsyncedLocalWork = { surveys: 0, attachments: 0 }
+const EMPTY_WORK: UnsyncedLocalWork = { surveys: 0, attachments: 0, deletions: 0 }
 
 /**
  * D-04 owner-check state machine. Never calls the API, never shows UI —
