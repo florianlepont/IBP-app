@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef } from "react"
 import * as Network from "expo-network"
 import { createSurveyReport } from "../../api/ibp-api"
 import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from "../../storage"
-import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
+import { isAuthRequiredError, isAuthTemporarilyUnavailableError } from "../auth-errors"
 import { isOnlineNetworkState } from "./utils"
+
+const RETRY_LATER_MESSAGE =
+  "Synchronisation reportée : authentification momentanément indisponible. Vos relevés locaux sont conservés."
 
 type UseSurveySyncNetworkParams = {
   apiUrl: string
   accessToken: string | null
-  refreshToken: string | null
   surveys: LocalSurvey[]
   clearSession: () => Promise<void>
   withAuthRetry: <T>(fn: (token: string) => Promise<T>) => Promise<T>
@@ -20,7 +22,6 @@ type UseSurveySyncNetworkParams = {
 export function useSurveySyncNetwork({
   apiUrl,
   accessToken,
-  refreshToken,
   surveys,
   clearSession,
   withAuthRetry,
@@ -56,7 +57,11 @@ export function useSurveySyncNetwork({
           `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`,
         )
       } catch (error) {
-        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        if (isAuthTemporarilyUnavailableError(error)) {
+          setStatus(RETRY_LATER_MESSAGE)
+          return
+        }
+        if (isAuthRequiredError(error)) {
           await clearSession()
           setStatus(
             mode === "manual" ? "Login required before sync" : "Sync paused: login required",
@@ -76,7 +81,7 @@ export function useSurveySyncNetwork({
       if (lastOnlineStateRef.current !== true) {
         return
       }
-      if (!(accessToken || refreshToken)) {
+      if (!accessToken) {
         return
       }
 
@@ -111,7 +116,11 @@ export function useSurveySyncNetwork({
           )
         }
       } catch (error) {
-        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        if (isAuthTemporarilyUnavailableError(error)) {
+          setStatus(RETRY_LATER_MESSAGE)
+          return
+        }
+        if (isAuthRequiredError(error)) {
           await clearSession()
           setStatus("Sync paused: login required")
           return
@@ -126,7 +135,6 @@ export function useSurveySyncNetwork({
       clearSession,
       refreshLocalAttachments,
       refreshLocalSurveys,
-      refreshToken,
       runSync,
       setStatus,
       withAuthRetry,
@@ -147,7 +155,11 @@ export function useSurveySyncNetwork({
         `Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`,
       )
     } catch (error) {
-      if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+      if (isAuthTemporarilyUnavailableError(error)) {
+        setStatus(RETRY_LATER_MESSAGE)
+        return
+      }
+      if (isAuthRequiredError(error)) {
         await clearSession()
         setStatus("Login required before pulling server changes")
         return
@@ -179,7 +191,13 @@ export function useSurveySyncNetwork({
         setStatus(message)
         return { ok: true, message }
       } catch (error) {
-        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        if (isAuthTemporarilyUnavailableError(error)) {
+          const message =
+            "Signalement non envoyé : authentification momentanément indisponible. Réessayez plus tard."
+          setStatus(message)
+          return { ok: false, message }
+        }
+        if (isAuthRequiredError(error)) {
           await clearSession()
           const message = "Login required before reporting a survey"
           setStatus(message)
@@ -228,14 +246,14 @@ export function useSurveySyncNetwork({
   }, [maybeAutoSync])
 
   useEffect(() => {
-    if (!(accessToken || refreshToken)) {
+    if (!accessToken) {
       return
     }
     void maybeAutoSync("auth-ready")
-  }, [accessToken, refreshToken, maybeAutoSync])
+  }, [accessToken, maybeAutoSync])
 
   useEffect(() => {
-    if (!(accessToken || refreshToken)) {
+    if (!accessToken) {
       return
     }
 
@@ -246,14 +264,14 @@ export function useSurveySyncNetwork({
     return () => {
       clearInterval(intervalId)
     }
-  }, [accessToken, refreshToken, maybeAutoSync])
+  }, [accessToken, maybeAutoSync])
 
   useEffect(() => {
-    if (!(accessToken || refreshToken)) {
+    if (!accessToken) {
       return
     }
     void maybeAutoSync("local-queue-updated")
-  }, [surveys, accessToken, refreshToken, maybeAutoSync])
+  }, [surveys, accessToken, maybeAutoSync])
 
   return {
     handleSync,

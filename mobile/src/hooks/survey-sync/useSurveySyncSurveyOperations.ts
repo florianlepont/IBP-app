@@ -16,20 +16,17 @@ import {
   syncPending,
   updateSurveyVisibility,
 } from "../../storage"
-import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
+import { isAuthRequiredError } from "../auth-errors"
 import { formatSubmitReadinessError, guessMimeType, isUnauthorizedResultMessage } from "./utils"
 
 type UseSurveySyncSurveyOperationsParams = {
   apiUrl: string
   accessToken: string
-  refreshToken: string
   selectedSurveyId: string | null
   editingSurveyId: string | null
   surveys: LocalSurvey[]
   clearSession: () => Promise<void>
-  refreshSessionTokens: (
-    tokenOverride?: string,
-  ) => Promise<{ accessToken: string; refreshToken: string } | null>
+  refreshSessionTokens: () => Promise<{ accessToken: string } | null>
   withAuthRetry: <T>(operation: (token: string) => Promise<T>) => Promise<T>
   refreshLocalSurveys: () => Promise<void>
   refreshLocalAttachments: () => Promise<void>
@@ -43,7 +40,6 @@ type UseSurveySyncSurveyOperationsParams = {
 export function useSurveySyncSurveyOperations({
   apiUrl,
   accessToken,
-  refreshToken,
   selectedSurveyId,
   editingSurveyId,
   surveys,
@@ -167,7 +163,7 @@ export function useSurveySyncSurveyOperations({
           result.ok ? `Submitted ${surveyId}` : `Submit blocked for ${surveyId}: ${result.message}`,
         )
       } catch (error) {
-        if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+        if (isAuthRequiredError(error)) {
           await clearSession()
           setStatus("Login required before submit")
           return
@@ -234,7 +230,7 @@ export function useSurveySyncSurveyOperations({
         }
         await refreshLocalSurveys()
         await refreshLocalAttachments()
-        if (result.synced && (accessToken || refreshToken)) {
+        if (result.synced && accessToken) {
           void handleLoadCanonicalDetails(surveyId, { silent: true })
         }
         setStatus(
@@ -254,7 +250,6 @@ export function useSurveySyncSurveyOperations({
       refreshLocalAttachments,
       refreshLocalSurveys,
       refreshSessionTokens,
-      refreshToken,
       setStatus,
     ],
   )
@@ -395,7 +390,7 @@ export function useSurveySyncSurveyOperations({
             )
             return
           } catch (error) {
-            if ((error as Error).message === AUTH_REQUIRED_ERROR) {
+            if (isAuthRequiredError(error)) {
               await refreshLocalSurveys()
               await refreshLocalAttachments()
               setStatus("Attachment removed locally. Login and sync to propagate server deletion.")

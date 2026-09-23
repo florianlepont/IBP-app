@@ -47,11 +47,12 @@ export function useSurveySync({
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null)
   const detailAutoLoadCooldownUntilRef = useRef<Record<string, number>>({})
 
+  // Session end resets UI state only — local surveys, queue and photos are
+  // never purged here (D-02, audit M-C1).
   const clearSurveySessionState = useCallback(async (): Promise<void> => {
     setSurveyDetails({})
     setSurveyEvents({})
     detailAutoLoadCooldownUntilRef.current = {}
-    await clearLocalIbpData()
   }, [])
 
   const reportStatus = useCallback(
@@ -93,13 +94,10 @@ export function useSurveySync({
 
   const {
     accessToken,
-    refreshToken,
     sessionRestoring,
     currentUser,
     profile,
     isAuthenticated,
-    pendingEmailVerification,
-    devVerificationToken,
     setProfileFromUser,
     clearSession,
     refreshSessionTokens,
@@ -109,9 +107,6 @@ export function useSurveySync({
     handleRegister,
     handleForgotPassword,
     handleLogout,
-    handleCancelEmailVerification,
-    handleVerifyEmail,
-    handleResendVerification,
   } = useAuth0Session({
     apiUrl,
     reportStatus,
@@ -177,7 +172,6 @@ export function useSurveySync({
     {
       apiUrl,
       accessToken,
-      refreshToken,
       surveys,
       clearSession,
       withAuthRetry,
@@ -337,7 +331,6 @@ export function useSurveySync({
   } = useSurveySyncSurveyOperations({
     apiUrl,
     accessToken,
-    refreshToken,
     selectedSurveyId,
     editingSurveyId,
     surveys,
@@ -415,8 +408,6 @@ export function useSurveySync({
     accessToken,
     sessionRestoring,
     isAuthenticated,
-    pendingEmailVerification,
-    devVerificationToken,
     currentUser,
     profile,
     profileUpdating,
@@ -431,9 +422,6 @@ export function useSurveySync({
     handleRegister,
     handleForgotPassword,
     handleLogout,
-    handleCancelEmailVerification,
-    handleVerifyEmail,
-    handleResendVerification,
     handleLoadMyProfile,
     handleUpdateProfile,
     handleChangeEmail,
