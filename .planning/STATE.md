@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-23T14:34:42.365Z"
-last_activity: 2026-09-23 -- Phase 01.2 execution started
+stopped_at: Completed 01.2-01-PLAN.md
+last_updated: "2026-09-23T14:42:11.322Z"
+last_activity: 2026-09-23
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 15
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 01.2
-Last activity: 2026-09-23 -- Phase 01.2 execution started
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-09-23
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01.2 P01 | 45min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Decisions table. Decisions affecting current work:
 - **Shipped status enum wins** (`draft|submitted|synced|error|expired`, `submitted_at`/`deleted_at`); `ibp-form-spec.md` §10.1 is stale
 - US-C9 species recognition stays in MVP but is gated behind an ML ADR (Phase 1) and a contract extension (Phase 2)
 - The current VPS is ratified as the hosting target, not migrated (Phase 6)
+- [Phase 01.2]: Tracker key = SHA-256(bearer token) when present, else client IP; trust proxy defaults to loopback
+- [Phase 01.2]: Production default raised 10/min shared to 600/min per client (60/min /sync, 240/min uploads) plus a 3000/min per-IP ceiling against token rotation
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-22T09:01:30.500Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-species-recognition-approach-decision/01-CONTEXT.md
+Last session: 2026-09-23T14:42:11.315Z
+Stopped at: Completed 01.2-01-PLAN.md
+Resume file: None
