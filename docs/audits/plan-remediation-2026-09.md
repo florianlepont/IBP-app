@@ -77,15 +77,14 @@ Couvre : **A-C1**, **A-H4**.
 
 #### L3 · API — Identité, e-mail et confidentialité des signalements · **M** · 🟠
 Couvre : **A-H1**, **A-M6**, `MaxLength` du motif de signalement.
-- `AuthGuard` : la liaison par e-mail exige `userInfo.email_verified === true`. Sinon, on crée un nouvel utilisateur.
-  - Une option à trancher (§5) : supprimer complètement la liaison si la migration Auth0 est terminée.
+- `AuthGuard` : **supprimer** la liaison par e-mail (décision §5.1). Un `sub` inconnu crée toujours un nouvel utilisateur. Avant le déploiement, vérifier en production que `SELECT count(*) FROM users WHERE auth0_sub IS NULL` vaut 0.
 - Déplacer le provisionnement dans `UsersService.provisionFromAuth0()` avec `INSERT … ON CONFLICT (auth0_sub) DO UPDATE … RETURNING`, pour supprimer la course entre deux premières requêtes simultanées.
 - `users.service.ts:365-378` : ne mettre à jour `users.email` qu'après la vérification Auth0 (webhook ou lecture de `email_verified` à la connexion suivante).
 - `reports.service.ts` : l'événement `reported` ne contient plus `actor_id` ni `reason`.
   - Nouvelle migration pour nettoyer les événements existants.
   - `@MaxLength(1000)` sur `reason`, et déduplication `(reporter_id, survey_id)` par un index unique.
 - **Tests :**
-  - unitaire : un e-mail non vérifié ne fait pas de liaison ;
+  - unitaire : un `sub` inconnu dont l'e-mail existe déjà ne se lie pas au compte existant ;
   - E2E : deux premières requêtes concurrentes produisent un seul utilisateur ;
   - E2E : le propriétaire ne voit pas l'identité du signaleur.
 
@@ -266,7 +265,7 @@ Couvre : **ARCH-2**, les efficiences API (sync séquentielle, IGN, listes non bo
 #### L16 · API — Index et migrations · **S** · 🟡
 Couvre : les index manquants et redondants, la partie migrations et tables mortes d'**ARCH-7**.
 - Index partiel `surveys (submitted_at DESC) WHERE status = 'submitted' AND visibility = 'public' AND deleted_at IS NULL`.
-- Colonnes générées `parcels.centroid_lat` et `centroid_lng` (`STORED`) avec un index btree composite. Réécrire le filtre bbox. Option PostGIS à trancher (§5).
+- Colonnes générées `parcels.centroid_lat` et `centroid_lng` (`STORED`) avec un index btree composite. Réécrire le filtre bbox. PostGIS écarté (§5.3).
 - Index `survey_events(actor_id)`.
 - Supprimer `idx_users_auth0_sub`, `idx_surveys_parcel_id` et `idx_survey_parcels_survey_id`.
 - `scripts/migrate.js` : `pg_advisory_lock` pendant les migrations.
@@ -304,7 +303,7 @@ Couvre : **ARCH-4**, les efficiences mobile (re-rendus, `FlatList`, `listLocalSu
 
 #### L19 · Mobile — i18n, messages et accessibilité · **M** · 🟢
 Couvre : les textes mélangés FR/EN, les messages d'état techniques, l'accessibilité.
-- `i18n-js` et `expo-localization`, avec le catalogue `fr` comme langue de référence et `en` en option. Extraire tous les textes.
+- `i18n-js` et `expo-localization`, avec un seul catalogue `fr` (§5.4). L'anglais s'ajoutera plus tard par simple traduction. Extraire tous les textes.
 - Les messages d'état passent par un mapping `code → message utilisateur`, sans ID ni texte technique. Le détail reste dans les logs de debug.
 - `accessibilityRole`, `accessibilityLabel` et `accessibilityState` sur tous les `Pressable` de `SurveyDetailScreen`, `PublicMapScreen` et `SurveyFormScreen`. Règle ESLint `react-native-a11y` en *warning*.
 - **Tests :** aucun texte en dur (règle ESLint `i18next/no-literal-string` limitée aux écrans).
@@ -336,13 +335,15 @@ Couvre : **ARCH-7** (reste), **ARCH-8**.
 | **J3 — Architecture saine** | Phase 3 | Aucun fichier source de plus de 600 lignes. Règles IBP définies une seule fois. `EXPLAIN` sans scan séquentiel sur les routes publiques. Liste fluide avec 500 relevés. |
 | **J4 — Audit soldé** | Phase 4 | Chaque ligne de la matrice §6 cochée avec un lien vers sa PR. `CLAUDE.md` exact. Couverture globale ≥ 70 % (API unitaire et E2E combinés) et ≥ 65 % (mobile). |
 
-## 5. Décisions à prendre
+## 5. Décisions (arbitrées le 23/09/2026)
 
-1. **Liaison de comptes par e-mail (L3).** Faut-il la supprimer complètement (recommandé si tous les comptes ont déjà un `auth0_sub`, à vérifier par une requête SQL en production), ou la garder avec `email_verified` ? Et l'inscription Auth0 exige-t-elle la vérification de l'e-mail ?
-2. **Déconnexion avec des données en attente (L1).** Faut-il la bloquer tant que la sync n'a pas eu lieu, ou autoriser la purge après confirmation (recommandé) ?
-3. **Filtre géographique (L16).** Colonnes générées et btree (recommandé, sans nouvelle dépendance), ou PostGIS (plus puissant, mais nouvelle extension et nouvelle image Postgres) ?
-4. **Langues (L19).** Français seulement pour l'instant, ou français et anglais ?
-5. **Rythme de publication mobile.** Une version à chaque jalon J0, J2, J3 et J4 (recommandé), ou une seule grosse version ?
+| # | Sujet | Décision |
+|---|---|---|
+| 1 | Liaison de comptes par e-mail (L3) | **Supprimée.** Un nouvel identifiant Auth0 crée toujours un nouvel utilisateur. Prérequis à vérifier avant le déploiement : aucune ligne `users` sans `auth0_sub` en production. |
+| 2 | Déconnexion avec des données en attente (L1) | **Confirmation, puis purge.** L'app compte les relevés et les photos non synchronisés, et ne supprime qu'après confirmation explicite. |
+| 3 | Filtre géographique (L16) | **Colonnes générées `centroid_lat` / `centroid_lng` avec un index btree.** Pas de PostGIS. |
+| 4 | Langues (L19) | **Français seul, avec une i18n prête** : tous les textes passent par un catalogue `fr`. |
+| 5 | Rythme de publication mobile | Non arbitré. Par défaut, une version à chaque jalon (J0, J2, J3, J4). |
 
 ## 6. Matrice de traçabilité
 
