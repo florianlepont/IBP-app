@@ -248,7 +248,7 @@ describe("first-login provisioning (e2e)", () => {
     expect(after.rows[0].auth0_sub).toBe(`test|${email}`)
   })
 
-  it("links a verified email to the existing account and updates auth0_sub", async () => {
+  it("links a verified email to an existing unlinked (pre-Auth0) account and sets auth0_sub", async () => {
     const email = `e2e-verified-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/debug/test-token")
@@ -258,6 +258,8 @@ describe("first-login provisioning (e2e)", () => {
       .query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])
       .then((r) => r.rows[0])
     expect(login.status).toBe(201)
+    // Only an account not yet linked to an Auth0 identity may be linked (WR-03).
+    await db.query(`UPDATE users SET auth0_sub = NULL WHERE id = $1`, [existingUser.id])
 
     mockFetchUserInfo({ email, email_verified: true })
     const newSub = `auth0|verified-${Date.now()}`
@@ -270,5 +272,24 @@ describe("first-login provisioning (e2e)", () => {
       [email],
     )
     expect(after.rows[0].auth0_sub).toBe(newSub)
+  })
+
+  it("never re-points an account already linked to another sub, even with a verified email (WR-03)", async () => {
+    const email = `e2e-verified-linked-${Date.now()}@ibp.local`
+    await request(app.getHttpServer()).post("/v1/debug/test-token").send({ email }).expect(201)
+
+    mockFetchUserInfo({ email, email_verified: true })
+    const newSub = `google-oauth2|verified-${Date.now()}`
+
+    await expect(invoke({ sub: newSub })).rejects.toMatchObject({
+      status: 403,
+      response: { code: "email_already_linked" },
+    })
+
+    const after = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(after.rows[0].auth0_sub).toBe(`test|${email}`)
   })
 })
