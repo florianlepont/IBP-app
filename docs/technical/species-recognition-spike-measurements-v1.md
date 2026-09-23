@@ -1027,7 +1027,8 @@ _(Additional gaps recorded here as plans 03, 04 and 05 execute.)_
 
 ## 10. Iteration 2 — expanded corpus, larger backbone, side-by-side comparison
 
-**Status: IN PROGRESS (started 2026-09-23, after iteration 1's result was reviewed).**
+**Status: COMPLETE (2026-09-23, after iteration 1's result was reviewed and rejected as
+premature).**
 
 **Why this section exists.** Iteration 1 (Sections 4–5 above, git commits `1490ec6`/`ff07741`)
 found 0 of 34 genera clearing the D-02 95% top-3 bar. The user reviewed that result and rejected
@@ -1161,7 +1162,7 @@ Full detail: `spike/species-recognition/data/splits/seasonal_balance_report.json
 apply; composition was not re-audited at the new scale (out of scope for this iteration, see
 "What was not re-done" below).
 
-### 10.2 Training — in progress
+### 10.2 Training — complete
 
 Backbone: MobileNetV3-Large (`tensorflow.keras.applications.MobileNetV3Large`, same
 ImageNet-pretrained, Apache-2.0, Google-hosted-weights pattern as iteration 1's Small variant —
@@ -1216,10 +1217,112 @@ weights rather than the best one found during the run — the same category of m
 this plan's parity-check requirement is designed to catch on the export side, applied here on the
 training side.
 
-_(Retrained-run results, export, and the side-by-side per-genus comparison table are filled in
-next.)_
+**Retrained result (bug fixed, early stopping added): validation top1=0.5920, top3=0.7951 —
+still climbing at the final epoch, no overfitting observed.** Compare iteration 1's
+0.3816/0.5897. Full fine-tune-phase curve (8 epochs): val_top3 rose monotonically
+0.695→0.729→0.749→0.764→0.775→0.782→0.790→0.795, train_top3 rose 0.610→0.857 over the same
+epochs — a healthy, still-converging gap (not the runaway train/val divergence the first,
+buggy attempt showed). `EarlyStopping` never triggered (best epoch = the last, epoch 8) —
+this run stopped because it reached the epoch budget, not because it plateaued; more epochs
+would very likely have improved it further, not investigated here for the same D-19 timebox
+reasons iteration 1 stopped when it did. Training wall-clock: 1,699s (head) + 3,337s
+(fine-tune) = 5,046s (≈84 min), CPU-only.
 
-### 10.3 What was not re-done in iteration 2
+**Export: `spike/species-recognition/train/genus_classifier_v2.tflite`, 6,127,976 bytes
+(≈5.84 MB), float16-quantised (same scheme as iteration 1, same reasoning — kept, per this
+iteration's instructions, rather than re-optimised for size).** Export parity: **100%** top-1
+agreement (68/68 sampled test images) between the trained model and the exported `.tflite` —
+even cleaner than iteration 1's 100% (iteration 1 also passed cleanly on the retry after
+switching from int8 to float16; both iterations ship float16 for the same reason).
+
+### 10.3 Per-genus accuracy — iteration 1 vs iteration 2, side by side
+
+**Source model:** `genus_classifier_v2.tflite` (above). **Test split:** iteration 2's own
+held-out test split, 6,387 images across 34 classes (up from iteration 1's 1,183) — roughly
+200 images/class instead of ~35. **Measured:** 2026-09-23, same
+`eval/evaluate_accuracy.py` script, same D-03/D-04 rules (per genus, raw counts, no headline
+average). **Composition-filtering decision unchanged from iteration 1** (Section 5): raw,
+unfiltered test split, for the same reasons.
+
+**Bug-fix sanity check, repeated on the corrected run:** label-index/top-3-accuracy correlation
+is r=0.36 — statistically indistinguishable from iteration 1's r=0.36, both consistent with
+normal windowed-shuffle imprecision rather than the r=0.85 systematic artefact the first,
+discarded iteration-2 attempt showed. This result is not affected by that bug.
+
+| genus | it1 n | it1 top1 | it1 top3 | it1 clears | it2 n | it2 top1 | it2 top3 | it2 clears | top3 Δ |
+|---|---:|---:|---:|:---:|---:|---:|---:|:---:|---:|
+| Abies | 35 | 45.7% | 60.0% | No | 198 | 55.0% | 81.3% | No | +21.3pp |
+| Acer | 35 | 14.3% | 25.7% | No | 191 | 58.6% | 79.6% | No | +53.9pp |
+| Alnus | 35 | 31.4% | 54.3% | No | 199 | 54.8% | 70.9% | No | +16.6pp |
+| Arbutus | 35 | 54.3% | 80.0% | No | 197 | 66.5% | 87.8% | No | +7.8pp |
+| Betula | 35 | 42.9% | 51.4% | No | 191 | 50.8% | 68.6% | No | +17.2pp |
+| Carpinus | 35 | 37.1% | 51.4% | No | 199 | 61.8% | 79.4% | No | +28.0pp |
+| Castanea | 35 | 37.1% | 51.4% | No | 192 | 63.5% | 81.8% | No | +30.3pp |
+| Celtis | 35 | 31.4% | 48.6% | No | 170 | 38.8% | 65.9% | No | +17.3pp |
+| Cupressus | 35 | 37.1% | 74.3% | No | 165 | 64.2% | 83.6% | No | +9.4pp |
+| Fagus | 35 | 51.4% | 71.4% | No | 169 | 56.8% | 78.1% | No | +6.7pp |
+| Fraxinus | 35 | 5.7% | 22.9% | No | 141 | 29.8% | 63.1% | No | +40.3pp |
+| Juglans | 35 | 14.3% | 42.9% | No | 179 | 52.5% | 73.7% | No | +30.9pp |
+| Juniperus | 35 | 25.7% | 60.0% | No | 177 | 53.7% | 76.3% | No | +16.3pp |
+| Larix | 35 | 42.9% | 54.3% | No | 176 | 62.5% | 79.5% | No | +25.3pp |
+| Malus | 35 | 54.3% | 71.4% | No | 191 | 53.4% | 72.2% | No | +0.8pp |
+| Ostrya | 35 | 22.9% | 34.3% | No | 185 | 53.0% | 69.2% | No | +34.9pp |
+| Pinus | 35 | 42.9% | 74.3% | No | 189 | 59.3% | 83.1% | No | +8.8pp |
+| Picea | 35 | 34.3% | 65.7% | No | 186 | 48.4% | 82.3% | No | +16.5pp |
+| Populus | 35 | 17.1% | 40.0% | No | 191 | 47.1% | 69.1% | No | +29.1pp |
+| Prunus | 35 | 31.4% | 48.6% | No | 197 | 49.8% | 73.6% | No | +25.0pp |
+| Pyrus | 35 | 20.0% | 42.9% | No | 188 | 43.1% | 71.3% | No | +28.4pp |
+| Quercus_deciduae | 35 | 40.0% | 60.0% | No | 196 | 69.9% | 84.7% | No | +24.7pp |
+| Quercus_sempervirens | 35 | 37.1% | 62.9% | No | 195 | 63.6% | 82.0% | No | +19.2pp |
+| Salix | 35 | 37.1% | 60.0% | No | 196 | 56.1% | 81.6% | No | +21.6pp |
+| Sorbus | 35 | 37.1% | 62.9% | No | 194 | 69.1% | 82.0% | No | +19.1pp |
+| Tamarix | 35 | 51.4% | 65.7% | No | 179 | 81.0% | 88.3% | No | +22.6pp |
+| Taxus | 35 | 45.7% | 68.6% | No | 197 | 67.5% | 85.3% | No | +16.7pp |
+| Tilia | 35 | 25.7% | 60.0% | No | 199 | 55.3% | 78.9% | No | +18.9pp |
+| Ulmus | 30 | 0.0% | 16.7% | No | 197 | 45.2% | 67.5% | No | +50.8pp |
+| Ceratonia | 35 | 65.7% | 85.7% | No | 193 | 80.8% | 92.8% | No | +7.0pp |
+| Cercis | 35 | 42.9% | 65.7% | No | 191 | 73.3% | 80.6% | No | +14.9pp |
+| Olea | 35 | 60.0% | 94.3% | No | 193 | 71.5% | 88.6% | No | **−5.7pp** |
+| Phillyrea | 35 | 60.0% | 88.6% | No | 199 | 71.4% | 88.4% | No | −0.1pp |
+| Pistacia | 33 | 48.5% | 81.8% | No | 187 | 61.0% | 82.3% | No | +0.5pp |
+
+**0 of 34 genera clear the D-02 95% top-3 bar in iteration 2 either — the same headline
+outcome as iteration 1.** But the delta column is the actual finding the user asked for:
+**32 of 34 genera improved, by a mean of +19.9 percentage points top-3** (range +0.5pp to
++53.9pp among improved classes); only 2 regressed, both by small margins (Olea −5.7pp,
+Phillyrea −0.1pp) and both were already iteration 1's two best-performing genera (94.3% and
+88.6%) — consistent with a ceiling/ranking-shuffle effect among already-strong classes rather
+than a real capability loss. **This is a data-limited result, not an approach-limited one.**
+Accuracy moved substantially and broadly with ~13x more training data and a larger backbone,
+which is the opposite of what a fundamentally-broken approach would show (a fundamentally
+broken approach would leave most classes near chance regardless of data volume). The most
+dramatic individual gains — Acer +53.9pp, Ulmus +50.8pp, Fraxinus +40.3pp — were iteration 1's
+worst-performing classes, exactly where a data-starved model would be expected to gain the
+most from more examples.
+
+**Confidence-band comparison (D-12).** Iteration 2: strong ≥0.758 (n=2,451/6,387 = 38.4% of
+predictions, 90.0% in-band accuracy) — nearly 3.5x the coverage of iteration 1's strong band
+(11.2% of predictions) at the same ~90% precision target. The weak band is empty in iteration 2
+(no predictions fell below the computed weak threshold of 0.078) — the larger, better-trained
+model rarely produces a very low-confidence output at all, unlike iteration 1 where 37% of
+predictions fell in the weak band. Pooled accuracy (context only, not a D-03 result — see the
+per-genus table above) rose from iteration 1's 36.8% to iteration 2's 58.8%.
+
+**Candidate-ordering comparison (D-11).** Iteration 2's confusion pattern reads as more
+botanically coherent than iteration 1's: the top true→predicted confusion pairs are
+Phillyrea→Olea (31, both Oleaceae — genuinely closely related), Picea↔Abies (23+22, both
+conifers), Pyrus→Prunus (21, both Rosaceae), Prunus→Malus (20, both Rosaceae),
+Cupressus→Juniperus (16, both Cupressaceae). Iteration 1's top confusions were a more mixed
+bag of plausible and implausible pairs (Section 5). Of 2,632 wrong top-1 predictions, the true
+genus was rank 2 in 888 (33.7%) and rank 3 in 390 (14.8%) — the candidate list is doing
+meaningfully more work in iteration 2 (near-miss rate 48.5% vs iteration 1's 35.0%).
+
+**Resolution limit, now much coarser.** At n≈200/class, the 95% bar tolerates up to 10 misses
+(190/200), rather than iteration 1's single-image knife-edge at n=35. Olea's iteration-2 figure
+(171/193, 88.6%) is genuinely 22 images short of the bar, not one-image-flippable — a
+qualitatively more solid negative than iteration 1's Olea reading was.
+
+### 10.4 What was not re-done in iteration 2
 
 - **Composition audit (Section 3a) was not re-run at the new scale.** The original 30-image-per-
   class visual audit and its Betula/Phillyrea exclusions are carried forward unchanged. A larger
@@ -1233,3 +1336,39 @@ next.)_
   is itself part of why iteration 2 was requested.
 - **No field photographs were added.** The no-field-photos gap (Section 6, Section 9 item 2)
   is unchanged by this iteration; it is a data-source gap, not a corpus-volume gap.
+- **Latency was not re-measured.** Iteration 2's model (5.84 MB float16) is roughly 3x iteration
+  1's (2.0 MB) and will run slower on-device, but plan 01-04's own instruction for this extension
+  was explicit not to re-optimise for size or speed given the 36x latency headroom iteration 1
+  measured (83ms vs the 3,000ms D-05 budget, Section 8) — even a 3x latency increase from a bigger
+  model leaves an enormous margin. Plan 05 measures real on-device latency; whichever model is
+  promoted to the canonical path (Section 10.5) is what it will time.
+
+### 10.5 Summary and promotion to the canonical model path
+
+**Both iterations' full artefacts remain on disk and in this document — iteration 2 does not
+erase iteration 1.** Iteration 1: Sections 4–5 above, `git` commits `1490ec6`/`ff07741`,
+model/results archived at `spike/species-recognition/{train,eval}/*iteration1*` (gitignored).
+Iteration 2: this Section 10, model/results at `spike/species-recognition/train/genus_classifier_v2.tflite`
+and `spike/species-recognition/eval/results_v2/` (gitignored).
+
+**`spike/species-recognition/train/genus_classifier_v2.tflite` (iteration 2, MobileNetV3-Large,
+5.84 MB) has been promoted to the canonical path
+(`spike/species-recognition/train/genus_classifier.tflite`) that plan 03's on-device cache
+convention and plan 05's device harness expect, replacing iteration 1's file at that path.**
+Iteration 1's original file is preserved separately
+(`spike/species-recognition/train/genus_classifier_iteration1.tflite`) and its numbers are fully
+recorded in Sections 4–5 regardless of what sits at the canonical path — nothing about iteration 1's
+evidence depends on that file continuing to exist there. Iteration 2 is promoted because it is
+the more capable, more current candidate and the one the ADR (plan 01-06) and any further device
+measurement (plan 01-05) should reason about going forward; `eval/GATE` is updated to
+`GATE-MODEL: PASS` referencing this promoted model (Section 10.6).
+
+**What this means for the ADR.** Iteration 2 answers the question the user's rejection asked:
+the no-go was data-limited, not approach-limited — accuracy moved broadly and substantially
+(mean +19.9pp top-3, 32/34 genera improved) with more data and a larger backbone. It did **not**,
+however, cross the D-02 bar for any genus at the larger, more statistically solid ~200-image
+test-split resolution. The honest reading is: on-device genus recognition is not proven infeasible
+by this evidence, but it is also not proven to clear the 95% bar within this milestone's 2–3 day
+spike timebox with the data and compute available. Whether that supports a no-go, a
+conditional/deferred go pending a further data-collection effort, or something else is the ADR's
+decision to make with this evidence in hand — not this document's.
