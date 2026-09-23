@@ -237,7 +237,23 @@ describe("withAuthRetry", () => {
 
     expect(value).toBe("ok")
     expect(mockGetCredentials).toHaveBeenNthCalledWith(2, undefined, undefined, undefined, true)
-    expect(operation).toHaveBeenNthCalledWith(2, "token-2")
+    expect(operation).toHaveBeenNthCalledWith(2, "token-2", null)
+  })
+
+  test("passes the operation the sub of the account the token belongs to (CR-01)", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "token-b",
+      idToken: buildIdToken("auth0|b", "b@c.fr"),
+    })
+    const operation = jest.fn().mockResolvedValue("ok")
+
+    await result.current.withAuthRetry(operation)
+
+    expect(operation).toHaveBeenCalledWith("token-b", "auth0|b")
   })
 
   test("a non-401 error is rethrown without forcing a refresh", async () => {

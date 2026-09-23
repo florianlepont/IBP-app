@@ -257,6 +257,7 @@ export function useSurveySync({
       refreshLocalAttachments,
       setStatus,
       syncAllowed: localDataOwner.syncAllowed,
+      ensureSyncOwner: localDataOwner.ensureSyncOwner,
     },
   )
 

@@ -3,6 +3,7 @@ import * as Network from "expo-network"
 import { createSurveyReport } from "../../api/ibp-api"
 import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from "../../storage"
 import { isAuthRequiredError, isAuthTemporarilyUnavailableError } from "../auth-errors"
+import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
 import { isOnlineNetworkState } from "./utils"
 
 const RETRY_LATER_MESSAGE =
@@ -14,16 +15,22 @@ const RETRY_LATER_MESSAGE =
 const OWNER_SUSPENDED_MESSAGE =
   "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte."
 
+// The execution-time owner check refused (the token's account, the session
+// owner and the stored local-data owner disagree): nothing was sent.
+const OWNER_RECHECK_MESSAGE =
+  "Synchronisation reportée : vérification du compte propriétaire des données locales en cours."
+
 type UseSurveySyncNetworkParams = {
   apiUrl: string
   accessToken: string | null
   surveys: LocalSurvey[]
   clearSession: () => Promise<void>
-  withAuthRetry: <T>(fn: (token: string) => Promise<T>) => Promise<T>
+  withAuthRetry: <T>(fn: (token: string, tokenSub: string | null) => Promise<T>) => Promise<T>
   refreshLocalSurveys: () => Promise<void>
   refreshLocalAttachments: () => Promise<void>
   setStatus: (message: string) => void
   syncAllowed: boolean
+  ensureSyncOwner: EnsureSyncOwner
 }
 
 export function useSurveySyncNetwork({
@@ -36,6 +43,7 @@ export function useSurveySyncNetwork({
   refreshLocalAttachments,
   setStatus,
   syncAllowed,
+  ensureSyncOwner,
 }: UseSurveySyncNetworkParams) {
   const syncInProgressRef = useRef(false)
   const pullInProgressRef = useRef(false)
@@ -65,13 +73,20 @@ export function useSurveySyncNetwork({
         } else {
           setStatus(`Back online. Sync in progress${trigger ? ` (${trigger})` : ""}...`)
         }
-        const result = await withAuthRetry((token) => syncPending(apiUrl, token))
+        const result = await withAuthRetry(async (token, tokenSub) => {
+          await assertSyncOwner(ensureSyncOwner, tokenSub)
+          return syncPending(apiUrl, token)
+        })
         await refreshLocalSurveys()
         await refreshLocalAttachments()
         setStatus(
           `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`,
         )
       } catch (error) {
+        if (isSyncOwnerMismatchError(error)) {
+          setStatus(OWNER_RECHECK_MESSAGE)
+          return
+        }
         if (isAuthTemporarilyUnavailableError(error)) {
           setStatus(RETRY_LATER_MESSAGE)
           return
@@ -91,6 +106,7 @@ export function useSurveySyncNetwork({
     [
       apiUrl,
       clearSession,
+      ensureSyncOwner,
       refreshLocalAttachments,
       refreshLocalSurveys,
       setStatus,
@@ -133,7 +149,10 @@ export function useSurveySyncNetwork({
 
       pullInProgressRef.current = true
       try {
-        const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token))
+        const result = await withAuthRetry(async (token, tokenSub) => {
+          await assertSyncOwner(ensureSyncOwner, tokenSub)
+          return pullRemoteChanges(apiUrl, token)
+        })
         if (result.surveys > 0 || result.attachments > 0) {
           await refreshLocalSurveys()
           await refreshLocalAttachments()
@@ -142,6 +161,9 @@ export function useSurveySyncNetwork({
           )
         }
       } catch (error) {
+        if (isSyncOwnerMismatchError(error)) {
+          return
+        }
         if (isAuthTemporarilyUnavailableError(error)) {
           setStatus(RETRY_LATER_MESSAGE)
           return
@@ -159,6 +181,7 @@ export function useSurveySyncNetwork({
       accessToken,
       apiUrl,
       clearSession,
+      ensureSyncOwner,
       refreshLocalAttachments,
       refreshLocalSurveys,
       runSync,
@@ -179,13 +202,20 @@ export function useSurveySyncNetwork({
     }
     try {
       setStatus("Pulling server changes...")
-      const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token))
+      const result = await withAuthRetry(async (token, tokenSub) => {
+        await assertSyncOwner(ensureSyncOwner, tokenSub)
+        return pullRemoteChanges(apiUrl, token)
+      })
       await refreshLocalSurveys()
       await refreshLocalAttachments()
       setStatus(
         `Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`,
       )
     } catch (error) {
+      if (isSyncOwnerMismatchError(error)) {
+        setStatus(OWNER_RECHECK_MESSAGE)
+        return
+      }
       if (isAuthTemporarilyUnavailableError(error)) {
         setStatus(RETRY_LATER_MESSAGE)
         return
@@ -200,6 +230,7 @@ export function useSurveySyncNetwork({
   }, [
     apiUrl,
     clearSession,
+    ensureSyncOwner,
     refreshLocalAttachments,
     refreshLocalSurveys,
     setStatus,

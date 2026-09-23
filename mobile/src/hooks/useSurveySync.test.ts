@@ -42,6 +42,7 @@ const mockLocalDataOwner = {
   foreignOwnerEmail: null as string | null,
   discardForeignData: jest.fn(),
   recheck: jest.fn(),
+  ensureSyncOwner: jest.fn(),
 }
 
 const mockUseAuth0Session = jest.fn()
