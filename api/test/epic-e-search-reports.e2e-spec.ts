@@ -1,6 +1,9 @@
 import "dotenv/config"
-import { INestApplication } from "@nestjs/common"
+import { INestApplication, ValidationPipe } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
+import { randomUUID } from "crypto"
+import * as fs from "fs"
+import * as path from "path"
 import request = require("supertest")
 import { AppModule } from "../src/app.module"
 import { DatabaseService } from "../src/database/database.service"
@@ -17,6 +20,13 @@ describe("Epic E - Search and Reports (e2e)", () => {
     app = moduleFixture.createNestApplication()
     db = moduleFixture.get(DatabaseService)
     app.setGlobalPrefix("v1")
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: false,
+        transform: true,
+      }),
+    )
     await app.init()
   })
 
@@ -256,6 +266,31 @@ describe("Epic E - Search and Reports (e2e)", () => {
     )
     expect(reportedEvent.rows[0]?.event_type).toBe("reported")
 
+    // The owner-facing event feed must not expose the reporter's identity or reason (T-01.2-08)
+    const ownerEvents = await request(app.getHttpServer())
+      .get(`/v1/surveys/${publicSurveyId}/events`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .expect(200)
+    const ownerReportedEvent = (
+      ownerEvents.body.items as Array<{
+        event_type: string
+        actor_id: string | null
+        payload: Record<string, unknown>
+      }>
+    ).find((item) => item.event_type === "reported")
+    expect(ownerReportedEvent).toBeTruthy()
+    expect(ownerReportedEvent?.actor_id).toBeNull()
+    expect(ownerReportedEvent?.payload).not.toHaveProperty("reason")
+    expect(ownerReportedEvent?.payload).not.toHaveProperty("actor_id")
+
+    // The reports table still keeps reporter identity and reason for moderators
+    const reportRow = await db.query<{ reporter_user_id: string; reason: string }>(
+      `SELECT reporter_user_id, reason FROM reports WHERE id = $1`,
+      [reportId],
+    )
+    expect(reportRow.rows[0]?.reason).toBe("Suspicious values and duplicate pattern")
+    expect(reportRow.rows[0]?.reporter_user_id).toBeTruthy()
+
     await request(app.getHttpServer())
       .get("/v1/reports")
       .set("Authorization", `Bearer ${reporterToken}`)
@@ -295,5 +330,102 @@ describe("Epic E - Search and Reports (e2e)", () => {
       .send({ survey_id: privateSurveyId, reason: "Owner can still flag own survey for review" })
       .expect(403)
     expect(ownerId).toBeTruthy()
+  })
+
+  it("bounds report reason length and scrubs legacy reported-event identity via migration 013", async () => {
+    const ownerEmail = `e2e-epic-e4-owner-${Date.now()}@ibp.local`
+    const ownerLogin = await request(app.getHttpServer())
+      .post("/v1/debug/test-token")
+      .send({ email: ownerEmail })
+      .expect(201)
+    const ownerToken = ownerLogin.body.access_token as string
+
+    const reporterEmail = `e2e-epic-e4-reporter-${Date.now()}@ibp.local`
+    const reporterLogin = await request(app.getHttpServer())
+      .post("/v1/debug/test-token")
+      .send({ email: reporterEmail })
+      .expect(201)
+    const reporterToken = reporterLogin.body.access_token as string
+    const reporterId = (
+      await request(app.getHttpServer())
+        .get("/v1/me")
+        .set("Authorization", `Bearer ${reporterToken}`)
+        .expect(200)
+    ).body.id as string
+
+    const requiredFactors = {
+      A: 1,
+      B: 1,
+      C: 1,
+      D: 1,
+      E: 1,
+      F: 1,
+      G: 1,
+      H: 1,
+      I: 2,
+      J: 2,
+    }
+    const publicSurveyId = `e2e-epic-e4-public-${Date.now()}`
+
+    await request(app.getHttpServer())
+      .post("/v1/surveys")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        id: publicSurveyId,
+        sync_version: 1,
+        site_name: "Public Forest",
+        status: "submitted",
+        visibility: "public",
+        region_version: "ACA",
+        vegetation_stage: "collineen",
+        factors: requiredFactors,
+        scores: {},
+        location: { source: "gps", lat: 48.643, lng: 1.829 },
+      })
+      .expect(201)
+
+    await request(app.getHttpServer())
+      .post("/v1/reports")
+      .set("Authorization", `Bearer ${reporterToken}`)
+      .send({ survey_id: publicSurveyId, reason: "a".repeat(2001) })
+      .expect(400)
+
+    await request(app.getHttpServer())
+      .post("/v1/reports")
+      .set("Authorization", `Bearer ${reporterToken}`)
+      .send({ survey_id: publicSurveyId, reason: "a".repeat(2000) })
+      .expect(201)
+
+    // Simulate a legacy row written before this change and confirm migration 013 scrubs it
+    const legacyEventId = randomUUID()
+    await db.query(
+      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
+       VALUES ($1, $2, $3, 'reported', $4::jsonb)`,
+      [
+        legacyEventId,
+        publicSurveyId,
+        reporterId,
+        JSON.stringify({ report_id: "x", reason: "legacy" }),
+      ],
+    )
+
+    const migrationSql = fs.readFileSync(
+      path.join(__dirname, "../migrations/013_scrub_reported_event_identity.sql"),
+      "utf-8",
+    )
+    const scrubStatement = migrationSql
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n")
+      .trim()
+    await db.query(scrubStatement)
+
+    const scrubbed = await db.query<{ actor_id: string | null; payload: Record<string, unknown> }>(
+      `SELECT actor_id, payload FROM survey_events WHERE id = $1`,
+      [legacyEventId],
+    )
+    expect(scrubbed.rows[0]?.actor_id).toBeNull()
+    expect(scrubbed.rows[0]?.payload).not.toHaveProperty("reason")
+    expect(scrubbed.rows[0]?.payload).not.toHaveProperty("actor_id")
   })
 })
