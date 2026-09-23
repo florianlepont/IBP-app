@@ -2,17 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Species Recognition — Approach Decision
-status: planning
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-09-23T13:47:32.346Z"
-last_activity: 2026-09-23
-last_activity_desc: Full code audit remediation inserted as Phases 1.2–1.9; Phase 6 re-scoped after re-checking the SQL and index concerns
+last_updated: "2026-09-23T14:32:42.866Z"
+last_activity: 2026-09-23 -- Phase 01.2 planning complete
 progress:
   total_phases: 16
   completed_phases: 0
-  total_plans: 6
+  total_plans: 15
   completed_plans: 0
   percent: 0
 ---
@@ -28,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 ## Current Position
 
-Phase: 1 of 16 (Species Recognition — Approach Decision)
-Plan: 0 of 6 in current phase
-Status: Ready to plan
-Last activity: 2026-09-23 — full code audit remediation inserted as Phases 1.2–1.9; Phase 6 re-scoped
+Phase: 1.2 of 16 (Stop field data loss and account exposure) — Phase 1 is also planned (6 plans) and waits on real devices
+Plan: 0 of 9 in current phase
+Status: Ready to execute
+Last activity: 2026-09-23 -- Phase 01.2 planning complete
 
 Progress: [░░░░░░░░░░] 0%
 
