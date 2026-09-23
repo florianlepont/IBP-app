@@ -17,7 +17,12 @@ import {
   updateSurveyVisibility,
 } from "../../storage"
 import { isAuthRequiredError } from "../auth-errors"
+import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
 import { formatSubmitReadinessError, guessMimeType, isUnauthorizedResultMessage } from "./utils"
+
+// D-04: these paths drain the whole sync_queue, so they honour the same owner
+// gate as useSurveySyncNetwork — the change stays queued locally until then.
+const OWNER_GATE_SUFFIX = "synchronisation en attente de la vérification du compte propriétaire"
 
 type UseSurveySyncSurveyOperationsParams = {
   apiUrl: string
@@ -26,8 +31,9 @@ type UseSurveySyncSurveyOperationsParams = {
   editingSurveyId: string | null
   surveys: LocalSurvey[]
   clearSession: () => Promise<void>
-  refreshSessionTokens: () => Promise<{ accessToken: string } | null>
-  withAuthRetry: <T>(operation: (token: string) => Promise<T>) => Promise<T>
+  withAuthRetry: <T>(
+    operation: (token: string, tokenSub: string | null) => Promise<T>,
+  ) => Promise<T>
   refreshLocalSurveys: () => Promise<void>
   refreshLocalAttachments: () => Promise<void>
   onCloseSurveyDetail: () => void
@@ -35,6 +41,8 @@ type UseSurveySyncSurveyOperationsParams = {
   setStatus: (message: string) => void
   maybeAutoSync: (trigger: string) => Promise<void>
   handleLoadCanonicalDetails: (surveyId: string, options?: { silent?: boolean }) => Promise<void>
+  syncAllowed: boolean
+  ensureSyncOwner: EnsureSyncOwner
 }
 
 export function useSurveySyncSurveyOperations({
@@ -44,7 +52,6 @@ export function useSurveySyncSurveyOperations({
   editingSurveyId,
   surveys,
   clearSession,
-  refreshSessionTokens,
   withAuthRetry,
   refreshLocalSurveys,
   refreshLocalAttachments,
@@ -53,7 +60,20 @@ export function useSurveySyncSurveyOperations({
   setStatus,
   maybeAutoSync,
   handleLoadCanonicalDetails,
+  syncAllowed,
+  ensureSyncOwner,
 }: UseSurveySyncSurveyOperationsParams) {
+  // Drains the queue only after the execution-time owner check passed for the
+  // exact token about to be used (CR-01 / WR-01).
+  const runOwnerGuardedSync = useCallback(
+    () =>
+      withAuthRetry(async (token, tokenSub) => {
+        await assertSyncOwner(ensureSyncOwner, tokenSub)
+        return syncPending(apiUrl, token)
+      }),
+    [apiUrl, ensureSyncOwner, withAuthRetry],
+  )
+
   const queueAttachmentAsset = useCallback(
     async (
       surveyId: string,
@@ -142,8 +162,14 @@ export function useSurveySyncSurveyOperations({
         return
       }
 
+      if (!syncAllowed) {
+        setStatus(`Submit postponed for ${surveyId}: ${OWNER_GATE_SUFFIX}`)
+        return
+      }
+
       try {
-        const result = await withAuthRetry(async (token) => {
+        const result = await withAuthRetry(async (token, tokenSub) => {
+          await assertSyncOwner(ensureSyncOwner, tokenSub)
           const submitResult = await submitSurvey(apiUrl, token, surveyId)
           if (!submitResult.ok && isUnauthorizedResultMessage(submitResult.message)) {
             throw new Error(submitResult.message)
@@ -168,6 +194,10 @@ export function useSurveySyncSurveyOperations({
           setStatus("Login required before submit")
           return
         }
+        if (isSyncOwnerMismatchError(error)) {
+          setStatus(`Submit postponed for ${surveyId}: ${OWNER_GATE_SUFFIX}`)
+          return
+        }
         setStatus(`Submit error for ${surveyId}: ${(error as Error).message}`)
       }
     },
@@ -175,12 +205,14 @@ export function useSurveySyncSurveyOperations({
       apiUrl,
       clearSession,
       editingSurveyId,
+      ensureSyncOwner,
       handleLoadCanonicalDetails,
       onStopEditing,
       refreshLocalAttachments,
       refreshLocalSurveys,
       setStatus,
       surveys,
+      syncAllowed,
       withAuthRetry,
     ],
   )
@@ -218,26 +250,49 @@ export function useSurveySyncSurveyOperations({
   const handleToggleVisibility = useCallback(
     async (surveyId: string, visibility: "private" | "public"): Promise<void> => {
       try {
-        let result = await updateSurveyVisibility(apiUrl, accessToken, surveyId, visibility)
-        if (!result.ok && isUnauthorizedResultMessage(result.message)) {
-          const refreshed = await refreshSessionTokens()
-          if (!refreshed?.accessToken) {
+        // An empty token makes updateSurveyVisibility queue the change without
+        // draining the queue itself; the owner-guarded sync below sends it.
+        const queued = await updateSurveyVisibility(apiUrl, "", surveyId, visibility)
+        if (!queued.queued || !accessToken) {
+          await refreshLocalSurveys()
+          setStatus(queued.message)
+          return
+        }
+
+        if (!syncAllowed) {
+          await refreshLocalSurveys()
+          setStatus(`Visibility queued locally (${visibility}); ${OWNER_GATE_SUFFIX}`)
+          return
+        }
+
+        try {
+          const result = await runOwnerGuardedSync()
+          await refreshLocalSurveys()
+          await refreshLocalAttachments()
+          if (result.failed > 0) {
+            setStatus(
+              `Visibility update warning for ${surveyId}: Visibility queued locally, but sync reported ${result.failed} failed operation(s)`,
+            )
+            return
+          }
+          void handleLoadCanonicalDetails(surveyId, { silent: true })
+          setStatus(`Visibility set to ${visibility} and synced`)
+        } catch (error) {
+          await refreshLocalSurveys()
+          await refreshLocalAttachments()
+          if (isAuthRequiredError(error)) {
             await clearSession()
             setStatus("Login required before changing visibility")
             return
           }
-          result = await updateSurveyVisibility(apiUrl, refreshed.accessToken, surveyId, visibility)
+          if (isSyncOwnerMismatchError(error)) {
+            setStatus(`Visibility queued locally (${visibility}); ${OWNER_GATE_SUFFIX}`)
+            return
+          }
+          setStatus(
+            `Visibility queued locally (${visibility}); sync pending (${(error as Error).message})`,
+          )
         }
-        await refreshLocalSurveys()
-        await refreshLocalAttachments()
-        if (result.synced && accessToken) {
-          void handleLoadCanonicalDetails(surveyId, { silent: true })
-        }
-        setStatus(
-          result.ok
-            ? result.message
-            : `Visibility update warning for ${surveyId}: ${result.message}`,
-        )
       } catch (error) {
         setStatus(`Visibility update error: ${(error as Error).message}`)
       }
@@ -249,8 +304,9 @@ export function useSurveySyncSurveyOperations({
       handleLoadCanonicalDetails,
       refreshLocalAttachments,
       refreshLocalSurveys,
-      refreshSessionTokens,
+      runOwnerGuardedSync,
       setStatus,
+      syncAllowed,
     ],
   )
 
@@ -380,9 +436,16 @@ export function useSurveySyncSurveyOperations({
           return
         }
 
+        if (result.queued_delete && !syncAllowed) {
+          await refreshLocalSurveys()
+          await refreshLocalAttachments()
+          setStatus(`Attachment removed locally; delete queued (${OWNER_GATE_SUFFIX})`)
+          return
+        }
+
         if (result.queued_delete) {
           try {
-            const syncResult = await withAuthRetry((token) => syncPending(apiUrl, token))
+            const syncResult = await runOwnerGuardedSync()
             await refreshLocalSurveys()
             await refreshLocalAttachments()
             setStatus(
@@ -394,6 +457,12 @@ export function useSurveySyncSurveyOperations({
               await refreshLocalSurveys()
               await refreshLocalAttachments()
               setStatus("Attachment removed locally. Login and sync to propagate server deletion.")
+              return
+            }
+            if (isSyncOwnerMismatchError(error)) {
+              await refreshLocalSurveys()
+              await refreshLocalAttachments()
+              setStatus(`Attachment removed locally; delete queued (${OWNER_GATE_SUFFIX})`)
               return
             }
             await refreshLocalSurveys()
@@ -412,7 +481,14 @@ export function useSurveySyncSurveyOperations({
         setStatus(`Attachment delete error: ${(error as Error).message}`)
       }
     },
-    [apiUrl, refreshLocalAttachments, refreshLocalSurveys, setStatus, surveys, withAuthRetry],
+    [
+      refreshLocalAttachments,
+      refreshLocalSurveys,
+      runOwnerGuardedSync,
+      setStatus,
+      surveys,
+      syncAllowed,
+    ],
   )
 
   return {

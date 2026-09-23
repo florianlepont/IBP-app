@@ -104,7 +104,6 @@ export function useSurveySync({
     isAuthenticated,
     setProfileFromUser,
     clearSession,
-    refreshSessionTokens,
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
@@ -415,7 +414,6 @@ export function useSurveySync({
     editingSurveyId,
     surveys,
     clearSession,
-    refreshSessionTokens,
     withAuthRetry,
     refreshLocalSurveys,
     refreshLocalAttachments,
@@ -424,6 +422,8 @@ export function useSurveySync({
     setStatus,
     maybeAutoSync,
     handleLoadCanonicalDetails,
+    syncAllowed: localDataOwner.syncAllowed,
+    ensureSyncOwner: localDataOwner.ensureSyncOwner,
   })
 
   useEffect(() => {
