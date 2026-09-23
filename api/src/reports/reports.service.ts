@@ -54,9 +54,9 @@ export class ReportsService {
     )
 
     await this.db.query(
-      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
-       VALUES ($1, $2, $3, 'reported', $4::jsonb)`,
-      [randomUUID(), surveyId, user.id, JSON.stringify({ report_id: reportId, reason })],
+      `INSERT INTO survey_events (id, survey_id, event_type, payload)
+       VALUES ($1, $2, 'reported', $3::jsonb)`,
+      [randomUUID(), surveyId, JSON.stringify({ report_id: reportId })],
     )
 
     const report = result.rows[0]

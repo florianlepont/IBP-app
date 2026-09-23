@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01.2-01-PLAN.md
-last_updated: "2026-09-23T14:42:11.322Z"
+stopped_at: Completed 01.2-02-PLAN.md
+last_updated: "2026-09-23T14:52:24.623Z"
 last_activity: 2026-09-23
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 15
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-09-23
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01.2 P01 | 45min | 3 tasks | 13 files |
+| Phase 01.2 P02 | 55min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Decisions table. Decisions affecting current work:
 - The current VPS is ratified as the hosting target, not migrated (Phase 6)
 - [Phase 01.2]: Tracker key = SHA-256(bearer token) when present, else client IP; trust proxy defaults to loopback
 - [Phase 01.2]: Production default raised 10/min shared to 600/min per client (60/min /sync, 240/min uploads) plus a 3000/min per-IP ceiling against token rotation
+- [Phase 01.2]: Email linking requires email_verified===true; unverified emails refuse to link and never write auth0_sub
+- [Phase 01.2]: First-login provisioning uses INSERT ... ON CONFLICT (auth0_sub) with a 23505 re-select fallback for race-free user creation
+- [Phase 01.2]: Reported survey events carry only {report_id}; reporter identity and reason stay in the moderator-only reports table, with migration 013 scrubbing historic rows
 
 ### Pending Todos
 
@@ -98,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T14:42:11.315Z
-Stopped at: Completed 01.2-01-PLAN.md
+Last session: 2026-09-23T14:52:24.618Z
+Stopped at: Completed 01.2-02-PLAN.md
 Resume file: None

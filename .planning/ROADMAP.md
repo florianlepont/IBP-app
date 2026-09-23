@@ -112,7 +112,7 @@ Plans:
 Plans:
 
 - [x] 01.2-01-PLAN.md — API rate limiting: per-client tracker (bearer hash / trusted IP), trust proxy, raised production limits, tighter /sync and upload limits (wave 1)
-- [ ] 01.2-02-PLAN.md — API identity and reports: email_verified-gated linking, race-free provisioning, private reported events, reason bound, migration 013 (wave 1)
+- [x] 01.2-02-PLAN.md — API identity and reports: email_verified-gated linking, race-free provisioning, private reported events, reason bound, migration 013 (wave 1)
 - [ ] 01.2-03-PLAN.md — Mobile test tooling (RNTL) and Auth0 error classification in useAuth0Session, forced refresh on 401 (wave 1)
 - [ ] 01.2-04-PLAN.md — Mobile quick fixes: dev tools only in __DEV__, nearby-parcels bbox order (wave 1)
 - [ ] 01.2-05-PLAN.md — DebugModule and HS256 path absent in production, /v1/debug/* 404 (wave 2)
@@ -344,7 +344,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 |-------|----------------|--------|-----------|
 | 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
-| 1.2. Stop field data loss and account exposure | 1/9 | In Progress|  |
+| 1.2. Stop field data loss and account exposure | 2/9 | In Progress|  |
 | 1.3. CI and test safety net | 0/TBD | Not started | - |
 | 1.4. API sync integrity | 0/TBD | Not started | - |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
