@@ -1,0 +1,23 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/technical/api-contract-v1.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "V1 API Contract",
+  "summary": "REST API contract for the IBP V1 backend: base path, auth delegation to Auth0, and endpoint request/response schemas.",
+  "scope": [
+    "REST API /v1",
+    "Auth0 JWT authentication",
+    "user profile endpoints (/me)",
+    "surveys",
+    "attachments",
+    "survey events",
+    "sync operations",
+    "reports",
+    "public map read model"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 1,
+  "notes": ""
+}

@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/user-tests/epic-a-access-and-security.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Test Plan — EPIC A: Access & Security",
+  "summary": "Manual user-test plan and results matrix for Epic A login, logout, sign-up, and profile management flows.",
+  "scope": ["login", "logout", "sign-up", "profile management", "Auth0", "session restore", "profile picture", "email change", "legal links"],
+  "cross_refs": ["../specs/epic-a-access-and-security.md"],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

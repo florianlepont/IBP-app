@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/technical/adr-001-technical-stack-and-engineering-principles-v1.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-001 - Technical Stack and V1 Engineering Principles",
+  "summary": "Accepted decision fixing the V1 technical stack (React Native/Expo, NestJS, PostgreSQL, S3, Auth0) and offline-first engineering principles.",
+  "scope": [
+    "mobile stack (React Native, Expo, TypeScript)",
+    "backend API (Node.js, NestJS)",
+    "PostgreSQL database",
+    "S3-compatible object storage",
+    "Auth0 authentication (JWT RS256, JWKS)",
+    "offline-first synchronization",
+    "API versioning",
+    "security baseline",
+    "observability baseline",
+    "cloud provider option (Scaleway)"
+  ],
+  "cross_refs": [],
+  "locked": true,
+  "precedence": 0,
+  "notes": ""
+}

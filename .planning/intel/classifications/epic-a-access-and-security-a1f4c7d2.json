@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-a-access-and-security.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "EPIC A - Access and Security",
+  "summary": "MVP user stories and acceptance criteria for contributor authentication, session management, logout, sign-up and basic profile management.",
+  "scope": ["authentication", "login", "logout", "sign-up", "session management", "profile management", "account security"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

@@ -1,5 +1,10 @@
 # Publication Visibility & Post-Submit Management (V1)
 
+> **Deferred — 2026-09-22.** Survey publication and private/public visibility left the current
+> milestone along with the rest of the community surfaces; the MVP is internal-use only. See
+> `.planning/REQUIREMENTS.md`, section "Deferred — Next Milestone". This document stays in Draft
+> and is not implemented against in the current milestone.
+
 ## Status
 Draft for implementation planning (2026-03-09)
 

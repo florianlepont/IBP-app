@@ -1,0 +1,20 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/technical/publication-visibility-post-submit-v1.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Publication Visibility & Post-Submit Management (V1)",
+  "summary": "Defines visibility toggle API, post-submit edit restrictions, audit events, and test matrix for survey publication.",
+  "scope": [
+    "survey visibility",
+    "post-submit edit policy",
+    "PATCH /surveys/{id}/visibility",
+    "audit events",
+    "public map read model",
+    "offline sync visibility_update"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 1,
+  "notes": ""
+}

@@ -1,0 +1,21 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-i-workshops-training-ma-foret-vivante.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic I - Workshops & Training \"Ma Forêt Vivante\"",
+  "summary": "V1 epic covering discovery, browsing and registration for association workshops and training sessions, integrated with the exploration map.",
+  "scope": [
+    "events calendar",
+    "event details screen",
+    "event registration",
+    "HelloAsso integration",
+    "exploration map integration",
+    "workshops",
+    "training sessions"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

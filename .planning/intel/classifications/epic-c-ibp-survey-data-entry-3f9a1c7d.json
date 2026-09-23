@@ -1,0 +1,21 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-c-ibp-survey-data-entry.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic C - IBP Survey Data Entry",
+  "summary": "MVP user stories and acceptance criteria for creating, editing, validating, and submitting IBP surveys with drafts, photos, and parcel linkage.",
+  "scope": [
+    "IBP survey form",
+    "IBP factors A-J",
+    "draft saving and expiration",
+    "photo attachments",
+    "parcel linkage by map selection",
+    "field validation",
+    "survey submission"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

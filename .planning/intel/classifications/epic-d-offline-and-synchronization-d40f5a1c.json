@@ -1,0 +1,21 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-d-offline-and-synchronization.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic D - Offline and Synchronization",
+  "summary": "MVP epic of user stories and acceptance criteria for offline usage, offline maps, automatic sync, conflict handling and attachment upload.",
+  "scope": [
+    "offline map mode",
+    "offline survey drafts",
+    "sync queue",
+    "automatic synchronization",
+    "parcel linkage metadata",
+    "downsync of parcel history",
+    "area download for offline use"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

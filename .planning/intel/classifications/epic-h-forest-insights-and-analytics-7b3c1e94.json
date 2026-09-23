@@ -1,0 +1,21 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-h-forest-insights-and-analytics.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic H - Forest Insights and Analytics",
+  "summary": "V2 epic defining aggregated IBP analytics in Explore: regional score overviews, parcel trends, factor distributions, and analytics trust.",
+  "scope": [
+    "Explore",
+    "regional IBP score aggregates",
+    "parcel trend analytics",
+    "factor distributions A-J",
+    "ibp_peuplement_gestion factors",
+    "ibp_contexte factors",
+    "analytics transparency"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

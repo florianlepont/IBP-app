@@ -1,0 +1,20 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/epic-e-data-quality-and-trust.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Epic E - Data Quality and Trust",
+  "summary": "V1 epic defining minimum community data-quality controls: survey audit trail, survey search/filtering, and reporting of suspicious content.",
+  "scope": [
+    "audit trail",
+    "moderation interface",
+    "survey search and filters",
+    "survey reporting",
+    "moderator review",
+    "survey status and timestamps"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

@@ -1,5 +1,11 @@
 # V1 Technical Architecture (Blocks and Responsibilities)
 
+> **Partly superseded — 2026-09-22.** The `auth_sessions` table listed under core tables below was
+> dropped by `api/migrations/011_auth0_migration.sql` when authentication moved to Auth0. For the
+> structure as actually implemented, read `.planning/codebase/ARCHITECTURE.md`, generated from the
+> code. This document remains the reference for *intent*: block responsibilities, the A–L technical
+> flows, and the security baseline.
+
 ## Status
 Aligned with accepted V1 data/API contracts (updated on 2026-03-08). V1.1 parcel/history extension proposed on 2026-03-10. Auth0 delegation and account deletion flow added on 2026-04-06.
 

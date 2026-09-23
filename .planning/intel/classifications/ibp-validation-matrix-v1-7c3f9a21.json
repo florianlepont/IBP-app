@@ -1,0 +1,22 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/technical/ibp-validation-matrix-v1.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "IBP Validation Matrix (V1)",
+  "summary": "Reference case matrix defining expected IBP factor normalization, scoring classes, aggregate totals, and blocking vs non-blocking validation outcomes.",
+  "scope": [
+    "IBP rule engine",
+    "factors A-J",
+    "factor normalization",
+    "score aggregation",
+    "validation errors and warnings",
+    "api/test/ibp-rules.spec.ts"
+  ],
+  "cross_refs": [
+    "api/test/ibp-rules.spec.ts"
+  ],
+  "locked": false,
+  "precedence": 1,
+  "notes": ""
+}

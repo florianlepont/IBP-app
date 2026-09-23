@@ -1,0 +1,73 @@
+# GSD ingest manifest — Cortege / IBP
+# Precedence: ADR (0) > SPEC (1) > PRD (2) > DOC (3)
+docs:
+  # --- ADR: locked engineering decisions ---
+  - path: docs/technical/adr-001-technical-stack-and-engineering-principles-v1.md
+    type: ADR
+    precedence: 0
+
+  # --- SPEC: binding technical & design contracts ---
+  - path: docs/technical/api-contract-v1.md
+    type: SPEC
+    precedence: 1
+  - path: docs/technical/data-contract-v1.md
+    type: SPEC
+    precedence: 1
+  - path: docs/technical/ibp-validation-matrix-v1.md
+    type: SPEC
+    precedence: 1
+  - path: docs/technical/sync-conflict-resolution-v1.md
+    type: SPEC
+    precedence: 1
+  - path: docs/technical/publication-visibility-post-submit-v1.md
+    type: SPEC
+    precedence: 1
+  - path: docs/specs/ibp-form-spec.md
+    type: SPEC
+    precedence: 1
+  - path: docs/design/charte-graphique-etats-sauvages-spec.md
+    type: SPEC
+    precedence: 1
+
+  # --- PRD: product scope, user stories, acceptance criteria ---
+  - path: docs/specs/user-stories.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-a-access-and-security.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-b-survey-preparation.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-c-ibp-survey-data-entry.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-d-offline-and-synchronization.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-e-data-quality-and-trust.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-f-participatory-experience-and-gamification.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-g-ibp-information-association-visibility-and-donation.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-h-forest-insights-and-analytics.md
+    type: PRD
+    precedence: 2
+  - path: docs/specs/epic-i-workshops-training-ma-foret-vivante.md
+    type: PRD
+    precedence: 2
+
+  # --- DOC: descriptive context ---
+  - path: docs/technical/technical-architecture-v1.md
+    type: DOC
+    precedence: 3
+  - path: docs/project/presentation-association.md
+    type: DOC
+    precedence: 3
+  - path: docs/user-tests/epic-a-access-and-security.md
+    type: DOC
+    precedence: 3

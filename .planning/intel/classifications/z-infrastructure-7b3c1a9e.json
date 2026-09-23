@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/florian/Projects/cortege/docs/specs/z-infrastructure.md",
+  "type": "PRD",
+  "confidence": "low",
+  "manifest_override": true,
+  "title": "Z - Infrastructure",
+  "summary": "Placeholder document for infrastructure work items; contains only a heading with no body content.",
+  "scope": ["infrastructure"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Type taken from MANIFEST_TYPE (PRD). File content is a single H1 with no body, so no independent classification signals exist; treat as empty placeholder during extraction."
+}
