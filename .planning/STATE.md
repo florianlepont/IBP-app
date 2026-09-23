@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: "Completed 01-03-PLAN.md (device harness; GATE-HARNESS: BUILD-FAILED, device-unreachable)"
-last_updated: "2026-09-22T18:42:52.239Z"
+stopped_at: "Completed 01-03-PLAN.md (device harness; GATE-HARNESS: PASS on real iPhone 15 Pro, flagship-flagged; Android build-only gap)"
+last_updated: "2026-09-23T04:54:31.469Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 1 execution started
 progress:
@@ -57,7 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01 P01 | 25min | 3 tasks | 5 files |
 | Phase 01 P02 | ~4h | 3 tasks | 2 files |
-| Phase 01-species-recognition-approach-decision P03 | 50min | 2 tasks | 15 files |
+| Phase 01-species-recognition-approach-decision P03 | ~3h | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -75,9 +75,11 @@ Decisions table. Decisions affecting current work:
 - [Phase 01]: Field photographs (D-16) fallback: no-field-photos. Spike reports the public-dataset accuracy figure only; field validation deferred and recorded as a stated gap in the measurement document, not silently dropped. — No field photo set was available at the Task 1 checkpoint.
 - [Phase 01]: 34-class corpus assembled from GBIF occurrence media (CC0/CC-BY only); composition audit found the corpus is NOT reliably single-subject, excluding Betula and Phillyrea from the usable-class count (CLASSES-USABLE: 32, GATE-CORPUS: PASS)
 - [Phase 01]: Seasonal-skew measurement found 23 of 34 classes have zero autumn-dated images in the training corpus, despite field tests starting in October -- recorded as a new confidence cap on any accuracy figure this phase reports
-- [Phase 01]: GATE-HARNESS BUILD-FAILED (device-unreachable, not build-failure) -- native build succeeds on both platforms with react-native-fast-tflite, no substitution needed, but no real iOS/Android device reachable from this machine
+- [Phase 01]: GATE-HARNESS PASS (corrected from an earlier, wrong BUILD-FAILED) -- react-native-fast-tflite built, linked AND RAN on a real iPhone 15 Pro (iOS 27.0, FLAGSHIP -- not the D-18 low-spec floor), 10/10 real benchmark passes (preprocess ms median 77.9/worst 93.2, inference ms median 4.8/worst 13.7). Android build succeeded but was not run on real hardware (no device connected, by user decision this milestone) -- recorded as a gap, not a runtime failure. D-06 offline behaviour not empirically re-verified in airplane mode on real hardware -- open item for plan 05.
 - [Phase 01]: react-native-vision-camera@5.2.3 ships no Expo config plugin; fixed with a project-local plugin injecting camera permissions directly
 - [Phase 01]: pod install must run once after all expo install calls finish, not interleaved -- interleaving left a stale Podfile.lock path that broke the iOS build
+- [Phase 01]: TensorFlowLiteC/RCTDeprecation deployment targets (12.0/4.3) fall below Xcode 27's real-device floor (15.0) -- invisible on Simulator, fixed with a Podfile post_install hook plugin
+- [Phase 01]: iOS 26+ scene-lifecycle-adoption crash (EXC_BREAKPOINT/SIGTRAP) is invisible on Simulator and only appears on a real device -- fixed by porting mobile/plugins/with-scene-delegate.js into the harness; this is the clearest evidence for why D-18's real-hardware requirement exists
 
 ### Pending Todos
 
@@ -89,7 +91,7 @@ None yet.
 - **Schedule.** The published plan put MVP finalization at September 2026 (today) with field tests October–December. Phases 1–3 are unstarted unknowns; the December field-test window is at risk.
 - **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): string-interpolated SQL in `users.service.ts`, 9 of 12 screens untested, missing indexes — all scheduled in Phases 6 and 7.
 - **Next-milestone prerequisite:** Epics E and G need a back-office / CMS surface that no spec or architecture doc defines.
-- 01-03: plan 05 (device latency measurement) is blocked until a real iOS device and a real Android device are reachable from a development machine
+- 01-03: plan 05 still needs a lower-spec real iOS device (iPhone SE/11-class, not a flagship) and a first real Android device -- the iPhone 15 Pro figures from 01-03 are a flagship ceiling, not the D-18 representative floor. D-06 (offline) also still needs an airplane-mode confirmation on real hardware.
 
 ### Roadmap Evolution
 
@@ -106,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-22T18:42:52.235Z
-Stopped at: Completed 01-03-PLAN.md (device harness; GATE-HARNESS: BUILD-FAILED, device-unreachable)
+Last session: 2026-09-23T04:54:31.465Z
+Stopped at: Completed 01-03-PLAN.md (device harness; GATE-HARNESS: PASS on real iPhone 15 Pro, flagship-flagged; Android build-only gap)
 Resume file: None

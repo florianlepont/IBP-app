@@ -75,6 +75,14 @@ restructuring required, only the two device names and this status line.
 
 _(Exact device models and OS versions used for measurement: filled by plan 05.)_
 
+**Addendum (plan 01-03, 2026-09-23):** the device-harness native-integration proof (Section 8) was
+run on an iPhone 15 Pro — the only real device reachable during that session, and explicitly a
+**flagship**, not this section's documented floor. That run answers a different question (does the
+runtime build and execute at all on real hardware) than this section's question (is the observers'
+real-world latency under 3 seconds), and its numbers must not be substituted for a genuine Section 7
+reading. Plan 05 still owes a run on the actual floor devices above, or on the association's
+confirmed real handsets if named before then.
+
 ---
 
 ## 2. Genus label set (CNPF IBP FR v3.2, Factor A)
@@ -575,7 +583,87 @@ _Filled by plan 05. Subject to the device-confidence cap recorded in Section 1._
 
 ## 8. Native integration notes
 
-_Filled by plan 05._
+**Status: filled by plan 01-03 (device-harness build), ahead of schedule at the coordinator's
+direction, since the findings below are exactly what Phase 3's implementation estimate needs.**
+Full detail and file-level citations live in
+`spike/species-recognition/device-harness/README.md`; `spike/species-recognition/device-harness/GATE`
+carries the machine-checkable summary (`GATE-HARNESS: PASS`, `RUNTIME: react-native-fast-tflite@3.0.1`,
+`RUNTIME-SUBSTITUTION: no`).
+
+**Runtime result: the primary recommendation builds, links and runs on real hardware.**
+`react-native-fast-tflite` + `react-native-vision-camera` (RESEARCH.md's primary pick, no
+ONNX-fallback substitution needed) compile against Expo 57.0.24 / RN 0.86.3 and, once the four
+findings below were fixed, ran a full 10-pass benchmark on a real iPhone 15 Pro (iOS 27.0):
+preprocess ms median 77.9 / worst 93.2, inference ms median 4.8 / worst 13.7 — comfortably inside
+the 3s D-05 budget on this device. **This device is a flagship, not the D-18 low-spec floor —
+treat these figures as an optimistic ceiling, not a representative reading; plan 05 must repeat
+this on lower-spec hardware before the ADR can cite a latency number with confidence.** Android
+was not run on real hardware this session (no device connected, by user decision this milestone);
+the Android build itself succeeded (`./gradlew assembleDebug`, `BUILD SUCCESSFUL in 9m 1s`) with
+the same runtime and no substitution, so the runtime question is answered for Android even without
+a device run.
+
+**Finding 1 — `react-native-vision-camera@5.2.3` ships no Expo config plugin.** RESEARCH.md's
+Pattern 2 example (a bare `"react-native-vision-camera"` string in `app.json`'s `plugins` array)
+fails `expo prebuild` immediately — no `app.plugin.js` exists in the installed package, unlike
+earlier v3/v4 releases of this library. **Fix, ~20 min:** a project-local config plugin
+(`plugins/with-vision-camera-permissions.js`, `withInfoPlist`/`withAndroidManifest`) injecting the
+camera permission strings directly, following the same local-plugin convention
+`mobile/plugins/with-scene-delegate.js` already establishes in this repo. Native linking itself is
+unaffected (autolinking, not the `plugins` array). **Actionable for Phase 3:** budget for this
+plugin, or re-check whether a later `react-native-vision-camera` release restores it.
+
+**Finding 2 — a stale `Podfile.lock` path breaks the build if `pod install` runs between package
+installs rather than after all of them.** The first `pod install` (right after installing the
+TFLite/camera runtimes) resolved `expo-constants`'s path through a transient nested
+`node_modules/expo/node_modules/expo-constants` copy that a later `expo install` call deduped
+away, breaking the build with a misleading `PrivacyInfo.xcprivacy couldn't be opened` error (points
+at a resource bundle, not the actual cause). **Fix, ~10 min diagnosis + 43s reinstall:** delete
+`ios/Pods`/`ios/Podfile.lock` and run `pod install` once, after every package install is done.
+**Actionable for Phase 3:** sequence dependency setup so `pod install` is the last step, not
+interleaved with `npm install`/`expo install` calls.
+
+**Finding 3 — `JAVA_HOME` unresolved blocks the Android build outright.** Homebrew's `openjdk@17`
+was installed but not symlinked into `/Library/Java/JavaVirtualMachines`, so Gradle failed with
+"Unable to locate a Java Runtime" until `JAVA_HOME` was exported explicitly. **Fix:** added to
+`~/.zshrc`, mirroring plan 01-01's existing `ANDROID_HOME` export (same low-risk precedent,
+Threat T-01-03, disposition accept). **Actionable for Phase 3:** document this environment
+requirement in the mobile build setup instructions, since it is easy to hit on any machine with a
+similarly unlinked JDK.
+
+**Finding 4 — iOS 26+'s scene-lifecycle-adoption crash is invisible on the Simulator and only
+appears on a real device.** The harness built and ran cleanly in the iOS Simulator; the very first
+real-device install crashed instantly (`EXC_BREAKPOINT`/`SIGTRAP` in
+`UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`) — iOS 26+ kills at launch any app
+built against the new SDK that has not adopted the UIKit scene life cycle. `mobile/` already
+carries a fix for this exact issue (`mobile/plugins/with-scene-delegate.js`); the harness had never
+needed an equivalent until a real device was reachable. **Fix:** copied that plugin verbatim, added
+the matching `UIApplicationSceneManifest`/`UISceneDelegateClassName` block to the harness's
+`app.json` (identical shape to `mobile/app.json`). Diagnosed with no jailbreak and no Xcode UI via
+`xcrun devicectl device info files --domain-type systemCrashLogs` to list crash reports and
+`device copy from` to pull the `.ips` file directly off the device (a JSON header line + a JSON
+body). **Actionable for Phase 3, the most important finding here:** this plugin is not optional
+for any iOS 26+/Xcode 27 native build — it must ship with the species-recognition feature's native
+integration from day one, not be discovered on first real-device test as it was here. **This
+finding is also the clearest argument for why D-18's real-hardware requirement exists at all:** a
+Simulator-only test suite would have reported this harness as fully working while it silently
+could not run on a single real handset.
+
+**Non-blocking caveat.** `npx expo-doctor` flags `react-native-fast-tflite` "Untested on New
+Architecture" per React Native Directory metadata. The library is Nitro-Modules-based (JSI, not
+the legacy bridge) and therefore New-Architecture-native by construction; nothing in either build
+surfaced an actual New Architecture failure. Worth one line in the ADR as an unresolved-but-minor
+caveat.
+
+**Debug-over-Metro is unreliable when the dev machine's own network is the same device's Personal
+Hotspot.** Early real-device attempts (Debug config, Metro-served JS bundle) white-screened and
+were killed by iOS; root cause was this development Mac's sole network interface being tethered
+through the same iPhone's Personal Hotspot (`172.20.10.0/28`, macOS-flagged `constrained`) — the
+dev-server round trip went back to the device it was serving. Not a Phase-3-relevant finding on
+its own (Phase 3 ships Release builds, not Metro-served debug builds, to end users), but the
+resolution is: the latency figures above are from a **Release** build (JS bundle embedded, no
+runtime packager dependency), which is also the more honest basis for a 3-second user-facing
+budget than a debug dev-server round trip would have been.
 
 ---
 
@@ -615,6 +703,21 @@ filled before the ADR is written.
 **3. The benchmark-device pair is unconfirmed.** See Section 1. Latency figures in Section 7 are
 measured against a documented floor, not against the observers' real phones. This caps confidence
 in the latency evidence until the association confirms a device pair.
+
+**4. The device-harness native-integration proof (Section 8) ran on a flagship, not the documented
+floor, and covers iOS only.** The iPhone 15 Pro used was the only real device reachable during plan
+01-03's session; no real Android device was connected, by the user's explicit decision for this
+milestone. The Android build succeeded (`./gradlew assembleDebug`), so the runtime question is
+answered for Android, but no real Android latency number exists anywhere in this document. Plan 05
+owes both a lower-spec iOS reading and a first real Android reading.
+
+**5. D-06 (on-device, no network in the inference path) is an architectural guarantee by code
+inspection, not an observed airplane-mode result.** `spike/species-recognition/device-harness/src/`
+makes no network call anywhere in its load/preprocess/inference path — verifiable by reading the
+source — but the harness's real-device session did not repeat the airplane-mode test this plan's
+own instructions call for once real hardware finally became reachable (device access was
+intermittent and prioritised toward capturing any real benchmark numbers at all). Plan 05 should
+close this explicitly with the device physically in airplane mode during a run.
 
 **4. The corpus is not composition-filtered before evaluation (plan 01-02).** See Section 3a. A
 30-image-per-class visual audit found the raw GBIF corpus is NOT reliably single-subject — two
