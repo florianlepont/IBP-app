@@ -31,6 +31,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR
 - [ ] **Phase 1.1: Reconcile the IBP method version** (INSERTED) - Establish whether the app still implements the current CNPF method, and what changes if not
+- [ ] **Phase 1.2: Stop field data loss and account exposure** (INSERTED) - Session errors never delete offline data; no account takeover or open debug surface
+- [ ] **Phase 1.3: CI and test safety net** (INSERTED) - Typecheck in CI, reproducible image, tests that run real SQL
+- [ ] **Phase 1.4: API sync integrity** (INSERTED) - Validated sync payloads, no submit bypass, transactional writes
+- [ ] **Phase 1.5: Mobile sync engine reliability** (INSERTED) - Single-flight drain, bounded batches, durable photos
 - [ ] **Phase 2: Species Contracts & Data-Contract Corrections** - Give species a data model, an API surface and a migration; correct the stale form spec
 - [ ] **Phase 3: Species Recognition for Factor A** - Photograph a tree, get a species suggestion, keep or reject it
 - [ ] **Phase 4: Offline Map & Own-Survey Navigation** - Navigate a parcel with no network, and see your own surveys on the map
@@ -82,6 +86,71 @@ Plans:
 Plans:
 
 - [ ] TBD (run /gsd-plan-phase 01.1 to break down)
+
+### Phase 01.2: Stop field data loss and account exposure (INSERTED)
+
+**Goal**: Nothing an ecologist records offline can be destroyed by a session error, and no account or endpoint can be taken over or opened by configuration mistake.
+**Depends on**: Nothing — independent of the species-recognition track. Must land before Phase 7.
+**Requirements**: REQ-AUD-session-data-loss, REQ-AUD-rate-limit, REQ-AUD-debug-surface, REQ-AUD-identity, REQ-AUD-mobile-quick-fixes
+**Source**: audit lots L1–L4 (`docs/audits/plan-remediation-2026-09.md`), findings M-C1, A-C1, A-H1, A-H4, A-M6, M-H3, M-H5 (`docs/audits/audit-2026-09-code-complet.md`)
+**Success Criteria** (what must be TRUE):
+
+  1. A network error, a timeout or an unknown error while refreshing the Auth0 token never deletes `local_surveys`, `sync_queue` or `local_attachments`; only an explicit refresh-token rejection (`invalid_grant`, Auth0 401/403) ends the session, and even then the local queue is kept and syncs after re-login with the same account.
+  2. Logging out with unsynced surveys or photos shows how many will be lost and purges only after explicit confirmation; local data is never attached to a different account after re-login.
+  3. Behind Caddy, rate limiting keys on the real client (`trust proxy` on loopback, per-user tracker when authenticated); the global production limit no longer lets one syncing device lock out every user.
+  4. `DebugModule` and the HS256 test-token path are not loaded in production; `/v1/debug/*` returns 404 there.
+  5. An unknown Auth0 `sub` is linked to an existing account by email only when Auth0 reports `email_verified === true` (Google/Apple social login keeps working); first-login provisioning is race-free (`INSERT … ON CONFLICT`); a report no longer exposes the reporter's identity to the reported surveyor.
+  6. Developer tools (API URL override, data reset) are absent from production builds, and the nearby-parcels bbox is sent as `minLng,minLat,maxLng,maxLat`.
+
+**Plans**: TBD
+
+### Phase 01.3: CI and test safety net (INSERTED)
+
+**Goal**: A change that breaks types, the Docker image or the sync storage layer cannot reach `main` or production unnoticed.
+**Depends on**: Nothing. Must land before Phases 01.4 and 01.5, which rely on its test infrastructure.
+**Requirements**: REQ-AUD-ci-pipeline, REQ-AUD-reproducible-image, REQ-AUD-test-infra
+**Source**: audit lots L5, L6 and the core of L7, findings CI-1…CI-6, T1, T3, T4, T5
+**Success Criteria** (what must be TRUE):
+
+  1. CI runs `npm run typecheck`; a PR with a deliberate type error fails, and a docs-only PR runs only the cheap checks (path filters, one aggregating `ci-ok` required check).
+  2. Every job has `timeout-minutes`, the workflow declares least-privilege `permissions`, PR runs cancel superseded runs, and third-party actions are pinned by SHA.
+  3. The API image is built from the repo root with `npm ci` against the root lockfile, runs as a non-root user, is tagged with the commit SHA as well as `latest`, and can only be pushed from `main`.
+  4. Mobile unit tests execute real SQL (in-memory SQLite behind the `expo-sqlite` mock), hooks are tested with `renderHook`, `*.test.tsx` files are picked up, and the E2E database is reset before each run.
+  5. Coverage runs in CI with per-directory thresholds set at today's measured values (ratchet).
+
+**Plans**: TBD
+
+### Phase 01.4: API sync integrity (INSERTED)
+
+**Goal**: The server accepts only valid, correctly-sequenced sync operations and never commits half of a write.
+**Depends on**: Phase 01.3
+**Requirements**: REQ-AUD-sync-validation, REQ-AUD-transactions
+**Source**: audit lots L8, L9, findings A-H2, A-M1, A-M2 (validation), A-M5, A-M7, A-M9, ARCH-3 (API)
+**Success Criteria** (what must be TRUE):
+
+  1. Every `POST /v1/sync` operation payload is validated by a class DTO; an invalid payload yields a per-operation `fatal_error` with a generic message instead of a retried 500, and deterministic PostgreSQL errors (22xxx/23xxx) are never retryable.
+  2. A sync upsert can no longer submit a survey or move its `expires_at`: `status` and `expires_at` from the client are ignored (installed apps keep working), and read-only fields of a submitted survey cannot be overwritten.
+  3. Upsert, patch, submit, delete, attachment writes and report creation each run in one transaction with their event; an injected failure on the event insert leaves nothing committed; the upsert UPDATE is guarded on `sync_version`.
+  4. Two concurrent submits on the same parcel give one success and one 409, never a 500 or a duplicate version; `parcel_ids` is bounded and validated.
+  5. Account deletion commits the database transaction before deleting the Auth0 user.
+
+**Plans**: TBD
+
+### Phase 01.5: Mobile sync engine reliability (INSERTED)
+
+**Goal**: The queue on the phone drains exactly once, in bounded batches, survives crashes, and never loses or silently drops a photo.
+**Depends on**: Phase 01.3
+**Requirements**: REQ-AUD-sync-engine, REQ-AUD-local-storage, REQ-AUD-photos
+**Source**: audit lots L11a, L11b, L12, findings M-H1, M-H2, M-H4, ARCH-3 (mobile), ARCH-5, and the retry-cap, timeout, pull-overwrite, autosave and ID findings
+**Success Criteria** (what must be TRUE):
+
+  1. Only one drain or pull runs at a time (module-level single flight); two concurrent triggers produce one `POST /sync`.
+  2. A queue of 250 operations syncs in batches of at most 100; a survey is marked `synced` only when no other queue row exists for it.
+  3. The documented retry cap applies (8 attempts then `sync_blocked`), network and 5xx errors do not consume it, every sync request has a timeout, and a pull never overwrites a survey that has a pending or blocked local change.
+  4. SQLite writes that span several statements run in a transaction, the schema is versioned with `PRAGMA user_version`, and new IDs are UUIDs.
+  5. Photos are resized (2048 px, JPEG 0.7) and copied to the document directory at capture, uploaded by streaming, and a missing local file is shown to the user instead of being deleted silently.
+
+**Plans**: TBD
 
 ### Phase 2: Species Contracts & Data-Contract Corrections
 
@@ -156,14 +225,14 @@ Plans:
   2. A scheduled PostgreSQL backup runs unattended, and a restore of one of those backups into a clean database has been performed and recorded at least once.
   3. A fresh database and the production database reach the same schema version through one documented path, and a deliberately failed migration leaves the schema unchanged rather than half-applied.
   4. `api/src/users/email.service.ts` and the vestigial `SMTP_*` variables are gone from the repo, from `api/.env.example` and from the deployment env.
-  5. Account deletion runs on fully parameterized SQL, and `attachments(survey_id, created_at)`, `survey_parcels(survey_id)` and `users(auth0_sub)` are indexed — confirmed by `EXPLAIN` on the queries that scan them today.
+  5. A lint rule rejects interpolating values into SQL strings (account deletion already interpolates only constant subqueries and binds `$1`, verified 2026-09-23); `survey_events(actor_id)` is indexed and the redundant `idx_users_auth0_sub`, `idx_survey_parcels_survey_id` and `idx_surveys_parcel_id` are dropped — confirmed by `EXPLAIN` on account deletion and the survey list.
 
 **Plans**: TBD
 
 ### Phase 7: Field Validation
 
 **Goal**: An ecologist completes a full IBP survey offline on a real parcel, and it syncs back with no data loss and no duplicates — on record.
-**Depends on**: Phases 3, 4, 5, 6
+**Depends on**: Phases 1.2, 1.4, 1.5 (field tests must not run on the data-loss and sync defects), 3, 4, 5, 6
 **Requirements**: REQ-FT-field-tests, REQ-QA-bug-a3-4, REQ-QA-bug-a6-2, REQ-QA-screen-tests, REQ-DOC-taxonomy, REQ-DOC-epicd-ids
 **Success Criteria** (what must be TRUE):
 
@@ -178,7 +247,9 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7
+
+Phases 1.2–1.5 (audit remediation) do not depend on the species-recognition track and should run while Phase 1 waits on real devices.
 
 Phases 4, 5 and 6 declare no dependency on the species-recognition track and can be reordered ahead
 of it if Phase 1 returns a no-go, or run in parallel with it.
@@ -186,6 +257,11 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
+| 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
+| 1.2. Stop field data loss and account exposure | 0/TBD | Not started | - |
+| 1.3. CI and test safety net | 0/TBD | Not started | - |
+| 1.4. API sync integrity | 0/TBD | Not started | - |
+| 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
@@ -195,8 +271,8 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 ## Coverage
 
-All 42 MVP requirements map to exactly one phase. 23 carry build work across Phases 1–7; the other
-19 are already built and are verified in Phase 7's field tests. Full mapping in
+All 55 MVP requirements map to exactly one phase. 36 carry build work across Phases 1–7 (13 of them
+from the 2026-09 code audit, Phases 1.2–1.5); the other 19 are already built and are verified in Phase 7's field tests. Full mapping in
 `.planning/REQUIREMENTS.md` → Traceability.
 
 ## Deferred
