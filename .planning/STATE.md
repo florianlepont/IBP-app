@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01.2-05-PLAN.md
-last_updated: "2026-09-23T15:27:52.064Z"
+stopped_at: Completed 01.2-07-PLAN.md
+last_updated: "2026-09-23T15:41:46.149Z"
 last_activity: 2026-09-23
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 15
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-09-23
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01.2 P04 | 12min | 2 tasks | 8 files |
 | Phase 01.2 P05 | 8min | 2 tasks | 4 files |
 | Phase 01.2 P06 | 22min | 2 tasks | 8 files |
+| Phase 01.2 P07 | 10min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Decisions table. Decisions affecting current work:
 - [Phase 01.2]: shouldShowDevTools(isDev = __DEV__) gates the Settings dev-tools section and the App.tsx stored API URL override (D-11)
 - [Phase 01.2]: DebugModule and the HS256 test-token path load only when NODE_ENV !== "production" (isDebugSurfaceEnabled); no new env var, so CI's NODE_ENV=test setup is unchanged
 - [Phase 01.2]: clearSurveySessionState no longer purges local data on session end (D-02); AUTH_TEMPORARILY_UNAVAILABLE keeps the session as retry-later in sync/pull/report; pre-Auth0 stubs removed from useAuth0Session and every caller
+- [Phase 01.2]: resolveLocalDataOwnership implements the D-04 owner decision table (adopt/match/purge-and-adopt/conflict/unknown-session) as a pure function; useLocalDataOwner's syncAllowed is default-deny (true only when status is ok)
+- [Phase 01.2]: local_meta keys session_owner_sub/session_owner_email persist the D-04 owner marker; clearLocalIbpData also forgets them
 
 ### Pending Todos
 
@@ -111,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T15:27:33.163Z
-Stopped at: Completed 01.2-05-PLAN.md
+Last session: 2026-09-23T15:41:46.144Z
+Stopped at: Completed 01.2-07-PLAN.md
 Resume file: None
