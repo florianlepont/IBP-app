@@ -2,11 +2,8 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/*.test.ts'],
+  testMatch: ['**/*.test.ts', '**/*.test.tsx'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
-  moduleNameMapper: {
-    '^@expo/vector-icons$': '<rootDir>/test/vector-icons.mock.ts',
-  },
   collectCoverageFrom: [
     '<rootDir>/App.tsx',
     '<rootDir>/src/**/*.{ts,tsx}',
