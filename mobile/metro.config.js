@@ -1,18 +1,13 @@
-const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// In this monorepo, keep Metro resolution pinned to mobile/node_modules
-// so React / React Native versions remain consistent with the mobile workspace.
-config.resolver.nodeModulesPaths = [
-  path.resolve(__dirname, 'node_modules'),
-  path.resolve(__dirname, '../node_modules')
-];
-config.resolver.disableHierarchicalLookup = true;
-config.resolver.extraNodeModules = {
-  react: path.resolve(__dirname, 'node_modules/react'),
-  'react-native': path.resolve(__dirname, 'node_modules/react-native')
-};
+// This is an npm workspaces monorepo: react and react-native are hoisted to
+// the root node_modules and pinned there by root package.json's
+// dependencies + overrides. Expo's default config (getDefaultConfig above)
+// already configures Metro's monorepo lookup (watchFolders, nodeModulesPaths)
+// to find them, so no resolver overrides are needed here. A single copy of
+// react and react-native ends up in the bundle — verified in phase 01.3 by
+// the source-map single-copy check recorded in 01.3-03-SUMMARY.md.
 
 module.exports = config;
