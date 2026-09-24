@@ -1483,3 +1483,39 @@ list to stderr) rather than letting training silently proceed on a handful of cl
 a per-genus table that looks structurally normal but is meaningless. Verified directly against the
 still-restoring corpus: the check correctly refused with 87 problems (29 classes still empty at
 that point) rather than allowing training to start.
+
+**A third issue, live-diagnosed while the restored run was in progress: the process itself hung
+indefinitely (0.1% CPU, no file writes for 5+ minutes) — not the manifest bug, a genuine network
+stall.** Live process inspection pointed at the occurrence-search or species-match API path, not
+the image-download path (which already had a wall-clock-budget fix from an earlier plan). A plain
+`requests.get(url, timeout=N)` does not reliably bound every hang mode — DNS resolution stalls and
+some connect-then-nothing states can block past the nominal timeout on certain platforms/resolvers,
+because the hang can occur before `requests`' own timeout machinery gets a chance to apply.
+
+**Fixed with a thread-based hard deadline that does not depend on `requests` at all.** Every
+network call (search, species/match, per-image metadata backfill, and the image download itself,
+consolidated onto one shared implementation) now runs inside a dedicated worker thread and is
+bounded by `Future.result(timeout=...)` from the calling thread — a guarantee that holds regardless
+of what the worker thread is actually doing; a hung worker is simply abandoned rather than waited
+on. Calls retry with exponential backoff (a few seconds, doubling, capped) rather than hammering a
+possibly-throttling host — the observed download-rate collapse during this run (roughly
+1,000–2,000 images per 10–20 minutes, versus ~14,000/hour during iteration 2's expansion) is
+consistent with GBIF or an upstream image host rate-limiting under sustained heavy, concurrent
+load across two long sessions, not a code defect on its own. Verified directly against an
+intentionally unreachable address: the guard gave up cleanly after 2 retries in 13 seconds rather
+than hanging.
+
+**Also added: a dedicated on-disk progress log
+(`spike/species-recognition/data/splits/progress.log`, gitignored) with a heartbeat every 30s
+during any multi-minute phase (metadata backfill, concurrent downloads), plus a start-of-class
+line naming the existing count and target.** This was added specifically because "working slowly"
+and "hung" had been indistinguishable from the outside for most of this iteration, costing repeated
+live investigation — the log now makes that distinction directly observable without inspecting
+process CPU.
+
+**Also reordered class processing: least-progressed classes first, not `genus_labels.txt`
+order.** Seven classes had already tripled (reaching 4,793–6,000) from earlier passes while the
+other 27 sat untouched at iteration-2 levels (1,403–1,992); a balanced corpus is what the
+iteration-2→3 comparison needs, so processing now sorts ascending by current on-disk count each
+run — the 27 lagging classes are worked through before any already-advanced class is topped up
+further.
