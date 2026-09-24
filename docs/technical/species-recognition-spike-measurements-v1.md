@@ -1471,3 +1471,15 @@ both were caught because the coordinator's "commit/checkpoint as you go" discipl
 intermediate state for inspection rather than only the final result. Re-running
 `prepare_dataset.py` after the fix regenerates every class's manifest entries correctly from the
 intact files already on disk (no re-download needed for what was already there).
+
+**A hard precondition check was added to `finetune.py`, guarding against training starting before
+restoration finishes.** Restoration after the truncation happens one class per pass, at download
+speed — so for a period after the fix, most classes' split files are still empty even though
+nothing is currently broken, only incomplete. `verify_corpus_complete()` now runs immediately
+after the corpus-gate check and before any data loading: it asserts every one of the 34 classes
+has non-empty `train.txt`/`val.txt`/`test.txt`, and that each split's line count matches
+`per_class_counts.json`'s recorded value exactly, failing loudly (`sys.exit(1)`, full problem
+list to stderr) rather than letting training silently proceed on a handful of classes and produce
+a per-genus table that looks structurally normal but is meaningless. Verified directly against the
+still-restoring corpus: the check correctly refused with 87 problems (29 classes still empty at
+that point) rather than allowing training to start.
