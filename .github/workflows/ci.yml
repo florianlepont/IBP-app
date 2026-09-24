@@ -71,7 +71,7 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: ibp
+          POSTGRES_DB: ibp_test
           POSTGRES_USER: ibp
           POSTGRES_PASSWORD: ibp
         options: >-
@@ -87,7 +87,7 @@ jobs:
       PORT: 3000
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
-      POSTGRES_DB: ibp
+      POSTGRES_DB: ibp_test
       POSTGRES_USER: ibp
       POSTGRES_PASSWORD: ibp
       OBJECT_STORAGE_MODE: local
