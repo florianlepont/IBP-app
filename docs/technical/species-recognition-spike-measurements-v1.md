@@ -1443,3 +1443,31 @@ yet re-processed in this pass; their status is confirmed or revised below once r
 table will be superseded by the complete 34-class results in the final Section 11.1 once the
 expansion finishes; recorded here specifically so this finding is not lost to a further
 interruption.
+
+**A second interruption (transient network outage, `api.gbif.org` DNS resolution failure) found
+and fixed a genuine data-loss-adjacent bug in `prepare_dataset.py` — not a training bug this
+time, a corpus-assembly one.** The resumed run above processed 4 classes successfully
+(Abies, Acer, Alnus, Arbutus, each topped up close to the 6,000 target) before the network
+dropped; the remaining 30 classes each raised a `ConnectionError` inside the per-class `try`
+block. The exception handler correctly logged the failure and moved on — but `manifest_rows`
+started as an empty list on every invocation and was only ever appended to for classes
+processed successfully IN THAT RUN. Since `write_outputs()` checkpoints after every class, the
+very next checkpoint after the 4th success persisted a manifest containing only those 4
+classes — **silently truncating the other 30 classes' `train.txt`/`val.txt`/`test.txt` files to
+empty**, even though every one of those classes' actual downloaded images (5,215 for Betula,
+4,793 for Carpinus, and so on — nothing below 1,700) sat completely untouched on disk. Confirmed
+directly: `find data/raw -name '*.jpg' | wc -l` still reported 88,473 files immediately after the
+failure — no image was lost — but `data/splits/*/  {train,val,test}.txt` for 30 classes now held
+zero lines, and the script's own end-of-run report showed `GATE-CORPUS: EARLY-NO-GO` (4/34
+usable) purely as a consequence of the empty split files, not any real data loss.
+
+**Fixed:** `build_corpus()` now loads the prior `manifest.csv` (grouped by class) and the prior
+`per_class_counts.json`/`seasonal_balance_report.json` at the start of every invocation, and only
+*replaces* a class's entries when that class is actually (re)processed successfully in the
+current pass. A class not reached, or that raises, keeps whatever the previous run last wrote for
+it — the exception handler no longer zeroes a class's counts if better data already exists from
+disk. This is the corpus-assembly-time equivalent of iteration 2's training-time shuffle-bug fix:
+both were caught because the coordinator's "commit/checkpoint as you go" discipline surfaced the
+intermediate state for inspection rather than only the final result. Re-running
+`prepare_dataset.py` after the fix regenerates every class's manifest entries correctly from the
+intact files already on disk (no re-download needed for what was already there).
