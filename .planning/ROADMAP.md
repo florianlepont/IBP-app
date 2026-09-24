@@ -162,7 +162,15 @@ Plans:
   4. Two concurrent submits on the same parcel give one success and one 409, never a 500 or a duplicate version; `parcel_ids` is bounded and validated.
   5. Account deletion commits the database transaction before deleting the Auth0 user.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 01.4-01-PLAN.md — Transaction helper, E2E fault injection, account deletion commits before Auth0 (wave 1)
+- [ ] 01.4-02-PLAN.md — Sync DTO validation, fatal 22xxx/23xxx, parcel_ids bound (wave 1)
+- [ ] 01.4-03-PLAN.md — Survey writes transactional, guarded upsert, concurrent submit lock (wave 2)
+- [ ] 01.4-04-PLAN.md — Attachment and report writes transactional (wave 2)
+- [ ] 01.4-05-PLAN.md — Upsert ignores status/expires_at, submitted read-only, installed-app replay (wave 3)
+- [ ] 01.4-06-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 4)
 
 ### Phase 01.5: Mobile sync engine reliability (INSERTED)
 
