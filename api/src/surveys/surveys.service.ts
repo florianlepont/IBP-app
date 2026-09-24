@@ -10,7 +10,7 @@ import { randomUUID } from "crypto"
 import { rm } from "fs/promises"
 import { join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { DatabaseService } from "../database/database.service"
+import { DatabaseService, Queryable } from "../database/database.service"
 import { CadastreProviderService } from "./cadastre-provider.service"
 import { IbpRulesService } from "./ibp-rules.service"
 import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
@@ -181,10 +181,12 @@ export class SurveysService {
     if (typeof body.sync_version !== "number") {
       throw new BadRequestException("sync_version is required")
     }
+    const syncVersion = body.sync_version
 
     if (!body.site_name) {
       throw new BadRequestException("site_name is required")
     }
+    const siteName = body.site_name
 
     const draftValidation = this.ibpRules.validateDraft(
       body.factors,
@@ -207,12 +209,231 @@ export class SurveysService {
       ibp_contexte: 0,
       ibp_total: 0,
     }
+    const surveyId = body.id
 
-    const existing = await this.getSurveyForUser(body.id, user.id, false)
+    return this.db.transaction(async (db) => {
+      let existing = await this.getSurveyForUser(db, surveyId, user.id, false, {
+        forUpdate: true,
+      })
+
+      if (!existing) {
+        const selectedParcelIds = await this.resolveSelectedParcelIds(db, body, null, [])
+        const parcelId = selectedParcelIds[0] ?? null
+        const { observationYear, versionNumber, previousSurveyId } = await this.resolveVersionInfo(
+          db,
+          body,
+          null,
+          parcelId,
+          now,
+        )
+
+        const createdAt = now.toISOString()
+        const insertResult = await db.query<{ id: string; updated_at: string }>(
+          `INSERT INTO surveys (
+            id, user_id, site_name, status, visibility, parcel_id, observation_year, version_number, previous_survey_id, region_version, vegetation_stage,
+            factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+            $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20
+          )
+          ON CONFLICT (id) DO NOTHING
+          RETURNING id, updated_at::text`,
+          [
+            surveyId,
+            user.id,
+            siteName,
+            body.status ?? "draft",
+            body.visibility ?? "private",
+            parcelId,
+            observationYear,
+            versionNumber,
+            previousSurveyId,
+            body.region_version ?? null,
+            body.vegetation_stage ?? null,
+            JSON.stringify(body.factors ?? {}),
+            JSON.stringify(draftValidation.factor_results ?? {}),
+            JSON.stringify(computedScores),
+            JSON.stringify({}),
+            createdAt,
+            createdAt,
+            null,
+            expiresAt,
+            syncVersion,
+          ],
+        )
+
+        if (insertResult.rows[0]) {
+          await this.syncSurveyParcels(db, surveyId, selectedParcelIds)
+
+          await this.insertEvent(db, surveyId, user.id, "created", {
+            sync_version: syncVersion,
+            site_name: siteName,
+            warnings: draftValidation.warnings,
+          })
+
+          return {
+            id: insertResult.rows[0].id,
+            server_status: "synced" as const,
+            updated_at: insertResult.rows[0].updated_at,
+            warnings: draftValidation.warnings,
+            factor_results: draftValidation.factor_results ?? undefined,
+          }
+        }
+
+        // A concurrent create committed first: re-read under lock and either
+        // continue through the existing-row path below (same user) or reject
+        // as a survey id owned by someone else (T-01.4-15).
+        const raced = await this.getSurveyForUser(db, surveyId, user.id, false, {
+          forUpdate: true,
+        })
+        if (!raced) {
+          throw new ConflictException({
+            code: "survey_id_conflict",
+            message: "Survey id already exists",
+            details: { survey_id: surveyId },
+          })
+        }
+        existing = raced
+      }
+
+      const existingParcelIds = await this.getSurveyParcelIds(db, existing.id)
+      const selectedParcelIds = await this.resolveSelectedParcelIds(
+        db,
+        body,
+        existing,
+        existingParcelIds,
+      )
+      const parcelId = selectedParcelIds[0] ?? null
+      const { observationYear, versionNumber, previousSurveyId } = await this.resolveVersionInfo(
+        db,
+        body,
+        existing,
+        parcelId,
+        now,
+      )
+
+      if (syncVersion < existing.sync_version) {
+        throw new ConflictException({
+          code: "sync_version_conflict",
+          message: "Older sync_version received",
+          details: {
+            survey_id: surveyId,
+            server_sync_version: existing.sync_version,
+            client_sync_version: syncVersion,
+          },
+        })
+      }
+
+      if (syncVersion === existing.sync_version) {
+        return {
+          id: existing.id,
+          server_status: "synced" as const,
+          updated_at: existing.updated_at,
+          warnings: draftValidation.warnings,
+          factor_results: draftValidation.factor_results ?? undefined,
+        }
+      }
+
+      const updateResult = await db.query<{ id: string; updated_at: string }>(
+        `UPDATE surveys
+         SET site_name = $3,
+             status = $4,
+             visibility = $5,
+             parcel_id = $6,
+             observation_year = $7,
+             version_number = $8,
+             previous_survey_id = $9,
+             region_version = $10,
+             vegetation_stage = $11,
+             factors = $12::jsonb,
+             factor_results = $13::jsonb,
+             scores = $14::jsonb,
+             location = $15::jsonb,
+             expires_at = $16,
+             sync_version = $17,
+             updated_at = $18
+         WHERE id = $1 AND user_id = $2 AND sync_version < $17
+         RETURNING id, updated_at::text`,
+        [
+          surveyId,
+          user.id,
+          siteName,
+          body.status ?? existing.status,
+          body.visibility ?? existing.visibility,
+          parcelId,
+          observationYear,
+          versionNumber,
+          previousSurveyId,
+          body.region_version ?? existing.region_version,
+          body.vegetation_stage ?? existing.vegetation_stage,
+          JSON.stringify(body.factors ?? existing.factors ?? {}),
+          JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
+          JSON.stringify(computedScores),
+          JSON.stringify({}),
+          expiresAt,
+          syncVersion,
+          now.toISOString(),
+        ],
+      )
+
+      if (!updateResult.rows[0]) {
+        // Zero rows updated: another request already advanced sync_version.
+        // Re-read under lock and decide idempotent-replay vs conflict (T-01.4-11).
+        const reRead = await this.getSurveyForUser(db, surveyId, user.id, false, {
+          forUpdate: true,
+        })
+        if (!reRead) {
+          throw new NotFoundException("Survey not found")
+        }
+
+        if (reRead.sync_version === syncVersion) {
+          return {
+            id: reRead.id,
+            server_status: "synced" as const,
+            updated_at: reRead.updated_at,
+            warnings: draftValidation.warnings,
+            factor_results: draftValidation.factor_results ?? undefined,
+          }
+        }
+
+        throw new ConflictException({
+          code: "sync_version_conflict",
+          message: "Older sync_version received",
+          details: {
+            survey_id: surveyId,
+            server_sync_version: reRead.sync_version,
+            client_sync_version: syncVersion,
+          },
+        })
+      }
+
+      await this.syncSurveyParcels(db, surveyId, selectedParcelIds)
+
+      await this.insertEvent(db, surveyId, user.id, "updated", {
+        sync_version: syncVersion,
+        site_name: siteName,
+        warnings: draftValidation.warnings,
+      })
+
+      return {
+        id: updateResult.rows[0].id,
+        server_status: "synced" as const,
+        updated_at: updateResult.rows[0].updated_at,
+        warnings: draftValidation.warnings,
+        factor_results: draftValidation.factor_results ?? undefined,
+      }
+    })
+  }
+
+  private async resolveSelectedParcelIds(
+    db: Queryable,
+    body: SurveyUpsertBody,
+    existing: SurveyRow | null,
+    existingParcelIds: string[],
+  ): Promise<string[]> {
     const hasParcelIdsInput = Array.isArray(body.parcel_ids)
     const normalizedParcelIdsFromBody = normalizeParcelIds(body.parcel_ids)
     const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
-    const existingParcelIds = existing ? await this.getSurveyParcelIds(existing.id) : []
 
     let selectedParcelIds = normalizedParcelIdsFromBody
     if (!hasParcelIdsInput) {
@@ -225,8 +446,20 @@ export class SurveysService {
       }
     }
 
-    selectedParcelIds = await this.ensureParcelIds(selectedParcelIds)
-    const parcelId = selectedParcelIds[0] ?? null
+    return this.ensureParcelIds(db, selectedParcelIds)
+  }
+
+  private async resolveVersionInfo(
+    db: Queryable,
+    body: SurveyUpsertBody,
+    existing: SurveyRow | null,
+    parcelId: string | null,
+    now: Date,
+  ): Promise<{
+    observationYear: number | null
+    versionNumber: number | null
+    previousSurveyId: string | null
+  }> {
     const observationYear =
       normalizeObservationYear(body.observation_year) ??
       existing?.observation_year ??
@@ -234,139 +467,12 @@ export class SurveysService {
     const versionNumberRaw =
       normalizeVersionNumber(body.version_number) ?? existing?.version_number ?? null
     const versionNumber =
-      versionNumberRaw ?? (parcelId ? await this.getDefaultVersionNumber(parcelId, body.id) : null)
+      versionNumberRaw ??
+      (parcelId ? await this.getDefaultVersionNumber(db, parcelId, body.id) : null)
     const previousSurveyId =
       normalizePreviousSurveyId(body.previous_survey_id) ?? existing?.previous_survey_id ?? null
 
-    if (!existing) {
-      const createdAt = now.toISOString()
-      const insertResult = await this.db.query<{ id: string; updated_at: string }>(
-        `INSERT INTO surveys (
-          id, user_id, site_name, status, visibility, parcel_id, observation_year, version_number, previous_survey_id, region_version, vegetation_stage,
-          factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-          $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20
-        )
-        RETURNING id, updated_at::text`,
-        [
-          body.id,
-          user.id,
-          body.site_name,
-          body.status ?? "draft",
-          body.visibility ?? "private",
-          parcelId,
-          observationYear,
-          versionNumber,
-          previousSurveyId,
-          body.region_version ?? null,
-          body.vegetation_stage ?? null,
-          JSON.stringify(body.factors ?? {}),
-          JSON.stringify(draftValidation.factor_results ?? {}),
-          JSON.stringify(computedScores),
-          JSON.stringify({}),
-          createdAt,
-          createdAt,
-          null,
-          expiresAt,
-          body.sync_version,
-        ],
-      )
-      await this.syncSurveyParcels(body.id, selectedParcelIds)
-
-      await this.insertEvent(body.id, user.id, "created", {
-        sync_version: body.sync_version,
-        site_name: body.site_name,
-        warnings: draftValidation.warnings,
-      })
-
-      return {
-        id: insertResult.rows[0].id,
-        server_status: "synced",
-        updated_at: insertResult.rows[0].updated_at,
-        warnings: draftValidation.warnings,
-        factor_results: draftValidation.factor_results ?? undefined,
-      }
-    }
-
-    if (body.sync_version < existing.sync_version) {
-      throw new ConflictException({
-        code: "sync_version_conflict",
-        message: "Older sync_version received",
-        details: {
-          survey_id: body.id,
-          server_sync_version: existing.sync_version,
-          client_sync_version: body.sync_version,
-        },
-      })
-    }
-
-    if (body.sync_version === existing.sync_version) {
-      return {
-        id: existing.id,
-        server_status: "synced",
-        updated_at: existing.updated_at,
-        warnings: draftValidation.warnings,
-        factor_results: draftValidation.factor_results ?? undefined,
-      }
-    }
-
-    const updateResult = await this.db.query<{ id: string; updated_at: string }>(
-      `UPDATE surveys
-       SET site_name = $3,
-           status = $4,
-           visibility = $5,
-           parcel_id = $6,
-           observation_year = $7,
-           version_number = $8,
-           previous_survey_id = $9,
-           region_version = $10,
-           vegetation_stage = $11,
-           factors = $12::jsonb,
-           factor_results = $13::jsonb,
-           scores = $14::jsonb,
-           location = $15::jsonb,
-           expires_at = $16,
-           sync_version = $17,
-           updated_at = $18
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, updated_at::text`,
-      [
-        body.id,
-        user.id,
-        body.site_name,
-        body.status ?? existing.status,
-        body.visibility ?? existing.visibility,
-        parcelId,
-        observationYear,
-        versionNumber,
-        previousSurveyId,
-        body.region_version ?? existing.region_version,
-        body.vegetation_stage ?? existing.vegetation_stage,
-        JSON.stringify(body.factors ?? existing.factors ?? {}),
-        JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
-        JSON.stringify(computedScores),
-        JSON.stringify({}),
-        expiresAt,
-        body.sync_version,
-        now.toISOString(),
-      ],
-    )
-    await this.syncSurveyParcels(body.id, selectedParcelIds)
-
-    await this.insertEvent(body.id, user.id, "updated", {
-      sync_version: body.sync_version,
-      site_name: body.site_name,
-      warnings: draftValidation.warnings,
-    })
-
-    return {
-      id: updateResult.rows[0].id,
-      server_status: "synced",
-      updated_at: updateResult.rows[0].updated_at,
-      warnings: draftValidation.warnings,
-      factor_results: draftValidation.factor_results ?? undefined,
-    }
+    return { observationYear, versionNumber, previousSurveyId }
   }
 
   async patchSurvey(
@@ -374,135 +480,138 @@ export class SurveysService {
     surveyId: string,
     body: SurveyPatchBody,
   ): Promise<{ id: string; updated_at: string }> {
-    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id)
-    const forbiddenPostSubmitFields = getSubmittedReadOnlyFields(body)
+    return this.db.transaction(async (db) => {
+      const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id)
+      const forbiddenPostSubmitFields = getSubmittedReadOnlyFields(body)
 
-    if (existing.status === "submitted" && forbiddenPostSubmitFields.length > 0) {
-      throw new UnprocessableEntityException({
-        code: "submitted_read_only_fields",
-        message: "submitted survey is read-only for observation fields",
-        forbidden_fields: forbiddenPostSubmitFields,
-      })
-    }
-
-    if (body.factors) {
-      const check = this.ibpRules.validateDraft(
-        body.factors,
-        body.region_version ?? existing.region_version,
-        body.vegetation_stage ?? existing.vegetation_stage,
-      )
-      if (!check.ok) {
+      if (existing.status === "submitted" && forbiddenPostSubmitFields.length > 0) {
         throw new UnprocessableEntityException({
-          message: "IBP factor validation failed",
-          errors: check.errors,
-          warnings: check.warnings,
+          code: "submitted_read_only_fields",
+          message: "submitted survey is read-only for observation fields",
+          forbidden_fields: forbiddenPostSubmitFields,
         })
       }
-      if (check.scores) {
-        body.scores = check.scores
-      }
-      if (check.factor_results) {
-        const mutableBody = body as SurveyPatchBody & {
-          factor_results?: SurveyRow["factor_results"]
+
+      if (body.factors) {
+        const check = this.ibpRules.validateDraft(
+          body.factors,
+          body.region_version ?? existing.region_version,
+          body.vegetation_stage ?? existing.vegetation_stage,
+        )
+        if (!check.ok) {
+          throw new UnprocessableEntityException({
+            message: "IBP factor validation failed",
+            errors: check.errors,
+            warnings: check.warnings,
+          })
         }
-        mutableBody.factor_results = check.factor_results
+        if (check.scores) {
+          body.scores = check.scores
+        }
+        if (check.factor_results) {
+          const mutableBody = body as SurveyPatchBody & {
+            factor_results?: SurveyRow["factor_results"]
+          }
+          mutableBody.factor_results = check.factor_results
+        }
       }
-    }
 
-    const hasParcelIdsPatch = Object.prototype.hasOwnProperty.call(body, "parcel_ids")
-    const hasLegacyParcelIdPatch = Object.prototype.hasOwnProperty.call(body, "parcel_id")
-    const normalizedParcelIdsFromPatch = normalizeParcelIds(body.parcel_ids)
-    const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
-    const currentParcelIds = await this.getSurveyParcelIds(existing.id)
+      const hasParcelIdsPatch = Object.prototype.hasOwnProperty.call(body, "parcel_ids")
+      const hasLegacyParcelIdPatch = Object.prototype.hasOwnProperty.call(body, "parcel_id")
+      const normalizedParcelIdsFromPatch = normalizeParcelIds(body.parcel_ids)
+      const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
+      const currentParcelIds = await this.getSurveyParcelIds(db, existing.id)
 
-    let targetParcelIds =
-      currentParcelIds.length > 0
-        ? currentParcelIds
-        : existing.parcel_id
-          ? [existing.parcel_id]
-          : []
-    if (hasParcelIdsPatch) {
-      targetParcelIds = normalizedParcelIdsFromPatch
-    } else if (hasLegacyParcelIdPatch) {
-      targetParcelIds = normalizedLegacyParcelId ? [normalizedLegacyParcelId] : []
-    }
+      let targetParcelIds =
+        currentParcelIds.length > 0
+          ? currentParcelIds
+          : existing.parcel_id
+            ? [existing.parcel_id]
+            : []
+      if (hasParcelIdsPatch) {
+        targetParcelIds = normalizedParcelIdsFromPatch
+      } else if (hasLegacyParcelIdPatch) {
+        targetParcelIds = normalizedLegacyParcelId ? [normalizedLegacyParcelId] : []
+      }
 
-    const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch
-    targetParcelIds = await this.ensureParcelIds(targetParcelIds)
-    const parcelIdForPatch = targetParcelIds[0] ?? null
-    const observationYearForPatch =
-      normalizeObservationYear(body.observation_year) ??
-      (parcelIdForPatch && !existing.observation_year ? new Date().getUTCFullYear() : null)
-    const versionNumberForPatch =
-      normalizeVersionNumber(body.version_number) ??
-      (parcelIdForPatch && !existing.version_number
-        ? await this.getDefaultVersionNumber(parcelIdForPatch, surveyId)
-        : null)
-    const hasPreviousSurveyId = Object.prototype.hasOwnProperty.call(body, "previous_survey_id")
-    const previousSurveyIdForPatch = hasPreviousSurveyId
-      ? normalizePreviousSurveyId(body.previous_survey_id)
-      : null
+      const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch
+      targetParcelIds = await this.ensureParcelIds(db, targetParcelIds)
+      const parcelIdForPatch = targetParcelIds[0] ?? null
+      const observationYearForPatch =
+        normalizeObservationYear(body.observation_year) ??
+        (parcelIdForPatch && !existing.observation_year ? new Date().getUTCFullYear() : null)
+      const versionNumberForPatch =
+        normalizeVersionNumber(body.version_number) ??
+        (parcelIdForPatch && !existing.version_number
+          ? await this.getDefaultVersionNumber(db, parcelIdForPatch, surveyId)
+          : null)
+      const hasPreviousSurveyId = Object.prototype.hasOwnProperty.call(body, "previous_survey_id")
+      const previousSurveyIdForPatch = hasPreviousSurveyId
+        ? normalizePreviousSurveyId(body.previous_survey_id)
+        : null
 
-    const result = await this.db.query<{ id: string; updated_at: string }>(
-      `UPDATE surveys
-       SET site_name = COALESCE($3, site_name),
-           visibility = COALESCE($4, visibility),
-           parcel_id = CASE WHEN $14::boolean THEN $5 ELSE parcel_id END,
-           observation_year = COALESCE($6, observation_year),
-           version_number = COALESCE($7, version_number),
-           previous_survey_id = COALESCE($8, previous_survey_id),
-           region_version = COALESCE($9, region_version),
-           vegetation_stage = COALESCE($10, vegetation_stage),
-           factors = COALESCE($11::jsonb, factors),
-           factor_results = COALESCE($12::jsonb, factor_results),
-           scores = COALESCE($13::jsonb, scores),
-           location = '{}'::jsonb,
-           updated_at = NOW()
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, updated_at::text`,
-      [
-        surveyId,
-        user.id,
-        body.site_name ?? null,
-        body.visibility ?? null,
-        parcelIdForPatch,
-        observationYearForPatch,
-        versionNumberForPatch,
-        previousSurveyIdForPatch,
-        body.region_version ?? null,
-        body.vegetation_stage ?? null,
-        body.factors ? JSON.stringify(body.factors) : null,
-        (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] }).factor_results
-          ? JSON.stringify(
-              (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] })
-                .factor_results,
-            )
-          : null,
-        body.scores ? JSON.stringify(body.scores) : null,
-        shouldUpdateParcels,
-      ],
-    )
+      const result = await db.query<{ id: string; updated_at: string }>(
+        `UPDATE surveys
+         SET site_name = COALESCE($3, site_name),
+             visibility = COALESCE($4, visibility),
+             parcel_id = CASE WHEN $14::boolean THEN $5 ELSE parcel_id END,
+             observation_year = COALESCE($6, observation_year),
+             version_number = COALESCE($7, version_number),
+             previous_survey_id = COALESCE($8, previous_survey_id),
+             region_version = COALESCE($9, region_version),
+             vegetation_stage = COALESCE($10, vegetation_stage),
+             factors = COALESCE($11::jsonb, factors),
+             factor_results = COALESCE($12::jsonb, factor_results),
+             scores = COALESCE($13::jsonb, scores),
+             location = '{}'::jsonb,
+             updated_at = NOW()
+         WHERE id = $1 AND user_id = $2
+         RETURNING id, updated_at::text`,
+        [
+          surveyId,
+          user.id,
+          body.site_name ?? null,
+          body.visibility ?? null,
+          parcelIdForPatch,
+          observationYearForPatch,
+          versionNumberForPatch,
+          previousSurveyIdForPatch,
+          body.region_version ?? null,
+          body.vegetation_stage ?? null,
+          body.factors ? JSON.stringify(body.factors) : null,
+          (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] })
+            .factor_results
+            ? JSON.stringify(
+                (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] })
+                  .factor_results,
+              )
+            : null,
+          body.scores ? JSON.stringify(body.scores) : null,
+          shouldUpdateParcels,
+        ],
+      )
 
-    if (!result.rows[0]) {
-      throw new NotFoundException("Survey not found")
-    }
+      if (!result.rows[0]) {
+        throw new NotFoundException("Survey not found")
+      }
 
-    await this.insertEvent(surveyId, user.id, "updated", {
-      changed_fields: Object.keys(body),
-    })
-
-    if (shouldUpdateParcels) {
-      await this.syncSurveyParcels(surveyId, targetParcelIds)
-    }
-
-    if (body.visibility && body.visibility !== existing.visibility) {
-      await this.insertEvent(surveyId, user.id, "visibility_changed", {
-        from: existing.visibility,
-        to: body.visibility,
+      await this.insertEvent(db, surveyId, user.id, "updated", {
+        changed_fields: Object.keys(body),
       })
-    }
 
-    return result.rows[0]
+      if (shouldUpdateParcels) {
+        await this.syncSurveyParcels(db, surveyId, targetParcelIds)
+      }
+
+      if (body.visibility && body.visibility !== existing.visibility) {
+        await this.insertEvent(db, surveyId, user.id, "visibility_changed", {
+          from: existing.visibility,
+          to: body.visibility,
+        })
+      }
+
+      return result.rows[0]
+    })
   }
 
   async patchSurveyVisibility(
@@ -514,39 +623,41 @@ export class SurveysService {
       throw new BadRequestException("visibility must be private or public")
     }
 
-    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id)
-    if (existing.visibility === body.visibility) {
-      return {
-        id: existing.id,
-        visibility: existing.visibility,
-        updated_at: existing.updated_at,
+    return this.db.transaction(async (db) => {
+      const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id)
+      if (existing.visibility === body.visibility) {
+        return {
+          id: existing.id,
+          visibility: existing.visibility,
+          updated_at: existing.updated_at,
+        }
       }
-    }
 
-    const result = await this.db.query<{
-      id: string
-      visibility: "private" | "public"
-      updated_at: string
-    }>(
-      `UPDATE surveys
-       SET visibility = $3,
-           updated_at = NOW()
-       WHERE id = $1
-         AND user_id = $2
-       RETURNING id, visibility, updated_at::text`,
-      [surveyId, user.id, body.visibility],
-    )
+      const result = await db.query<{
+        id: string
+        visibility: "private" | "public"
+        updated_at: string
+      }>(
+        `UPDATE surveys
+         SET visibility = $3,
+             updated_at = NOW()
+         WHERE id = $1
+           AND user_id = $2
+         RETURNING id, visibility, updated_at::text`,
+        [surveyId, user.id, body.visibility],
+      )
 
-    if (!result.rows[0]) {
-      throw new NotFoundException("Survey not found")
-    }
+      if (!result.rows[0]) {
+        throw new NotFoundException("Survey not found")
+      }
 
-    await this.insertEvent(surveyId, user.id, "visibility_changed", {
-      from: existing.visibility,
-      to: result.rows[0].visibility,
+      await this.insertEvent(db, surveyId, user.id, "visibility_changed", {
+        from: existing.visibility,
+        to: result.rows[0].visibility,
+      })
+
+      return result.rows[0]
     })
-
-    return result.rows[0]
   }
 
   async getSurveyById(
@@ -576,8 +687,8 @@ export class SurveysService {
       | "sync_version"
     > & { display_location: { lat: number; lng: number } | null }
   > {
-    const survey = await this.getSurveyForUserOrThrow(surveyId, user.id)
-    const parcelIds = await this.getSurveyParcelIds(survey.id)
+    const survey = await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+    const parcelIds = await this.getSurveyParcelIds(this.db, survey.id)
     const displayLocation = await this.computeSurveyDisplayLocation(survey.id, survey.parcel_id)
 
     return {
@@ -614,82 +725,158 @@ export class SurveysService {
     scores: Record<string, number>
     warnings?: string[]
   }> {
-    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id)
+    type SubmitOutcome =
+      | {
+          kind: "submitted"
+          result: {
+            id: string
+            status: "submitted"
+            submitted_at: string
+            scores: Record<string, number>
+            warnings?: string[]
+          }
+        }
+      | { kind: "rejected"; error: UnprocessableEntityException }
 
-    const validation = this.ibpRules.validateSubmit({
-      region_version: existing.region_version,
-      vegetation_stage: existing.vegetation_stage,
-      expires_at: existing.expires_at,
-      factors: existing.factors,
-    })
-    const parcelValidation = await this.validateParcelSubmit(existing)
-
-    if (parcelValidation.versionConflict) {
-      throw new ConflictException({
-        code: "parcel_version_conflict",
-        message: "Parcel version conflict",
-        details: {
-          parcel_id: existing.parcel_id,
-          expected_version_number: parcelValidation.versionConflict.expectedVersionNumber,
-          client_version_number: existing.version_number,
-        },
-      })
-    }
-
-    if (!validation.ok || !validation.scores || parcelValidation.errors.length > 0) {
-      const isExpired = validation.issues.some((issue) => issue.code === "survey_expired")
-      if (isExpired && existing.status !== "expired") {
-        await this.db.query(
-          `UPDATE surveys
-           SET status = 'expired',
-               updated_at = NOW()
-           WHERE id = $1 AND user_id = $2`,
-          [surveyId, user.id],
-        )
-        await this.insertEvent(surveyId, user.id, "expired", {
-          reason: "submit_after_deadline",
-          expires_at: existing.expires_at,
+    try {
+      const outcome: SubmitOutcome = await this.db.transaction(async (db) => {
+        const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id, {
+          forUpdate: true,
         })
+
+        const validation = this.ibpRules.validateSubmit({
+          region_version: existing.region_version,
+          vegetation_stage: existing.vegetation_stage,
+          expires_at: existing.expires_at,
+          factors: existing.factors,
+        })
+
+        // D-08/T-01.4-12: lock the affected parcels in a consistent (sorted)
+        // order before resolving the submit version, so two concurrent
+        // submits on the same parcel serialise instead of racing.
+        const surveyParcelIds = await this.getSurveyParcelIds(db, existing.id)
+        const parcelIdsToLock =
+          surveyParcelIds.length > 0
+            ? surveyParcelIds
+            : existing.parcel_id
+              ? [existing.parcel_id]
+              : []
+        if (parcelIdsToLock.length > 0) {
+          const sortedParcelIds = [...parcelIdsToLock].sort()
+          await db.query(
+            `SELECT parcel_id
+             FROM parcels
+             WHERE parcel_id = ANY($1::text[])
+             ORDER BY parcel_id
+             FOR UPDATE`,
+            [sortedParcelIds],
+          )
+        }
+
+        const parcelValidation = await this.validateParcelSubmit(db, existing)
+
+        if (parcelValidation.versionConflict) {
+          throw new ConflictException({
+            code: "parcel_version_conflict",
+            message: "Parcel version conflict",
+            details: {
+              parcel_id: existing.parcel_id,
+              expected_version_number: parcelValidation.versionConflict.expectedVersionNumber,
+              client_version_number: existing.version_number,
+            },
+          })
+        }
+
+        if (!validation.ok || !validation.scores || parcelValidation.errors.length > 0) {
+          const isExpired = validation.issues.some((issue) => issue.code === "survey_expired")
+          if (isExpired && existing.status !== "expired") {
+            // This write must commit even though the request is rejected
+            // below, so we return a discriminated outcome instead of
+            // throwing (which would roll it back).
+            await db.query(
+              `UPDATE surveys
+               SET status = 'expired',
+                   updated_at = NOW()
+               WHERE id = $1 AND user_id = $2`,
+              [surveyId, user.id],
+            )
+            await this.insertEvent(db, surveyId, user.id, "expired", {
+              reason: "submit_after_deadline",
+              expires_at: existing.expires_at,
+            })
+          }
+
+          return {
+            kind: "rejected",
+            error: new UnprocessableEntityException({
+              code: parcelValidation.code,
+              message: "Survey cannot be submitted",
+              errors: [...validation.errors, ...parcelValidation.errors],
+              warnings: validation.warnings,
+            }),
+          }
+        }
+
+        const result = await db.query<{
+          id: string
+          status: "submitted"
+          submitted_at: string
+        }>(
+          `UPDATE surveys
+           SET status = 'submitted',
+               submitted_at = NOW(),
+               factor_results = $3::jsonb,
+               scores = $4::jsonb,
+               updated_at = NOW()
+           WHERE id = $1 AND user_id = $2
+           RETURNING id, status, submitted_at::text`,
+          [
+            surveyId,
+            user.id,
+            JSON.stringify(validation.factor_results ?? {}),
+            JSON.stringify(validation.scores),
+          ],
+        )
+
+        if (!result.rows[0]) {
+          throw new NotFoundException("Survey not found")
+        }
+
+        await this.insertEvent(db, surveyId, user.id, "submitted", {
+          scores: validation.scores,
+          warnings: validation.warnings,
+        })
+
+        return {
+          kind: "submitted",
+          result: {
+            ...result.rows[0],
+            scores: validation.scores,
+            warnings: validation.warnings,
+          },
+        }
+      })
+
+      if (outcome.kind === "rejected") {
+        throw outcome.error
       }
 
-      throw new UnprocessableEntityException({
-        code: parcelValidation.code,
-        message: "Survey cannot be submitted",
-        errors: [...validation.errors, ...parcelValidation.errors],
-        warnings: validation.warnings,
-      })
-    }
-
-    const result = await this.db.query<{ id: string; status: "submitted"; submitted_at: string }>(
-      `UPDATE surveys
-       SET status = 'submitted',
-           submitted_at = NOW(),
-           factor_results = $3::jsonb,
-           scores = $4::jsonb,
-           updated_at = NOW()
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, status, submitted_at::text`,
-      [
-        surveyId,
-        user.id,
-        JSON.stringify(validation.factor_results ?? {}),
-        JSON.stringify(validation.scores),
-      ],
-    )
-
-    if (!result.rows[0]) {
-      throw new NotFoundException("Survey not found")
-    }
-
-    await this.insertEvent(surveyId, user.id, "submitted", {
-      scores: validation.scores,
-      warnings: validation.warnings,
-    })
-
-    return {
-      ...result.rows[0],
-      scores: validation.scores,
-      warnings: validation.warnings,
+      return outcome.result
+    } catch (error: unknown) {
+      // D-14: no UNIQUE(parcel_id, version_number) constraint exists in this
+      // phase, so the sorted FOR UPDATE lock above is the primary guard; a
+      // residual 23505 is still mapped to 409 as defence in depth. Every
+      // other error (including the ConflictException/UnprocessableEntityException
+      // thrown above) is rethrown untouched (RESEARCH Pitfall 3).
+      const pgError = error as { code?: string }
+      if (pgError && typeof pgError === "object" && pgError.code === "23505") {
+        throw new ConflictException({
+          code: "parcel_version_conflict",
+          message: "Parcel version conflict",
+          details: { survey_id: surveyId },
+        })
+      }
+      throw error
     }
   }
 
@@ -703,7 +890,7 @@ export class SurveysService {
     already_deleted: boolean
     missing: boolean
   }> {
-    const existing = await this.getSurveyForUser(surveyId, user.id, false)
+    const existing = await this.getSurveyForUser(this.db, surveyId, user.id, false)
     if (!existing) {
       if (options?.allowMissing) {
         return { id: surveyId, deleted_at: null, already_deleted: false, missing: true }
@@ -720,42 +907,48 @@ export class SurveysService {
       }
     }
 
-    const attachmentsResult = await this.db.query<Pick<AttachmentRow, "id" | "storage_key">>(
-      `SELECT id, storage_key
-       FROM attachments
-       WHERE survey_id = $1
-         AND deleted_at IS NULL`,
-      [surveyId],
-    )
+    const { deletedAt, storageKeys } = await this.db.transaction(async (db) => {
+      const attachmentsResult = await db.query<Pick<AttachmentRow, "id" | "storage_key">>(
+        `SELECT id, storage_key
+         FROM attachments
+         WHERE survey_id = $1
+           AND deleted_at IS NULL`,
+        [surveyId],
+      )
 
-    await this.db.query(
-      `UPDATE attachments
-       SET deleted_at = NOW()
-       WHERE survey_id = $1
-         AND deleted_at IS NULL`,
-      [surveyId],
-    )
+      await db.query(
+        `UPDATE attachments
+         SET deleted_at = NOW()
+         WHERE survey_id = $1
+           AND deleted_at IS NULL`,
+        [surveyId],
+      )
 
-    for (const attachment of attachmentsResult.rows) {
-      await this.cleanupAttachmentStorage(attachment.storage_key)
-    }
+      const deletedSurvey = await db.query<{ id: string; deleted_at: string }>(
+        `UPDATE surveys
+         SET deleted_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1
+           AND user_id = $2
+           AND deleted_at IS NULL
+         RETURNING id, deleted_at::text`,
+        [surveyId, user.id],
+      )
 
-    const deletedSurvey = await this.db.query<{ id: string; deleted_at: string }>(
-      `UPDATE surveys
-       SET deleted_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $1
-         AND user_id = $2
-         AND deleted_at IS NULL
-       RETURNING id, deleted_at::text`,
-      [surveyId, user.id],
-    )
+      await this.insertEvent(db, surveyId, user.id, "deleted", {
+        attachment_count_deleted: attachmentsResult.rows.length,
+      })
 
-    const deletedAt = deletedSurvey.rows[0]?.deleted_at ?? existing.deleted_at ?? null
-
-    await this.insertEvent(surveyId, user.id, "deleted", {
-      attachment_count_deleted: attachmentsResult.rows.length,
+      return {
+        deletedAt: deletedSurvey.rows[0]?.deleted_at ?? existing.deleted_at ?? null,
+        storageKeys: attachmentsResult.rows.map((row) => row.storage_key),
+      }
     })
+
+    // D-07: object-storage cleanup is best-effort and runs only after commit.
+    for (const storageKey of storageKeys) {
+      await this.cleanupAttachmentStorage(storageKey)
+    }
 
     return {
       id: surveyId,
@@ -766,7 +959,7 @@ export class SurveysService {
   }
 
   async getEvents(user: AuthenticatedUser, surveyId: string): Promise<{ items: SurveyEventRow[] }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
 
     const events = await this.db.query<SurveyEventRow>(
       `SELECT id, survey_id, actor_id, event_type, payload, created_at::text
@@ -1237,8 +1430,13 @@ export class SurveysService {
     }
   }
 
-  private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {
-    const survey = await this.getSurveyForUser(surveyId, userId, true)
+  private async getSurveyForUserOrThrow(
+    db: Queryable,
+    surveyId: string,
+    userId: string,
+    options?: { forUpdate?: boolean },
+  ): Promise<SurveyRow> {
+    const survey = await this.getSurveyForUser(db, surveyId, userId, true, options)
     if (!survey) {
       throw new NotFoundException("Survey not found")
     }
@@ -1246,27 +1444,32 @@ export class SurveysService {
   }
 
   private async getSurveyForUser(
+    db: Queryable,
     surveyId: string,
     userId: string,
     activeOnly: boolean,
+    options?: { forUpdate?: boolean },
   ): Promise<SurveyRow | null> {
     const where = activeOnly ? "AND deleted_at IS NULL" : ""
-    const result = await this.db.query<SurveyRow>(
+    const forUpdateClause = options?.forUpdate ? "FOR UPDATE" : ""
+    const result = await db.query<SurveyRow>(
       `SELECT *
        FROM surveys
-       WHERE id = $1 AND user_id = $2 ${where}`,
+       WHERE id = $1 AND user_id = $2 ${where}
+       ${forUpdateClause}`,
       [surveyId, userId],
     )
     return result.rows[0] ?? null
   }
 
   private async insertEvent(
+    db: Queryable,
     surveyId: string,
     actorId: string,
     eventType: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    await this.db.query(
+    await db.query(
       `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
@@ -1292,45 +1495,33 @@ export class SurveysService {
     await rm(storagePath, { force: true }).catch(() => undefined)
   }
 
-  private async getSurveyParcelIds(surveyId: string): Promise<string[]> {
-    try {
-      const result = await this.db.query<{ parcel_id: string }>(
-        `SELECT parcel_id
-         FROM survey_parcels
-         WHERE survey_id = $1
-         ORDER BY parcel_id ASC`,
-        [surveyId],
-      )
-      return result.rows.map((row) => row.parcel_id)
-    } catch (error) {
-      const message = (error as Error).message ?? ""
-      if (message.toLowerCase().includes("survey_parcels")) {
-        return []
-      }
-      throw error
-    }
+  private async getSurveyParcelIds(db: Queryable, surveyId: string): Promise<string[]> {
+    const result = await db.query<{ parcel_id: string }>(
+      `SELECT parcel_id
+       FROM survey_parcels
+       WHERE survey_id = $1
+       ORDER BY parcel_id ASC`,
+      [surveyId],
+    )
+    return result.rows.map((row) => row.parcel_id)
   }
 
-  private async syncSurveyParcels(surveyId: string, parcelIds: string[]): Promise<void> {
+  private async syncSurveyParcels(
+    db: Queryable,
+    surveyId: string,
+    parcelIds: string[],
+  ): Promise<void> {
     const normalized = normalizeParcelIds(parcelIds)
-    try {
-      await this.db.query(`DELETE FROM survey_parcels WHERE survey_id = $1`, [surveyId])
-      if (normalized.length === 0) {
-        return
-      }
-      await this.db.query(
-        `INSERT INTO survey_parcels (survey_id, parcel_id)
-         SELECT $1, unnest($2::text[])
-         ON CONFLICT (survey_id, parcel_id) DO NOTHING`,
-        [surveyId, normalized],
-      )
-    } catch (error) {
-      const message = (error as Error).message ?? ""
-      if (message.toLowerCase().includes("survey_parcels")) {
-        return
-      }
-      throw error
+    await db.query(`DELETE FROM survey_parcels WHERE survey_id = $1`, [surveyId])
+    if (normalized.length === 0) {
+      return
     }
+    await db.query(
+      `INSERT INTO survey_parcels (survey_id, parcel_id)
+       SELECT $1, unnest($2::text[])
+       ON CONFLICT (survey_id, parcel_id) DO NOTHING`,
+      [surveyId, normalized],
+    )
   }
 
   private async computeSurveyDisplayLocation(
@@ -1372,7 +1563,7 @@ export class SurveysService {
     return normalizeCentroid(fallback.rows[0].centroid)
   }
 
-  private async ensureParcelIds(parcelIds: string[]): Promise<string[]> {
+  private async ensureParcelIds(db: Queryable, parcelIds: string[]): Promise<string[]> {
     if (parcelIds.length === 0) {
       return []
     }
@@ -1384,7 +1575,7 @@ export class SurveysService {
       if (!normalized || seen.has(normalized)) {
         continue
       }
-      const ensured = await this.ensureParcelById(normalized)
+      const ensured = await this.ensureParcelById(db, normalized)
       if (!seen.has(ensured.parcel_id)) {
         seen.add(ensured.parcel_id)
         output.push(ensured.parcel_id)
@@ -1435,8 +1626,8 @@ export class SurveysService {
     return result.rows[0] ?? null
   }
 
-  private async ensureParcelById(parcelId: string): Promise<ParcelRow> {
-    const existing = await this.db.query<ParcelRow>(
+  private async ensureParcelById(db: Queryable, parcelId: string): Promise<ParcelRow> {
+    const existing = await db.query<ParcelRow>(
       `SELECT
          id::text,
          parcel_id,
@@ -1458,7 +1649,7 @@ export class SurveysService {
     }
 
     const parsed = parseParcelIdentifier(parcelId)
-    const inserted = await this.db.query<ParcelRow>(
+    const inserted = await db.query<ParcelRow>(
       `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
        ON CONFLICT (parcel_id) DO UPDATE
@@ -1491,10 +1682,11 @@ export class SurveysService {
   }
 
   private async getDefaultVersionNumber(
+    db: Queryable,
     parcelId: string,
     surveyIdToExclude?: string,
   ): Promise<number> {
-    const result = await this.db.query<{ next_version: number }>(
+    const result = await db.query<{ next_version: number }>(
       `SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
        FROM surveys s
        JOIN survey_parcels sp
@@ -1508,7 +1700,10 @@ export class SurveysService {
     return result.rows[0]?.next_version ?? 1
   }
 
-  private async validateParcelSubmit(survey: SurveyRow): Promise<{
+  private async validateParcelSubmit(
+    db: Queryable,
+    survey: SurveyRow,
+  ): Promise<{
     code?: "parcel_required" | "parcel_invalid"
     errors: string[]
     versionConflict?: { expectedVersionNumber: number }
@@ -1516,7 +1711,7 @@ export class SurveysService {
     const errors: string[] = []
     const observationYear = survey.observation_year
     const versionNumber = survey.version_number
-    const surveyParcelIds = await this.getSurveyParcelIds(survey.id)
+    const surveyParcelIds = await this.getSurveyParcelIds(db, survey.id)
     const parcelIds =
       surveyParcelIds.length > 0 ? surveyParcelIds : survey.parcel_id ? [survey.parcel_id] : []
 
@@ -1537,7 +1732,7 @@ export class SurveysService {
       }
     }
 
-    const parcelExists = await this.db.query<{ parcel_id: string }>(
+    const parcelExists = await db.query<{ parcel_id: string }>(
       `SELECT parcel_id
        FROM parcels
        WHERE parcel_id = ANY($1::text[])`,
@@ -1552,7 +1747,7 @@ export class SurveysService {
     }
 
     for (const parcelId of parcelIds) {
-      const expectedVersionNumber = await this.getDefaultVersionNumber(parcelId, survey.id)
+      const expectedVersionNumber = await this.getDefaultVersionNumber(db, parcelId, survey.id)
       if (versionNumber !== expectedVersionNumber) {
         return {
           errors: [],
