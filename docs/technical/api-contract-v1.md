@@ -624,8 +624,9 @@ Response `200`:
 
 Rules:
 
-- Batch size max in V1: `100` operations.
-- Each operation is processed independently.
+- Batch size max in V1: `100` operations, minimum `1`. The whole request is rejected (`400`) if `operations` is empty, exceeds `100`, or the request body carries any field other than `operations`.
+- Each operation's envelope (`entity`, `action`, `survey_id`, `client_ref`) and its `payload` are validated independently by a class DTO before the operation runs. A bad operation never aborts the batch: it yields its own `fatal_error` result with `error.code: "invalid_sync_operation"`, `error.http_status: 400` and `error.details.fields` listing the offending property names (never values or raw constraint text); every other operation in the batch is still processed.
+- Unknown fields inside an operation's `payload` are silently stripped, never rejected — this keeps installed apps and older local-queue fixtures syncing across app updates. Type or format violations on fields the DTO does know about (e.g. `sync_version` sent as a string) are still fatal.
 - Supported operation set in V1:
   - `survey.upsert`
   - `survey.delete`
@@ -641,11 +642,13 @@ Rules:
   - `rate_limited`
   - `network_gateway_error`
   - `transient_upstream_error`
+- Database data/constraint errors (PostgreSQL SQLSTATE classes `22` and `23`, e.g. a check-constraint or foreign-key violation) always return `fatal_error` with `error.code: "invalid_operation"` and a fixed generic message — never retried, and no SQL detail (constraint names, column values) ever reaches the client.
 - `client_ref` is echoed back for local queue reconciliation.
 - `attachment.delete` requires:
   - `survey_id` in operation envelope
   - `attachment_id` inside `payload`
 - For idempotency in sync path, deleting a missing attachment can still return `synced` with `missing=true`.
+- `parcel_ids` (on `survey.upsert` payloads, and on the REST `POST /surveys` / `PATCH /surveys/{id}` bodies) is bounded at `50` entries; each entry must match `^[0-9A-Z]{1,32}$` (case-insensitive) — the pattern accepts both synthetic cadastral IDs and the 14-character IGN `idu` values the server itself generates. A batch entry over the limit or containing a malformed ID is rejected the same way as any other invalid payload (`invalid_sync_operation`, `400`); on the REST routes it is a normal `400` validation error.
 
 ### GET /sync/changes?cursor=&limit=
 
@@ -949,3 +952,5 @@ Common business error codes (non-exhaustive):
 - `parcel_required`
 - `parcel_invalid`
 - `parcel_version_conflict`
+- `invalid_sync_operation` — a `/v1/sync` operation's envelope or payload failed class DTO validation; `error.details.fields` lists the offending property names.
+- `invalid_operation` — a deterministic PostgreSQL data/constraint error (SQLSTATE class `22`/`23`) was raised while processing the request; the message is intentionally generic and carries no SQL detail.
