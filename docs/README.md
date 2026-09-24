@@ -15,3 +15,4 @@ The repository documentation is grouped under `docs/`:
 - `docs/references/`
   Links to third-party reference material (CNPF IBP methodology, brand charter).
   The source PDFs are not redistributed here — see `docs/references/README.md`.
+<!-- CI proof: docs-only change, reverted before merge. -->
