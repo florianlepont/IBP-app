@@ -1532,3 +1532,108 @@ reinforcing that Pinus's autumn scarcity looks like a genuine property of GBIF's
 `StillImage` collection for that genus, not a sampling artefact at any scale tried so far. Acer and
 Prunus not yet re-processed in this pass; their status is confirmed once reached. Full final table
 in Section 11.1 once the expansion completes.
+
+**Working directory changed mid-run (2026-09-24, no interruption to the running process).** A
+separate Claude session operating in the same checkout switched `/Users/florian/Projects/cortege`
+to an unrelated branch. This session's work continued from a git worktree
+(`/Users/florian/Projects/cortege-phase1`, checked out on
+`gsd/phase-1-species-recognition-approach-decision`) with `spike/` symlinked to the original
+directory — the running `prepare_dataset.py` process (PID unchanged) kept writing to the same
+files throughout via that original path; nothing was interrupted, moved, or re-downloaded because
+of this. All commits from this point in the plan are made from the worktree.
+
+### 11.1 Corpus expansion — complete
+
+**Final state: 194,653 images selected into splits across 34 classes (194,661 raw files on disk),
+up from iteration 2's 63,863 — roughly 3.05x iteration 2's corpus, and roughly 26.2x iteration 1's
+original 7,432.** `data/GATE` reads `GATE-CORPUS: PASS`, `CLASSES-USABLE: 32` (composition
+exclusions Betula, Phillyrea unchanged, not re-audited at this scale — Section 10.3/10.4 of the
+prior iteration). `verify_corpus_complete()` (Section 11's precondition check) passes cleanly:
+all 34 classes have non-empty, count-consistent train/val/test splits.
+
+| genus | downloaded | train | val | test | candidates seen |
+|---|---:|---:|---:|---:|---:|
+| Abies | 6,000 | 4,800 | 600 | 600 | 6,000 |
+| Acer | 6,000 | 4,800 | 600 | 600 | 6,000 |
+| Alnus | 6,000 | 4,800 | 600 | 600 | 6,000 |
+| Arbutus | 6,000 | 4,800 | 600 | 600 | 6,500 |
+| Betula | 6,000 | 4,800 | 600 | 600 | 6,514 |
+| Carpinus | 6,000 | 4,800 | 600 | 600 | 6,500 |
+| Castanea | 6,000 | 4,800 | 600 | 600 | 6,500 |
+| Celtis | 5,998 | 4,798 | 600 | 600 | 6,500 |
+| Cupressus | 5,300 | 4,240 | 530 | 530 | 9,913 |
+| Fagus | 5,988 | 4,790 | 599 | 599 | 9,683 |
+| Fraxinus | 5,946 | 4,757 | 595 | 594 | 9,403 |
+| Juglans | 5,891 | 4,713 | 589 | 589 | 9,790 |
+| Juniperus | 5,971 | 4,777 | 597 | 597 | 9,764 |
+| Larix | 5,988 | 4,790 | 599 | 599 | 9,766 |
+| Malus | 5,615 | 4,492 | 562 | 561 | 9,909 |
+| Ostrya | 5,401 | 4,321 | 540 | 540 | 9,855 |
+| Pinus | 5,773 | 4,618 | 577 | 578 | 9,889 |
+| Picea | 5,952 | 4,762 | 595 | 595 | 9,867 |
+| Populus | 5,978 | 4,782 | 598 | 598 | 9,910 |
+| Prunus | 5,999 | 4,799 | 600 | 600 | 9,970 |
+| Pyrus | 5,630 | 4,504 | 563 | 563 | 9,882 |
+| Quercus_deciduae | 4,668 | 3,734 | 467 | 467 | 9,966 |
+| Quercus_sempervirens | 5,674 | 4,539 | 567 | 568 | 8,861 |
+| Salix | 5,986 | 4,789 | 599 | 598 | 9,958 |
+| Sorbus | 5,981 | 4,785 | 598 | 598 | 9,934 |
+| Tamarix | 5,440 | 4,352 | 544 | 544 | 9,783 |
+| Taxus | 5,331 | 4,265 | 533 | 533 | 9,965 |
+| Tilia | 5,750 | 4,600 | 575 | 575 | 9,990 |
+| Ulmus | 5,979 | 4,783 | 598 | 598 | 9,975 |
+| Ceratonia | 3,629 | 2,903 | 363 | 363 | 4,194 |
+| Cercis | 5,705 | 4,564 | 570 | 571 | 9,911 |
+| Olea | 5,915 | 4,732 | 592 | 591 | 9,932 |
+| Phillyrea | 5,460 | 4,368 | 546 | 546 | 8,717 |
+| Pistacia | 5,705 | 4,564 | 570 | 571 | 9,868 |
+
+**The per-class ceiling spread is itself a finding, not noise: from Ceratonia's 3,629 to eight
+classes flatly capped at the 6,000 target (which they may have exceeded had the target been set
+higher — those eight are target-limited, not ceiling-limited, unlike the rest).** RESEARCH.md's
+and `prepare_dataset.py`'s own original comment assumed a roughly flat ~4,200 CC0/CC-BY
+candidates/class across the whole genus list; the real picture at this scale is materially
+uneven. Reading the `candidates seen` column against `downloaded`: most classes' *search* pool
+(candidates matching the query) reached 8,700–9,990 once fetched exhaustively (`MAX_CANDIDATES_TO_FETCH=8000`
+plus whatever remained in the already-seen pool from iteration 2), but the *downloaded* count is
+consistently lower — sometimes by a wide margin (Quercus_deciduae: 9,966 candidates seen, only
+4,668 downloaded; Cupressus: 9,913 seen, 5,300 downloaded) — meaning a meaningful fraction of
+candidate URLs fail to download even after retries (dead links, host errors, non-image content,
+or genuine duplicates dropped by the composition-selection step). **Ceratonia is the clearest
+outlier: its candidate pool itself caps at 4,194** (the smallest of any class, well short of the
+8,000 fetch ceiling), confirming a class can be **genuinely licence-scarce**, not merely
+download-lossy — this is the same class iteration 1/2 already flagged as a Mediterranean
+supplementary genus with a thinner literature base. **This spread bounds what any future
+iteration could achieve**: eight classes could plausibly grow further with a higher target
+(they were still climbing when capped at 6,000), but the majority are already close to their real
+ceiling under this licence filter, and Ceratonia specifically cannot grow much more regardless of
+target.
+
+**Seasonal stratification, final: 31 of 34 classes reached double-digit autumn percentages
+(10.9%–32.4%), a dramatic improvement on iteration 2's already-improved-but-partial picture.**
+Three genera remain critically thin even at this scale, now confirmed rather than provisional:
+
+| genus | autumn achieved | autumn % | verdict |
+|---|---:|---:|---|
+| Prunus | 30 / 5,999 | 0.5% | confirmed near-absent at ~10,000-candidate scale |
+| Pinus | 60 / 5,773 | 1.0% | confirmed near-absent at ~9,900-candidate scale |
+| Acer | 66 / 6,000 | 1.1% | confirmed near-absent at ~6,000-candidate scale (capped by the download target here, not the candidate pool — see spread discussion above) |
+
+**These three read as a genuine property of GBIF's CC0/CC-BY `StillImage` collection for these
+specific genera, not a corpus-assembly limitation.** Every other class, including several that
+were at or near zero in iteration 1/2 (Fraxinus, Fagus, Juniperus, Populus, Salix), now carries
+substantial autumn representation (12.4%–27.5%). This closes most of Section 3b's original
+seasonal-skew finding — but not all of it, and the remaining gap (Prunus, Pinus, Acer) is now
+better-evidenced than a "hasn't been tried at scale yet" caveat: it has been tried, repeatedly, at
+increasing scale, and the answer did not change.
+
+**Download rate, honestly reported.** The observed rate collapsed over the course of this
+corpus-expansion effort: roughly 14,000 images/hour during iteration 2's expansion, dropping to
+roughly 1,000–2,000 images per 10–20 minutes (≈3,000–12,000/hour) during the earlier part of
+iteration 3, and continuing to vary session-to-session thereafter (one class-processing rate
+sampled at ~21 min/class average, others faster once the hang-proofing and priority-reordering
+fixes were in place). This is consistent with GBIF or an upstream image host applying rate-limiting
+under sustained heavy, concurrent, multi-hour load rather than a fixed per-request cost — the
+same download logic ran markedly faster in short bursts than in sustained multi-hour runs across
+this plan's several sessions. Recorded here so a future iteration does not assume iteration 2's
+throughput is representative of what a much larger, longer-running expansion will sustain.
