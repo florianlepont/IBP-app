@@ -41,6 +41,10 @@ Define a robust conflict and retry strategy for offline-first synchronization, s
 - Confirm URL failure after successful binary upload:
   - retryable for `5xx/429`, fatal for `4xx`.
 
+### Deterministic database errors
+- PostgreSQL SQLSTATE classes `22` (data exception) and `23` (integrity constraint violation) are always `fatal_error` and never retried — retrying a deterministic constraint or type violation can never succeed, and retrying would only produce a retry storm.
+- The client-facing error uses a fixed generic code (`invalid_operation`) and message; the raw database message (constraint names, values, SQL) is never returned to the client, only logged server-side.
+
 ## Retry Policy (Mobile)
 - Exponential backoff already exists and stays default.
 - Add hard retry cap:

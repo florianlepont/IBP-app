@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common"
-import { SurveyPatchBody, SurveyRow } from "./surveys.types"
+import { SurveyPatchBody, SurveyRow, SurveyUpsertBody } from "./surveys.types"
 
 export function normalizeSurveyStatusFilter(status?: string): SurveyRow["status"] | null {
   if (!status || typeof status !== "string") {
@@ -35,6 +35,159 @@ export function getSubmittedReadOnlyFields(body: SurveyPatchBody): string[] {
   ]
 
   return readonlyFields.filter((field) => Object.prototype.hasOwnProperty.call(body, field))
+}
+
+function jsonDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true
+  }
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false
+    }
+    return a.every((item, index) => jsonDeepEqual(item, b[index]))
+  }
+
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null
+
+  if (isPlainObject(a) || isPlainObject(b)) {
+    if (!isPlainObject(a) || !isPlainObject(b)) {
+      return false
+    }
+    const aKeys = Object.keys(a)
+    const bKeys = Object.keys(b)
+    if (aKeys.length !== bKeys.length) {
+      return false
+    }
+    return aKeys.every((key) => jsonDeepEqual(a[key], b[key]))
+  }
+
+  return false
+}
+
+function parcelIdSetEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false
+  }
+  const setA = new Set(a)
+  const setB = new Set(b)
+  if (setA.size !== setB.size) {
+    return false
+  }
+  for (const value of setA) {
+    if (!setB.has(value)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Value comparison of the read-only fields of a submitted survey, for the
+ * upsert path (D-04, D-13). Unlike getSubmittedReadOnlyFields (key-presence
+ * check used by PATCH), this reports a field only when its (normalized)
+ * value actually differs from what is stored. Absent/undefined/null fields
+ * on `body` are treated as "unchanged" and never reported. `scores` is
+ * excluded: it is recomputed server-side and must never block a resync.
+ */
+export function getChangedSubmittedReadOnlyFields(
+  body: SurveyUpsertBody,
+  existing: SurveyRow,
+  existingParcelIds: string[],
+): string[] {
+  const readonlyFields: Array<Exclude<keyof SurveyPatchBody, "scores">> = [
+    "site_name",
+    "parcel_id",
+    "parcel_ids",
+    "observation_year",
+    "version_number",
+    "previous_survey_id",
+    "region_version",
+    "vegetation_stage",
+    "factors",
+  ]
+
+  const changed: string[] = []
+
+  for (const field of readonlyFields) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) {
+      continue
+    }
+    const bodyValue = (body as Record<string, unknown>)[field]
+    if (bodyValue === undefined || bodyValue === null) {
+      continue
+    }
+
+    switch (field) {
+      case "site_name": {
+        if (bodyValue !== existing.site_name) {
+          changed.push(field)
+        }
+        break
+      }
+      case "parcel_id": {
+        if (normalizeParcelId(bodyValue) !== normalizeParcelId(existing.parcel_id)) {
+          changed.push(field)
+        }
+        break
+      }
+      case "parcel_ids": {
+        const bodyParcelIds = normalizeParcelIds(bodyValue)
+        const baselineParcelIds =
+          existingParcelIds.length > 0
+            ? existingParcelIds
+            : existing.parcel_id
+              ? [existing.parcel_id]
+              : []
+        if (!parcelIdSetEqual(bodyParcelIds, normalizeParcelIds(baselineParcelIds))) {
+          changed.push(field)
+        }
+        break
+      }
+      case "observation_year": {
+        if (normalizeObservationYear(bodyValue) !== existing.observation_year) {
+          changed.push(field)
+        }
+        break
+      }
+      case "version_number": {
+        if (normalizeVersionNumber(bodyValue) !== existing.version_number) {
+          changed.push(field)
+        }
+        break
+      }
+      case "previous_survey_id": {
+        if (normalizePreviousSurveyId(bodyValue) !== existing.previous_survey_id) {
+          changed.push(field)
+        }
+        break
+      }
+      case "region_version": {
+        if (bodyValue !== existing.region_version) {
+          changed.push(field)
+        }
+        break
+      }
+      case "vegetation_stage": {
+        if (bodyValue !== existing.vegetation_stage) {
+          changed.push(field)
+        }
+        break
+      }
+      case "factors": {
+        if (!jsonDeepEqual(bodyValue, existing.factors ?? {})) {
+          changed.push(field)
+        }
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  return changed
 }
 
 export function normalizeParcelId(value: unknown): string | null {
