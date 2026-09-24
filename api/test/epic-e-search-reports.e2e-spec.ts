@@ -91,10 +91,9 @@ describe("Epic E - Search and Reports (e2e)", () => {
       .expect(201)
 
     // D-03: upsert can no longer submit; set status directly for this fixture.
-    await db.query(
-      `UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = $1`,
-      [surveyB],
-    )
+    await db.query(`UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = $1`, [
+      surveyB,
+    ])
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -393,10 +392,9 @@ describe("Epic E - Search and Reports (e2e)", () => {
       .expect(201)
 
     // D-03: upsert can no longer submit; set status directly for this fixture.
-    await db.query(
-      `UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = $1`,
-      [publicSurveyId],
-    )
+    await db.query(`UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = $1`, [
+      publicSurveyId,
+    ])
 
     await request(app.getHttpServer())
       .post("/v1/reports")
