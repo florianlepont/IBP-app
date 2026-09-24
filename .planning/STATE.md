@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 01.2-09-PLAN.md
-last_updated: "2026-09-23T16:35:26.264Z"
-last_activity: 2026-09-23
+status: planning
+stopped_at: Phase 01.2 complete (owner approved device re-check 2026-09-24)
+last_updated: "2026-09-24T07:11:33.646Z"
+last_activity: 2026-09-24
 progress:
   total_phases: 16
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** An ecologist can complete a full IBP survey offline on a real parcel and have it reach the server intact on reconnection — no data loss, no duplicates.
-**Current focus:** Phase 01.2 — Stop field data loss and account exposure
+**Current focus:** Phase 01.3 — CI and test safety net
 
 ## Current Position
 
-Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
-Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-09-23
+Phase: 01.3 (CI and test safety net)
+Plan: Not started
+Status: Ready to plan — Phase 01.2 complete
+Last activity: 2026-09-24
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 9
 - Average duration: —
 - Total execution time: 0 hours
 
@@ -44,7 +44,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01.2 | 9 | - | - |
 
 **Recent Trend:**
 
