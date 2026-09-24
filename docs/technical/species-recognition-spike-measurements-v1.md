@@ -1415,3 +1415,31 @@ corpus-assembly shortfall.
    stated explicitly either way, not assumed.
 
 **This subsection is filled in as each step completes, same resumability discipline as Section 10.**
+
+**Progress checkpoint (2026-09-24, interim, corpus expansion in progress).** The corpus-expansion
+run was interrupted once by a session end after 7 of 34 classes; `prepare_dataset.py`'s
+resumability (reuse-existing-files, exclude-already-downloaded-ids) picked back up correctly with
+no data lost — restarted rather than resumed from a checkpoint file, but functionally equivalent
+since every previously-downloaded image is still on disk and gets reused. Progress so far (7
+classes; downloaded counts fell short of the 6,000 target, meaning these classes are approaching
+their real GBIF ceiling at the current ~8,000-candidate fetch pool, not stopping early):
+
+| genus | downloaded | candidates seen (this pass) | autumn achieved (quota 1,500) |
+|---|---:|---:|---:|
+| Abies | 4,712 | 9,982 | 1,519 |
+| Acer | 4,547 | 9,915 | 81 |
+| Alnus | 5,514 | 9,988 | 1,501 |
+| Arbutus | 5,204 | 9,970 | 1,500 |
+| Betula | 5,215 | 9,910 | 1,016 |
+| Carpinus | 4,793 | 9,990 | 1,536 |
+| Castanea | 4,832 | 9,913 | 1,735 |
+
+**Preliminary update to the Acer/Pinus/Prunus zero-autumn finding (iteration 2, Section 10.1):
+at this larger scale, Acer is no longer at zero — 81 autumn images were found**, out of 4,547
+downloaded (≈1.8%). This revises iteration 2's "genuinely zero" reading for Acer specifically: the
+correct reading is "very thin, not literally absent" — GBIF does hold a small number of autumn
+Acer photographs under this licence filter, just far short of the quota. Pinus and Prunus are not
+yet re-processed in this pass; their status is confirmed or revised below once reached. This
+table will be superseded by the complete 34-class results in the final Section 11.1 once the
+expansion finishes; recorded here specifically so this finding is not lost to a further
+interruption.
