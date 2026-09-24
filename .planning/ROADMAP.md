@@ -140,11 +140,11 @@ Plans:
 
 Plans:
 
-- [ ] 01.3-01-PLAN.md — Mobile test infra: real-SQL expo-sqlite mock by default, storage.test.ts on table state, .test.tsx collected, Node engines floor (wave 1)
-- [ ] 01.3-02-PLAN.md — API: E2E globalSetup drops schema and re-migrates; reproducible non-root Dockerfile from the root lockfile, .dockerignore, VPS runbook (wave 1)
-- [ ] 01.3-03-PLAN.md — expo-doctor fixes: newArchEnabled removed, Metro override proven obsolete with a single-React export check (wave 1)
-- [ ] 01.3-04-PLAN.md — Coverage ratchet: per-directory coverageThreshold at measured floor values (wave 2)
-- [ ] 01.3-05-PLAN.md — CI rewrite: path filters, check/typecheck, unit+coverage, E2E twice, mobile-build, audit, image smoke, CI OK, main-only SHA-tagged push; CodeQL; Dependabot actions (wave 2)
+- [x] 01.3-01-PLAN.md — Mobile test infra: real-SQL expo-sqlite mock by default, storage.test.ts on table state, .test.tsx collected, Node engines floor (wave 1)
+- [x] 01.3-02-PLAN.md — API: E2E globalSetup drops schema and re-migrates; reproducible non-root Dockerfile from the root lockfile, .dockerignore, VPS runbook (wave 1)
+- [x] 01.3-03-PLAN.md — expo-doctor fixes: newArchEnabled removed, Metro override proven obsolete with a single-React export check (wave 1)
+- [x] 01.3-04-PLAN.md — Coverage ratchet: per-directory coverageThreshold at measured floor values (wave 2)
+- [x] 01.3-05-PLAN.md — CI rewrite: path filters, check/typecheck, unit+coverage, E2E twice, mobile-build, audit, image smoke, CI OK, main-only SHA-tagged push; CodeQL; Dependabot actions (wave 2)
 - [ ] 01.3-06-PLAN.md — Phase gate: local suite, PR CI evidence, owner device check and merge (wave 3, checkpoint)
 - [ ] 01.3-07-PLAN.md — Post-merge: main push tags, type-error and docs-only PR proofs, VPS health and CI OK branch protection (wave 4, checkpoint)
 
@@ -355,7 +355,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
-| 1.3. CI and test safety net | 0/7 | Planned | - |
+| 1.3. CI and test safety net | 5/7 | In Progress|  |
 | 1.4. API sync integrity | 0/TBD | Not started | - |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
 | 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |

@@ -33,7 +33,6 @@
       ],
       "./plugins/with-scene-delegate"
     ],
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "fr.etatssauvages.cortege",
       "infoPlist": {

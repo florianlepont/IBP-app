@@ -24,3 +24,13 @@ updates:
       # Pinned to 8.4.49 by expo -> @expo/metro-config; unblocks when Expo
       # accepts a newer postcss.
       - dependency-name: "postcss"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+    # Workflow actions are pinned by commit SHA (see ci.yml / codeql.yml).
+    # Unlike the npm block above, this limit is not 0: Dependabot needs to be
+    # able to open bump PRs, or the SHA pins go stale silently.
+    open-pull-requests-limit: 5
