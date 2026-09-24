@@ -210,6 +210,10 @@ describe("Surveys idempotency (e2e)", () => {
       })
       .expect(201)
 
+    // D-03: expires_at is computed server-side and never moved by an upsert;
+    // set it directly to force the expired path for this test.
+    await db.query("UPDATE surveys SET expires_at = $2 WHERE id = $1", [surveyId, expiredAt])
+
     const submit = await request(app.getHttpServer())
       .post(`/v1/surveys/${surveyId}/submit`)
       .set("Authorization", `Bearer ${accessToken}`)

@@ -26,6 +26,7 @@ import {
 import {
   buildFallbackParcelGeometry,
   buildParcelKey,
+  getChangedSubmittedReadOnlyFields,
   getSubmittedReadOnlyFields,
   normalizeCentroid,
   normalizeObservationYear,
@@ -202,8 +203,10 @@ export class SurveysService {
     }
 
     const now = new Date()
-    const expiresAt =
-      body.expires_at ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    // D-03: expires_at is computed server-side at creation and never moved by
+    // an upsert; the client-sent value (kept on the DTO for compatibility) is
+    // never read here.
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
     const computedScores = draftValidation.scores ?? {
       ibp_peuplement_gestion: 0,
       ibp_contexte: 0,
@@ -242,7 +245,9 @@ export class SurveysService {
             surveyId,
             user.id,
             siteName,
-            body.status ?? "draft",
+            // D-03: a client can never submit through upsert; new surveys are
+            // always created as draft.
+            "draft",
             body.visibility ?? "private",
             parcelId,
             observationYear,
@@ -297,20 +302,6 @@ export class SurveysService {
       }
 
       const existingParcelIds = await this.getSurveyParcelIds(db, existing.id)
-      const selectedParcelIds = await this.resolveSelectedParcelIds(
-        db,
-        body,
-        existing,
-        existingParcelIds,
-      )
-      const parcelId = selectedParcelIds[0] ?? null
-      const { observationYear, versionNumber, previousSurveyId } = await this.resolveVersionInfo(
-        db,
-        body,
-        existing,
-        parcelId,
-        now,
-      )
 
       if (syncVersion < existing.sync_version) {
         throw new ConflictException({
@@ -334,31 +325,119 @@ export class SurveysService {
         }
       }
 
+      // D-04/D-13: a submitted survey's observation fields are read-only by
+      // value. Identical resends (including today's installed apps replaying
+      // status/expires_at) are accepted and only touch visibility/sync_version;
+      // any actual change to a read-only field is rejected — never falls
+      // through to ensureParcelIds/syncSurveyParcels or rewrites factors,
+      // factor_results or scores.
+      if (existing.status === "submitted") {
+        const changedFields = getChangedSubmittedReadOnlyFields(body, existing, existingParcelIds)
+        if (changedFields.length > 0) {
+          throw new ConflictException({
+            code: "survey_submitted_read_only",
+            message: "Submitted survey fields are read-only",
+            details: { survey_id: surveyId, fields: changedFields },
+          })
+        }
+
+        const restrictedUpdateResult = await db.query<{ id: string; updated_at: string }>(
+          `UPDATE surveys
+           SET visibility = $3,
+               sync_version = $4,
+               updated_at = $5
+           WHERE id = $1 AND user_id = $2 AND sync_version < $4
+           RETURNING id, updated_at::text`,
+          [
+            surveyId,
+            user.id,
+            body.visibility ?? existing.visibility,
+            syncVersion,
+            now.toISOString(),
+          ],
+        )
+
+        if (!restrictedUpdateResult.rows[0]) {
+          const reRead = await this.getSurveyForUser(db, surveyId, user.id, false, {
+            forUpdate: true,
+          })
+          if (!reRead) {
+            throw new NotFoundException("Survey not found")
+          }
+
+          if (reRead.sync_version === syncVersion) {
+            return {
+              id: reRead.id,
+              server_status: "synced" as const,
+              updated_at: reRead.updated_at,
+              warnings: draftValidation.warnings,
+              factor_results: draftValidation.factor_results ?? undefined,
+            }
+          }
+
+          throw new ConflictException({
+            code: "sync_version_conflict",
+            message: "Older sync_version received",
+            details: {
+              survey_id: surveyId,
+              server_sync_version: reRead.sync_version,
+              client_sync_version: syncVersion,
+            },
+          })
+        }
+
+        await this.insertEvent(db, surveyId, user.id, "updated", {
+          sync_version: syncVersion,
+          site_name: siteName,
+          warnings: draftValidation.warnings,
+        })
+
+        return {
+          id: restrictedUpdateResult.rows[0].id,
+          server_status: "synced" as const,
+          updated_at: restrictedUpdateResult.rows[0].updated_at,
+          warnings: draftValidation.warnings,
+          factor_results: draftValidation.factor_results ?? undefined,
+        }
+      }
+
+      const selectedParcelIds = await this.resolveSelectedParcelIds(
+        db,
+        body,
+        existing,
+        existingParcelIds,
+      )
+      const parcelId = selectedParcelIds[0] ?? null
+      const { observationYear, versionNumber, previousSurveyId } = await this.resolveVersionInfo(
+        db,
+        body,
+        existing,
+        parcelId,
+        now,
+      )
+
       const updateResult = await db.query<{ id: string; updated_at: string }>(
         `UPDATE surveys
          SET site_name = $3,
-             status = $4,
-             visibility = $5,
-             parcel_id = $6,
-             observation_year = $7,
-             version_number = $8,
-             previous_survey_id = $9,
-             region_version = $10,
-             vegetation_stage = $11,
-             factors = $12::jsonb,
-             factor_results = $13::jsonb,
-             scores = $14::jsonb,
-             location = $15::jsonb,
-             expires_at = $16,
-             sync_version = $17,
-             updated_at = $18
-         WHERE id = $1 AND user_id = $2 AND sync_version < $17
+             visibility = $4,
+             parcel_id = $5,
+             observation_year = $6,
+             version_number = $7,
+             previous_survey_id = $8,
+             region_version = $9,
+             vegetation_stage = $10,
+             factors = $11::jsonb,
+             factor_results = $12::jsonb,
+             scores = $13::jsonb,
+             location = $14::jsonb,
+             sync_version = $15,
+             updated_at = $16
+         WHERE id = $1 AND user_id = $2 AND sync_version < $15
          RETURNING id, updated_at::text`,
         [
           surveyId,
           user.id,
           siteName,
-          body.status ?? existing.status,
           body.visibility ?? existing.visibility,
           parcelId,
           observationYear,
@@ -370,7 +449,6 @@ export class SurveysService {
           JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
           JSON.stringify(computedScores),
           JSON.stringify({}),
-          expiresAt,
           syncVersion,
           now.toISOString(),
         ],

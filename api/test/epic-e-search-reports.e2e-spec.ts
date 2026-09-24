@@ -70,7 +70,6 @@ describe("Epic E - Search and Reports (e2e)", () => {
         id: surveyB,
         sync_version: 1,
         site_name: "Pine Valley",
-        status: "submitted",
         visibility: "private",
         region_version: "ACA",
         vegetation_stage: "collineen",
@@ -90,6 +89,11 @@ describe("Epic E - Search and Reports (e2e)", () => {
         location: { source: "gps", lat: 48.643, lng: 1.829 },
       })
       .expect(201)
+
+    // D-03: upsert can no longer submit; set status directly for this fixture.
+    await db.query(`UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = $1`, [
+      surveyB,
+    ])
 
     await request(app.getHttpServer())
       .post("/v1/surveys")
@@ -208,7 +212,6 @@ describe("Epic E - Search and Reports (e2e)", () => {
         id: publicSurveyId,
         sync_version: 1,
         site_name: "Public Forest",
-        status: "submitted",
         visibility: "public",
         region_version: "ACA",
         vegetation_stage: "collineen",
@@ -225,7 +228,6 @@ describe("Epic E - Search and Reports (e2e)", () => {
         id: privateSurveyId,
         sync_version: 1,
         site_name: "Private Forest",
-        status: "submitted",
         visibility: "private",
         region_version: "ACA",
         vegetation_stage: "collineen",
@@ -234,6 +236,12 @@ describe("Epic E - Search and Reports (e2e)", () => {
         location: { source: "gps", lat: 48.643, lng: 1.829 },
       })
       .expect(201)
+
+    // D-03: upsert can no longer submit; set status directly for these fixtures.
+    await db.query(
+      `UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = ANY($1::text[])`,
+      [[publicSurveyId, privateSurveyId]],
+    )
 
     await request(app.getHttpServer())
       .post("/v1/reports")
@@ -374,7 +382,6 @@ describe("Epic E - Search and Reports (e2e)", () => {
         id: publicSurveyId,
         sync_version: 1,
         site_name: "Public Forest",
-        status: "submitted",
         visibility: "public",
         region_version: "ACA",
         vegetation_stage: "collineen",
@@ -383,6 +390,11 @@ describe("Epic E - Search and Reports (e2e)", () => {
         location: { source: "gps", lat: 48.643, lng: 1.829 },
       })
       .expect(201)
+
+    // D-03: upsert can no longer submit; set status directly for this fixture.
+    await db.query(`UPDATE surveys SET status = 'submitted', submitted_at = NOW() WHERE id = $1`, [
+      publicSurveyId,
+    ])
 
     await request(app.getHttpServer())
       .post("/v1/reports")

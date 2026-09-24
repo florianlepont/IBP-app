@@ -243,6 +243,20 @@ V1.1 addendum fields:
 - `version_number`: integer (`>=1`) for parcel-level survey versioning.
 - `previous_survey_id`: optional link to previous survey version on same parcel.
 
+**`status` and `expires_at` (V1.2 hardening):** both fields are accepted for backward
+compatibility with installed apps but are always ignored by the server. A survey is always
+created with `status: "draft"`; status changes only through `POST /surveys/{id}/submit`
+(`submitted`/`expired`). `expires_at` is set by the server at creation time (`created_at` + 7
+days) and is never moved by an upsert.
+
+**Submitted surveys are read-only by value (V1.2 hardening):** an upsert that changes the
+*value* of `site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`,
+`previous_survey_id`, `region_version`, `vegetation_stage` or `factors` on a survey whose
+status is `submitted` is rejected with `409 survey_submitted_read_only` and
+`details.fields` listing the changed field names. Resending identical values (including a
+resync of a pulled survey) is accepted and only refreshes `visibility`/`sync_version`;
+`scores` is excluded from this comparison (it is recomputed server-side).
+
 Response `200`:
 
 ```json
@@ -409,6 +423,11 @@ Response `200`:
 ```
 
 If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
+
+**Concurrent submits (V1.2 hardening):** submits on the same parcel are serialised by a
+row lock; the loser of a race gets `409 parcel_version_conflict` with
+`details.parcel_id`/`details.expected_version_number` instead of a duplicate version or a
+`500`.
 
 ### DELETE /surveys/{id}
 
@@ -649,6 +668,8 @@ Rules:
   - `attachment_id` inside `payload`
 - For idempotency in sync path, deleting a missing attachment can still return `synced` with `missing=true`.
 - `parcel_ids` (on `survey.upsert` payloads, and on the REST `POST /surveys` / `PATCH /surveys/{id}` bodies) is bounded at `50` entries; each entry must match `^[0-9A-Z]{1,32}$` (case-insensitive) — the pattern accepts both synthetic cadastral IDs and the 14-character IGN `idu` values the server itself generates. A batch entry over the limit or containing a malformed ID is rejected the same way as any other invalid payload (`invalid_sync_operation`, `400`); on the REST routes it is a normal `400` validation error.
+- `status` and `expires_at` on a `survey.upsert` payload are accepted for compatibility with installed apps and always ignored: status changes only through `POST /surveys/{id}/submit`, and `expires_at` is computed server-side at creation (`created_at` + 7 days), never moved by an upsert (D-03).
+- An upsert on a `submitted` survey that changes the value of `site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`, `previous_survey_id`, `region_version`, `vegetation_stage` or `factors` returns `fatal_error` with `error.code: "survey_submitted_read_only"`, `error.http_status: 409` and `error.details.fields` listing the changed field names. Resending identical values (a pulled-survey replay) is `synced` and only refreshes `visibility`/`sync_version`; `scores` is excluded from the comparison since it is recomputed server-side (D-04, D-13).
 
 ### GET /sync/changes?cursor=&limit=
 
@@ -951,6 +972,8 @@ Common business error codes (non-exhaustive):
 
 - `parcel_required`
 - `parcel_invalid`
-- `parcel_version_conflict`
+- `parcel_version_conflict` — a submit lost a race against another submit on the same parcel; `error.details.parcel_id`/`expected_version_number` identify the conflict.
+- `survey_submitted_read_only` — an upsert changed the value of a read-only field on a `submitted` survey; `error.details.fields` lists the changed field names (identical values and `scores` are always accepted).
+- `survey_id_conflict` — an upsert's `id` already exists and is owned by another user.
 - `invalid_sync_operation` — a `/v1/sync` operation's envelope or payload failed class DTO validation; `error.details.fields` lists the offending property names.
 - `invalid_operation` — a deterministic PostgreSQL data/constraint error (SQLSTATE class `22`/`23`) was raised while processing the request; the message is intentionally generic and carries no SQL detail.
