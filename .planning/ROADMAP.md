@@ -165,8 +165,9 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 01.4-01-PLAN.md — Transaction helper, E2E fault injection, account deletion commits before Auth0 (wave 1)
-- [ ] 01.4-02-PLAN.md — Sync DTO validation, fatal 22xxx/23xxx, parcel_ids bound (wave 1)
+
+- [x] 01.4-01-PLAN.md — Transaction helper, E2E fault injection, account deletion commits before Auth0 (wave 1)
+- [x] 01.4-02-PLAN.md — Sync DTO validation, fatal 22xxx/23xxx, parcel_ids bound (wave 1)
 - [ ] 01.4-03-PLAN.md — Survey writes transactional, guarded upsert, concurrent submit lock (wave 2)
 - [ ] 01.4-04-PLAN.md — Attachment and report writes transactional (wave 2)
 - [ ] 01.4-05-PLAN.md — Upsert ignores status/expires_at, submitted read-only, installed-app replay (wave 3)
@@ -364,7 +365,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
-| 1.4. API sync integrity | 0/TBD | Not started | - |
+| 1.4. API sync integrity | 2/6 | In Progress|  |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
 | 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
