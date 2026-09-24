@@ -46,7 +46,7 @@ function buildService() {
         await client.query("COMMIT")
         return result
       } catch (error) {
-        await client.query("ROLLBACK").catch(() => undefined)
+        await Promise.resolve(client.query("ROLLBACK")).catch(() => undefined)
         throw error
       }
     }),
@@ -400,9 +400,10 @@ describe("UsersService", () => {
         expect.stringContaining("SET user_id = NULL"),
         [AUTH_USER.id],
       )
-      expect(client.query).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM attachments"), [
-        AUTH_USER.id,
-      ])
+      expect(client.query).toHaveBeenCalledWith(
+        expect.stringContaining("DELETE FROM attachments"),
+        [AUTH_USER.id],
+      )
       expect(client.query).toHaveBeenCalledWith(
         expect.stringContaining("DELETE FROM survey_events"),
         [AUTH_USER.id],

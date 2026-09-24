@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common"
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import { dirname, join } from "path"
@@ -44,6 +44,7 @@ export type PatchMeBody = {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name)
   private readonly objectStorageMode: "local" | "minio"
   private readonly s3Bucket: string
   private readonly s3Client?: S3Client
@@ -258,10 +259,6 @@ export class UsersService {
       throw new NotFoundException("User not found")
     }
 
-    await this.auth0Management.deleteUser(user.auth0_sub)
-
-    const client = await this.db.connect()
-    const storageKeysToDelete: string[] = []
     // Surveys to retain = submitted/synced (not soft-deleted).
     // Identified once at the start of the transaction so subsequent UPDATEs
     // (which nullify user_id) cannot affect the predicate.
@@ -276,20 +273,23 @@ export class UsersService {
       SELECT id FROM surveys WHERE user_id = $1
     `
 
-    try {
-      await client.query("BEGIN")
+    // A-M9: the local account (surveys, events, attachments, user row) is
+    // fully committed before Auth0 is ever touched, so a DB failure never
+    // leaves an orphaned Auth0 user with no local account.
+    const storageKeysToDelete = await this.db.transaction(async (db) => {
+      const keysToDelete: string[] = []
 
       // 1. Collect storage keys of draft attachments BEFORE any modification.
-      const attachmentKeys = await client.query<AttachmentStorageRow>(
+      const attachmentKeys = await db.query<AttachmentStorageRow>(
         `SELECT a.storage_key
          FROM attachments a
          WHERE a.survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
-      storageKeysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
+      keysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
 
       // 2. Anonymise retained surveys: nullify actor on their events, then nullify user_id.
-      await client.query(
+      await db.query(
         `UPDATE survey_events
          SET actor_id = NULL
          WHERE actor_id = $1
@@ -297,7 +297,7 @@ export class UsersService {
         [user.id],
       )
 
-      await client.query(
+      await db.query(
         `UPDATE surveys
          SET user_id = NULL
          WHERE id IN (${retainedSurveySubquery})`,
@@ -305,26 +305,31 @@ export class UsersService {
       )
 
       // 3. Delete draft surveys and their dependents (user_id still set on drafts at this point).
-      await client.query(
+      await db.query(
         `DELETE FROM attachments
          WHERE survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
-      await client.query(
+      await db.query(
         `DELETE FROM survey_events
          WHERE survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
-      await client.query(`DELETE FROM surveys WHERE user_id = $1`, [user.id])
+      await db.query(`DELETE FROM surveys WHERE user_id = $1`, [user.id])
 
       // 4. Delete the user row.
-      await client.query(`DELETE FROM users WHERE id = $1`, [user.id])
-      await client.query("COMMIT")
+      await db.query(`DELETE FROM users WHERE id = $1`, [user.id])
+
+      return keysToDelete
+    })
+
+    try {
+      await this.auth0Management.deleteUser(user.auth0_sub)
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `Auth0 user deletion failed after local account deletion (user_id=${user.id}, auth0_sub=${user.auth0_sub}): ${message}`,
+      )
     }
 
     if (current.profile_picture_storage_key) {

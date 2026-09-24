@@ -45,9 +45,7 @@ describe("DatabaseService.transaction (e2e)", () => {
       return null
     })
 
-    const result = await db.query<{ id: string }>(
-      `SELECT id FROM e2e_tx_probe WHERE id = 'c'`,
-    )
+    const result = await db.query<{ id: string }>(`SELECT id FROM e2e_tx_probe WHERE id = 'c'`)
     expect(result.rows).toHaveLength(1)
   })
 
@@ -61,9 +59,7 @@ describe("DatabaseService.transaction (e2e)", () => {
       }),
     ).rejects.toBe(error)
 
-    const result = await db.query<{ id: string }>(
-      `SELECT id FROM e2e_tx_probe WHERE id = 'a'`,
-    )
+    const result = await db.query<{ id: string }>(`SELECT id FROM e2e_tx_probe WHERE id = 'a'`)
     expect(result.rows).toHaveLength(0)
   })
 
