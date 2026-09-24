@@ -1,4 +1,4 @@
-import { UnauthorizedException } from "@nestjs/common"
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
 import * as jwt from "jsonwebtoken"
 import { AuthGuard } from "../src/auth/auth.guard"
 
@@ -104,6 +104,55 @@ describe("AuthGuard", () => {
   })
 })
 
+describe("canActivate with Auth0 tokens (WR-04)", () => {
+  let originalNodeEnv: string | undefined
+
+  beforeEach(() => {
+    originalNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+  })
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    jest.restoreAllMocks()
+  })
+
+  it("refusing to link an email returns 403 email_already_linked, not 401", async () => {
+    const { guard, db } = buildGuard()
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockResolvedValue({ sub: "auth0|attacker" })
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: AUTH_USER.email, email_verified: false }),
+    } as Response)
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
+      .mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "23505" })) // INSERT
+      .mockResolvedValueOnce({ rows: [] }) // re-SELECT by auth0_sub
+
+    const error = await guard.canActivate(makeContext("rs256-token")).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ForbiddenException)
+    expect((error as ForbiddenException).getStatus()).toBe(403)
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      code: "email_already_linked",
+    })
+  })
+
+  it("an invalid token is still a 401", async () => {
+    const { guard } = buildGuard()
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockRejectedValue(new Error("jwt expired"))
+
+    await expect(guard.canActivate(makeContext("rs256-token"))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
+  })
+})
+
 describe("getOrProvisionUser", () => {
   afterEach(() => {
     jest.restoreAllMocks()
@@ -149,16 +198,19 @@ describe("getOrProvisionUser", () => {
       (call: unknown[]) => typeof call[0] === "string" && call[0].includes("UPDATE users"),
     )
     expect(updateCall).toBeDefined()
-    expect(updateCall?.[0]).toContain("SET auth0_sub = $1 WHERE email = $2")
+    expect(updateCall?.[0]).toContain("SET auth0_sub = $1 WHERE email = $2 AND auth0_sub IS NULL")
     expect(updateCall?.[1]).toEqual(["auth0|new-sub", AUTH_USER.email])
   })
+
+  const emailTaken = () => Object.assign(new Error("duplicate key (email)"), { code: "23505" })
 
   it("rejects linking when email_verified is false and the email already exists", async () => {
     const { guard, db } = buildGuard()
     mockFetchUserInfo({ email: AUTH_USER.email, email_verified: false })
     db.query
       .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
-      .mockResolvedValueOnce({ rows: [{ id: AUTH_USER.id }] }) // SELECT 1 FROM users WHERE email
+      .mockRejectedValueOnce(emailTaken()) // INSERT trips the email UNIQUE index
+      .mockResolvedValueOnce({ rows: [] }) // re-SELECT by auth0_sub: not our row
 
     await expect(invoke(guard, { sub: "auth0|new-sub" })).rejects.toThrow()
     const updateCall = db.query.mock.calls.find(
@@ -172,7 +224,8 @@ describe("getOrProvisionUser", () => {
     mockFetchUserInfo({ email: AUTH_USER.email })
     db.query
       .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub
-      .mockResolvedValueOnce({ rows: [{ id: AUTH_USER.id }] }) // SELECT 1 FROM users WHERE email
+      .mockRejectedValueOnce(emailTaken()) // INSERT trips the email UNIQUE index
+      .mockResolvedValueOnce({ rows: [] }) // re-SELECT by auth0_sub: not our row
 
     await expect(invoke(guard, { sub: "auth0|new-sub" })).rejects.toThrow()
     const updateCall = db.query.mock.calls.find(
@@ -212,6 +265,22 @@ describe("getOrProvisionUser", () => {
     const result = await invoke(guard, { sub: "auth0|racer" })
 
     expect(result).toEqual(AUTH_USER)
+  })
+
+  it("WR-02: an unverified first login racing its twin for the same sub returns the twin's row", async () => {
+    const { guard, db } = buildGuard()
+    const ownRow = { ...AUTH_USER, auth0_sub: "auth0|twin" }
+    mockFetchUserInfo({ email: AUTH_USER.email, email_verified: false })
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT by auth0_sub (before the twin inserted)
+      .mockRejectedValueOnce(emailTaken()) // INSERT: the twin's row now holds the email
+      .mockResolvedValueOnce({ rows: [ownRow] }) // re-SELECT by auth0_sub finds the twin's row
+
+    await expect(invoke(guard, { sub: "auth0|twin" })).resolves.toEqual(ownRow)
+    const emailLookup = db.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === "string" && /WHERE email = \$1/.test(call[0]),
+    )
+    expect(emailLookup).toBeUndefined()
   })
 
   it("rejects when INSERT raises 23505 and the re-select finds no row", async () => {

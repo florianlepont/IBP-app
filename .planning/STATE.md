@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01.2-08-PLAN.md
-last_updated: "2026-09-23T15:53:53.781Z"
+status: verifying
+stopped_at: Completed 01.2-09-PLAN.md
+last_updated: "2026-09-23T16:35:26.264Z"
 last_activity: 2026-09-23
 progress:
   total_phases: 16
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 15
-  completed_plans: 8
-  percent: 0
+  completed_plans: 9
+  percent: 6
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 Phase: 01.2 (Stop field data loss and account exposure) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-23
 
 Progress: [░░░░░░░░░░] 0%
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01.2 P06 | 22min | 2 tasks | 8 files |
 | Phase 01.2 P07 | 10min | 2 tasks | 8 files |
 | Phase 01.2 P08 | 21min | 2 tasks | 6 files |
+| Phase 01.2 P09 | 37min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -88,10 +89,12 @@ Decisions table. Decisions affecting current work:
 - [Phase 01.2]: syncAllowed gates every automatic/manual sync and pull path in useSurveySyncNetwork (runSync, maybeAutoSync, handlePullChanges); handleReportSurvey stays ungated since it carries no local survey data
 - [Phase 01.2]: handleLogout now counts unsynced work and purges only after an explicit destructive confirmation (D-03); performDeleteAccount purges via the same performLogoutAndPurge helper without the unsynced-work alert
 - [Phase 01.2]: LocalDataOwnerConflictScreen (French) blocks the app with exactly two choices when localDataOwnerStatus is conflict; App.tsx keeps it mutually exclusive with the profile-setup overlay
+- [Phase 01.2]: Device verification: steps 1-5 confirmed on real hardware (offline session keep, revoked refresh token, logout with unsynced work, other-account conflict, dev tools absent in release build); steps 6-7 (nearby-parcels list, production rate limiting) carried over as they require field conditions / a live deploy
 
 ### Pending Todos
 
-None yet.
+- Verify nearby-parcels list on device near known parcels (carried over from Phase 01.2-09 step 6; automated coverage exists in `useNearbyParcels.test.ts` / `map-viewport.test.ts`)
+- After API deploy: check Caddy/API logs for 429 bursts under concurrent sync; set `TRUST_PROXY=loopback,uniquelocal` in `/home/ubuntu/cortege.env` if unauthenticated requests share one bucket (carried over from Phase 01.2-09 step 7)
 
 ### Blockers/Concerns
 
@@ -118,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T15:53:53.774Z
-Stopped at: Completed 01.2-08-PLAN.md
+Last session: 2026-09-23T16:34:41.161Z
+Stopped at: Completed 01.2-09-PLAN.md
 Resume file: None

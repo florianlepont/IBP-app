@@ -69,12 +69,12 @@ jest.mock("../api/ibp-api", () => ({
   getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
 }))
 
-import { cleanup, renderHook, waitFor } from "@testing-library/react-native/pure"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react-native/pure"
 import { ApiError } from "../api/client"
 import { useAuth0Session } from "./useAuth0Session"
 
-afterEach(() => {
-  cleanup()
+afterEach(async () => {
+  await cleanup()
 })
 
 function credErr(type: string): MockCredentialsManagerError {
@@ -237,7 +237,23 @@ describe("withAuthRetry", () => {
 
     expect(value).toBe("ok")
     expect(mockGetCredentials).toHaveBeenNthCalledWith(2, undefined, undefined, undefined, true)
-    expect(operation).toHaveBeenNthCalledWith(2, "token-2")
+    expect(operation).toHaveBeenNthCalledWith(2, "token-2", null)
+  })
+
+  test("passes the operation the sub of the account the token belongs to (CR-01)", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "token-b",
+      idToken: buildIdToken("auth0|b", "b@c.fr"),
+    })
+    const operation = jest.fn().mockResolvedValue("ok")
+
+    await result.current.withAuthRetry(operation)
+
+    expect(operation).toHaveBeenCalledWith("token-b", "auth0|b")
   })
 
   test("a non-401 error is rethrown without forcing a refresh", async () => {
@@ -250,6 +266,78 @@ describe("withAuthRetry", () => {
 
     await expect(result.current.withAuthRetry(operation)).rejects.toThrow("boom")
     expect(mockGetCredentials).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("email already linked to another account (WR-04)", () => {
+  const linkedError = () =>
+    new ApiError(403, "This email address already belongs to another account", {
+      statusCode: 403,
+      code: "email_already_linked",
+      message: "This email address already belongs to another account",
+    })
+
+  test("a 403 is rethrown by withAuthRetry without forcing a token refresh", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({ accessToken: "token-1" })
+    const operation = jest.fn().mockRejectedValue(linkedError())
+
+    await expect(result.current.withAuthRetry(operation)).rejects.toMatchObject({ status: 403 })
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(mockGetCredentials).toHaveBeenCalledTimes(1)
+    expect(mockGetCredentials).not.toHaveBeenCalledWith(undefined, undefined, undefined, true)
+  })
+
+  test("handleLogin shows a clear French message and drops the refused session", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockAuthorize.mockResolvedValue({
+      accessToken: "token-b",
+      idToken: buildIdToken("google-oauth2|b", "a@b.fr"),
+    })
+    mockSaveCredentials.mockResolvedValue(undefined)
+    mockClearCredentials.mockResolvedValue(undefined)
+    mockGetMyProfile.mockRejectedValue(linkedError())
+
+    let message: string | null = null
+    await act(async () => {
+      message = await result.current.handleLogin()
+    })
+
+    expect(message).toContain("déjà associée à un autre compte")
+    expect(REPORT_STATUS).toHaveBeenCalledWith(
+      "auth",
+      "error",
+      expect.stringContaining("déjà associée à un autre compte"),
+    )
+    expect(mockClearCredentials).toHaveBeenCalled()
+    expect(result.current.accessToken).toBe("")
+    expect(result.current.sessionOwner).toBeNull()
+    expect(mockGetCredentials).not.toHaveBeenCalledWith(undefined, undefined, undefined, true)
+  })
+
+  test("handleRegister maps the same 403 to the same message", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockAuthorize.mockResolvedValue({ accessToken: "token-b", idToken: buildIdToken("auth0|b") })
+    mockSaveCredentials.mockResolvedValue(undefined)
+    mockClearCredentials.mockResolvedValue(undefined)
+    mockGetMyProfile.mockRejectedValue(linkedError())
+
+    let message: string | null = null
+    await act(async () => {
+      message = await result.current.handleRegister()
+    })
+
+    expect(message).toContain("déjà associée à un autre compte")
+    expect(mockClearCredentials).toHaveBeenCalled()
   })
 })
 

@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common"
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common"
 import { Request } from "express"
 import * as jwt from "jsonwebtoken"
 import { JwksClient } from "jwks-rsa"
@@ -12,6 +18,18 @@ const AUTH0_JWKS_DOMAINS = Array.from(new Set([AUTH0_PUBLIC_DOMAIN, AUTH0_DOMAIN
 const AUTH0_ACCEPTED_ISSUERS = Array.from(
   new Set(AUTH0_JWKS_DOMAINS.map((domain) => `https://${domain}/`)),
 )
+
+/**
+ * Stable error code returned (HTTP 403) when first-login provisioning refuses
+ * to attach an Auth0 identity to an email that already belongs to another
+ * account (D-08). It is a policy refusal, not an invalid token: clients must
+ * not refresh and retry.
+ */
+export const EMAIL_ALREADY_LINKED_CODE = "email_already_linked"
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "23505"
+}
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -49,6 +67,9 @@ export class AuthGuard implements CanActivate {
       request.user = user
       return true
     } catch (err) {
+      if (err instanceof ForbiddenException) {
+        throw err
+      }
       console.error("[AuthGuard] Token validation failed:", err)
       throw new UnauthorizedException()
     }
@@ -138,26 +159,23 @@ export class AuthGuard implements CanActivate {
 
     if (userInfo.email_verified === true) {
       // Verified email: safe to link this Auth0 identity to an existing account
-      // (needed for Google/Apple social login, REQ-A-social-login).
+      // (needed for Google/Apple social login, REQ-A-social-login) — but only
+      // to a pre-Auth0/unlinked row. An account already linked to another sub
+      // is never re-pointed (D-08): the INSERT below then trips the email index
+      // and the request is refused.
       const linked = await this.db.query<AuthenticatedUser>(
-        `UPDATE users SET auth0_sub = $1 WHERE email = $2
+        `UPDATE users SET auth0_sub = $1 WHERE email = $2 AND auth0_sub IS NULL
          RETURNING id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url`,
         [auth0Sub, email],
       )
       if (linked.rows.length > 0) {
         return linked.rows[0]
       }
-    } else {
-      // Unverified (or unknown) email: never link to an existing account — that would
-      // be an account takeover path. Refuse if the email is already taken.
-      const byEmail = await this.db.query<{ id: string }>(`SELECT 1 FROM users WHERE email = $1`, [
-        email,
-      ])
-      if (byEmail.rows.length > 0) {
-        throw new Error("Refusing to link an unverified email to an existing account")
-      }
     }
 
+    // Insert first, then classify a conflict (D-09). No SELECT-by-email guard
+    // runs before the insert: a concurrent first login for the same sub would
+    // otherwise find the row its twin just created and be refused.
     try {
       const inserted = await this.db.query<AuthenticatedUser>(
         `INSERT INTO users (id, auth0_sub, email, display_name, first_name, last_name, role)
@@ -168,19 +186,28 @@ export class AuthGuard implements CanActivate {
       )
       return inserted.rows[0]
     } catch (err) {
-      if (typeof err === "object" && err !== null && "code" in err && err.code === "23505") {
-        // A concurrent first login for the same sub raced us past the ON-CONFLICT insert
-        // by tripping the email UNIQUE index instead. Re-read the row the winner created.
-        const retry = await this.db.query<AuthenticatedUser>(
-          `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
-           FROM users WHERE auth0_sub = $1`,
-          [auth0Sub],
-        )
-        if (retry.rows.length > 0) {
-          return retry.rows[0]
-        }
+      if (!isUniqueViolation(err)) {
+        throw err
       }
-      throw err
+
+      // The email UNIQUE index tripped. Either a concurrent first login for the
+      // same sub created the row first (return it), or the email belongs to a
+      // different account: an unverified (or unknown) email is never linked to
+      // it — that would be an account takeover path.
+      const retry = await this.db.query<AuthenticatedUser>(
+        `SELECT id, auth0_sub, email, role, first_name, last_name, display_name, profile_picture_url
+         FROM users WHERE auth0_sub = $1`,
+        [auth0Sub],
+      )
+      if (retry.rows.length > 0) {
+        return retry.rows[0]
+      }
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: "Forbidden",
+        code: EMAIL_ALREADY_LINKED_CODE,
+        message: "This email address already belongs to another account",
+      })
     }
   }
 

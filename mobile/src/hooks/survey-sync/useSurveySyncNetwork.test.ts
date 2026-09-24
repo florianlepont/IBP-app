@@ -37,6 +37,7 @@ jest.mock("expo-network", () => ({
 
 import React from "react"
 import { useSurveySyncNetwork } from "./useSurveySyncNetwork"
+import { createSyncActivity } from "./sync-activity"
 
 function useBuildHook(overrides: Record<string, unknown> = {}) {
   const params = {
@@ -44,11 +45,17 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     accessToken: "access-token",
     surveys: [],
     clearSession: jest.fn().mockResolvedValue(undefined),
-    withAuthRetry: jest.fn((fn: (token: string) => unknown) => fn("token")),
+    withAuthRetry: jest.fn((fn: (token: string, tokenSub: string | null) => unknown) =>
+      fn("token", "auth0|owner"),
+    ),
     refreshLocalSurveys: jest.fn().mockResolvedValue(undefined),
     refreshLocalAttachments: jest.fn().mockResolvedValue(undefined),
     setStatus: jest.fn(),
     syncAllowed: true,
+    ensureSyncOwner: jest.fn().mockResolvedValue(true),
+    ownerStatus: "ok",
+    recheckOwner: jest.fn().mockResolvedValue(undefined),
+    syncActivity: createSyncActivity(),
     ...overrides,
   }
   const hook = useSurveySyncNetwork(params as never)
@@ -258,7 +265,10 @@ describe("useSurveySyncNetwork", () => {
 
   describe("syncAllowed gate (D-04)", () => {
     test("handleSync does not call withAuthRetry and sets the suspension status when syncAllowed is false", async () => {
-      const { handleSync, setStatus, withAuthRetry } = useBuildHook({ syncAllowed: false })
+      const { handleSync, setStatus, withAuthRetry } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "conflict",
+      })
 
       await handleSync()
 
@@ -282,7 +292,7 @@ describe("useSurveySyncNetwork", () => {
       }) as never)
       mockHasPendingSyncWork.mockResolvedValue(true)
 
-      const { maybeAutoSync } = useBuildHook({ syncAllowed: false })
+      const { maybeAutoSync } = useBuildHook({ syncAllowed: false, ownerStatus: "conflict" })
       await maybeAutoSync("auth-ready")
 
       expect(mockHasPendingSyncWork).not.toHaveBeenCalled()
@@ -291,7 +301,10 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("handlePullChanges does not call pullRemoteChanges when syncAllowed is false", async () => {
-      const { handlePullChanges, setStatus, withAuthRetry } = useBuildHook({ syncAllowed: false })
+      const { handlePullChanges, setStatus, withAuthRetry } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "conflict",
+      })
 
       await handlePullChanges()
 
@@ -302,14 +315,78 @@ describe("useSurveySyncNetwork", () => {
       )
     })
 
+    test("WR-07: a failed owner check retries it on manual sync and does not blame another account", async () => {
+      const { handleSync, setStatus, withAuthRetry, recheckOwner } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "error",
+      })
+
+      await handleSync()
+
+      expect(withAuthRetry).not.toHaveBeenCalled()
+      expect(recheckOwner).toHaveBeenCalled()
+      expect(setStatus).not.toHaveBeenCalledWith(
+        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
+      )
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+    })
+
+    test("WR-07: a manual pull during the owner check reports the check, not a conflict", async () => {
+      const { handlePullChanges, setStatus, recheckOwner } = useBuildHook({
+        syncAllowed: false,
+        ownerStatus: "checking",
+      })
+
+      await handlePullChanges()
+
+      expect(recheckOwner).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+    })
+
     test("handleReportSurvey is not gated by syncAllowed", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey } = useBuildHook({ syncAllowed: false })
+      const { handleReportSurvey } = useBuildHook({ syncAllowed: false, ownerStatus: "conflict" })
 
       const result = await handleReportSurvey("survey-1", "reason text")
 
       expect(result.ok).toBe(true)
       expect(mockCreateSurveyReport).toHaveBeenCalled()
+    })
+
+    test("handleSync re-checks the owner with the token's sub right before syncPending (CR-01)", async () => {
+      const ensureSyncOwner = jest.fn().mockResolvedValue(false)
+      const { handleSync, setStatus } = useBuildHook({ ensureSyncOwner })
+
+      await handleSync()
+
+      expect(ensureSyncOwner).toHaveBeenCalledWith("auth0|owner")
+      expect(mockSyncPending).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("vérification du compte"))
+    })
+
+    test("handlePullChanges re-checks the owner right before pullRemoteChanges (CR-01)", async () => {
+      const ensureSyncOwner = jest.fn().mockResolvedValue(false)
+      const { handlePullChanges } = useBuildHook({ ensureSyncOwner })
+
+      await handlePullChanges()
+
+      expect(ensureSyncOwner).toHaveBeenCalledWith("auth0|owner")
+      expect(mockPullRemoteChanges).not.toHaveBeenCalled()
+    })
+
+    test("a token without a sub never reaches syncPending (CR-01)", async () => {
+      const ensureSyncOwner = jest.fn(async (tokenSub: string | null) => tokenSub !== null)
+      const { handleSync } = useBuildHook({
+        ensureSyncOwner,
+        withAuthRetry: jest.fn((fn: (token: string, tokenSub: string | null) => unknown) =>
+          fn("token", null),
+        ),
+      })
+
+      await handleSync()
+
+      expect(ensureSyncOwner).toHaveBeenCalledWith(null)
+      expect(mockSyncPending).not.toHaveBeenCalled()
     })
 
     test("syncAllowed true preserves existing handleSync behavior", async () => {

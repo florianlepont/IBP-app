@@ -15,6 +15,11 @@ import type { LocalSurvey } from "../storage/types"
 import { createInitialOperationStatus, updateOperationStatus } from "./operation-status"
 import { AUTH_REQUIRED_ERROR, useAuth0Session } from "./useAuth0Session"
 import { useLocalDataOwner } from "./useLocalDataOwner"
+import {
+  createSyncActivity,
+  purgeWhileSyncSuspended,
+  SyncActivity,
+} from "./survey-sync/sync-activity"
 import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
 import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
 import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
@@ -49,6 +54,13 @@ export function useSurveySync({
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({})
   const [eventsLoadingSurveyId, setEventsLoadingSurveyId] = useState<string | null>(null)
   const detailAutoLoadCooldownUntilRef = useRef<Record<string, number>>({})
+  // WR-08: every sync/pull runs through this tracker so a purge can wait for
+  // in-flight writes and block new ones.
+  const syncActivityRef = useRef<SyncActivity | null>(null)
+  if (!syncActivityRef.current) {
+    syncActivityRef.current = createSyncActivity()
+  }
+  const syncActivity = syncActivityRef.current
 
   // Session end resets UI state only — local surveys, queue and photos are
   // never purged here (D-02, audit M-C1).
@@ -78,7 +90,7 @@ export function useSurveySync({
   )
 
   const resetLocalSurveyState = useCallback(async (): Promise<void> => {
-    await clearLocalIbpData()
+    await purgeWhileSyncSuspended(syncActivity, clearLocalIbpData)
     await refreshLocalSurveys()
     await refreshLocalAttachments()
     setSurveyDetails({})
@@ -93,6 +105,7 @@ export function useSurveySync({
     onStopEditing,
     refreshLocalAttachments,
     refreshLocalSurveys,
+    syncActivity,
   ])
 
   const {
@@ -104,7 +117,6 @@ export function useSurveySync({
     isAuthenticated,
     setProfileFromUser,
     clearSession,
-    refreshSessionTokens,
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
@@ -126,21 +138,28 @@ export function useSurveySync({
     setSurveyEvents({})
   }, [refreshLocalAttachments, refreshLocalSurveys])
 
-  const localDataOwner = useLocalDataOwner({ sessionOwner, onLocalDataPurged })
+  const localDataOwner = useLocalDataOwner({ sessionOwner, onLocalDataPurged, syncActivity })
 
   // D-03: logout with unsynced work purges local data only after the user
   // explicitly confirms, having seen how many surveys/photos will be lost.
+  // WR-08: sync is suspended first, then the purge waits for any sync still
+  // writing the previous account's data, so no pulled row can land after it
+  // (it would carry no owner marker and be adopted by the next account).
   const performLogoutAndPurge = useCallback(async (): Promise<void> => {
+    const resumeSync = syncActivity.suspend()
     try {
       await handleAuthLogout()
+      await syncActivity.waitForIdle()
       await clearLocalIbpData()
       await refreshLocalSurveys()
       await refreshLocalAttachments()
       setStatus("Déconnecté")
     } catch (error) {
       setStatus(`Erreur de déconnexion : ${(error as Error).message}`)
+    } finally {
+      resumeSync()
     }
-  }, [handleAuthLogout, refreshLocalAttachments, refreshLocalSurveys, setStatus])
+  }, [handleAuthLogout, refreshLocalAttachments, refreshLocalSurveys, setStatus, syncActivity])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     const work = await countUnsyncedLocalWork()
@@ -257,6 +276,10 @@ export function useSurveySync({
       refreshLocalAttachments,
       setStatus,
       syncAllowed: localDataOwner.syncAllowed,
+      ensureSyncOwner: localDataOwner.ensureSyncOwner,
+      ownerStatus: localDataOwner.status,
+      recheckOwner: localDataOwner.recheck,
+      syncActivity,
     },
   )
 
@@ -414,7 +437,6 @@ export function useSurveySync({
     editingSurveyId,
     surveys,
     clearSession,
-    refreshSessionTokens,
     withAuthRetry,
     refreshLocalSurveys,
     refreshLocalAttachments,
@@ -423,6 +445,9 @@ export function useSurveySync({
     setStatus,
     maybeAutoSync,
     handleLoadCanonicalDetails,
+    syncAllowed: localDataOwner.syncAllowed,
+    ensureSyncOwner: localDataOwner.ensureSyncOwner,
+    syncActivity,
   })
 
   useEffect(() => {

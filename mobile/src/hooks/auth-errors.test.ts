@@ -44,7 +44,9 @@ import {
   classifyCredentialsError,
   isAuthRequiredError,
   isAuthTemporarilyUnavailableError,
+  isEmailAlreadyLinkedError,
 } from "./auth-errors"
+import { ApiError } from "../api/client"
 
 function credErr(type: string): MockCredentialsManagerError {
   return new MockCredentialsManagerError(type)
@@ -149,5 +151,22 @@ describe("isAuthTemporarilyUnavailableError", () => {
   test("false for other errors and non-Errors", () => {
     expect(isAuthTemporarilyUnavailableError(new Error("other"))).toBe(false)
     expect(isAuthTemporarilyUnavailableError(null)).toBe(false)
+  })
+})
+
+describe("isEmailAlreadyLinkedError (WR-04)", () => {
+  test("true only for a 403 carrying code email_already_linked", () => {
+    expect(
+      isEmailAlreadyLinkedError(new ApiError(403, "taken", { code: "email_already_linked" })),
+    ).toBe(true)
+  })
+
+  test("false for other statuses, codes and non-ApiErrors", () => {
+    expect(
+      isEmailAlreadyLinkedError(new ApiError(401, "taken", { code: "email_already_linked" })),
+    ).toBe(false)
+    expect(isEmailAlreadyLinkedError(new ApiError(403, "Forbidden", { code: "other" }))).toBe(false)
+    expect(isEmailAlreadyLinkedError(new ApiError(403, "Forbidden", null))).toBe(false)
+    expect(isEmailAlreadyLinkedError(new Error("email_already_linked"))).toBe(false)
   })
 })

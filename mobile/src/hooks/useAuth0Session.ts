@@ -16,6 +16,8 @@ import {
   AUTH_REQUIRED_ERROR,
   AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
   classifyCredentialsError,
+  EMAIL_ALREADY_LINKED_MESSAGE,
+  isEmailAlreadyLinkedError,
 } from "./auth-errors"
 import { OperationScope, OperationState } from "./operation-status"
 import { isOnlineNetworkState } from "./survey-sync/utils"
@@ -104,11 +106,27 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     await onSessionCleared?.()
   }, [onSessionCleared])
 
+  // WR-04: the API refused to provision this identity (its email belongs to
+  // another account). Drop the stored credentials so no heartbeat keeps
+  // calling the API with them, and tell the user why.
+  const endRefusedSession = useCallback(async (): Promise<string> => {
+    await getAuth0()
+      .credentialsManager.clearCredentials()
+      .catch(() => undefined)
+    await clearSession()
+    reportStatus("auth", "error", EMAIL_ALREADY_LINKED_MESSAGE)
+    return EMAIL_ALREADY_LINKED_MESSAGE
+  }, [clearSession, getAuth0, reportStatus])
+
   // Never returns null and never calls clearSession: a network/timeout/unknown
   // error means "retry later", only a genuine refresh-token rejection ends the
   // session (thrown as AUTH_REQUIRED, handled by the caller).
-  const getValidAccessToken = useCallback(
-    async (options?: { forceRefresh?: boolean }): Promise<string> => {
+  // Also returns the `sub` of the account the token belongs to, so D-04 sync
+  // paths can check it against the local-data owner right before sending.
+  const getValidCredentials = useCallback(
+    async (options?: {
+      forceRefresh?: boolean
+    }): Promise<{ accessToken: string; sub: string | null }> => {
       const forceRefresh = options?.forceRefresh ?? false
 
       let credentials
@@ -131,28 +149,36 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         throw new Error(AUTH_TEMPORARILY_UNAVAILABLE_ERROR)
       }
 
+      const claims = extractIdTokenClaims(credentials.idToken)
       setAccessToken(credentials.accessToken)
-      setSessionOwner(extractIdTokenClaims(credentials.idToken))
-      return credentials.accessToken
+      setSessionOwner(claims)
+      return { accessToken: credentials.accessToken, sub: claims?.sub ?? null }
     },
     [getAuth0],
   )
 
+  const getValidAccessToken = useCallback(
+    async (options?: { forceRefresh?: boolean }): Promise<string> =>
+      (await getValidCredentials(options)).accessToken,
+    [getValidCredentials],
+  )
+
+  // `operation` receives the token and the `sub` of the account it belongs to.
   const withAuthRetry = useCallback(
-    async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
-      const token = await getValidAccessToken()
+    async <T>(operation: (token: string, tokenSub: string | null) => Promise<T>): Promise<T> => {
+      const credentials = await getValidCredentials()
 
       try {
-        return await operation(token)
+        return await operation(credentials.accessToken, credentials.sub)
       } catch (error) {
         if (!isUnauthorizedError(error)) throw error
 
         // Force a fresh token on 401 instead of reusing the (still-cached) one.
-        const refreshed = await getValidAccessToken({ forceRefresh: true })
-        return operation(refreshed)
+        const refreshed = await getValidCredentials({ forceRefresh: true })
+        return operation(refreshed.accessToken, refreshed.sub)
       }
     },
-    [getValidAccessToken],
+    [getValidCredentials],
   )
 
   const handleLoadMyProfile = useCallback(
@@ -271,6 +297,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       try {
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
+        if (isEmailAlreadyLinkedError(error)) {
+          return await endRefusedSession()
+        }
         if (error instanceof ApiError && error.status === 401) {
           const msg = buildApiTokenRejectedMessage(apiUrl)
           reportStatus("auth", "error", msg)
@@ -298,7 +327,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       reportStatus("auth", "error", msg)
       return msg
     }
-  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+  }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleRegister = useCallback(async (): Promise<string | null> => {
     try {
@@ -318,6 +347,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       try {
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
+        if (isEmailAlreadyLinkedError(error)) {
+          return await endRefusedSession()
+        }
         if (error instanceof ApiError && error.status === 401) {
           const msg = buildApiTokenRejectedMessage(apiUrl)
           reportStatus("auth", "error", msg)
@@ -344,7 +376,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       reportStatus("auth", "error", msg)
       return msg
     }
-  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+  }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleForgotPassword = useCallback(async (): Promise<void> => {
     try {
@@ -357,7 +389,15 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
       setSessionOwner(extractIdTokenClaims(credentials.idToken))
-      const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
+      let refused = false
+      const user = await getMyProfile(apiUrl, credentials.accessToken).catch((error: unknown) => {
+        refused = isEmailAlreadyLinkedError(error)
+        return null
+      })
+      if (refused) {
+        await endRefusedSession()
+        return
+      }
       if (user) {
         setProfileFromUser(user)
         reportStatus("auth", "success", "Logged in")
@@ -366,7 +406,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       // Cancellation and errors are silent: the user just wanted to reset their password
       reportStatus("auth", "idle", "")
     }
-  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+  }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {

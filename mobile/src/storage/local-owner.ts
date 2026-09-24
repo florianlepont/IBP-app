@@ -75,8 +75,17 @@ export async function countUnsyncedLocalWork(): Promise<UnsyncedLocalWork> {
      WHERE sync_state != 'synced'`,
   )
 
+  // A queued survey delete removes the local_surveys row immediately and
+  // leaves only its sync_queue entry, so the query above cannot see it.
+  const deletionsRow = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(DISTINCT survey_id) AS count
+     FROM sync_queue
+     WHERE survey_id NOT IN (SELECT id FROM local_surveys)`,
+  )
+
   return {
     surveys: Number(surveysRow?.count ?? 0),
     attachments: Number(attachmentsRow?.count ?? 0),
+    deletions: Number(deletionsRow?.count ?? 0),
   }
 }

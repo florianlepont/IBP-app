@@ -3,6 +3,9 @@ import * as Network from "expo-network"
 import { createSurveyReport } from "../../api/ibp-api"
 import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from "../../storage"
 import { isAuthRequiredError, isAuthTemporarilyUnavailableError } from "../auth-errors"
+import type { LocalDataOwnerStatus } from "../useLocalDataOwner"
+import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
+import { isSyncSuspendedError, SyncActivity } from "./sync-activity"
 import { isOnlineNetworkState } from "./utils"
 
 const RETRY_LATER_MESSAGE =
@@ -10,20 +13,42 @@ const RETRY_LATER_MESSAGE =
 
 // D-04: local data owned by another account suspends every automatic and
 // manual sync/pull path until the conflict is resolved (owner-check status
-// leaves "conflict" or turns "ok").
+// leaves "conflict" or turns "ok"). Only the "conflict" status may say so.
 const OWNER_SUSPENDED_MESSAGE =
   "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte."
+
+// Any other status that blocks sync ("checking", "error", "idle"): the owner
+// check has not approved this session yet (WR-07).
+const OWNER_CHECK_PENDING_MESSAGE =
+  "Vérification des données locales en cours… La synchronisation reprendra ensuite."
+
+// WR-08: a local-data purge (logout, account switch) is in progress.
+const PURGE_IN_PROGRESS_MESSAGE =
+  "Synchronisation suspendue : suppression des données locales en cours."
+
+function ownerGateMessage(ownerStatus: LocalDataOwnerStatus): string {
+  return ownerStatus === "conflict" ? OWNER_SUSPENDED_MESSAGE : OWNER_CHECK_PENDING_MESSAGE
+}
+
+// The execution-time owner check refused (the token's account, the session
+// owner and the stored local-data owner disagree): nothing was sent.
+const OWNER_RECHECK_MESSAGE =
+  "Synchronisation reportée : vérification du compte propriétaire des données locales en cours."
 
 type UseSurveySyncNetworkParams = {
   apiUrl: string
   accessToken: string | null
   surveys: LocalSurvey[]
   clearSession: () => Promise<void>
-  withAuthRetry: <T>(fn: (token: string) => Promise<T>) => Promise<T>
+  withAuthRetry: <T>(fn: (token: string, tokenSub: string | null) => Promise<T>) => Promise<T>
   refreshLocalSurveys: () => Promise<void>
   refreshLocalAttachments: () => Promise<void>
   setStatus: (message: string) => void
   syncAllowed: boolean
+  ensureSyncOwner: EnsureSyncOwner
+  ownerStatus: LocalDataOwnerStatus
+  recheckOwner: () => Promise<void>
+  syncActivity: SyncActivity
 }
 
 export function useSurveySyncNetwork({
@@ -36,17 +61,31 @@ export function useSurveySyncNetwork({
   refreshLocalAttachments,
   setStatus,
   syncAllowed,
+  ensureSyncOwner,
+  ownerStatus,
+  recheckOwner,
+  syncActivity,
 }: UseSurveySyncNetworkParams) {
   const syncInProgressRef = useRef(false)
   const pullInProgressRef = useRef(false)
   const lastOnlineStateRef = useRef<boolean | null>(null)
   const lastAutoSyncAtRef = useRef<number>(0)
+  const ownerStatusRef = useRef<LocalDataOwnerStatus>(ownerStatus)
+  ownerStatusRef.current = ownerStatus
+
+  // A manual sync or a new token retries a failed owner check (WR-07).
+  const retryFailedOwnerCheck = useCallback((): void => {
+    if (ownerStatusRef.current === "error") {
+      void recheckOwner()
+    }
+  }, [recheckOwner])
 
   const runSync = useCallback(
     async (mode: "manual" | "auto", trigger?: string): Promise<void> => {
       if (!syncAllowed) {
         if (mode === "manual") {
-          setStatus(OWNER_SUSPENDED_MESSAGE)
+          retryFailedOwnerCheck()
+          setStatus(ownerGateMessage(ownerStatusRef.current))
         }
         return
       }
@@ -65,13 +104,26 @@ export function useSurveySyncNetwork({
         } else {
           setStatus(`Back online. Sync in progress${trigger ? ` (${trigger})` : ""}...`)
         }
-        const result = await withAuthRetry((token) => syncPending(apiUrl, token))
+        const result = await withAuthRetry(async (token, tokenSub) => {
+          await assertSyncOwner(ensureSyncOwner, tokenSub)
+          return syncActivity.run(() => syncPending(apiUrl, token))
+        })
         await refreshLocalSurveys()
         await refreshLocalAttachments()
         setStatus(
           `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`,
         )
       } catch (error) {
+        if (isSyncSuspendedError(error)) {
+          if (mode === "manual") {
+            setStatus(PURGE_IN_PROGRESS_MESSAGE)
+          }
+          return
+        }
+        if (isSyncOwnerMismatchError(error)) {
+          setStatus(OWNER_RECHECK_MESSAGE)
+          return
+        }
         if (isAuthTemporarilyUnavailableError(error)) {
           setStatus(RETRY_LATER_MESSAGE)
           return
@@ -91,9 +143,12 @@ export function useSurveySyncNetwork({
     [
       apiUrl,
       clearSession,
+      ensureSyncOwner,
       refreshLocalAttachments,
       refreshLocalSurveys,
+      retryFailedOwnerCheck,
       setStatus,
+      syncActivity,
       syncAllowed,
       withAuthRetry,
     ],
@@ -133,7 +188,10 @@ export function useSurveySyncNetwork({
 
       pullInProgressRef.current = true
       try {
-        const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token))
+        const result = await withAuthRetry(async (token, tokenSub) => {
+          await assertSyncOwner(ensureSyncOwner, tokenSub)
+          return syncActivity.run(() => pullRemoteChanges(apiUrl, token))
+        })
         if (result.surveys > 0 || result.attachments > 0) {
           await refreshLocalSurveys()
           await refreshLocalAttachments()
@@ -142,6 +200,9 @@ export function useSurveySyncNetwork({
           )
         }
       } catch (error) {
+        if (isSyncOwnerMismatchError(error) || isSyncSuspendedError(error)) {
+          return
+        }
         if (isAuthTemporarilyUnavailableError(error)) {
           setStatus(RETRY_LATER_MESSAGE)
           return
@@ -159,10 +220,12 @@ export function useSurveySyncNetwork({
       accessToken,
       apiUrl,
       clearSession,
+      ensureSyncOwner,
       refreshLocalAttachments,
       refreshLocalSurveys,
       runSync,
       setStatus,
+      syncActivity,
       syncAllowed,
       withAuthRetry,
     ],
@@ -174,18 +237,30 @@ export function useSurveySyncNetwork({
 
   const handlePullChanges = useCallback(async (): Promise<void> => {
     if (!syncAllowed) {
-      setStatus(OWNER_SUSPENDED_MESSAGE)
+      retryFailedOwnerCheck()
+      setStatus(ownerGateMessage(ownerStatusRef.current))
       return
     }
     try {
       setStatus("Pulling server changes...")
-      const result = await withAuthRetry((token) => pullRemoteChanges(apiUrl, token))
+      const result = await withAuthRetry(async (token, tokenSub) => {
+        await assertSyncOwner(ensureSyncOwner, tokenSub)
+        return syncActivity.run(() => pullRemoteChanges(apiUrl, token))
+      })
       await refreshLocalSurveys()
       await refreshLocalAttachments()
       setStatus(
         `Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`,
       )
     } catch (error) {
+      if (isSyncSuspendedError(error)) {
+        setStatus(PURGE_IN_PROGRESS_MESSAGE)
+        return
+      }
+      if (isSyncOwnerMismatchError(error)) {
+        setStatus(OWNER_RECHECK_MESSAGE)
+        return
+      }
       if (isAuthTemporarilyUnavailableError(error)) {
         setStatus(RETRY_LATER_MESSAGE)
         return
@@ -200,9 +275,12 @@ export function useSurveySyncNetwork({
   }, [
     apiUrl,
     clearSession,
+    ensureSyncOwner,
     refreshLocalAttachments,
     refreshLocalSurveys,
+    retryFailedOwnerCheck,
     setStatus,
+    syncActivity,
     syncAllowed,
     withAuthRetry,
   ])
@@ -290,6 +368,13 @@ export function useSurveySyncNetwork({
     }
     void maybeAutoSync("auth-ready")
   }, [accessToken, syncAllowed, maybeAutoSync])
+
+  // A new/refreshed token ("auth-ready") also retries a failed owner check.
+  useEffect(() => {
+    if (accessToken) {
+      retryFailedOwnerCheck()
+    }
+  }, [accessToken, retryFailedOwnerCheck])
 
   useEffect(() => {
     if (!accessToken) {

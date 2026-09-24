@@ -6,37 +6,56 @@ import {
 
 describe("hasUnsyncedWork", () => {
   test("returns false when both counts are zero", () => {
-    expect(hasUnsyncedWork({ surveys: 0, attachments: 0 })).toBe(false)
+    expect(hasUnsyncedWork({ surveys: 0, attachments: 0, deletions: 0 })).toBe(false)
   })
 
   test("returns true when surveys count is positive", () => {
-    expect(hasUnsyncedWork({ surveys: 1, attachments: 0 })).toBe(true)
+    expect(hasUnsyncedWork({ surveys: 1, attachments: 0, deletions: 0 })).toBe(true)
   })
 
   test("returns true when attachments count is positive", () => {
-    expect(hasUnsyncedWork({ surveys: 0, attachments: 1 })).toBe(true)
+    expect(hasUnsyncedWork({ surveys: 0, attachments: 1, deletions: 0 })).toBe(true)
+  })
+
+  test("returns true when only a remote deletion is pending (WR-06)", () => {
+    expect(hasUnsyncedWork({ surveys: 0, attachments: 0, deletions: 1 })).toBe(true)
   })
 })
 
 describe("formatUnsyncedWorkSummary", () => {
   test("singular survey", () => {
-    expect(formatUnsyncedWorkSummary({ surveys: 1, attachments: 0 })).toBe("1 relevé")
+    expect(formatUnsyncedWorkSummary({ surveys: 1, attachments: 0, deletions: 0 })).toBe("1 relevé")
   })
 
   test("plural surveys", () => {
-    expect(formatUnsyncedWorkSummary({ surveys: 3, attachments: 0 })).toBe("3 relevés")
+    expect(formatUnsyncedWorkSummary({ surveys: 3, attachments: 0, deletions: 0 })).toBe(
+      "3 relevés",
+    )
   })
 
   test("singular photo", () => {
-    expect(formatUnsyncedWorkSummary({ surveys: 0, attachments: 1 })).toBe("1 photo")
+    expect(formatUnsyncedWorkSummary({ surveys: 0, attachments: 1, deletions: 0 })).toBe("1 photo")
   })
 
   test("surveys and attachments combined", () => {
-    expect(formatUnsyncedWorkSummary({ surveys: 2, attachments: 5 })).toBe("2 relevés et 5 photos")
+    expect(formatUnsyncedWorkSummary({ surveys: 2, attachments: 5, deletions: 0 })).toBe(
+      "2 relevés et 5 photos",
+    )
+  })
+
+  test("pending deletions are listed (WR-06)", () => {
+    expect(formatUnsyncedWorkSummary({ surveys: 0, attachments: 0, deletions: 1 })).toBe(
+      "1 suppression en attente",
+    )
+    expect(formatUnsyncedWorkSummary({ surveys: 2, attachments: 1, deletions: 3 })).toBe(
+      "2 relevés, 1 photo et 3 suppressions en attente",
+    )
   })
 
   test("nothing unsynced", () => {
-    expect(formatUnsyncedWorkSummary({ surveys: 0, attachments: 0 })).toBe("aucune donnée")
+    expect(formatUnsyncedWorkSummary({ surveys: 0, attachments: 0, deletions: 0 })).toBe(
+      "aucune donnée",
+    )
   })
 })
 
@@ -46,7 +65,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: "auth0|a",
         sessionSub: null,
-        unsynced: { surveys: 0, attachments: 0 },
+        unsynced: { surveys: 0, attachments: 0, deletions: 0 },
       }),
     ).toBe("unknown-session")
   })
@@ -56,7 +75,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: null,
         sessionSub: null,
-        unsynced: { surveys: 1, attachments: 0 },
+        unsynced: { surveys: 1, attachments: 0, deletions: 0 },
       }),
     ).toBe("unknown-session")
   })
@@ -66,7 +85,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: null,
         sessionSub: "auth0|a",
-        unsynced: { surveys: 0, attachments: 0 },
+        unsynced: { surveys: 0, attachments: 0, deletions: 0 },
       }),
     ).toBe("adopt")
   })
@@ -76,7 +95,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: null,
         sessionSub: "auth0|a",
-        unsynced: { surveys: 2, attachments: 1 },
+        unsynced: { surveys: 2, attachments: 1, deletions: 0 },
       }),
     ).toBe("adopt")
   })
@@ -86,7 +105,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: "auth0|a",
         sessionSub: "auth0|a",
-        unsynced: { surveys: 0, attachments: 0 },
+        unsynced: { surveys: 0, attachments: 0, deletions: 0 },
       }),
     ).toBe("match")
   })
@@ -96,7 +115,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: "auth0|a",
         sessionSub: "auth0|a",
-        unsynced: { surveys: 3, attachments: 0 },
+        unsynced: { surveys: 3, attachments: 0, deletions: 0 },
       }),
     ).toBe("match")
   })
@@ -106,7 +125,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: "auth0|a",
         sessionSub: "auth0|b",
-        unsynced: { surveys: 2, attachments: 1 },
+        unsynced: { surveys: 2, attachments: 1, deletions: 0 },
       }),
     ).toBe("conflict")
   })
@@ -116,7 +135,7 @@ describe("resolveLocalDataOwnership", () => {
       resolveLocalDataOwnership({
         storedOwnerSub: "auth0|a",
         sessionSub: "auth0|b",
-        unsynced: { surveys: 0, attachments: 0 },
+        unsynced: { surveys: 0, attachments: 0, deletions: 0 },
       }),
     ).toBe("purge-and-adopt")
   })

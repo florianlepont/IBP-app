@@ -88,7 +88,7 @@ describe("countUnsyncedLocalWork", () => {
 
     const result = await countUnsyncedLocalWork()
 
-    expect(result).toEqual({ surveys: 2, attachments: 5 })
+    expect(result).toEqual({ surveys: 2, attachments: 5, deletions: 0 })
     expect(mockDb.getFirstAsync).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining("FROM local_surveys"),
@@ -104,6 +104,6 @@ describe("countUnsyncedLocalWork", () => {
 
     const result = await countUnsyncedLocalWork()
 
-    expect(result).toEqual({ surveys: 0, attachments: 0 })
+    expect(result).toEqual({ surveys: 0, attachments: 0, deletions: 0 })
   })
 })
