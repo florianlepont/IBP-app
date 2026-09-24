@@ -41,18 +41,6 @@ export type CreateAttachmentBody = {
   metadata?: Record<string, unknown>
 }
 
-export type SyncOperation = {
-  client_ref?: string
-  entity?: "survey" | "attachment"
-  action?: "upsert" | "create" | "delete" | "visibility_update"
-  survey_id?: string
-  payload?: unknown
-}
-
-export type SyncBatchBody = {
-  operations?: SyncOperation[]
-}
-
 type JsonObject = Record<string, unknown>
 
 export type FactorCanonical = {
