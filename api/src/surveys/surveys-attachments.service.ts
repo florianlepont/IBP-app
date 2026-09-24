@@ -12,7 +12,7 @@ import { randomUUID } from "crypto"
 import { mkdir, rm, writeFile } from "fs/promises"
 import { dirname, join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { DatabaseService } from "../database/database.service"
+import { DatabaseService, Queryable } from "../database/database.service"
 import { extensionFromMime, isAllowedMimeType } from "../common/file.utils"
 import { AttachmentRow, CreateAttachmentBody, SurveyRow } from "./surveys.types"
 
@@ -48,8 +48,13 @@ export class SurveysAttachmentsService {
     }
   }
 
-  private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {
-    const survey = await this.getSurveyForUser(surveyId, userId, true)
+  private async getSurveyForUserOrThrow(
+    db: Queryable,
+    surveyId: string,
+    userId: string,
+    options?: { forUpdate?: boolean },
+  ): Promise<SurveyRow> {
+    const survey = await this.getSurveyForUser(db, surveyId, userId, true, options)
     if (!survey) {
       throw new NotFoundException("Survey not found")
     }
@@ -57,27 +62,31 @@ export class SurveysAttachmentsService {
   }
 
   private async getSurveyForUser(
+    db: Queryable,
     surveyId: string,
     userId: string,
     activeOnly: boolean,
+    options?: { forUpdate?: boolean },
   ): Promise<SurveyRow | null> {
     const where = activeOnly ? "AND deleted_at IS NULL" : ""
-    const result = await this.db.query<SurveyRow>(
+    const forUpdate = options?.forUpdate ? "FOR UPDATE" : ""
+    const result = await db.query<SurveyRow>(
       `SELECT *
        FROM surveys
-       WHERE id = $1 AND user_id = $2 ${where}`,
+       WHERE id = $1 AND user_id = $2 ${where} ${forUpdate}`,
       [surveyId, userId],
     )
     return result.rows[0] ?? null
   }
 
   private async insertEvent(
+    db: Queryable,
     surveyId: string,
     actorId: string,
     eventType: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    await this.db.query(
+    await db.query(
       `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
@@ -159,17 +168,6 @@ export class SurveysAttachmentsService {
     upload_url: string
     confirm_url: string
   }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
-
-    const countResult = await this.db.query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
-      [surveyId],
-    )
-    const currentCount = parseInt(countResult.rows[0]?.count ?? "0", 10)
-    if (currentCount >= 10) {
-      throw new BadRequestException("Survey already has the maximum of 10 attachments")
-    }
-
     if (!body?.mime_type || typeof body.mime_type !== "string") {
       throw new BadRequestException("mime_type is required")
     }
@@ -193,26 +191,39 @@ export class SurveysAttachmentsService {
     const confirmUrl = this.buildConfirmUrl(surveyId, attachmentId, uploadToken)
     const uploadUrl = await this.buildUploadUrl(storageKey, body.mime_type, confirmUrl)
 
-    await this.db.query(
-      `INSERT INTO attachments (id, survey_id, storage_key, mime_type, size_bytes, captured_at, metadata, upload_token, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW())`,
-      [
-        attachmentId,
-        surveyId,
-        storageKey,
-        body.mime_type,
-        body.size_bytes,
-        body.captured_at ?? null,
-        JSON.stringify(body.metadata ?? {}),
-        uploadToken,
-      ],
-    )
+    await this.db.transaction(async (db) => {
+      await this.getSurveyForUserOrThrow(db, surveyId, user.id, { forUpdate: true })
 
-    await this.insertEvent(surveyId, user.id, "attachment_created", {
-      attachment_id: attachmentId,
-      storage_key: storageKey,
-      mime_type: body.mime_type,
-      size_bytes: body.size_bytes,
+      const countResult = await db.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
+        [surveyId],
+      )
+      const currentCount = parseInt(countResult.rows[0]?.count ?? "0", 10)
+      if (currentCount >= 10) {
+        throw new BadRequestException("Survey already has the maximum of 10 attachments")
+      }
+
+      await db.query(
+        `INSERT INTO attachments (id, survey_id, storage_key, mime_type, size_bytes, captured_at, metadata, upload_token, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW())`,
+        [
+          attachmentId,
+          surveyId,
+          storageKey,
+          body.mime_type,
+          body.size_bytes,
+          body.captured_at ?? null,
+          JSON.stringify(body.metadata ?? {}),
+          uploadToken,
+        ],
+      )
+
+      await this.insertEvent(db, surveyId, user.id, "attachment_created", {
+        attachment_id: attachmentId,
+        storage_key: storageKey,
+        mime_type: body.mime_type,
+        size_bytes: body.size_bytes,
+      })
     })
 
     return {
@@ -234,7 +245,7 @@ export class SurveysAttachmentsService {
       throw new BadRequestException("upload token is required")
     }
 
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
 
     const existing = await this.db.query<AttachmentRow>(
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
@@ -288,19 +299,23 @@ export class SurveysAttachmentsService {
       await writeFile(storagePath, file.buffer)
     }
 
-    const updated = await this.db.query<{ id: string; uploaded_at: string }>(
-      `UPDATE attachments
-       SET uploaded_at = NOW()
-       WHERE id = $1 AND survey_id = $2
-       RETURNING id, uploaded_at::text`,
-      [attachmentId, surveyId],
-    )
+    const updated = await this.db.transaction(async (db) => {
+      const result = await db.query<{ id: string; uploaded_at: string }>(
+        `UPDATE attachments
+         SET uploaded_at = NOW()
+         WHERE id = $1 AND survey_id = $2
+         RETURNING id, uploaded_at::text`,
+        [attachmentId, surveyId],
+      )
 
-    await this.insertEvent(surveyId, user.id, "attachment_uploaded", {
-      attachment_id: attachmentId,
-      storage_key: existing.rows[0].storage_key,
-      object_storage_mode: this.objectStorageMode,
-      bytes_written: file?.buffer?.length ?? null,
+      await this.insertEvent(db, surveyId, user.id, "attachment_uploaded", {
+        attachment_id: attachmentId,
+        storage_key: existing.rows[0].storage_key,
+        object_storage_mode: this.objectStorageMode,
+        bytes_written: file?.buffer?.length ?? null,
+      })
+
+      return result
     })
 
     return {
@@ -315,7 +330,7 @@ export class SurveysAttachmentsService {
     attachmentId: string,
     options?: { allowMissing?: boolean },
   ): Promise<{ survey_id: string; attachment_id: string; missing: boolean; deleted: boolean }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
 
     const existing = await this.db.query<AttachmentRow>(
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
@@ -336,19 +351,21 @@ export class SurveysAttachmentsService {
       throw new NotFoundException("Attachment not found")
     }
 
-    await this.db.query(
-      `UPDATE attachments
-       SET deleted_at = NOW()
-       WHERE id = $1 AND survey_id = $2`,
-      [attachmentId, surveyId],
-    )
+    await this.db.transaction(async (db) => {
+      await db.query(
+        `UPDATE attachments
+         SET deleted_at = NOW()
+         WHERE id = $1 AND survey_id = $2`,
+        [attachmentId, surveyId],
+      )
+
+      await this.insertEvent(db, surveyId, user.id, "attachment_deleted", {
+        attachment_id: attachmentId,
+        storage_key: existing.rows[0].storage_key,
+      })
+    })
 
     await this.cleanupAttachmentStorage(existing.rows[0].storage_key)
-
-    await this.insertEvent(surveyId, user.id, "attachment_deleted", {
-      attachment_id: attachmentId,
-      storage_key: existing.rows[0].storage_key,
-    })
 
     return {
       survey_id: surveyId,
@@ -375,7 +392,7 @@ export class SurveysAttachmentsService {
       >
     >
   }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
 
     const result = await this.db.query<
       Pick<

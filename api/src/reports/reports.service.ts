@@ -46,20 +46,23 @@ export class ReportsService {
     }
 
     const reportId = randomUUID()
-    const result = await this.db.query<Pick<ReportRow, "id" | "status">>(
-      `INSERT INTO reports (id, survey_id, reporter_user_id, reason, status)
-       VALUES ($1, $2, $3, $4, 'open')
-       RETURNING id, status`,
-      [reportId, surveyId, user.id, reason],
-    )
+    const report = await this.db.transaction(async (db) => {
+      const result = await db.query<Pick<ReportRow, "id" | "status">>(
+        `INSERT INTO reports (id, survey_id, reporter_user_id, reason, status)
+         VALUES ($1, $2, $3, $4, 'open')
+         RETURNING id, status`,
+        [reportId, surveyId, user.id, reason],
+      )
 
-    await this.db.query(
-      `INSERT INTO survey_events (id, survey_id, event_type, payload)
-       VALUES ($1, $2, 'reported', $3::jsonb)`,
-      [randomUUID(), surveyId, JSON.stringify({ report_id: reportId })],
-    )
+      await db.query(
+        `INSERT INTO survey_events (id, survey_id, event_type, payload)
+         VALUES ($1, $2, 'reported', $3::jsonb)`,
+        [randomUUID(), surveyId, JSON.stringify({ report_id: reportId })],
+      )
 
-    const report = result.rows[0]
+      return result.rows[0]
+    })
+
     return {
       id: report.id,
       status: report.status,
