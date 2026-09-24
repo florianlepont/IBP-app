@@ -5,7 +5,7 @@ import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { SYNC_THROTTLE } from "../common/rate-limit.config"
 import { SurveysSyncService } from "./surveys-sync.service"
-import { SyncBatchBody } from "./surveys.types"
+import { SyncBatchDto } from "./dtos/sync-batch.dto"
 
 @Controller("sync")
 @UseGuards(AuthGuard)
@@ -15,7 +15,7 @@ export class SyncController {
   @Post()
   @HttpCode(200)
   @Throttle(SYNC_THROTTLE)
-  async syncBatch(@CurrentUser() user: AuthenticatedUser, @Body() body: SyncBatchBody) {
+  async syncBatch(@CurrentUser() user: AuthenticatedUser, @Body() body: SyncBatchDto) {
     return this.syncService.syncBatch(user, body)
   }
 

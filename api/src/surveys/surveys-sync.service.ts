@@ -1,16 +1,13 @@
-import { BadRequestException, Injectable } from "@nestjs/common"
+import { BadRequestException, HttpException, Injectable, Logger } from "@nestjs/common"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService } from "../database/database.service"
 import { IbpRulesService } from "./ibp-rules.service"
 import { mapSyncError } from "./sync-error.utils"
 import {
-  CreateAttachmentBody,
-  SyncBatchBody,
   SyncChangeAttachment,
   SyncChangeEvent,
   SyncChangeSurvey,
   SyncOperationResult,
-  SurveyUpsertBody,
 } from "./surveys.types"
 import {
   buildChangesCursor,
@@ -20,9 +17,20 @@ import {
 } from "./surveys-normalize.utils"
 import { SurveysService } from "./surveys.service"
 import { SurveysAttachmentsService } from "./surveys-attachments.service"
+import { SyncBatchDto, SyncOperationEnvelopeDto } from "./dtos/sync-batch.dto"
+import {
+  AttachmentDeletePayloadDto,
+  SurveyDeletePayloadDto,
+  SurveyVisibilityPayloadDto,
+} from "./dtos/sync-payloads.dto"
+import { CreateAttachmentDto } from "./dtos/create-attachment.dto"
+import { SurveyUpsertDto } from "./dtos/survey-upsert.dto"
+import { validateSyncDto } from "./sync-operation-validation"
 
 @Injectable()
 export class SurveysSyncService {
+  private readonly logger = new Logger(SurveysSyncService.name)
+
   constructor(
     private readonly db: DatabaseService,
     private readonly ibpRules: IbpRulesService,
@@ -32,55 +40,51 @@ export class SurveysSyncService {
 
   async syncBatch(
     user: AuthenticatedUser,
-    body: SyncBatchBody,
+    body: SyncBatchDto,
   ): Promise<{ results: SyncOperationResult[] }> {
     const operations = body.operations
-    if (!Array.isArray(operations) || operations.length === 0) {
-      throw new BadRequestException("operations must be a non-empty array")
-    }
-    if (operations.length > 100) {
-      throw new BadRequestException("operations exceeds V1 batch limit (100)")
-    }
 
     const results: SyncOperationResult[] = []
 
     for (const operation of operations) {
+      const rawClientRef =
+        operation && typeof operation === "object"
+          ? (operation as { client_ref?: unknown }).client_ref
+          : undefined
       const clientRef =
-        typeof operation.client_ref === "string" && operation.client_ref.trim()
-          ? operation.client_ref
-          : null
-      const entity = typeof operation.entity === "string" ? operation.entity : "unknown"
-      const action = typeof operation.action === "string" ? operation.action : "unknown"
+        typeof rawClientRef === "string" && rawClientRef.trim() ? rawClientRef : null
+      const rawEntity =
+        operation && typeof operation === "object"
+          ? (operation as { entity?: unknown }).entity
+          : undefined
+      const rawAction =
+        operation && typeof operation === "object"
+          ? (operation as { action?: unknown }).action
+          : undefined
+      const entity = typeof rawEntity === "string" ? rawEntity : "unknown"
+      const action = typeof rawAction === "string" ? rawAction : "unknown"
 
       try {
-        if (operation.entity === "survey" && operation.action === "upsert") {
-          if (!operation.payload || typeof operation.payload !== "object") {
-            throw new BadRequestException("survey upsert payload is required")
-          }
-          const data = await this.surveysService.upsertForUser(
-            user,
-            operation.payload as SurveyUpsertBody,
-          )
+        const envelope = await validateSyncDto(SyncOperationEnvelopeDto, operation)
+
+        if (envelope.entity === "survey" && envelope.action === "upsert") {
+          const payload = await validateSyncDto(SurveyUpsertDto, envelope.payload)
+          const data = await this.surveysService.upsertForUser(user, payload)
           results.push({
             client_ref: clientRef,
-            entity: operation.entity,
-            action: operation.action,
+            entity: envelope.entity,
+            action: envelope.action,
             status: "synced",
-            data: data as Record<string, unknown>,
+            data: data as unknown as Record<string, unknown>,
           })
           continue
         }
 
-        if (operation.entity === "survey" && operation.action === "delete") {
-          const payloadSurveyId =
-            operation.payload && typeof operation.payload === "object"
-              ? (operation.payload as { id?: unknown }).id
-              : undefined
-          const surveyId =
-            operation.survey_id ??
-            (typeof payloadSurveyId === "string" ? payloadSurveyId : undefined)
-          if (!surveyId || typeof surveyId !== "string") {
-            throw new BadRequestException("survey_id is required for survey delete")
+        if (envelope.entity === "survey" && envelope.action === "delete") {
+          const payload = await validateSyncDto(SurveyDeletePayloadDto, envelope.payload ?? {})
+          const surveyId = envelope.survey_id ?? payload.id
+          if (!surveyId) {
+            throw badRequest("survey_id is required for survey delete")
           }
 
           const data = await this.surveysService.deleteSurvey(user, surveyId, {
@@ -88,97 +92,89 @@ export class SurveysSyncService {
           })
           results.push({
             client_ref: clientRef,
-            entity: operation.entity,
-            action: operation.action,
+            entity: envelope.entity,
+            action: envelope.action,
             status: "synced",
-            data: data as Record<string, unknown>,
+            data: data as unknown as Record<string, unknown>,
           })
           continue
         }
 
-        if (operation.entity === "survey" && operation.action === "visibility_update") {
-          const payloadVisibility =
-            operation.payload && typeof operation.payload === "object"
-              ? (operation.payload as { visibility?: unknown }).visibility
-              : undefined
-
-          if (!operation.survey_id || typeof operation.survey_id !== "string") {
-            throw new BadRequestException("survey_id is required for survey visibility_update")
+        if (envelope.entity === "survey" && envelope.action === "visibility_update") {
+          if (!envelope.survey_id) {
+            throw badRequest("survey_id is required for survey visibility_update")
           }
-          if (payloadVisibility !== "private" && payloadVisibility !== "public") {
-            throw new BadRequestException(
-              "visibility must be private or public for survey visibility_update",
-            )
-          }
+          const payload = await validateSyncDto(SurveyVisibilityPayloadDto, envelope.payload)
 
-          const data = await this.surveysService.patchSurveyVisibility(user, operation.survey_id, {
-            visibility: payloadVisibility,
+          const data = await this.surveysService.patchSurveyVisibility(user, envelope.survey_id, {
+            visibility: payload.visibility,
           })
           results.push({
             client_ref: clientRef,
-            entity: operation.entity,
-            action: operation.action,
+            entity: envelope.entity,
+            action: envelope.action,
             status: "synced",
-            data: data as Record<string, unknown>,
+            data: data as unknown as Record<string, unknown>,
           })
           continue
         }
 
-        if (operation.entity === "attachment" && operation.action === "create") {
-          if (!operation.survey_id) {
-            throw new BadRequestException("survey_id is required for attachment create")
+        if (envelope.entity === "attachment" && envelope.action === "create") {
+          if (!envelope.survey_id) {
+            throw badRequest("survey_id is required for attachment create")
           }
-          if (!operation.payload || typeof operation.payload !== "object") {
-            throw new BadRequestException("attachment create payload is required")
-          }
+          const payload = await validateSyncDto(CreateAttachmentDto, envelope.payload)
           const data = await this.attachmentsService.createAttachment(
             user,
-            operation.survey_id,
-            operation.payload as CreateAttachmentBody,
+            envelope.survey_id,
+            payload,
           )
           results.push({
             client_ref: clientRef,
-            entity: operation.entity,
-            action: operation.action,
+            entity: envelope.entity,
+            action: envelope.action,
             status: "synced",
-            data: data as Record<string, unknown>,
+            data: data as unknown as Record<string, unknown>,
           })
           continue
         }
 
-        if (operation.entity === "attachment" && operation.action === "delete") {
-          const payloadAttachmentId =
-            operation.payload && typeof operation.payload === "object"
-              ? (operation.payload as { attachment_id?: unknown }).attachment_id
-              : undefined
-
-          if (!operation.survey_id || typeof operation.survey_id !== "string") {
-            throw new BadRequestException("survey_id is required for attachment delete")
+        if (envelope.entity === "attachment" && envelope.action === "delete") {
+          if (!envelope.survey_id) {
+            throw badRequest("survey_id is required for attachment delete")
           }
-          if (!payloadAttachmentId || typeof payloadAttachmentId !== "string") {
-            throw new BadRequestException("attachment_id is required for attachment delete")
-          }
+          const payload = await validateSyncDto(AttachmentDeletePayloadDto, envelope.payload)
 
           const data = await this.attachmentsService.deleteAttachment(
             user,
-            operation.survey_id,
-            payloadAttachmentId,
+            envelope.survey_id,
+            payload.attachment_id,
             {
               allowMissing: true,
             },
           )
           results.push({
             client_ref: clientRef,
-            entity: operation.entity,
-            action: operation.action,
+            entity: envelope.entity,
+            action: envelope.action,
             status: "synced",
-            data: data as Record<string, unknown>,
+            data: data as unknown as Record<string, unknown>,
           })
           continue
         }
 
-        throw new BadRequestException(`Unsupported sync operation: ${entity}.${action}`)
+        throw badRequest(`Unsupported sync operation: ${envelope.entity}.${envelope.action}`)
       } catch (error) {
+        if (!isHttpException(error)) {
+          const pgCode =
+            typeof error === "object" && error !== null && "code" in error
+              ? (error as { code?: unknown }).code
+              : undefined
+          const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn(
+            `sync operation failed (entity=${entity}, action=${action}${pgCode ? `, pg_code=${String(pgCode)}` : ""}): ${message}`,
+          )
+        }
         const mapped = mapSyncError(error)
         results.push({
           client_ref: clientRef,
@@ -488,4 +484,12 @@ export class SurveysSyncService {
 
     return result.rows
   }
+}
+
+function badRequest(message: string): BadRequestException {
+  return new BadRequestException(message)
+}
+
+function isHttpException(error: unknown): error is HttpException {
+  return error instanceof HttpException
 }
