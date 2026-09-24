@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1.1: Reconcile the IBP method version** (INSERTED) - Establish whether the app still implements the current CNPF method, and what changes if not
 - [x] **Phase 1.2: Stop field data loss and account exposure** (INSERTED) - Session errors never delete offline data; no account takeover or open debug surface (completed 2026-09-24)
 - [x] **Phase 1.3: CI and test safety net** (INSERTED) - Typecheck in CI, reproducible image, tests that run real SQL (completed 2026-09-24)
-- [ ] **Phase 1.4: API sync integrity** (INSERTED) - Validated sync payloads, no submit bypass, transactional writes
+- [x] **Phase 1.4: API sync integrity** (INSERTED) - Validated sync payloads, no submit bypass, transactional writes (completed 2026-09-24)
 - [ ] **Phase 1.5: Mobile sync engine reliability** (INSERTED) - Single-flight drain, bounded batches, durable photos
 - [ ] **Phase 1.6: Sync feed ordering and unified object storage** (INSERTED) - No skipped change between devices; one bounded storage service
 - [ ] **Phase 1.7: API configuration, service split and database tuning** (INSERTED) - Fail-fast config, split SurveysService, bounded and indexed queries
@@ -171,7 +171,7 @@ Plans:
 - [x] 01.4-03-PLAN.md — Survey writes transactional, guarded upsert, concurrent submit lock (wave 2)
 - [x] 01.4-04-PLAN.md — Attachment and report writes transactional (wave 2)
 - [x] 01.4-05-PLAN.md — Upsert ignores status/expires_at, submitted read-only, installed-app replay (wave 3)
-- [ ] 01.4-06-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 4)
+- [x] 01.4-06-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 4)
 
 ### Phase 01.5: Mobile sync engine reliability (INSERTED)
 
@@ -365,7 +365,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
-| 1.4. API sync integrity | 5/6 | In Progress|  |
+| 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
 | 1.5. Mobile sync engine reliability | 0/TBD | Not started | - |
 | 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
