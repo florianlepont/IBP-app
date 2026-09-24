@@ -403,7 +403,7 @@ jobs:
             cortege:ci
 
           ok=false
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/v1/health > /dev/null; then
               ok=true
               break
