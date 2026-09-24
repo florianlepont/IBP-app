@@ -136,7 +136,11 @@ describe("getChangedSubmittedReadOnlyFields", () => {
     const existing = makeRow({ factors: { A: 1, B: 2 } })
 
     expect(
-      getChangedSubmittedReadOnlyFields({ factors: { B: 2, A: 1 } }, existing, existing.parcel_ids ?? []),
+      getChangedSubmittedReadOnlyFields(
+        { factors: { B: 2, A: 1 } },
+        existing,
+        existing.parcel_ids ?? [],
+      ),
     ).toEqual([])
   })
 
@@ -144,7 +148,11 @@ describe("getChangedSubmittedReadOnlyFields", () => {
     const existing = makeRow({ factors: { A: 1, B: 2 } })
 
     expect(
-      getChangedSubmittedReadOnlyFields({ factors: { A: 2, B: 2 } }, existing, existing.parcel_ids ?? []),
+      getChangedSubmittedReadOnlyFields(
+        { factors: { A: 2, B: 2 } },
+        existing,
+        existing.parcel_ids ?? [],
+      ),
     ).toEqual(["factors"])
   })
 
