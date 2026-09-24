@@ -1519,3 +1519,16 @@ other 27 sat untouched at iteration-2 levels (1,403–1,992); a balanced corpus 
 iteration-2→3 comparison needs, so processing now sorts ascending by current on-disk count each
 run — the 27 lagging classes are worked through before any already-advanced class is topped up
 further.
+
+**Progress checkpoint (2026-09-24, ~4h40min into the hardened run, no hangs or crashes since the
+fixes above).** 20 of 34 classes have real data; 143,677 raw images on disk (up from 89,522 before
+this relaunch). Observed rate across this run's first 13 newly-processed classes: ~21 min/class
+average — slower than iteration 2's expansion, consistent with the rate-limiting the download-
+speed collapse already flagged. Emerging autumn-representation pattern, now confirmed for more
+classes at this much larger scale: most classes that were thin or zero in iteration 2 show
+substantial autumn gains (Fraxinus 32→1,073, Fagus 57→885, Juniperus 21→655, Malus already-strong
+→1,584) — **but Pinus remains thin even now (60 autumn images out of 5,773 downloaded, ≈1%)**,
+reinforcing that Pinus's autumn scarcity looks like a genuine property of GBIF's CC0/CC-BY
+`StillImage` collection for that genus, not a sampling artefact at any scale tried so far. Acer and
+Prunus not yet re-processed in this pass; their status is confirmed once reached. Full final table
+in Section 11.1 once the expansion completes.
