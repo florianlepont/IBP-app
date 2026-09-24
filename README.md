@@ -118,6 +118,8 @@ npm run test:e2e
 npm run format:check
 ```
 
+`npm run test:e2e` runs against a separate `ibp_test` database (settings in `api/.env.test.example`, override with a gitignored `api/.env.test`), created on the docker-compose Postgres if missing and wiped before every run; it refuses any database whose name does not end in `_test`, so the dev database `ibp` is never touched.
+
 Coverage helpers:
 
 ```bash

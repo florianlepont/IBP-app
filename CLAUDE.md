@@ -89,7 +89,7 @@ npm run format:check          # Prettier check (used in CI)
 
 # Testing
 npm run test:unit             # unit tests for api + mobile
-npm run test:e2e              # E2E tests for API (requires running DB)
+npm run test:e2e              # E2E tests for API (requires running DB; uses the separate ibp_test database)
 npm run test                  # unit + E2E
 npm run test:coverage:api     # coverage report for API
 npm run test:coverage:mobile  # coverage report for mobile
@@ -260,6 +260,7 @@ Factor validation matrix: `docs/technical/ibp-validation-matrix-v1.md`
 - Run with: `npm run test:e2e`
 - Config: `api/jest.config.js`
 - Notable suites: `auth-profile.e2e-spec.ts`, `surveys-idempotency.e2e-spec.ts`
+- Target a dedicated `*_test` database (`api/.env.test.example`, default `ibp_test`); globalSetup drops and re-migrates it before each run and refuses any other database name
 
 ### Before committing
 

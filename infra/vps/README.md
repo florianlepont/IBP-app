@@ -63,7 +63,7 @@ docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.e
 
 # Database schema
 docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env \
-  exec api node scripts/migrate.js
+  exec api node api/scripts/migrate.js
 
 # Automatic updates
 sudo cp infra/vps/cortege-deploy.* /etc/systemd/system/
@@ -81,6 +81,26 @@ systemctl list-timers cortege-deploy.timer   # when it next fires
 journalctl -u cortege-deploy.service -n 50   # what the last run did
 sudo systemctl start cortege-deploy.service  # deploy now, without waiting
 docker compose -f infra/docker-compose.vps.yml logs -f api
+```
+
+## Rolling back
+
+Every `main` build is also tagged `ghcr.io/florianlepont/cortege:sha-<commit>`. The
+image runs as the non-root `node` user and reports Docker health from
+`/v1/health`.
+
+To roll back to a known-good commit:
+
+```bash
+# Stop the timer first, or the next poll re-pulls the bad :latest
+sudo systemctl stop cortege-deploy.timer
+
+docker pull ghcr.io/florianlepont/cortege:sha-<good-commit>
+docker tag ghcr.io/florianlepont/cortege:sha-<good-commit> ghcr.io/florianlepont/cortege:latest
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env up -d api
+
+# Re-enable the timer only once the fix has landed on main
+sudo systemctl start cortege-deploy.timer
 ```
 
 ## Sharing the machine

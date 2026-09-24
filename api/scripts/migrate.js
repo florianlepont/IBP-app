@@ -3,14 +3,16 @@ const path = require('path');
 const { Client } = require('pg');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-async function run() {
-  const client = new Client({
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: Number(process.env.POSTGRES_PORT || 5432),
-    user: process.env.POSTGRES_USER || 'ibp',
-    password: process.env.POSTGRES_PASSWORD || 'ibp',
-    database: process.env.POSTGRES_DB || 'ibp'
-  });
+async function runMigrations(config) {
+  const client = new Client(
+    config || {
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: Number(process.env.POSTGRES_PORT || 5432),
+      user: process.env.POSTGRES_USER || 'ibp',
+      password: process.env.POSTGRES_PASSWORD || 'ibp',
+      database: process.env.POSTGRES_DB || 'ibp'
+    }
+  );
 
   await client.connect();
 
@@ -43,11 +45,17 @@ async function run() {
     console.log('Migrations are up to date.');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Migration failed:', error.message);
-    process.exitCode = 1;
+    throw error;
   } finally {
     await client.end();
   }
 }
 
-run();
+module.exports = { runMigrations };
+
+if (require.main === module) {
+  runMigrations().catch((error) => {
+    console.error('Migration failed:', error.message);
+    process.exitCode = 1;
+  });
+}

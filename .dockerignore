@@ -1,0 +1,23 @@
+# Build context is the repo root since phase 01.3 (api/Dockerfile installs
+# from the root lockfile). Secrets and the mobile workspace must never enter
+# the build context.
+.git
+.github
+.planning
+.claude
+docs
+infra
+mobile
+scripts
+App.tsx
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+api/test
+**/*.spec.ts
+**/*.e2e-spec.ts
+**/*.tsbuildinfo
+*.md
