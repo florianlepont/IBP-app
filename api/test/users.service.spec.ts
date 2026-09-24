@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common"
+import { BadRequestException, Logger, NotFoundException } from "@nestjs/common"
 import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import { UsersService } from "../src/users/users.service"
 
@@ -39,6 +39,17 @@ function buildService() {
   const db = {
     query: jest.fn(),
     connect: jest.fn().mockResolvedValue(client),
+    transaction: jest.fn(async (fn: (handle: typeof client) => Promise<unknown>) => {
+      await client.query("BEGIN")
+      try {
+        const result = await fn(client)
+        await client.query("COMMIT")
+        return result
+      } catch (error) {
+        await Promise.resolve(client.query("ROLLBACK")).catch(() => undefined)
+        throw error
+      }
+    }),
   }
   const auth0Management = {
     updateEmail: jest.fn(),
@@ -341,52 +352,130 @@ describe("UsersService", () => {
     })
   })
 
-  it("deletes the Auth0 account, anonymizes submitted surveys, and removes the user row", async () => {
-    const { service, db, client, auth0Management } = buildService()
-    db.query.mockResolvedValueOnce({
-      rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
+  describe("deleteAccount", () => {
+    let loggerErrorSpy: jest.SpyInstance
+
+    beforeEach(() => {
+      loggerErrorSpy = jest.spyOn(Logger.prototype, "error").mockImplementation(() => undefined)
     })
-    auth0Management.deleteUser.mockResolvedValueOnce(undefined)
-    client.query
-      .mockResolvedValueOnce({}) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ storage_key: "attachments/survey-draft/photo.jpg" }] }) // collect draft attachment keys
-      .mockResolvedValueOnce({}) // UPDATE survey_events SET actor_id = NULL
-      .mockResolvedValueOnce({}) // UPDATE surveys SET user_id = NULL
-      .mockResolvedValueOnce({}) // DELETE FROM attachments
-      .mockResolvedValueOnce({}) // DELETE FROM survey_events
-      .mockResolvedValueOnce({}) // DELETE FROM surveys
-      .mockResolvedValueOnce({}) // DELETE FROM users
-      .mockResolvedValue({}) // COMMIT
 
-    await service.deleteAccount(AUTH_USER)
+    afterEach(() => {
+      loggerErrorSpy.mockRestore()
+    })
 
-    expect(auth0Management.deleteUser).toHaveBeenCalledWith(AUTH_USER.auth0_sub)
-    expect(db.connect).toHaveBeenCalledTimes(1)
-    expect(client.query).toHaveBeenNthCalledWith(1, "BEGIN")
-    // Storage keys collected first, before any UPDATE/DELETE
-    expect(client.query).toHaveBeenNthCalledWith(2, expect.stringContaining("FROM attachments a"), [
-      AUTH_USER.id,
-    ])
-    expect(client.query).toHaveBeenNthCalledWith(
-      3,
-      expect.stringContaining("SET actor_id = NULL"),
-      [AUTH_USER.id],
-    )
-    expect(client.query).toHaveBeenNthCalledWith(4, expect.stringContaining("SET user_id = NULL"), [
-      AUTH_USER.id,
-    ])
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM attachments"), [
-      AUTH_USER.id,
-    ])
-    expect(client.query).toHaveBeenCalledWith(
-      expect.stringContaining("DELETE FROM survey_events"),
-      [AUTH_USER.id],
-    )
-    expect(client.query).toHaveBeenCalledWith(`DELETE FROM surveys WHERE user_id = $1`, [
-      AUTH_USER.id,
-    ])
-    expect(client.query).toHaveBeenCalledWith(`DELETE FROM users WHERE id = $1`, [AUTH_USER.id])
-    expect(client.query).toHaveBeenLastCalledWith("COMMIT")
-    expect(client.release).toHaveBeenCalledTimes(1)
+    it("commits the DB transaction, anonymizes submitted surveys and removes the user row, then deletes the Auth0 user", async () => {
+      const { service, db, client, auth0Management } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
+      })
+      auth0Management.deleteUser.mockResolvedValueOnce(undefined)
+      client.query
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ storage_key: "attachments/survey-draft/photo.jpg" }] }) // collect draft attachment keys
+        .mockResolvedValueOnce({}) // UPDATE survey_events SET actor_id = NULL
+        .mockResolvedValueOnce({}) // UPDATE surveys SET user_id = NULL
+        .mockResolvedValueOnce({}) // DELETE FROM attachments
+        .mockResolvedValueOnce({}) // DELETE FROM survey_events
+        .mockResolvedValueOnce({}) // DELETE FROM surveys
+        .mockResolvedValueOnce({}) // DELETE FROM users
+        .mockResolvedValue({}) // COMMIT
+
+      await service.deleteAccount(AUTH_USER)
+
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+      expect(client.query).toHaveBeenNthCalledWith(1, "BEGIN")
+      // Storage keys collected first, before any UPDATE/DELETE
+      expect(client.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining("FROM attachments a"),
+        [AUTH_USER.id],
+      )
+      expect(client.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining("SET actor_id = NULL"),
+        [AUTH_USER.id],
+      )
+      expect(client.query).toHaveBeenNthCalledWith(
+        4,
+        expect.stringContaining("SET user_id = NULL"),
+        [AUTH_USER.id],
+      )
+      expect(client.query).toHaveBeenCalledWith(
+        expect.stringContaining("DELETE FROM attachments"),
+        [AUTH_USER.id],
+      )
+      expect(client.query).toHaveBeenCalledWith(
+        expect.stringContaining("DELETE FROM survey_events"),
+        [AUTH_USER.id],
+      )
+      expect(client.query).toHaveBeenCalledWith(`DELETE FROM surveys WHERE user_id = $1`, [
+        AUTH_USER.id,
+      ])
+      expect(client.query).toHaveBeenCalledWith(`DELETE FROM users WHERE id = $1`, [AUTH_USER.id])
+      expect(client.query).toHaveBeenLastCalledWith("COMMIT")
+
+      expect(auth0Management.deleteUser).toHaveBeenCalledWith(AUTH_USER.auth0_sub)
+      // A-M9: the DB transaction (BEGIN..COMMIT) must fully complete before Auth0 is touched.
+      const lastDbCallOrder =
+        client.query.mock.invocationCallOrder[client.query.mock.invocationCallOrder.length - 1]
+      expect(auth0Management.deleteUser.mock.invocationCallOrder[0]).toBeGreaterThan(
+        lastDbCallOrder,
+      )
+    })
+
+    it("rolls back and never calls Auth0 when the DB transaction fails", async () => {
+      const { service, db, client, auth0Management } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: null })],
+      })
+      const dbError = new Error("db failed")
+      client.query
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // collect draft attachment keys
+        .mockRejectedValueOnce(dbError) // UPDATE survey_events SET actor_id = NULL
+
+      await expect(service.deleteAccount(AUTH_USER)).rejects.toThrow("db failed")
+
+      expect(client.query).toHaveBeenCalledWith("ROLLBACK")
+      expect(auth0Management.deleteUser).not.toHaveBeenCalled()
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+    })
+
+    it("resolves and logs a structured error when Auth0 deletion fails after commit", async () => {
+      const { service, db, client, auth0Management } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
+      })
+      client.query
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // collect draft attachment keys
+        .mockResolvedValueOnce({}) // UPDATE survey_events SET actor_id = NULL
+        .mockResolvedValueOnce({}) // UPDATE surveys SET user_id = NULL
+        .mockResolvedValueOnce({}) // DELETE FROM attachments
+        .mockResolvedValueOnce({}) // DELETE FROM survey_events
+        .mockResolvedValueOnce({}) // DELETE FROM surveys
+        .mockResolvedValueOnce({}) // DELETE FROM users
+        .mockResolvedValue({}) // COMMIT
+      const auth0Error = new Error("auth0 down")
+      auth0Management.deleteUser.mockRejectedValueOnce(auth0Error)
+
+      await expect(service.deleteAccount(AUTH_USER)).resolves.toBeUndefined()
+
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1)
+      const [message] = loggerErrorSpy.mock.calls[0]
+      expect(message).toContain(AUTH_USER.id)
+      expect(message).toContain(AUTH_USER.auth0_sub)
+      // storage cleanup still attempted despite the Auth0 failure
+      expect(rm).toHaveBeenCalled()
+    })
+
+    it("throws NotFoundException and never calls Auth0 when the user row is missing", async () => {
+      const { service, db, auth0Management } = buildService()
+      db.query.mockResolvedValueOnce({ rows: [] })
+
+      await expect(service.deleteAccount(AUTH_USER)).rejects.toBeInstanceOf(NotFoundException)
+      expect(auth0Management.deleteUser).not.toHaveBeenCalled()
+      expect(db.transaction).not.toHaveBeenCalled()
+    })
   })
 })
