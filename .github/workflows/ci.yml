@@ -290,9 +290,18 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      # The SDK version check compares against the live npm registry, so an Expo
+      # patch release would turn every PR red. It runs below as information only.
       - name: expo-doctor
         run: npx --yes expo-doctor@1.20.4
         working-directory: mobile
+        env:
+          EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK: "1"
+
+      - name: Expo SDK version drift (informational)
+        run: npx expo install --check
+        working-directory: mobile
+        continue-on-error: true
 
       - name: expo export
         run: npx expo export --platform android --output-dir "$RUNNER_TEMP/expo-export"
