@@ -31,7 +31,8 @@
           "domain": "cortege-auth.algernon.ovh"
         }
       ],
-      "./plugins/with-scene-delegate"
+      "./plugins/with-scene-delegate",
+      "expo-image"
     ],
     "ios": {
       "bundleIdentifier": "fr.etatssauvages.cortege",
