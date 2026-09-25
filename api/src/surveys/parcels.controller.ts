@@ -2,16 +2,16 @@ import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common"
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { SurveysService } from "./surveys.service"
+import { ParcelsService } from "./parcels.service"
 
 @Controller("parcels")
 @UseGuards(AuthGuard)
 export class ParcelsController {
-  constructor(private readonly surveysService: SurveysService) {}
+  constructor(private readonly parcelsService: ParcelsService) {}
 
   @Get("resolve")
   async resolve(@Query("lat") lat?: string, @Query("lng") lng?: string) {
-    return this.surveysService.resolveParcelByCoordinates({ lat, lng })
+    return this.parcelsService.resolveParcelByCoordinates({ lat, lng })
   }
 
   @Get(":parcelId/surveys/history")
@@ -20,6 +20,6 @@ export class ParcelsController {
     @Param("parcelId") parcelId: string,
     @Query("limit") limit?: string,
   ) {
-    return this.surveysService.getParcelSurveyHistory(user, parcelId, limit)
+    return this.parcelsService.getParcelSurveyHistory(user, parcelId, limit)
   }
 }

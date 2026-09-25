@@ -5,20 +5,17 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common"
-import { ConfigService } from "@nestjs/config"
-import { randomUUID } from "crypto"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { appConfigOf } from "../config/app-config"
 import { DatabaseService, Queryable } from "../database/database.service"
 import { StorageService } from "../storage/storage.service"
-import { CadastreProviderService } from "./cadastre-provider.service"
+import { CadastreProviderService, WfsParcelFeature } from "./cadastre-provider.service"
 import { IbpRulesService } from "./ibp-rules.service"
+import { ParcelsService } from "./parcels.service"
 import { SurveyEventsService } from "./survey-events.service"
 import { SurveysRepository } from "./surveys.repository"
 import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
 import {
   AttachmentRow,
-  ParcelRow,
   SurveyPatchBody,
   SurveyVisibilityPatchBody,
   SurveyRow,
@@ -34,44 +31,28 @@ import {
   normalizeObservationYear,
   normalizeParcelId,
   normalizeParcelIds,
-  normalizeParcelHistoryLimit,
-  normalizeParcelPartToDigits,
-  normalizeParcelSection,
   normalizePreviousSurveyId,
   normalizeSurveyStatusFilter,
   normalizeVersionNumber,
   parseBbox,
-  parseParcelIdentifier,
   SameVersionContent,
   toFiniteNumber,
 } from "./surveys-normalize.utils"
 
 @Injectable()
 export class SurveysService {
-  private readonly useIgnParcelWfs: boolean
-  private readonly ignParcelWfsUrl: string
-  private readonly ignParcelWfsTypeName: string
-  private readonly ignParcelWfsCount: number
-  private readonly ignParcelWfsTimeoutMs: number
-
   constructor(
     private readonly db: DatabaseService,
     private readonly ibpRules: IbpRulesService,
+    // D-08: the single IGN client (WFS features for the public parcel statuses).
     private readonly cadastreProvider: CadastreProviderService,
     private readonly storage: StorageService,
-    config: ConfigService,
     // D-07: the shared ownership lookup, parcel links and event writer (SurveysDataModule).
     private readonly repository: SurveysRepository,
     private readonly events: SurveyEventsService,
-  ) {
-    // D-01: the WFS count cap (3000) and the defaults live in app-config.ts.
-    const cadastre = appConfigOf(config).cadastre
-    this.useIgnParcelWfs = cadastre.provider === "ign"
-    this.ignParcelWfsUrl = cadastre.wfsUrl
-    this.ignParcelWfsTypeName = cadastre.wfsTypename
-    this.ignParcelWfsCount = cadastre.wfsCount
-    this.ignParcelWfsTimeoutMs = cadastre.timeoutMs
-  }
+    // D-07/D-10: parcel registration, display location and submit validation.
+    private readonly parcels: ParcelsService,
+  ) {}
 
   async listForUser(
     user: AuthenticatedUser,
@@ -545,7 +526,7 @@ export class SurveysService {
       }
     }
 
-    return this.ensureParcelIds(db, selectedParcelIds)
+    return this.parcels.ensureParcelIds(db, selectedParcelIds)
   }
 
   private async resolveVersionInfo(
@@ -567,7 +548,7 @@ export class SurveysService {
       normalizeVersionNumber(body.version_number) ?? existing?.version_number ?? null
     const versionNumber =
       versionNumberRaw ??
-      (parcelId ? await this.getDefaultVersionNumber(db, parcelId, body.id) : null)
+      (parcelId ? await this.parcels.getDefaultVersionNumber(db, parcelId, body.id) : null)
     const previousSurveyId =
       normalizePreviousSurveyId(body.previous_survey_id) ?? existing?.previous_survey_id ?? null
 
@@ -637,7 +618,7 @@ export class SurveysService {
       }
 
       const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch
-      targetParcelIds = await this.ensureParcelIds(db, targetParcelIds)
+      targetParcelIds = await this.parcels.ensureParcelIds(db, targetParcelIds)
       const parcelIdForPatch = targetParcelIds[0] ?? null
       const observationYearForPatch =
         normalizeObservationYear(body.observation_year) ??
@@ -645,7 +626,7 @@ export class SurveysService {
       const versionNumberForPatch =
         normalizeVersionNumber(body.version_number) ??
         (parcelIdForPatch && !existing.version_number
-          ? await this.getDefaultVersionNumber(db, parcelIdForPatch, surveyId)
+          ? await this.parcels.getDefaultVersionNumber(db, parcelIdForPatch, surveyId)
           : null)
       const hasPreviousSurveyId = Object.prototype.hasOwnProperty.call(body, "previous_survey_id")
       const previousSurveyIdForPatch = hasPreviousSurveyId
@@ -859,7 +840,7 @@ export class SurveysService {
       columns: "full",
     })
     const parcelIds = await this.repository.getSurveyParcelIds(this.db, survey.id)
-    const displayLocation = await this.computeSurveyDisplayLocation(survey.id, survey.parcel_id)
+    const displayLocation = await this.parcels.displayLocation(this.db, survey.id, survey.parcel_id)
 
     return {
       id: survey.id,
@@ -945,7 +926,11 @@ export class SurveysService {
           )
         }
 
-        const parcelValidation = await this.validateParcelSubmit(db, existing)
+        const parcelValidation = await this.parcels.validateParcelSubmit(
+          db,
+          existing,
+          surveyParcelIds,
+        )
 
         if (parcelValidation.versionConflict) {
           throw new ConflictException({
@@ -1224,10 +1209,11 @@ export class SurveysService {
 
     const bbox = parseBbox(input?.bbox)
     const year = normalizeObservationYear(input?.year)
-    if (this.useIgnParcelWfs && bbox) {
-      const ignItems = await this.resolvePublicParcelStatusesFromIgnWfs(bbox, year)
-      if (ignItems.length > 0) {
-        return { items: ignItems }
+    if (this.cadastreProvider.wfsEnabled && bbox) {
+      // D-08: null (too many tiles, or IGN failed) and an empty answer both use the DB path.
+      const features = await this.cadastreProvider.fetchParcelFeaturesInBbox(bbox)
+      if (features && features.length > 0) {
+        return { items: await this.withStudyStatus(features, year) }
       }
     }
 
@@ -1323,8 +1309,16 @@ export class SurveysService {
     }
   }
 
-  private async resolvePublicParcelStatusesFromIgnWfs(
-    bbox: { minLng: number; minLat: number; maxLng: number; maxLat: number },
+  /**
+   * Study status for IGN features, computed per request (never cached, D-08): the latest
+   * public submitted survey of each parcel, ranked as before. The ranking only runs over
+   * parcels in the features' communes (D-08, T-01.7-39). It is not bounded by centroid: parcels
+   * registered by id have an empty centroid and would lose their "studied" flag (RESEARCH
+   * Pattern 7). Features only match parcels on their exact commune code, so the restriction
+   * does not change the result.
+   */
+  private async withStudyStatus(
+    features: WfsParcelFeature[],
     year: number | null,
   ): Promise<
     Array<{
@@ -1336,500 +1330,78 @@ export class SurveysService {
       geometry?: Record<string, unknown>
     }>
   > {
-    try {
-      const url = new URL(this.ignParcelWfsUrl)
-      url.searchParams.set("service", "WFS")
-      url.searchParams.set("version", "2.0.0")
-      url.searchParams.set("request", "GetFeature")
-      url.searchParams.set("typeNames", this.ignParcelWfsTypeName)
-      url.searchParams.set(
-        "bbox",
-        `${bbox.minLng.toFixed(6)},${bbox.minLat.toFixed(6)},${bbox.maxLng.toFixed(6)},${bbox.maxLat.toFixed(6)},EPSG:4326`,
-      )
-      url.searchParams.set("outputFormat", "application/json")
-      url.searchParams.set("count", String(this.ignParcelWfsCount))
-
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), this.ignParcelWfsTimeoutMs)
-      const response = await fetch(url, {
-        method: "GET",
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-        },
-      }).finally(() => clearTimeout(timeout))
-
-      if (!response.ok) {
-        return []
-      }
-
-      const payloadRaw = await response.json()
-      const payload =
-        payloadRaw && typeof payloadRaw === "object" ? (payloadRaw as Record<string, unknown>) : {}
-      const featuresRaw = Array.isArray(payload.features) ? payload.features : []
-      if (featuresRaw.length === 0) {
-        return []
-      }
-
-      const latestResult = await this.db.query<{
-        parcel_id: string
-        commune_code: string
-        section: string
-        number: string
-        latest_submitted_survey_id: string
-        latest_observation_year: number | null
-        latest_ibp_total: number | null
-      }>(
-        `WITH latest_public AS (
-           SELECT
-             sp.parcel_id,
-             s.id,
-             s.observation_year,
-             s.version_number,
-             s.submitted_at,
-             s.scores,
-             ROW_NUMBER() OVER (
-               PARTITION BY sp.parcel_id
-               ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
-             ) AS rank_in_parcel
-           FROM surveys s
-           JOIN survey_parcels sp
-             ON sp.survey_id = s.id
-           WHERE s.deleted_at IS NULL
-             AND s.status = 'submitted'
-             AND s.visibility = 'public'
-             AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
-         )
-         SELECT
-           p.parcel_id,
-           p.commune_code,
-           p.section,
-           p.number,
-           lp.id::text AS latest_submitted_survey_id,
-           lp.observation_year AS latest_observation_year,
-           (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
-         FROM latest_public lp
-         JOIN parcels p
-           ON p.parcel_id = lp.parcel_id
-         WHERE lp.rank_in_parcel = 1`,
-        [year],
-      )
-
-      const studiedByParcelKey = new Map<
-        string,
-        {
-          latest_submitted_survey_id: string
-          latest_observation_year: number | null
-          latest_ibp_total: number | null
-        }
-      >()
-      for (const row of latestResult.rows) {
-        const key = buildParcelKey(row.commune_code, row.section, row.number)
-        studiedByParcelKey.set(key, {
-          latest_submitted_survey_id: row.latest_submitted_survey_id,
-          latest_observation_year: row.latest_observation_year,
-          latest_ibp_total: row.latest_ibp_total,
-        })
-      }
-
-      const items: Array<{
-        parcel_id: string
-        study_status: "studied" | "not_studied"
-        latest_submitted_survey_id: string | null
-        latest_observation_year: number | null
-        latest_ibp_total: number | null
-        geometry?: Record<string, unknown>
-      }> = []
-      const seen = new Set<string>()
-
-      for (const featureRaw of featuresRaw) {
-        const feature =
-          featureRaw && typeof featureRaw === "object"
-            ? (featureRaw as Record<string, unknown>)
-            : {}
-        const propertiesRaw = feature.properties
-        const properties =
-          propertiesRaw && typeof propertiesRaw === "object" && !Array.isArray(propertiesRaw)
-            ? (propertiesRaw as Record<string, unknown>)
-            : {}
-        const geometryRaw = feature.geometry
-        const geometry =
-          geometryRaw && typeof geometryRaw === "object" && !Array.isArray(geometryRaw)
-            ? (geometryRaw as Record<string, unknown>)
-            : {}
-        const geometryType = typeof geometry.type === "string" ? geometry.type : ""
-        if (
-          (geometryType !== "Polygon" && geometryType !== "MultiPolygon") ||
-          !Array.isArray(geometry.coordinates)
-        ) {
-          continue
-        }
-
-        const communeCode = normalizeParcelPartToDigits(properties.code_insee, 5)
-        const section = normalizeParcelSection(properties.section)
-        const number = normalizeParcelPartToDigits(properties.numero, 4)
-        if (!communeCode || !section || !number) {
-          continue
-        }
-
-        const parcelKey = buildParcelKey(communeCode, section, number)
-        if (seen.has(parcelKey)) {
-          continue
-        }
-        seen.add(parcelKey)
-
-        const idu = typeof properties.idu === "string" ? properties.idu.trim().toUpperCase() : ""
-        const parcelId = idu.length > 0 ? idu : `${communeCode}${section}${number}`
-        const studied = studiedByParcelKey.get(parcelKey)
-        items.push({
-          parcel_id: parcelId,
-          study_status: studied ? "studied" : "not_studied",
-          latest_submitted_survey_id: studied?.latest_submitted_survey_id ?? null,
-          latest_observation_year: studied?.latest_observation_year ?? null,
-          latest_ibp_total: studied?.latest_ibp_total ?? null,
-          geometry,
-        })
-      }
-
-      return items
-    } catch {
-      return []
-    }
-  }
-
-  async resolveParcelByCoordinates(input?: { lat?: string; lng?: string }): Promise<{
-    parcel: {
-      parcel_id: string
+    const communeCodes = [...new Set(features.map((feature) => feature.commune_code))]
+    const latestResult = await this.db.query<{
       commune_code: string
       section: string
       number: string
-      centroid: { lat: number; lng: number }
-    }
-  }> {
-    const lat = toFiniteNumber(input?.lat)
-    const lng = toFiniteNumber(input?.lng)
-    if (lat === null || lng === null) {
-      throw new BadRequestException("lat and lng query parameters are required")
-    }
-
-    const parcel = await this.resolveParcelFromCoordinates(lat, lng)
-    if (!parcel) {
-      throw new UnprocessableEntityException({
-        code: "parcel_invalid",
-        message: "Parcel could not be resolved from coordinates",
-      })
-    }
-
-    const centroid = normalizeCentroid(parcel.centroid)
-    if (!centroid) {
-      throw new UnprocessableEntityException({
-        code: "parcel_invalid",
-        message: "Resolved parcel has invalid centroid metadata",
-      })
-    }
-
-    return {
-      parcel: {
-        parcel_id: parcel.parcel_id,
-        commune_code: parcel.commune_code,
-        section: parcel.section,
-        number: parcel.number,
-        centroid,
-      },
-    }
-  }
-
-  async getParcelSurveyHistory(
-    user: AuthenticatedUser,
-    parcelIdRaw: string,
-    limitRaw?: string,
-  ): Promise<{
-    parcel_id: string
-    items: Array<{
-      survey_id: string
-      observation_year: number | null
-      version_number: number | null
-      scores: Record<string, unknown>
-      factor_results: Record<string, unknown>
-      submitted_at: string
-    }>
-  }> {
-    const parcelId = normalizeParcelId(parcelIdRaw)
-    if (!parcelId) {
-      throw new BadRequestException("parcel_id is required")
-    }
-
-    const limit = normalizeParcelHistoryLimit(limitRaw)
-    const result = await this.db.query<{
-      survey_id: string
-      observation_year: number | null
-      version_number: number | null
-      scores: Record<string, unknown>
-      factor_results: Record<string, unknown>
-      submitted_at: string
+      latest_submitted_survey_id: string
+      latest_observation_year: number | null
+      latest_ibp_total: number | null
     }>(
-      `SELECT
-         s.id AS survey_id,
-         s.observation_year,
-         s.version_number,
-         s.scores,
-         s.factor_results,
-         s.submitted_at::text
-       FROM surveys s
-       JOIN survey_parcels sp
-         ON sp.survey_id = s.id
-       WHERE sp.parcel_id = $1
-         AND s.deleted_at IS NULL
-         AND s.status = 'submitted'
-         AND s.submitted_at IS NOT NULL
-         AND (s.visibility = 'public' OR s.user_id = $2)
-       ORDER BY s.observation_year ASC NULLS LAST, s.version_number ASC NULLS LAST, s.submitted_at ASC
-       LIMIT $3`,
-      [parcelId, user.id, limit],
+      `WITH latest_public AS (
+         SELECT
+           p.commune_code,
+           p.section,
+           p.number,
+           s.id,
+           s.observation_year,
+           s.scores,
+           ROW_NUMBER() OVER (
+             PARTITION BY sp.parcel_id
+             ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
+           ) AS rank_in_parcel
+         FROM surveys s
+         JOIN survey_parcels sp
+           ON sp.survey_id = s.id
+         JOIN parcels p
+           ON p.parcel_id = sp.parcel_id
+         WHERE s.deleted_at IS NULL
+           AND s.status = 'submitted'
+           AND s.visibility = 'public'
+           AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
+           AND p.commune_code = ANY($2::text[])
+       )
+       SELECT
+         lp.commune_code,
+         lp.section,
+         lp.number,
+         lp.id::text AS latest_submitted_survey_id,
+         lp.observation_year AS latest_observation_year,
+         (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
+       FROM latest_public lp
+       WHERE lp.rank_in_parcel = 1`,
+      [year, communeCodes],
     )
 
-    return {
-      parcel_id: parcelId,
-      items: result.rows,
+    const studiedByParcelKey = new Map<
+      string,
+      {
+        latest_submitted_survey_id: string
+        latest_observation_year: number | null
+        latest_ibp_total: number | null
+      }
+    >()
+    for (const row of latestResult.rows) {
+      studiedByParcelKey.set(buildParcelKey(row.commune_code, row.section, row.number), {
+        latest_submitted_survey_id: row.latest_submitted_survey_id,
+        latest_observation_year: row.latest_observation_year,
+        latest_ibp_total: row.latest_ibp_total,
+      })
     }
-  }
 
-  private async computeSurveyDisplayLocation(
-    surveyId: string,
-    fallbackParcelId?: string | null,
-  ): Promise<{ lat: number; lng: number } | null> {
-    const fromMany = await this.db.query<{ lat: number | null; lng: number | null }>(
-      `SELECT
-         AVG((p.centroid ->> 'lat')::double precision) AS lat,
-         AVG((p.centroid ->> 'lng')::double precision) AS lng
-       FROM survey_parcels sp
-       JOIN parcels p
-         ON p.parcel_id = sp.parcel_id
-       WHERE sp.survey_id = $1`,
-      [surveyId],
-    )
-    const centroidMany = normalizeCentroid({
-      lat: fromMany.rows[0]?.lat,
-      lng: fromMany.rows[0]?.lng,
+    return features.map((feature) => {
+      const studied = studiedByParcelKey.get(
+        buildParcelKey(feature.commune_code, feature.section, feature.number),
+      )
+      return {
+        parcel_id: feature.parcel_id,
+        study_status: studied ? "studied" : "not_studied",
+        latest_submitted_survey_id: studied?.latest_submitted_survey_id ?? null,
+        latest_observation_year: studied?.latest_observation_year ?? null,
+        latest_ibp_total: studied?.latest_ibp_total ?? null,
+        geometry: feature.geometry,
+      }
     })
-    if (centroidMany) {
-      return centroidMany
-    }
-
-    const parcelId = normalizeParcelId(fallbackParcelId)
-    if (!parcelId) {
-      return null
-    }
-
-    const fallback = await this.db.query<{ centroid: Record<string, unknown> }>(
-      `SELECT centroid
-       FROM parcels
-       WHERE parcel_id = $1`,
-      [parcelId],
-    )
-    if (!fallback.rows[0]?.centroid) {
-      return null
-    }
-    return normalizeCentroid(fallback.rows[0].centroid)
-  }
-
-  private async ensureParcelIds(db: Queryable, parcelIds: string[]): Promise<string[]> {
-    if (parcelIds.length === 0) {
-      return []
-    }
-
-    const output: string[] = []
-    const seen = new Set<string>()
-    for (const raw of parcelIds) {
-      const normalized = normalizeParcelId(raw)
-      if (!normalized || seen.has(normalized)) {
-        continue
-      }
-      const ensured = await this.ensureParcelById(db, normalized)
-      if (!seen.has(ensured.parcel_id)) {
-        seen.add(ensured.parcel_id)
-        output.push(ensured.parcel_id)
-      }
-    }
-
-    return output
-  }
-
-  private async resolveParcelFromCoordinates(lat: number, lng: number): Promise<ParcelRow | null> {
-    const resolved = await this.cadastreProvider.resolveFromPoint(lat, lng)
-    if (!resolved) {
-      return null
-    }
-
-    const result = await this.db.query<ParcelRow>(
-      `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
-       ON CONFLICT (parcel_id) DO UPDATE
-         SET centroid = COALESCE(NULLIF(parcels.centroid, '{}'::jsonb), EXCLUDED.centroid),
-             geometry = COALESCE(NULLIF(parcels.geometry, '{}'::jsonb), EXCLUDED.geometry),
-             source = COALESCE(parcels.source, EXCLUDED.source),
-             updated_at = NOW()
-       RETURNING
-         id::text,
-         parcel_id,
-         commune_code,
-         section,
-         number,
-         geometry,
-         centroid,
-         area_m2,
-         source,
-         created_at::text,
-         updated_at::text`,
-      [
-        randomUUID(),
-        resolved.parcel_id,
-        resolved.commune_code,
-        resolved.section,
-        resolved.number,
-        JSON.stringify(resolved.geometry ?? {}),
-        JSON.stringify(resolved.centroid),
-        resolved.source,
-      ],
-    )
-
-    return result.rows[0] ?? null
-  }
-
-  private async ensureParcelById(db: Queryable, parcelId: string): Promise<ParcelRow> {
-    const existing = await db.query<ParcelRow>(
-      `SELECT
-         id::text,
-         parcel_id,
-         commune_code,
-         section,
-         number,
-         geometry,
-         centroid,
-         area_m2,
-         source,
-         created_at::text,
-         updated_at::text
-       FROM parcels
-       WHERE parcel_id = $1`,
-      [parcelId],
-    )
-    if (existing.rows[0]) {
-      return existing.rows[0]
-    }
-
-    const parsed = parseParcelIdentifier(parcelId)
-    const inserted = await db.query<ParcelRow>(
-      `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
-       ON CONFLICT (parcel_id) DO UPDATE
-         SET updated_at = NOW()
-       RETURNING
-         id::text,
-         parcel_id,
-         commune_code,
-         section,
-         number,
-         geometry,
-         centroid,
-         area_m2,
-         source,
-         created_at::text,
-         updated_at::text`,
-      [
-        randomUUID(),
-        parcelId,
-        parsed.communeCode,
-        parsed.section,
-        parsed.number,
-        JSON.stringify({}),
-        JSON.stringify({}),
-        "manual",
-      ],
-    )
-
-    return inserted.rows[0]
-  }
-
-  private async getDefaultVersionNumber(
-    db: Queryable,
-    parcelId: string,
-    surveyIdToExclude?: string,
-  ): Promise<number> {
-    const result = await db.query<{ next_version: number }>(
-      `SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
-       FROM surveys s
-       JOIN survey_parcels sp
-         ON sp.survey_id = s.id
-       WHERE sp.parcel_id = $1
-         AND s.deleted_at IS NULL
-         AND s.status = 'submitted'
-         AND ($2::text IS NULL OR s.id <> $2)`,
-      [parcelId, surveyIdToExclude ?? null],
-    )
-    return result.rows[0]?.next_version ?? 1
-  }
-
-  private async validateParcelSubmit(
-    db: Queryable,
-    survey: SurveyRow,
-  ): Promise<{
-    code?: "parcel_required" | "parcel_invalid"
-    errors: string[]
-    versionConflict?: { expectedVersionNumber: number }
-  }> {
-    const errors: string[] = []
-    const observationYear = survey.observation_year
-    const versionNumber = survey.version_number
-    const surveyParcelIds = await this.repository.getSurveyParcelIds(db, survey.id)
-    const parcelIds =
-      surveyParcelIds.length > 0 ? surveyParcelIds : survey.parcel_id ? [survey.parcel_id] : []
-
-    if (parcelIds.length === 0) {
-      errors.push("parcel_ids is required for submit")
-    }
-    if (!observationYear) {
-      errors.push("observation_year is required for submit")
-    }
-    if (!versionNumber) {
-      errors.push("version_number is required for submit")
-    }
-
-    if (errors.length > 0 || parcelIds.length === 0 || !observationYear || !versionNumber) {
-      return {
-        code: "parcel_required",
-        errors,
-      }
-    }
-
-    const parcelExists = await db.query<{ parcel_id: string }>(
-      `SELECT parcel_id
-       FROM parcels
-       WHERE parcel_id = ANY($1::text[])`,
-      [parcelIds],
-    )
-
-    if (parcelExists.rows.length !== parcelIds.length) {
-      return {
-        code: "parcel_invalid",
-        errors: ["one or more parcel_ids do not exist in parcel registry"],
-      }
-    }
-
-    for (const parcelId of parcelIds) {
-      const expectedVersionNumber = await this.getDefaultVersionNumber(db, parcelId, survey.id)
-      if (versionNumber !== expectedVersionNumber) {
-        return {
-          errors: [],
-          versionConflict: {
-            expectedVersionNumber,
-          },
-        }
-      }
-    }
-
-    return {
-      errors: [],
-    }
   }
 }
