@@ -1,7 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common"
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -9,12 +15,14 @@ import {
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { randomUUID } from "crypto"
-import { mkdir, rm, writeFile } from "fs/promises"
-import { dirname, join } from "path"
+import { mkdir, readFile, rm, writeFile } from "fs/promises"
+import { dirname, join, resolve, sep } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService, Queryable } from "../database/database.service"
 import { extensionFromMime, isAllowedMimeType } from "../common/file.utils"
 import { AttachmentRow, CreateAttachmentBody, SurveyRow } from "./surveys.types"
+
+const DOWNLOAD_URL_TTL_SECONDS = 300
 
 @Injectable()
 export class SurveysAttachmentsService {
@@ -414,5 +422,110 @@ export class SurveysAttachmentsService {
     )
 
     return { items: result.rows }
+  }
+
+  private async getUploadedAttachmentOrThrow(
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<Pick<AttachmentRow, "id" | "storage_key" | "mime_type" | "uploaded_at">> {
+    const result = await this.db.query<
+      Pick<AttachmentRow, "id" | "storage_key" | "mime_type" | "uploaded_at">
+    >(
+      `SELECT id, storage_key, mime_type, uploaded_at::text
+       FROM attachments
+       WHERE id = $1 AND survey_id = $2 AND deleted_at IS NULL`,
+      [attachmentId, surveyId],
+    )
+
+    const attachment = result.rows[0]
+    if (!attachment) {
+      throw new NotFoundException("Attachment not found")
+    }
+
+    if (!attachment.uploaded_at) {
+      throw new ConflictException({
+        code: "attachment_not_uploaded",
+        message: "Attachment has not been uploaded yet",
+      })
+    }
+
+    return attachment
+  }
+
+  private async buildDownloadUrl(
+    storageKey: string,
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<{ url: string; requires_auth: boolean }> {
+    if (this.objectStorageMode === "minio" && this.s3Client) {
+      await this.ensureS3Bucket()
+
+      const command = new GetObjectCommand({
+        Bucket: this.s3Bucket,
+        Key: storageKey,
+      })
+
+      const url = await getSignedUrl(this.s3Client, command, {
+        expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+      })
+
+      return { url, requires_auth: false }
+    }
+
+    return {
+      url: `/surveys/${surveyId}/attachments/${attachmentId}/content`,
+      requires_auth: true,
+    }
+  }
+
+  async getAttachmentDownload(
+    user: AuthenticatedUser,
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<{ url: string; expires_at: string; requires_auth: boolean }> {
+    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+
+    const attachment = await this.getUploadedAttachmentOrThrow(surveyId, attachmentId)
+    const { url, requires_auth } = await this.buildDownloadUrl(
+      attachment.storage_key,
+      surveyId,
+      attachmentId,
+    )
+
+    return {
+      url,
+      expires_at: new Date(Date.now() + DOWNLOAD_URL_TTL_SECONDS * 1000).toISOString(),
+      requires_auth,
+    }
+  }
+
+  async getAttachmentContent(
+    user: AuthenticatedUser,
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+
+    if (this.objectStorageMode !== "local") {
+      throw new NotFoundException("Attachment content not found")
+    }
+
+    const attachment = await this.getUploadedAttachmentOrThrow(surveyId, attachmentId)
+
+    const root = resolve(this.uploadsRootDir)
+    const filePath = resolve(root, attachment.storage_key)
+    if (filePath !== root && !filePath.startsWith(root + sep)) {
+      throw new NotFoundException("Attachment content not found")
+    }
+
+    const buffer = await readFile(filePath).catch(() => null)
+    if (!buffer) {
+      throw new NotFoundException("Attachment content not found")
+    }
+
+    return {
+      buffer,
+      mimeType: attachment.mime_type ?? "application/octet-stream",
+    }
   }
 }

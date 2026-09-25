@@ -9,6 +9,8 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -16,6 +18,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express"
 import { Throttle } from "@nestjs/throttler"
 import { memoryStorage } from "multer"
+import { Response } from "express"
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
@@ -99,6 +102,28 @@ export class SurveysController {
   @Get(":id/attachments")
   async listAttachments(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.attachmentsService.listAttachments(user, id)
+  }
+
+  @Get(":id/attachments/:attachmentId/download-url")
+  async getAttachmentDownloadUrl(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Param("attachmentId") attachmentId: string,
+  ) {
+    return this.attachmentsService.getAttachmentDownload(user, id, attachmentId)
+  }
+
+  @Get(":id/attachments/:attachmentId/content")
+  async getAttachmentContent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Param("attachmentId") attachmentId: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const content = await this.attachmentsService.getAttachmentContent(user, id, attachmentId)
+    response.setHeader("Content-Type", content.mimeType)
+    response.setHeader("Cache-Control", "private, max-age=300")
+    return new StreamableFile(content.buffer)
   }
 
   @Put(":id/attachments/:attachmentId/upload")
