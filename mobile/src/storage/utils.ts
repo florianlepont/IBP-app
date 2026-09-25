@@ -295,10 +295,7 @@ export function deriveQueueOpType(payload: unknown): QueueOpType {
   return "unknown"
 }
 
-export async function deleteQueuedSurveyUpserts(
-  db: DbExecutor,
-  surveyId: string,
-): Promise<void> {
+export async function deleteQueuedSurveyUpserts(db: DbExecutor, surveyId: string): Promise<void> {
   const rows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
     `SELECT id, payload
      FROM sync_queue
@@ -314,10 +311,7 @@ export async function deleteQueuedSurveyUpserts(
   }
 }
 
-export async function hasPendingQueueForSurvey(
-  db: DbExecutor,
-  surveyId: string,
-): Promise<boolean> {
+export async function hasPendingQueueForSurvey(db: DbExecutor, surveyId: string): Promise<boolean> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count
      FROM sync_queue
