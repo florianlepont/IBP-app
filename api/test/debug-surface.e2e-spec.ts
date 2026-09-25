@@ -12,10 +12,30 @@ import request = require("supertest")
 
 describe("Debug surface gating in production (e2e)", () => {
   let app: INestApplication
-  const originalNodeEnv = process.env.NODE_ENV
+
+  // D-05 / Pitfall 3: production mode now validates the configuration at
+  // startup, so boot with a production-valid fake env. GET /v1/health never
+  // touches the database and pg.Pool connects lazily, so these values are never
+  // used to connect. Every key set here is restored in afterAll.
+  const productionEnv: Record<string, string> = {
+    NODE_ENV: "production",
+    POSTGRES_HOST: "localhost",
+    POSTGRES_PORT: "5432",
+    POSTGRES_USER: "e2e-user",
+    POSTGRES_DB: "e2e-db",
+    POSTGRES_PASSWORD: "e2e-not-a-default-password",
+    AUTH0_DOMAIN: "e2e.example.auth0.com",
+    AUTH0_AUDIENCE: "https://e2e.example/api",
+    CORS_ORIGIN: "none",
+    OBJECT_STORAGE_MODE: "local",
+  }
+  const snapshot: Record<string, string | undefined> = {}
 
   beforeAll(async () => {
-    process.env.NODE_ENV = "production"
+    for (const [key, value] of Object.entries(productionEnv)) {
+      snapshot[key] = process.env[key]
+      process.env[key] = value
+    }
 
     await jest.isolateModulesAsync(async () => {
       // AppModule's imports array and app.setup's configureApp must come from the
@@ -39,7 +59,13 @@ describe("Debug surface gating in production (e2e)", () => {
     if (app) {
       await app.close()
     }
-    process.env.NODE_ENV = originalNodeEnv
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
   })
 
   it("returns 404 for POST /v1/debug/test-token", async () => {

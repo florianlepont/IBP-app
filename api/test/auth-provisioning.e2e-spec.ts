@@ -1,4 +1,7 @@
 import "dotenv/config"
+import { INestApplication } from "@nestjs/common"
+import { Test } from "@nestjs/testing"
+import { AppModule } from "../src/app.module"
 import { AuthGuard } from "../src/auth/auth.guard"
 import { DatabaseService } from "../src/database/database.service"
 
@@ -24,8 +27,11 @@ function delay(ms: number): Promise<void> {
 }
 
 describe("Auth0 first-login provisioning (e2e, real DB)", () => {
-  const db = new DatabaseService()
-  const guard = new AuthGuard(db)
+  // Taken from the compiled AppModule (pattern map C-6), so this spec keeps
+  // working when the guard and the pool take ConfigService in their constructors.
+  let app: INestApplication
+  let db: DatabaseService
+  let guard: AuthGuard
   const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`
   const createdEmails: string[] = []
 
@@ -35,13 +41,25 @@ describe("Auth0 first-login provisioning (e2e, real DB)", () => {
     return email
   }
 
+  beforeAll(async () => {
+    const moduleFixture = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = moduleFixture.createNestApplication()
+    await app.init()
+    db = app.get(DatabaseService)
+    guard = app.get(AuthGuard)
+  })
+
   afterEach(() => {
     jest.restoreAllMocks()
   })
 
   afterAll(async () => {
-    await db.query(`DELETE FROM users WHERE email = ANY($1::text[])`, [createdEmails])
-    await db.onModuleDestroy()
+    if (db) {
+      await db.query(`DELETE FROM users WHERE email = ANY($1::text[])`, [createdEmails])
+    }
+    if (app) {
+      await app.close()
+    }
   })
 
   it("WR-02: two concurrent first logins for the same sub with an unverified email both resolve to the same user", async () => {
