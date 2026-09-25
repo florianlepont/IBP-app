@@ -255,4 +255,41 @@ describe("GET /v1/sync/changes ordering under concurrent commits (e2e)", () => {
     const [, xid8] = cursor.split(":")
     expect(BigInt(xid8) < BigInt("99999999999")).toBe(true)
   })
+
+  // 01.6 todo, D-12: these legacy cursors used to pass the weak parser and make the
+  // `::timestamptz` cast raise 22008 / 22007, answering 500. They must be a plain 400.
+  describe("malformed legacy cursors", () => {
+    it.each(["2024-02-30T00:00:00Z|x", "2024-01-01 12:00:00 junk|x"])(
+      "answers 400 for %p",
+      async (cursor) => {
+        const response = await request(app.getHttpServer())
+          .get("/v1/sync/changes")
+          .set("Authorization", `Bearer ${accessToken}`)
+          .query({ cursor })
+          .expect(400)
+        expect(response.body.message).toBe("Invalid sync cursor")
+        expect(JSON.stringify(response.body)).not.toContain(cursor)
+      },
+    )
+
+    it("still accepts a legacy cursor built from a real event and answers a v2 cursor", async () => {
+      await baseline()
+      const event = await db.query<{ cursor: string }>(
+        `SELECT e.created_at::text || '|' || e.id AS cursor
+         FROM survey_events e
+         JOIN surveys s ON s.id = e.survey_id
+         WHERE s.user_id = $1
+         ORDER BY e.created_at ASC, e.id ASC
+         LIMIT 1`,
+        [userId],
+      )
+      expect(event.rows).toHaveLength(1)
+      const legacy = event.rows[0].cursor
+
+      const body = await poll(legacy)
+
+      expect(body.cursor_in).toBe(legacy)
+      expect(body.cursor_out).toMatch(/^v2:\d+:\d+$/)
+    })
+  })
 })

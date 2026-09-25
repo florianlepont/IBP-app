@@ -435,6 +435,42 @@ describe("SurveysSyncService.getSyncChanges", () => {
     expect(result.cursor_out).toBe("v2:0:0")
   })
 
+  it.each(["22008", "22007", "22009"])(
+    "maps a %s raised by the legacy translation cast to 400 Invalid sync cursor (D-12 backstop)",
+    async (code) => {
+      const { service, db } = buildService()
+      db.query.mockRejectedValueOnce(
+        Object.assign(new Error("date/time field value out of range"), { code }),
+      )
+
+      const promise = service.getSyncChanges(
+        AUTH_USER as never,
+        "2026-03-09 10:20:31.991+00|survey-1",
+        10,
+      )
+
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException)
+      await expect(promise).rejects.toThrow("Invalid sync cursor")
+      // Only the translation query ran: the feed query is never reached.
+      expect(db.query).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it.each([
+    [
+      "a statement timeout (57014)",
+      Object.assign(new Error("canceling statement"), { code: "57014" }),
+    ],
+    ["a plain Error", new Error("connection terminated")],
+  ])("rethrows %s from the legacy translation query unchanged", async (_label, failure) => {
+    const { service, db } = buildService()
+    db.query.mockRejectedValueOnce(failure)
+
+    await expect(
+      service.getSyncChanges(AUTH_USER as never, "2026-03-09 10:20:31.991+00|survey-1", 10),
+    ).rejects.toBe(failure)
+  })
+
   it("returns a null cursor and never re-sends event-less surveys when there is nothing new", async () => {
     const { service, db } = buildService()
     db.query.mockResolvedValueOnce({ rows: [] })

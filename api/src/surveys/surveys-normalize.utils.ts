@@ -441,7 +441,43 @@ export type SyncChangesCursor =
 export const SYNC_CURSOR_V2_PATTERN = /^v2:(\d{1,20}):(\d{1,19})$/
 const XID8_MAX = BigInt("18446744073709551615")
 const BIGINT_MAX = BigInt("9223372036854775807")
-const LEGACY_CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}[ T]/
+
+// D-12: the one strict timestamp check shared by the legacy sync cursor and the `v1:` list
+// cursors (list-cursor.ts). It accepts the PostgreSQL `timestamptz::text` output that installed
+// apps replay ("2026-03-09 10:20:31.991234+00") and ISO strings ("2026-03-09T10:20:31.991Z"),
+// and it rejects anything the `::timestamptz` cast would refuse: impossible dates (Feb 30,
+// month 13, hour 24), trailing junk, more than six fractional digits, a missing offset, year 0,
+// and offsets beyond PostgreSQL's +/-15:59 limit.
+const STRICT_TIMESTAMP_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(\.\d{1,6})?(Z|[+-](\d{2})(?::?(\d{2}))?)$/
+
+export function isStrictTimestamp(value: string): boolean {
+  if (typeof value !== "string") return false
+  const match = STRICT_TIMESTAMP_PATTERN.exec(value)
+  if (!match) return false
+
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number)
+  if (year < 1) return false
+
+  const offsetHours = match[9] === undefined ? 0 : Number(match[9])
+  const offsetMinutes = match[10] === undefined ? 0 : Number(match[10])
+  if (offsetHours > 15 || offsetMinutes > 59) return false
+
+  // Round-trip the wall-clock components: the UTC setters normalise overflow (Feb 30 becomes
+  // Mar 1, hour 24 becomes the next day), so any component that changes means the input named an
+  // impossible instant. setUTCFullYear, unlike Date.UTC, keeps years 1..99 literal.
+  const date = new Date(0)
+  date.setUTCFullYear(year, month - 1, day)
+  date.setUTCHours(hour, minute, second)
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute &&
+    date.getUTCSeconds() === second
+  )
+}
 
 export function parseSyncChangesCursor(cursor?: string): SyncChangesCursor {
   if (!cursor || cursor.trim().length === 0) {
@@ -460,15 +496,11 @@ export function parseSyncChangesCursor(cursor?: string): SyncChangesCursor {
     throw new BadRequestException("Invalid sync cursor")
   }
 
-  // Every legacy cursor was built as `${timestamptz}|${id}`. Requiring the separator and a
-  // leading ISO date matters because V8's Date.parse accepts strings such as "seq:5".
+  // Every legacy cursor was built as `${timestamptz}|${id}`. The timestamp half goes through the
+  // strict validator (D-12) because it is later cast with `::timestamptz`: a looser check let
+  // "2024-02-30T00:00:00Z|x" through and the cast raised 22008, answering 500.
   const [timestampRaw, eventIdRaw] = cursor.split("|")
-  if (
-    eventIdRaw === undefined ||
-    !timestampRaw ||
-    !LEGACY_CURSOR_TIMESTAMP_PATTERN.test(timestampRaw) ||
-    Number.isNaN(Date.parse(timestampRaw))
-  ) {
+  if (eventIdRaw === undefined || !timestampRaw || !isStrictTimestamp(timestampRaw)) {
     throw new BadRequestException("Invalid sync cursor")
   }
 

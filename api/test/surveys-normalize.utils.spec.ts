@@ -3,6 +3,7 @@ import {
   buildSyncChangesCursor,
   classifySameVersionContent,
   getChangedSubmittedReadOnlyFields,
+  isStrictTimestamp,
   parseSyncChangesCursor,
 } from "../src/surveys/surveys-normalize.utils"
 import { SurveyRow, SurveyUpsertBody } from "../src/surveys/surveys.types"
@@ -279,9 +280,71 @@ describe("parseSyncChangesCursor", () => {
     "v2:18446744073709551616:1",
     "v2:99999999999999999999:1",
     "v2:1:9223372036854775808",
+    "2024-02-30T00:00:00Z|x",
+    "2024-01-01 12:00:00 junk|x",
   ])("rejects the malformed cursor %p with 400 Invalid sync cursor", (cursor) => {
     expect(() => parseSyncChangesCursor(cursor)).toThrow(BadRequestException)
     expect(() => parseSyncChangesCursor(cursor)).toThrow("Invalid sync cursor")
+  })
+})
+
+describe("isStrictTimestamp", () => {
+  it.each([
+    "2026-03-09 10:20:31.991234+00",
+    "2026-03-09 10:20:31.991+00",
+    "2026-03-09T10:20:31Z",
+    "2026-03-09T10:20:31.991Z",
+    "2024-02-29T00:00:00+02:00",
+    "2026-01-01 00:00:00-0530",
+    "2024-01-01 00:00:00+15:59",
+    "0001-01-01 00:00:00Z",
+  ])("accepts %p", (value) => {
+    expect(isStrictTimestamp(value)).toBe(true)
+  })
+
+  it.each([
+    "2024-02-30T00:00:00Z",
+    "2023-02-29T00:00:00Z",
+    "2024-13-01T00:00:00Z",
+    "2024-00-10T00:00:00Z",
+    "2024-01-00T00:00:00Z",
+    "2024-01-01T24:00:00Z",
+    "2024-01-01T23:60:00Z",
+    "2024-01-01T23:59:60Z",
+    "2024-01-01 12:00:00 junk",
+    "2024-01-01",
+    "2024-01-01T00:00:00.1234567Z",
+    "2024-01-01T00:00:00",
+    "2024-01-01 00:00:00+16",
+    "2024-01-01 00:00:00+05:99",
+    "0000-01-01 00:00:00Z",
+    "",
+  ])("rejects %p", (value) => {
+    expect(isStrictTimestamp(value)).toBe(false)
+  })
+})
+
+describe("parseSyncChangesCursor strict legacy form", () => {
+  it("still parses a PostgreSQL timestamptz::text legacy cursor", () => {
+    expect(parseSyncChangesCursor("2026-03-09 10:20:31.991+00|survey-1")).toEqual({
+      kind: "legacy",
+      timestamp: "2026-03-09 10:20:31.991+00",
+      eventId: "survey-1",
+      original: "2026-03-09 10:20:31.991+00|survey-1",
+    })
+  })
+
+  it("never echoes the rejected cursor", () => {
+    let thrown: unknown
+    try {
+      parseSyncChangesCursor("2024-02-30T00:00:00Z|secret-marker")
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(BadRequestException)
+    const exception = thrown as BadRequestException
+    expect(exception.message).toBe("Invalid sync cursor")
+    expect(JSON.stringify(exception.getResponse())).not.toContain("secret-marker")
   })
 })
 
