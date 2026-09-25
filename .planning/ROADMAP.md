@@ -232,7 +232,7 @@ Plans:
 - [x] 01.6-05-PLAN.md — Safe-id validation at the API boundary (pipe + DTOs) (wave 2)
 - [x] 01.6-06-PLAN.md — Same-version conflict rule (visibility-only applied), SurveysService drops its S3 client (wave 3)
 - [x] 01.6-07-PLAN.md — Attachments through StorageService, presigned ContentLength, 422 on size mismatch (wave 3)
-- [ ] 01.6-08-PLAN.md — MinIO-mode E2E CI job and documentation (wave 4)
+- [x] 01.6-08-PLAN.md — MinIO-mode E2E CI job and documentation (wave 4)
 - [ ] 01.6-09-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 5)
 
 ### Phase 01.7: API configuration, service split and database tuning (INSERTED)
@@ -394,7 +394,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
 | 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
 | 1.5. Mobile sync engine reliability | 12/12 | Complete    | 2026-09-25 |
-| 1.6. Sync feed ordering and unified object storage | 7/9 | In Progress|  |
+| 1.6. Sync feed ordering and unified object storage | 8/9 | In Progress|  |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
 | 1.9. Mobile state architecture, i18n, accessibility and hygiene | 0/TBD | Not started | - |
