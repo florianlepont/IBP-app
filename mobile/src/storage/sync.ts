@@ -1,5 +1,6 @@
-import * as SQLite from "expo-sqlite"
-import { getDb, MAX_RETRY_COUNT } from "./db"
+import { getDb, SYNC_BATCH_SIZE, MAX_RETRY_COUNT } from "./db"
+import { runInTransaction, DbExecutor } from "./transaction"
+import { createSyncFlight } from "./sync-flight"
 import {
   QueueRow,
   SurveyQueuePayload,
@@ -45,39 +46,58 @@ import { apiRequest, ApiError } from "../api/client"
 // confirm PUT, submit) uses apiRequest's normal per-request default.
 const SYNC_BATCH_TIMEOUT_MS = 60_000
 
+// D-03: at most one drain (syncPending) or one pull (pullRemoteChanges) runs
+// at a time on the phone. sync.ts owns the single module-level instance;
+// drainQueue/pullChanges are the unguarded bodies, called directly from
+// inside each other (drainQueue's opportunistic pull) so they never wait on
+// their own flight.
+const syncFlight = createSyncFlight()
+
 type FailureOptions = {
   classification: FailureClassification
   errorCode?: string
 }
 
-async function markSurveyQueueRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow): Promise<void> {
+async function markSurveyQueueRowSynced(row: QueueRow): Promise<void> {
   const now = new Date().toISOString()
-  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  await db.runAsync(
-    `UPDATE local_surveys
-     SET sync_state = 'synced',
-         status = CASE
-           WHEN status IN ('submitted', 'expired') THEN status
-           ELSE 'synced'
-         END,
-         last_sync_error = NULL,
-         last_sync_error_code = NULL,
-         last_sync_error_at = NULL,
-         sync_blocked = 0,
-         updated_at = ?
-     WHERE id = ?`,
-    [now, row.survey_id],
-  )
+  await runInTransaction(async (tx) => {
+    await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+    // D-04: only flip to "synced" when no other queue row remains for this
+    // survey (a row in a later batch, or one that just failed) — otherwise a
+    // survey with more pending work would be shown as fully synced.
+    await tx.runAsync(
+      `UPDATE local_surveys
+       SET sync_state = 'synced',
+           status = CASE
+             WHEN status IN ('submitted', 'expired') THEN status
+             ELSE 'synced'
+           END,
+           last_sync_error = NULL,
+           last_sync_error_code = NULL,
+           last_sync_error_at = NULL,
+           sync_blocked = 0,
+           updated_at = ?
+       WHERE id = ? AND NOT EXISTS (SELECT 1 FROM sync_queue WHERE survey_id = ?)`,
+      [now, row.survey_id, row.survey_id],
+    )
+  })
 }
 
-async function markSurveyDeleteRowSynced(db: SQLite.SQLiteDatabase, row: QueueRow): Promise<void> {
-  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [row.survey_id])
-  await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [row.survey_id])
+async function markSurveyDeleteRowSynced(row: QueueRow): Promise<void> {
+  await runInTransaction(async (tx) => {
+    await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+    await tx.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [row.survey_id])
+    await tx.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [row.survey_id])
+  })
+}
+
+async function markAttachmentDeleteRowSynced(row: QueueRow): Promise<void> {
+  await runInTransaction(async (tx) => {
+    await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+  })
 }
 
 async function uploadAttachmentAndMarkSynced(
-  db: SQLite.SQLiteDatabase,
   row: QueueRow,
   payload: AttachmentQueuePayload,
   target: UploadTargetResponse,
@@ -114,29 +134,33 @@ async function uploadAttachmentAndMarkSynced(
     })
   }
 
+  // D-08/D-17: only the local DB tail is transactional — a transaction never
+  // spans network I/O, so the upload and confirm calls above run outside it.
   const now = new Date().toISOString()
-  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  await db.runAsync(
-    `UPDATE local_attachments
-     SET sync_state = 'synced',
-         remote_attachment_id = ?,
-         storage_key = ?,
-         upload_url = ?,
-         confirm_url = ?,
-         last_sync_error = NULL,
-         last_sync_error_code = NULL,
-         last_sync_error_at = NULL,
-         updated_at = ?
-     WHERE id = ?`,
-    [
-      target.attachment_id,
-      target.storage_key ?? null,
-      target.upload_url,
-      target.confirm_url ?? null,
-      now,
-      payload.local_attachment_id,
-    ],
-  )
+  await runInTransaction(async (tx) => {
+    await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+    await tx.runAsync(
+      `UPDATE local_attachments
+       SET sync_state = 'synced',
+           remote_attachment_id = ?,
+           storage_key = ?,
+           upload_url = ?,
+           confirm_url = ?,
+           last_sync_error = NULL,
+           last_sync_error_code = NULL,
+           last_sync_error_at = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      [
+        target.attachment_id,
+        target.storage_key ?? null,
+        target.upload_url,
+        target.confirm_url ?? null,
+        now,
+        payload.local_attachment_id,
+      ],
+    )
+  })
 }
 
 async function uploadFileViaApi(
@@ -181,7 +205,7 @@ async function uploadFileDirect(
 }
 
 async function getLocalAttachmentById(
-  db: SQLite.SQLiteDatabase,
+  db: DbExecutor,
   localAttachmentId: string,
 ): Promise<Pick<
   LocalAttachment,
@@ -202,7 +226,7 @@ async function getLocalAttachmentById(
 }
 
 async function saveAttachmentUploadTarget(
-  db: SQLite.SQLiteDatabase,
+  db: DbExecutor,
   localAttachmentId: string,
   target: UploadTargetResponse,
 ): Promise<void> {
@@ -229,7 +253,7 @@ async function saveAttachmentUploadTarget(
 }
 
 async function applyRemoteChanges(
-  db: SQLite.SQLiteDatabase,
+  db: DbExecutor,
   surveys: RemoteSurvey[],
   attachments: RemoteAttachment[],
 ): Promise<{ surveys: number; attachments: number }> {
@@ -423,7 +447,7 @@ function buildSurveyPayloadFromRemote(survey: RemoteSurvey): SurveyQueuePayload 
   }
 }
 
-async function getMetaValue(db: SQLite.SQLiteDatabase, key: string): Promise<string | null> {
+async function getMetaValue(db: DbExecutor, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>(
     `SELECT value
      FROM local_meta
@@ -433,7 +457,7 @@ async function getMetaValue(db: SQLite.SQLiteDatabase, key: string): Promise<str
   return row?.value ?? null
 }
 
-async function setMetaValue(db: SQLite.SQLiteDatabase, key: string, value: string): Promise<void> {
+async function setMetaValue(db: DbExecutor, key: string, value: string): Promise<void> {
   const now = new Date().toISOString()
   await db.runAsync(
     `INSERT INTO local_meta (key, value, updated_at)
@@ -479,7 +503,6 @@ function resolveFailureOutcome(
 }
 
 async function handleSurveySyncFailure(
-  db: SQLite.SQLiteDatabase,
   row: QueueRow,
   message: string,
   options: FailureOptions,
@@ -493,45 +516,46 @@ async function handleSurveySyncFailure(
   )
   const errorCode = options.errorCode ?? deriveSurveyErrorCode(finalMessage)
 
-  if (terminal) {
-    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  } else if (nextRetryCount !== null) {
-    // "unknown", not yet capped: count the attempt.
-    await db.runAsync(
-      `UPDATE sync_queue
-       SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
-       WHERE id = ?`,
-      [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
-    )
-  } else {
-    // "retryable": never counted, retry_count stays untouched.
-    await db.runAsync(
-      `UPDATE sync_queue
-       SET status = 'failed', next_retry_at = ?, updated_at = ?
-       WHERE id = ?`,
-      [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
-    )
-  }
+  await runInTransaction(async (tx) => {
+    if (terminal) {
+      await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+    } else if (nextRetryCount !== null) {
+      // "unknown", not yet capped: count the attempt.
+      await tx.runAsync(
+        `UPDATE sync_queue
+         SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+         WHERE id = ?`,
+        [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+      )
+    } else {
+      // "retryable": never counted, retry_count stays untouched.
+      await tx.runAsync(
+        `UPDATE sync_queue
+         SET status = 'failed', next_retry_at = ?, updated_at = ?
+         WHERE id = ?`,
+        [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
+      )
+    }
 
-  await db.runAsync(
-    `UPDATE local_surveys
-     SET sync_state = 'failed',
-         status = CASE
-           WHEN status IN ('submitted', 'expired') THEN status
-           ELSE 'error'
-         END,
-         last_sync_error = ?,
-         last_sync_error_code = ?,
-         last_sync_error_at = ?,
-         sync_blocked = ?,
-         updated_at = ?
-     WHERE id = ?`,
-    [finalMessage, errorCode, nowIso, terminal ? 1 : 0, nowIso, row.survey_id],
-  )
+    await tx.runAsync(
+      `UPDATE local_surveys
+       SET sync_state = 'failed',
+           status = CASE
+             WHEN status IN ('submitted', 'expired') THEN status
+             ELSE 'error'
+           END,
+           last_sync_error = ?,
+           last_sync_error_code = ?,
+           last_sync_error_at = ?,
+           sync_blocked = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [finalMessage, errorCode, nowIso, terminal ? 1 : 0, nowIso, row.survey_id],
+    )
+  })
 }
 
 async function handleAttachmentSyncFailure(
-  db: SQLite.SQLiteDatabase,
   row: QueueRow,
   payload: AttachmentQueuePayload,
   message: string,
@@ -546,38 +570,39 @@ async function handleAttachmentSyncFailure(
   )
   const errorCode = options.errorCode ?? deriveAttachmentErrorCode(finalMessage)
 
-  if (terminal) {
-    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  } else if (nextRetryCount !== null) {
-    await db.runAsync(
-      `UPDATE sync_queue
-       SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
-       WHERE id = ?`,
-      [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
-    )
-  } else {
-    await db.runAsync(
-      `UPDATE sync_queue
-       SET status = 'failed', next_retry_at = ?, updated_at = ?
-       WHERE id = ?`,
-      [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
-    )
-  }
+  await runInTransaction(async (tx) => {
+    if (terminal) {
+      await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+    } else if (nextRetryCount !== null) {
+      await tx.runAsync(
+        `UPDATE sync_queue
+         SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+         WHERE id = ?`,
+        [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+      )
+    } else {
+      await tx.runAsync(
+        `UPDATE sync_queue
+         SET status = 'failed', next_retry_at = ?, updated_at = ?
+         WHERE id = ?`,
+        [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
+      )
+    }
 
-  await db.runAsync(
-    `UPDATE local_attachments
-     SET sync_state = 'failed',
-         last_sync_error = ?,
-         last_sync_error_code = ?,
-         last_sync_error_at = ?,
-         updated_at = ?
-     WHERE id = ?`,
-    [finalMessage, errorCode, nowIso, nowIso, payload.local_attachment_id],
-  )
+    await tx.runAsync(
+      `UPDATE local_attachments
+       SET sync_state = 'failed',
+           last_sync_error = ?,
+           last_sync_error_code = ?,
+           last_sync_error_at = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [finalMessage, errorCode, nowIso, nowIso, payload.local_attachment_id],
+    )
+  })
 }
 
 async function handleAttachmentDeleteSyncFailure(
-  db: SQLite.SQLiteDatabase,
   row: QueueRow,
   message: string,
   options: FailureOptions,
@@ -590,145 +615,156 @@ async function handleAttachmentDeleteSyncFailure(
     message,
   )
 
-  if (terminal) {
-    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-    return
-  }
+  await runInTransaction(async (tx) => {
+    if (terminal) {
+      await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
+      return
+    }
 
-  if (nextRetryCount !== null) {
-    await db.runAsync(
+    if (nextRetryCount !== null) {
+      await tx.runAsync(
+        `UPDATE sync_queue
+         SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+         WHERE id = ?`,
+        [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+      )
+      return
+    }
+
+    await tx.runAsync(
       `UPDATE sync_queue
-       SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+       SET status = 'failed', next_retry_at = ?, updated_at = ?
        WHERE id = ?`,
-      [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+      [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
     )
-    return
-  }
-
-  await db.runAsync(
-    `UPDATE sync_queue
-     SET status = 'failed', next_retry_at = ?, updated_at = ?
-     WHERE id = ?`,
-    [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
-  )
+  })
 }
 
 async function queueSurveyVisibilityChange(
-  db: SQLite.SQLiteDatabase,
   surveyId: string,
   visibility: "private" | "public",
 ): Promise<{ changed: boolean }> {
-  const survey = await db.getFirstAsync<{
-    id: string
-    visibility: string | null
-    payload_json: string | null
-  }>(
-    `SELECT id, visibility, payload_json
-     FROM local_surveys
-     WHERE id = ?`,
-    [surveyId],
-  )
+  return runInTransaction(async (tx) => {
+    const survey = await tx.getFirstAsync<{
+      id: string
+      visibility: string | null
+      payload_json: string | null
+    }>(
+      `SELECT id, visibility, payload_json
+       FROM local_surveys
+       WHERE id = ?`,
+      [surveyId],
+    )
 
-  if (!survey?.id) {
-    throw new Error(`Unknown local survey: ${surveyId}`)
-  }
-
-  const currentVisibility = survey.visibility === "public" ? "public" : "private"
-  if (currentVisibility === visibility) {
-    return { changed: false }
-  }
-
-  const now = new Date().toISOString()
-  const queueRows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
-    `SELECT id, payload
-     FROM sync_queue
-     WHERE survey_id = ?`,
-    [surveyId],
-  )
-
-  let hasDeleteQueued = false
-  let upsertRowsUpdated = 0
-  const staleVisibilityRowIds: number[] = []
-
-  for (const row of queueRows) {
-    const parsed = safeParseJson(row.payload)
-
-    if (isSurveyDeleteQueuePayload(parsed)) {
-      hasDeleteQueued = true
-      continue
+    if (!survey?.id) {
+      throw new Error(`Unknown local survey: ${surveyId}`)
     }
 
-    if (isSurveyQueuePayload(parsed)) {
-      const nextPayload: SurveyQueuePayload = {
-        ...parsed,
+    const currentVisibility = survey.visibility === "public" ? "public" : "private"
+    if (currentVisibility === visibility) {
+      return { changed: false }
+    }
+
+    const now = new Date().toISOString()
+    const queueRows = await tx.getAllAsync<Array<{ id: number; payload: string }>[number]>(
+      `SELECT id, payload
+       FROM sync_queue
+       WHERE survey_id = ?`,
+      [surveyId],
+    )
+
+    let hasDeleteQueued = false
+    let upsertRowsUpdated = 0
+    const staleVisibilityRowIds: number[] = []
+
+    for (const row of queueRows) {
+      const parsed = safeParseJson(row.payload)
+
+      if (isSurveyDeleteQueuePayload(parsed)) {
+        hasDeleteQueued = true
+        continue
+      }
+
+      if (isSurveyQueuePayload(parsed)) {
+        const nextPayload: SurveyQueuePayload = {
+          ...parsed,
+          visibility,
+        }
+        await tx.runAsync(
+          `UPDATE sync_queue
+           SET payload = ?, status = 'pending', retry_count = 0, next_retry_at = NULL, updated_at = ?
+           WHERE id = ?`,
+          [JSON.stringify(nextPayload), now, row.id],
+        )
+        upsertRowsUpdated += 1
+        continue
+      }
+
+      if (isSurveyVisibilityQueuePayload(parsed)) {
+        staleVisibilityRowIds.push(row.id)
+      }
+    }
+
+    if (hasDeleteQueued) {
+      throw new Error(`Survey ${surveyId} already has a queued delete operation`)
+    }
+
+    for (const rowId of staleVisibilityRowIds) {
+      await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [rowId])
+    }
+
+    if (upsertRowsUpdated === 0) {
+      const queuePayload: SurveyVisibilityQueuePayload = {
+        kind: "survey_visibility_update",
+        survey_id: surveyId,
         visibility,
       }
-      await db.runAsync(
-        `UPDATE sync_queue
-         SET payload = ?, status = 'pending', retry_count = 0, next_retry_at = NULL, updated_at = ?
-         WHERE id = ?`,
-        [JSON.stringify(nextPayload), now, row.id],
+
+      await tx.runAsync(
+        `INSERT INTO sync_queue (survey_id, op_type, payload, status, retry_count, next_retry_at, created_at, updated_at)
+         VALUES (?, 'survey_visibility', ?, 'pending', 0, NULL, ?, ?)`,
+        [surveyId, JSON.stringify(queuePayload), now, now],
       )
-      upsertRowsUpdated += 1
-      continue
     }
 
-    if (isSurveyVisibilityQueuePayload(parsed)) {
-      staleVisibilityRowIds.push(row.id)
-    }
-  }
-
-  if (hasDeleteQueued) {
-    throw new Error(`Survey ${surveyId} already has a queued delete operation`)
-  }
-
-  for (const rowId of staleVisibilityRowIds) {
-    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [rowId])
-  }
-
-  if (upsertRowsUpdated === 0) {
-    const queuePayload: SurveyVisibilityQueuePayload = {
-      kind: "survey_visibility_update",
-      survey_id: surveyId,
-      visibility,
+    let payloadJson: string | null = survey.payload_json ?? null
+    if (payloadJson) {
+      const parsedPayload = safeParseJson(payloadJson)
+      if (parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)) {
+        payloadJson = JSON.stringify({
+          ...(parsedPayload as Record<string, unknown>),
+          visibility,
+        })
+      }
     }
 
-    await db.runAsync(
-      `INSERT INTO sync_queue (survey_id, payload, status, retry_count, next_retry_at, created_at, updated_at)
-       VALUES (?, ?, 'pending', 0, NULL, ?, ?)`,
-      [surveyId, JSON.stringify(queuePayload), now, now],
+    await tx.runAsync(
+      `UPDATE local_surveys
+       SET visibility = ?,
+           sync_state = 'pending',
+           last_sync_error = NULL,
+           last_sync_error_code = NULL,
+           last_sync_error_at = NULL,
+           sync_blocked = 0,
+           payload_json = COALESCE(?, payload_json),
+           updated_at = ?
+       WHERE id = ?`,
+      [visibility, payloadJson, now, surveyId],
     )
-  }
 
-  let payloadJson: string | null = survey.payload_json ?? null
-  if (payloadJson) {
-    const parsedPayload = safeParseJson(payloadJson)
-    if (parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)) {
-      payloadJson = JSON.stringify({
-        ...(parsedPayload as Record<string, unknown>),
-        visibility,
-      })
-    }
-  }
-
-  await db.runAsync(
-    `UPDATE local_surveys
-     SET visibility = ?,
-         sync_state = 'pending',
-         last_sync_error = NULL,
-         last_sync_error_code = NULL,
-         last_sync_error_at = NULL,
-         sync_blocked = 0,
-         payload_json = COALESCE(?, payload_json),
-         updated_at = ?
-     WHERE id = ?`,
-    [visibility, payloadJson, now, surveyId],
-  )
-
-  return { changed: true }
+    return { changed: true }
+  })
 }
 
-export async function syncPending(
+/**
+ * The unguarded drain body (D-03). Only reachable through the exported
+ * `syncPending`, which wraps it in the "sync" flight, or through
+ * this module's own opportunistic pull-after-drain call below, which reaches
+ * into `pullChanges` directly rather than through the guarded
+ * `pullRemoteChanges` export (calling the guarded export here would deadlock
+ * on the flight this function itself is running under).
+ */
+async function drainQueue(
   apiUrl: string,
   accessToken: string,
 ): Promise<{ synced: number; failed: number; pulled_surveys: number; pulled_attachments: number }> {
@@ -736,7 +772,7 @@ export async function syncPending(
   const nowIso = new Date().toISOString()
 
   const queueRows = await db.getAllAsync<QueueRow>(
-    `SELECT id, survey_id, payload, status, retry_count, next_retry_at
+    `SELECT id, survey_id, payload, status, retry_count, next_retry_at, op_type
      FROM sync_queue
      WHERE status IN ('pending', 'failed')
        AND (next_retry_at IS NULL OR next_retry_at <= ?)
@@ -859,14 +895,20 @@ export async function syncPending(
     }
 
     failed += 1
-    await handleSurveySyncFailure(db, row, "Invalid sync payload", {
+    await handleSurveySyncFailure(row, "Invalid sync payload", {
       classification: "fatal",
       errorCode: "invalid_local_payload",
     })
   }
 
-  if (operations.length > 0) {
+  // D-04: send at most SYNC_BATCH_SIZE operations per POST /sync, in queue
+  // order. A batch-level failure (not auth) marks that chunk's rows and
+  // stops processing the remaining chunks for this run — they stay untouched
+  // (still 'pending', retry_count 0) for the next drain.
+  for (let start = 0; start < operations.length; start += SYNC_BATCH_SIZE) {
+    const chunkOps = operations.slice(start, start + SYNC_BATCH_SIZE)
     let batchResults: SyncBatchResult[] = []
+    let batchFailed = false
 
     try {
       const response = await apiRequest<SyncBatchResponse>({
@@ -874,7 +916,7 @@ export async function syncPending(
         path: "/sync",
         method: "POST",
         token: accessToken,
-        json: { operations },
+        json: { operations: chunkOps },
         timeoutMs: SYNC_BATCH_TIMEOUT_MS,
       })
 
@@ -895,137 +937,147 @@ export async function syncPending(
       }
 
       const message = (error as Error).message
-      for (const operation of operations) {
+      for (const operation of chunkOps) {
         failed += 1
         const linked = operationRows.get(operation.client_ref)
         if (!linked) continue
 
         if (isAttachmentQueuePayload(linked.payload)) {
-          await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
+          await handleAttachmentSyncFailure(linked.row, linked.payload, message, {
             classification,
           })
         } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
-          await handleAttachmentDeleteSyncFailure(db, linked.row, message, {
+          await handleAttachmentDeleteSyncFailure(linked.row, message, {
             classification,
           })
         } else {
-          await handleSurveySyncFailure(db, linked.row, message, {
+          await handleSurveySyncFailure(linked.row, message, {
             classification,
           })
         }
       }
-      batchResults = []
+      batchFailed = true
     }
 
-    for (const result of batchResults) {
-      const clientRef = result.client_ref ?? ""
-      const linked = operationRows.get(clientRef)
-      if (!linked) {
-        continue
-      }
-
-      const message = buildSyncResultMessage(result)
-
-      if (result.status === "synced") {
-        if (isAttachmentQueuePayload(linked.payload)) {
-          const target = toUploadTarget(result.data)
-          if (!target) {
-            failed += 1
-            await handleAttachmentSyncFailure(
-              db,
-              linked.row,
-              linked.payload,
-              "Invalid attachment sync response",
-              {
-                classification: "fatal",
-                errorCode: "invalid_attachment_response",
-              },
-            )
-            continue
-          }
-
-          await saveAttachmentUploadTarget(db, linked.payload.local_attachment_id, target)
-
-          try {
-            await uploadAttachmentAndMarkSynced(
-              db,
-              linked.row,
-              linked.payload,
-              target,
-              apiUrl,
-              accessToken,
-            )
-            synced += 1
-          } catch (error) {
-            failed += 1
-            await handleAttachmentSyncFailure(
-              db,
-              linked.row,
-              linked.payload,
-              (error as Error).message,
-              {
-                classification: classifyUploadFailure(error),
-              },
-            )
-          }
-        } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
-          await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [linked.row.id])
-          synced += 1
-        } else {
-          if (isSurveyDeleteQueuePayload(linked.payload)) {
-            await markSurveyDeleteRowSynced(db, linked.row)
-          } else {
-            await markSurveyQueueRowSynced(db, linked.row)
-          }
-          synced += 1
+    if (!batchFailed) {
+      for (const result of batchResults) {
+        const clientRef = result.client_ref ?? ""
+        const linked = operationRows.get(clientRef)
+        if (!linked) {
+          continue
         }
-        continue
-      }
 
-      const classification = classifyBatchResult(result)
+        const message = buildSyncResultMessage(result)
 
-      if (isAttachmentQueuePayload(linked.payload)) {
-        failed += 1
-        await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
-          classification,
-          errorCode: result.error?.code,
-        })
-      } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
-        failed += 1
-        await handleAttachmentDeleteSyncFailure(db, linked.row, message, {
-          classification,
-          errorCode: result.error?.code,
-        })
-      } else {
-        failed += 1
-        await handleSurveySyncFailure(db, linked.row, message, {
-          classification,
-          errorCode: result.error?.code,
-        })
+        if (result.status === "synced") {
+          if (isAttachmentQueuePayload(linked.payload)) {
+            const target = toUploadTarget(result.data)
+            if (!target) {
+              failed += 1
+              await handleAttachmentSyncFailure(
+                linked.row,
+                linked.payload,
+                "Invalid attachment sync response",
+                {
+                  classification: "fatal",
+                  errorCode: "invalid_attachment_response",
+                },
+              )
+              continue
+            }
+
+            await saveAttachmentUploadTarget(db, linked.payload.local_attachment_id, target)
+
+            try {
+              await uploadAttachmentAndMarkSynced(
+                linked.row,
+                linked.payload,
+                target,
+                apiUrl,
+                accessToken,
+              )
+              synced += 1
+            } catch (error) {
+              failed += 1
+              await handleAttachmentSyncFailure(
+                linked.row,
+                linked.payload,
+                (error as Error).message,
+                {
+                  classification: classifyUploadFailure(error),
+                },
+              )
+            }
+          } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
+            try {
+              await markAttachmentDeleteRowSynced(linked.row)
+              synced += 1
+            } catch {
+              // D-08/D-17: the write was rolled back — leave the row for the
+              // next run instead of letting the whole drain crash.
+              failed += 1
+            }
+          } else {
+            try {
+              if (isSurveyDeleteQueuePayload(linked.payload)) {
+                await markSurveyDeleteRowSynced(linked.row)
+              } else {
+                await markSurveyQueueRowSynced(linked.row)
+              }
+              synced += 1
+            } catch {
+              // D-08/D-17: same rollback-and-continue treatment as above.
+              failed += 1
+            }
+          }
+          continue
+        }
+
+        const classification = classifyBatchResult(result)
+
+        if (isAttachmentQueuePayload(linked.payload)) {
+          failed += 1
+          await handleAttachmentSyncFailure(linked.row, linked.payload, message, {
+            classification,
+            errorCode: result.error?.code,
+          })
+        } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
+          failed += 1
+          await handleAttachmentDeleteSyncFailure(linked.row, message, {
+            classification,
+            errorCode: result.error?.code,
+          })
+        } else {
+          failed += 1
+          await handleSurveySyncFailure(linked.row, message, {
+            classification,
+            errorCode: result.error?.code,
+          })
+        }
       }
+    }
+
+    if (batchFailed) {
+      break
     }
   }
 
   for (const item of uploadOnlyRows) {
     try {
-      await uploadAttachmentAndMarkSynced(
-        db,
-        item.row,
-        item.payload,
-        item.target,
-        apiUrl,
-        accessToken,
-      )
+      await uploadAttachmentAndMarkSynced(item.row, item.payload, item.target, apiUrl, accessToken)
       synced += 1
     } catch (error) {
       failed += 1
-      await handleAttachmentSyncFailure(db, item.row, item.payload, (error as Error).message, {
+      await handleAttachmentSyncFailure(item.row, item.payload, (error as Error).message, {
         classification: classifyUploadFailure(error),
       })
     }
   }
 
-  const pulled = await pullRemoteChanges(apiUrl, accessToken).catch(() => ({
+  // Calls pullChanges directly (never the guarded pullRemoteChanges export):
+  // this function already runs inside the "sync" flight, so going through
+  // the guarded export here would wait on a flight it is itself holding.
+  const pulled = await pullChanges(apiUrl, accessToken).catch(() => ({
     surveys: 0,
     attachments: 0,
     pages: 0,
@@ -1040,7 +1092,12 @@ export async function syncPending(
   }
 }
 
-export async function pullRemoteChanges(
+/**
+ * The unguarded pull body (D-03). Reachable through the exported
+ * `pullRemoteChanges` (guarded) or directly from `drainQueue` above
+ * (unguarded, opportunistic pull at the end of a drain).
+ */
+async function pullChanges(
   apiUrl: string,
   accessToken: string,
   options?: { maxPages?: number; limit?: number },
@@ -1064,15 +1121,27 @@ export async function pullRemoteChanges(
     })
     const surveys = Array.isArray(payload.surveys) ? payload.surveys : []
     const attachments = Array.isArray(payload.attachments) ? payload.attachments : []
+    const nextCursor =
+      payload.cursor_out && payload.cursor_out !== cursor ? payload.cursor_out : null
 
-    const applied = await applyRemoteChanges(db, surveys, attachments)
+    // D-08/D-17: a pulled page and its cursor advance together. If applying
+    // the page throws (e.g. a local write fails), the whole transaction —
+    // including the cursor write — rolls back, so a retried pull re-fetches
+    // the same page instead of silently skipping it.
+    const applied = await runInTransaction(async (tx) => {
+      const result = await applyRemoteChanges(tx, surveys, attachments)
+      if (nextCursor) {
+        await setMetaValue(tx, "downsync_cursor", nextCursor)
+      }
+      return result
+    })
+
     totalSurveys += applied.surveys
     totalAttachments += applied.attachments
     pages += 1
 
-    if (payload.cursor_out && payload.cursor_out !== cursor) {
-      cursor = payload.cursor_out
-      await setMetaValue(db, "downsync_cursor", cursor)
+    if (nextCursor) {
+      cursor = nextCursor
     }
 
     hasMore = Boolean(payload.has_more)
@@ -1087,6 +1156,31 @@ export async function pullRemoteChanges(
     pages,
     has_more: hasMore,
   }
+}
+
+/**
+ * Guarded drain entry point (D-03). Concurrent calls join the same in-flight
+ * run and share its result; a concurrent `pullRemoteChanges` call waits for
+ * this to settle before starting its own flight.
+ */
+export function syncPending(
+  apiUrl: string,
+  accessToken: string,
+): Promise<{ synced: number; failed: number; pulled_surveys: number; pulled_attachments: number }> {
+  return syncFlight.run("sync", () => drainQueue(apiUrl, accessToken))
+}
+
+/**
+ * Guarded pull entry point (D-03). Concurrent calls join the same in-flight
+ * run and share its result; a concurrent `syncPending` call waits for this to
+ * settle before starting its own flight.
+ */
+export function pullRemoteChanges(
+  apiUrl: string,
+  accessToken: string,
+  options?: { maxPages?: number; limit?: number },
+): Promise<{ surveys: number; attachments: number; pages: number; has_more: boolean }> {
+  return syncFlight.run("pull", () => pullChanges(apiUrl, accessToken, options))
 }
 
 export async function submitSurvey(
@@ -1190,8 +1284,7 @@ export async function updateSurveyVisibility(
   queued: boolean
   synced: boolean
 }> {
-  const db = await getDb()
-  const queued = await queueSurveyVisibilityChange(db, surveyId, visibility)
+  const queued = await queueSurveyVisibilityChange(surveyId, visibility)
   if (!queued.changed) {
     return {
       ok: true,
@@ -1213,6 +1306,8 @@ export async function updateSurveyVisibility(
   }
 
   try {
+    // D-03/C5: goes through the guarded export, so it joins an in-flight
+    // drain instead of starting a second concurrent one.
     const result = await syncPending(apiUrl, accessToken)
     if (result.failed > 0) {
       return {
