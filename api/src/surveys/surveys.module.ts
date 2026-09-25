@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module"
 import { StorageModule } from "../storage/storage.module"
 import { CadastreProviderService } from "./cadastre-provider.service"
 import { ParcelsController } from "./parcels.controller"
+import { ParcelsService } from "./parcels.service"
 import { PublicController } from "./public.controller"
 import { SurveysController } from "./surveys.controller"
 import { SurveysDataModule } from "./surveys-data.module"
@@ -21,6 +22,7 @@ import { SyncController } from "./sync.controller"
     SurveysSyncService,
     IbpRulesService,
     CadastreProviderService,
+    ParcelsService,
   ],
 })
 export class SurveysModule {}
