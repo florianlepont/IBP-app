@@ -1637,3 +1637,70 @@ under sustained heavy, concurrent, multi-hour load rather than a fixed per-reque
 same download logic ran markedly faster in short bursts than in sustained multi-hour runs across
 this plan's several sessions. Recorded here so a future iteration does not assume iteration 2's
 throughput is representative of what a much larger, longer-running expansion will sustain.
+
+### 11.2 Training and export — complete
+
+**Backbone and hyperparameters held identical to iteration 2, by design (Section 11's stated
+purpose — isolate the data-alone effect).** MobileNetV3-Large
+(`tensorflow.keras.applications.MobileNetV3Large`), ImageNet-pretrained weights via the same
+Keras-applications API as iterations 1–2 (Apache-2.0 architecture, Google-hosted ImageNet weights —
+same licence chain, unchanged; see Section 4 for the full chain including the GBIF CC0/CC-BY-4.0
+training-image licence, which now also covers iteration 3's expanded corpus under the identical
+filter). 224×224 input, batch size 32, identical augmentation
+(`random_flip_left_right`, `random_brightness(0.15)`, `random_contrast(0.85,1.15)`),
+`UNFREEZE_LAST_N_LAYERS=60`, 6 head epochs (lr 0.001) + 8 fine-tune epochs (lr 3e-5) — the exact
+same epoch budget as iteration 2, not re-tuned, so any change in the fine-tune curve's shape is
+attributable to data volume alone.
+
+**Corpus used: 155,721 train images / 19,466 val images, zero corrupt in either split** (up from
+iteration 2's 51,089 train / 6,387 val) — consistent with Section 11.1's 3.05x corpus-expansion
+figure. `verify_corpus_complete()` (Section 11's hard precondition check, added mid-iteration after
+the manifest-truncation incident) passed before training started, confirming all 34 classes had
+non-empty, count-consistent splits — the corpus-completeness question raised by that incident is
+answered from evidence, not assumed.
+
+**Training wall-clock: head phase 5,105.0s (≈85 min) + fine-tune phase 12,006.6s (≈3h 20min) =
+17,138.4s (≈4h 46min), CPU-only** — roughly 3.4x iteration 2's 5,046s total, tracking the
+corpus-size increase rather than epoch count (epoch counts are identical between the two
+iterations).
+
+**Result: validation top1 = 0.6800, validation top3 = 0.8555 — labelled here as validation, a
+training-time sanity figure, not the reportable result** (the reportable per-genus test figures are
+Section 11.3). Compare iteration 2's validation top1/top3 of 0.5920/0.7951 — both numbers rose.
+
+**Critical finding: `best_finetune_epoch_1indexed = 8` of 8 fine-tune epochs run.
+`EarlyStopping(monitor='val_top3', restore_best_weights=True)` never triggered — the model was
+still improving when the run ended, not plateaued.** The full fine-tune-phase `val_top3` curve
+climbed every single epoch with no dip: 0.7651 → 0.8002 → 0.8186 → 0.8313 → 0.8407 → 0.8470 →
+0.8521 → 0.8555 (epochs 1–8), and `val_top1` likewise climbed monotonically 0.5496 → 0.5978 →
+0.6242 → 0.6414 → 0.6559 → 0.6652 → 0.6748 → 0.6800, both still rising at the final epoch with no
+sign of flattening. This is not new to iteration 3 — iteration 2's own fine-tune curve also ran to
+its last epoch without triggering `EarlyStopping` (Section 10.2) — but it repeats at 3x the corpus
+size and the same epoch budget, which means **the measured accuracy at every iteration so far is a
+floor on what this training configuration can reach, not a ceiling.** Neither the data volume nor
+the fixed 6+8 epoch schedule has saturated. This bears directly on how Section 11.3's diminishing-
+returns numbers should be read: some of the shrinking iteration-2→3 gain could be a genuine data-
+volume effect, but some of it is confounded by both iterations stopping at the same fixed epoch
+count regardless of how much more data iteration 3 had to learn from — a longer schedule at
+iteration 3's corpus size was not tried and would very likely have produced a higher figure, not
+investigated further here per D-19's timebox discipline.
+
+**Export: `spike/species-recognition/train/genus_classifier_v3.tflite`, 6,127,976 bytes
+(≈5.84 MB), float16-quantised — same scheme, same size in bytes as iteration 2's export.** The
+identical byte count is expected, not a bug: float16 quantisation preserves the architecture's
+weight-tensor shapes regardless of the values learned, so two trainings of the same architecture
+under the same quantisation scheme produce identically-sized files. Written under
+`--output-suffix _v3` (reads `train/genus_classifier_keras_v3/`, writes
+`train/genus_classifier_v3.tflite`), which does **not** touch `eval/GATE` or the canonical
+`genus_classifier.tflite` path — promotion is a separate, explicit decision (Section 11.6), not
+assumed.
+
+**Export parity: 98.53% top-1 agreement (67/68) between the trained Keras model and the exported
+`.tflite`, on the same 68-image (2/class) parity sample iterations 1–2 used** — above the 90%
+pass threshold (`export_report_v3.json`), though not the clean 100% both prior iterations achieved.
+One sampled image changed its top-1 argmax between the Keras and TFLite versions; the parity gate's
+own report records both the Keras-side and TFLite-side accuracy on that same 68-image sample
+(55.88% vs 57.35%) — close enough, and on the correct side (TFLite slightly higher), that this
+reads as ordinary float16 rounding noise on a near-tied prediction rather than a quantisation
+regression of the kind the int8 scheme produced in iteration 1 (Section 4: 79.4% agreement, 2x
+probability shifts). Still comfortably inside the plan's own 90% parity threshold.
