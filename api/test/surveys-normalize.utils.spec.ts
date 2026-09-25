@@ -275,6 +275,9 @@ describe("parseSyncChangesCursor", () => {
     "seq:5",
     "seq:5|x",
     "2026-03-09T10:20:31.991Z",
+    "v2:18446744073709551616:1",
+    "v2:99999999999999999999:1",
+    "v2:1:9223372036854775808",
   ])("rejects the malformed cursor %p with 400 Invalid sync cursor", (cursor) => {
     expect(() => parseSyncChangesCursor(cursor)).toThrow(BadRequestException)
     expect(() => parseSyncChangesCursor(cursor)).toThrow("Invalid sync cursor")

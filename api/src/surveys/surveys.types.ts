@@ -117,6 +117,10 @@ export type SyncOperationResult = {
 
 export type SyncChangeEvent = SurveyEventRow
 
+// Internal row of the changes-feed query: the feed position travels as text (xid8 and bigint
+// can exceed Number.MAX_SAFE_INTEGER) and is stripped before the response.
+export type SyncChangeEventRow = SyncChangeEvent & { xid8: string; seq: string }
+
 export type SyncChangeSurvey = Pick<
   SurveyRow,
   | "id"
