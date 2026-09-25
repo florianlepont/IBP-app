@@ -232,32 +232,6 @@ export function deriveAttachmentErrorCode(message: string): string {
   return "attachment_sync_failed"
 }
 
-export function isTerminalSurveyError(message: string): boolean {
-  return ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404", "HTTP 409", "HTTP 422"].some((code) =>
-    message.includes(code),
-  )
-}
-
-export function isTerminalAttachmentError(message: string): boolean {
-  return [
-    "HTTP 400",
-    "HTTP 401",
-    "HTTP 403",
-    "HTTP 404",
-    "HTTP 409",
-    "HTTP 422",
-    "UPLOAD_HTTP 400",
-    "UPLOAD_HTTP 401",
-    "UPLOAD_HTTP 403",
-    "UPLOAD_HTTP 404",
-    "CONFIRM_HTTP 400",
-    "CONFIRM_HTTP 401",
-    "CONFIRM_HTTP 403",
-    "CONFIRM_HTTP 404",
-    "LOCAL_FILE_HTTP 404",
-  ].some((code) => message.includes(code))
-}
-
 // D-05/D-14: one tested vocabulary decides whether a failure counts toward
 // the 8-attempt retry cap. "fatal" blocks on the first attempt, "retryable"
 // never counts (network/timeout/5xx/429), "unknown" counts (it's the only
@@ -287,7 +261,11 @@ export function classifyRequestError(error: unknown): FailureClassification | "a
 
   if (error instanceof ApiError) {
     if (error.status === 401 || error.status === 403) return "auth"
-    if (error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)) {
+    if (
+      error.status === 408 ||
+      error.status === 429 ||
+      (error.status >= 500 && error.status < 600)
+    ) {
       return "retryable"
     }
     return "unknown"
@@ -305,7 +283,10 @@ export function classifyBatchResult(result: SyncBatchResult): FailureClassificat
 
   if (result.status === "retryable_error") {
     const httpStatus = result.error?.http_status
-    if (httpStatus === 429 || (typeof httpStatus === "number" && httpStatus >= 500 && httpStatus < 600)) {
+    if (
+      httpStatus === 429 ||
+      (typeof httpStatus === "number" && httpStatus >= 500 && httpStatus < 600)
+    ) {
       return "retryable"
     }
     return "unknown"
@@ -326,7 +307,11 @@ export function classifyUploadFailure(error: unknown): FailureClassification {
 
   if (error instanceof ApiError) {
     if (error.status === 401 || error.status === 403) return "unknown"
-    if (error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)) {
+    if (
+      error.status === 408 ||
+      error.status === 429 ||
+      (error.status >= 500 && error.status < 600)
+    ) {
       return "retryable"
     }
     return "fatal"
@@ -358,14 +343,6 @@ export function safeParseJson(value: string): unknown {
     return JSON.parse(value)
   } catch {
     return null
-  }
-}
-
-export async function safeJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return {}
   }
 }
 

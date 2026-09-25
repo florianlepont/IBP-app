@@ -27,19 +27,26 @@ import {
   resolveUploadTarget,
   deriveSurveyErrorCode,
   deriveAttachmentErrorCode,
-  isTerminalSurveyError,
-  isTerminalAttachmentError,
   computeNextRetryAt,
   safeParseJson,
-  safeJson,
-  buildSyncChangesUrl,
+  buildSyncChangesPath,
   normalizeParcelIds,
   hasPendingQueueForSurvey,
+  classifyRequestError,
+  classifyBatchResult,
+  classifyUploadFailure,
+  FailureClassification,
 } from "./utils"
 import { markSurveyExpiredLocally } from "./surveys"
+import { apiRequest, ApiError } from "../api/client"
+
+// D-07: POST /sync carries a longer timeout than the client default because a
+// batch can contain many operations; every other sync JSON call (changes,
+// confirm PUT, submit) uses apiRequest's normal per-request default.
+const SYNC_BATCH_TIMEOUT_MS = 60_000
 
 type FailureOptions = {
-  terminalOverride?: boolean
+  classification: FailureClassification
   errorCode?: string
 }
 
@@ -94,16 +101,17 @@ async function uploadAttachmentAndMarkSynced(
   }
 
   if (confirmTarget !== uploadTarget) {
-    const confirmResponse = await fetch(confirmTarget, {
+    // confirmTarget is already an absolute URL (resolveUploadTarget); an
+    // empty baseUrl keeps apiRequest's `${baseUrl}${path}` join a no-op.
+    // Errors surface as ApiError so classifyUploadFailure can classify them
+    // (D-07/D-15: every sync JSON call goes through apiRequest's timeout).
+    await apiRequest({
+      baseUrl: "",
+      path: confirmTarget,
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      token: accessToken,
+      expectJson: false,
     })
-
-    if (!confirmResponse.ok) {
-      throw new Error(`CONFIRM_HTTP ${confirmResponse.status}`)
-    }
   }
 
   const now = new Date().toISOString()
@@ -231,7 +239,30 @@ async function applyRemoteChanges(
 
   for (const survey of surveys) {
     if (!survey?.id) continue
+
+    const existing = await db.getFirstAsync<{
+      id: string
+      sync_state: string
+      sync_blocked: number
+    }>(`SELECT id, sync_state, sync_blocked FROM local_surveys WHERE id = ?`, [survey.id])
+
     if (survey.deleted_at) {
+      // D-07/T-01.5-27: a remote delete never wins over pending local work.
+      // Only a survey_delete queued row is compatible with the survey
+      // disappearing anyway; any other pending/failed row, or a
+      // sync_blocked survey, keeps the survey and its attachments.
+      if (existing) {
+        const queueRows = await db.getAllAsync<{ payload: string }>(
+          `SELECT payload FROM sync_queue WHERE survey_id = ? AND status IN ('pending', 'failed')`,
+          [survey.id],
+        )
+        const hasNonDeleteQueueRow = queueRows.some(
+          (queueRow) => !isSurveyDeleteQueuePayload(safeParseJson(queueRow.payload)),
+        )
+        if (hasNonDeleteQueueRow || existing.sync_blocked === 1) {
+          continue
+        }
+      }
       await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ?`, [survey.id])
       await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [survey.id])
       await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [survey.id])
@@ -240,11 +271,6 @@ async function applyRemoteChanges(
     }
 
     const pendingQueue = await hasPendingQueueForSurvey(db, survey.id)
-
-    const existing = await db.getFirstAsync<{ id: string; sync_state: string }>(
-      `SELECT id, sync_state FROM local_surveys WHERE id = ?`,
-      [survey.id],
-    )
 
     if (!existing) {
       const payload = buildSurveyPayloadFromRemote(survey)
@@ -267,7 +293,9 @@ async function applyRemoteChanges(
       continue
     }
 
-    if (!pendingQueue) {
+    // D-07/T-01.5-27: never overwrite a survey with a pending queue row or a
+    // sync_blocked survey — that would silently discard local work.
+    if (!pendingQueue && existing.sync_blocked !== 1) {
       const payload = buildSurveyPayloadFromRemote(survey)
       await db.runAsync(
         `UPDATE local_surveys
@@ -311,8 +339,8 @@ async function applyRemoteChanges(
       continue
     }
 
-    const existing = await db.getFirstAsync<{ id: string }>(
-      `SELECT id
+    const existing = await db.getFirstAsync<{ id: string; file_state: string }>(
+      `SELECT id, file_state
        FROM local_attachments
        WHERE remote_attachment_id = ?
           OR id = ?
@@ -321,10 +349,12 @@ async function applyRemoteChanges(
     )
 
     if (!existing) {
+      // A brand-new pulled attachment has no local file — file_state
+      // 'remote' tells plan 06's on-demand download it needs fetching.
       await db.runAsync(
         `INSERT INTO local_attachments (
-           id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, 'synced', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)`,
+           id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, file_state, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'synced', ?, ?, NULL, NULL, NULL, NULL, NULL, 'remote', ?, ?)`,
         [
           `remote-${attachment.id}`,
           attachment.survey_id,
@@ -338,6 +368,12 @@ async function applyRemoteChanges(
         ],
       )
     } else {
+      // D-11: local_uri is never touched here. file_state only moves from
+      // 'unavailable' back to 'remote' — the server announced a change to
+      // this attachment (e.g. its upload finally completed), so plan 06's
+      // on-demand download gets one more chance; 'local' and 'missing' are
+      // left alone.
+      const nextFileState = existing.file_state === "unavailable" ? "remote" : existing.file_state
       await db.runAsync(
         `UPDATE local_attachments
          SET survey_id = ?,
@@ -349,6 +385,7 @@ async function applyRemoteChanges(
              last_sync_error = NULL,
              last_sync_error_code = NULL,
              last_sync_error_at = NULL,
+             file_state = ?,
              updated_at = ?
          WHERE id = ?`,
         [
@@ -357,6 +394,7 @@ async function applyRemoteChanges(
           attachment.size_bytes ?? 0,
           attachment.id,
           attachment.storage_key ?? null,
+          nextFileState,
           now,
           existing.id,
         ],
@@ -407,33 +445,71 @@ async function setMetaValue(db: SQLite.SQLiteDatabase, key: string, value: strin
   )
 }
 
+/**
+ * D-05/D-14: the 8-attempt retry cap only applies to "unknown" failures.
+ * "fatal" blocks the queue row on the first attempt; "retryable" (network,
+ * timeout, 5xx, 429) never increments retry_count and never blocks; "unknown"
+ * increments retry_count and, once it reaches MAX_RETRY_COUNT, is treated as
+ * fatal with a "retry cap reached" message so deriveSurveyErrorCode/
+ * deriveAttachmentErrorCode naturally produce the "retry_cap_reached" code.
+ */
+function resolveFailureOutcome(
+  classification: FailureClassification,
+  retryCount: number,
+  message: string,
+): { terminal: boolean; finalMessage: string; nextRetryCount: number | null } {
+  if (classification === "fatal") {
+    return { terminal: true, finalMessage: message, nextRetryCount: null }
+  }
+
+  if (classification === "retryable") {
+    return { terminal: false, finalMessage: message, nextRetryCount: null }
+  }
+
+  // "unknown" — the only class that counts toward the cap.
+  const nextRetryCount = retryCount + 1
+  if (nextRetryCount >= MAX_RETRY_COUNT) {
+    return {
+      terminal: true,
+      finalMessage: `${message} | retry cap reached (${MAX_RETRY_COUNT})`,
+      nextRetryCount,
+    }
+  }
+  return { terminal: false, finalMessage: message, nextRetryCount }
+}
+
 async function handleSurveySyncFailure(
   db: SQLite.SQLiteDatabase,
   row: QueueRow,
   message: string,
-  options?: FailureOptions,
+  options: FailureOptions,
 ): Promise<void> {
   const now = new Date()
   const nowIso = now.toISOString()
-  const nextRetryCount = row.retry_count + 1
-  const reachedRetryCap = nextRetryCount >= MAX_RETRY_COUNT
-  const terminalByMessage = isTerminalSurveyError(message)
-  const terminal = options?.terminalOverride ?? (terminalByMessage || reachedRetryCap)
-  const finalMessage =
-    reachedRetryCap && !terminalByMessage && !options?.terminalOverride
-      ? `${message} | retry cap reached (${MAX_RETRY_COUNT})`
-      : message
-  const errorCode = options?.errorCode ?? deriveSurveyErrorCode(finalMessage)
+  const { terminal, finalMessage, nextRetryCount } = resolveFailureOutcome(
+    options.classification,
+    row.retry_count,
+    message,
+  )
+  const errorCode = options.errorCode ?? deriveSurveyErrorCode(finalMessage)
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  } else {
-    const nextRetryAt = computeNextRetryAt(now, nextRetryCount)
+  } else if (nextRetryCount !== null) {
+    // "unknown", not yet capped: count the attempt.
     await db.runAsync(
       `UPDATE sync_queue
        SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
        WHERE id = ?`,
-      [nextRetryCount, nextRetryAt, nowIso, row.id],
+      [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+    )
+  } else {
+    // "retryable": never counted, retry_count stays untouched.
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET status = 'failed', next_retry_at = ?, updated_at = ?
+       WHERE id = ?`,
+      [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
     )
   }
 
@@ -459,29 +535,32 @@ async function handleAttachmentSyncFailure(
   row: QueueRow,
   payload: AttachmentQueuePayload,
   message: string,
-  options?: FailureOptions,
+  options: FailureOptions,
 ): Promise<void> {
   const now = new Date()
   const nowIso = now.toISOString()
-  const nextRetryCount = row.retry_count + 1
-  const reachedRetryCap = nextRetryCount >= MAX_RETRY_COUNT
-  const terminalByMessage = isTerminalAttachmentError(message)
-  const terminal = options?.terminalOverride ?? (terminalByMessage || reachedRetryCap)
-  const finalMessage =
-    reachedRetryCap && !terminalByMessage && !options?.terminalOverride
-      ? `${message} | retry cap reached (${MAX_RETRY_COUNT})`
-      : message
-  const errorCode = options?.errorCode ?? deriveAttachmentErrorCode(finalMessage)
+  const { terminal, finalMessage, nextRetryCount } = resolveFailureOutcome(
+    options.classification,
+    row.retry_count,
+    message,
+  )
+  const errorCode = options.errorCode ?? deriveAttachmentErrorCode(finalMessage)
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
-  } else {
-    const nextRetryAt = computeNextRetryAt(now, nextRetryCount)
+  } else if (nextRetryCount !== null) {
     await db.runAsync(
       `UPDATE sync_queue
        SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
        WHERE id = ?`,
-      [nextRetryCount, nextRetryAt, nowIso, row.id],
+      [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+    )
+  } else {
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET status = 'failed', next_retry_at = ?, updated_at = ?
+       WHERE id = ?`,
+      [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
     )
   }
 
@@ -501,26 +580,36 @@ async function handleAttachmentDeleteSyncFailure(
   db: SQLite.SQLiteDatabase,
   row: QueueRow,
   message: string,
-  options?: FailureOptions,
+  options: FailureOptions,
 ): Promise<void> {
   const now = new Date()
   const nowIso = now.toISOString()
-  const nextRetryCount = row.retry_count + 1
-  const reachedRetryCap = nextRetryCount >= MAX_RETRY_COUNT
-  const terminalByMessage = isTerminalAttachmentError(message)
-  const terminal = options?.terminalOverride ?? (terminalByMessage || reachedRetryCap)
+  const { terminal, nextRetryCount } = resolveFailureOutcome(
+    options.classification,
+    row.retry_count,
+    message,
+  )
 
   if (terminal) {
     await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
     return
   }
 
-  const nextRetryAt = computeNextRetryAt(now, nextRetryCount)
+  if (nextRetryCount !== null) {
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+       WHERE id = ?`,
+      [nextRetryCount, computeNextRetryAt(now, nextRetryCount), nowIso, row.id],
+    )
+    return
+  }
+
   await db.runAsync(
     `UPDATE sync_queue
-     SET status = 'failed', retry_count = ?, next_retry_at = ?, updated_at = ?
+     SET status = 'failed', next_retry_at = ?, updated_at = ?
      WHERE id = ?`,
-    [nextRetryCount, nextRetryAt, nowIso, row.id],
+    [computeNextRetryAt(now, Math.max(1, row.retry_count)), nowIso, row.id],
   )
 }
 
@@ -771,7 +860,7 @@ export async function syncPending(
 
     failed += 1
     await handleSurveySyncFailure(db, row, "Invalid sync payload", {
-      terminalOverride: true,
+      classification: "fatal",
       errorCode: "invalid_local_payload",
     })
   }
@@ -780,22 +869,31 @@ export async function syncPending(
     let batchResults: SyncBatchResult[] = []
 
     try {
-      const response = await fetch(`${apiUrl}/sync`, {
+      const response = await apiRequest<SyncBatchResponse>({
+        baseUrl: apiUrl,
+        path: "/sync",
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ operations }),
+        token: accessToken,
+        json: { operations },
+        timeoutMs: SYNC_BATCH_TIMEOUT_MS,
       })
 
-      if (!response.ok) {
-        throw new Error(`BATCH_HTTP ${response.status}`)
+      if (!Array.isArray(response?.results)) {
+        // Counted as unknown (D-14): the server responded but the batch
+        // envelope itself is malformed, which is not distinguishable from
+        // an ambiguous client-side bug.
+        throw new Error("Invalid sync batch response")
+      }
+      batchResults = response.results
+    } catch (error) {
+      const classification = classifyRequestError(error)
+      if (classification === "auth") {
+        // D-05/T-01.5-31: a batch-level 401/403 means the token is stale,
+        // not that these operations failed — leave every row untouched and
+        // let withAuthRetry refresh the token and retry the whole batch.
+        throw error
       }
 
-      const payload = (await safeJson(response)) as SyncBatchResponse
-      batchResults = Array.isArray(payload.results) ? payload.results : []
-    } catch (error) {
       const message = (error as Error).message
       for (const operation of operations) {
         failed += 1
@@ -804,15 +902,15 @@ export async function syncPending(
 
         if (isAttachmentQueuePayload(linked.payload)) {
           await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
-            terminalOverride: false,
+            classification,
           })
         } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
           await handleAttachmentDeleteSyncFailure(db, linked.row, message, {
-            terminalOverride: false,
+            classification,
           })
         } else {
           await handleSurveySyncFailure(db, linked.row, message, {
-            terminalOverride: false,
+            classification,
           })
         }
       }
@@ -839,7 +937,7 @@ export async function syncPending(
               linked.payload,
               "Invalid attachment sync response",
               {
-                terminalOverride: true,
+                classification: "fatal",
                 errorCode: "invalid_attachment_response",
               },
             )
@@ -865,6 +963,9 @@ export async function syncPending(
               linked.row,
               linked.payload,
               (error as Error).message,
+              {
+                classification: classifyUploadFailure(error),
+              },
             )
           }
         } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
@@ -881,22 +982,24 @@ export async function syncPending(
         continue
       }
 
+      const classification = classifyBatchResult(result)
+
       if (isAttachmentQueuePayload(linked.payload)) {
         failed += 1
         await handleAttachmentSyncFailure(db, linked.row, linked.payload, message, {
-          terminalOverride: result.status === "fatal_error",
+          classification,
           errorCode: result.error?.code,
         })
       } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
         failed += 1
         await handleAttachmentDeleteSyncFailure(db, linked.row, message, {
-          terminalOverride: result.status === "fatal_error",
+          classification,
           errorCode: result.error?.code,
         })
       } else {
         failed += 1
         await handleSurveySyncFailure(db, linked.row, message, {
-          terminalOverride: result.status === "fatal_error",
+          classification,
           errorCode: result.error?.code,
         })
       }
@@ -916,7 +1019,9 @@ export async function syncPending(
       synced += 1
     } catch (error) {
       failed += 1
-      await handleAttachmentSyncFailure(db, item.row, item.payload, (error as Error).message)
+      await handleAttachmentSyncFailure(db, item.row, item.payload, (error as Error).message, {
+        classification: classifyUploadFailure(error),
+      })
     }
   }
 
@@ -951,18 +1056,12 @@ export async function pullRemoteChanges(
   let hasMore = false
 
   for (let index = 0; index < maxPages; index += 1) {
-    const response = await fetch(buildSyncChangesUrl(apiUrl, cursor, limit), {
+    const payload = await apiRequest<SyncChangesResponse>({
+      baseUrl: apiUrl,
+      path: buildSyncChangesPath(cursor, limit),
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      token: accessToken,
     })
-
-    if (!response.ok) {
-      throw new Error(`DOWNSYNC_HTTP ${response.status}`)
-    }
-
-    const payload = (await safeJson(response)) as SyncChangesResponse
     const surveys = Array.isArray(payload.surveys) ? payload.surveys : []
     const attachments = Array.isArray(payload.attachments) ? payload.attachments : []
 
@@ -997,21 +1096,32 @@ export async function submitSurvey(
 ): Promise<{ ok: boolean; message: string }> {
   const db = await getDb()
 
-  const response = await fetch(`${apiUrl}/surveys/${surveyId}/submit`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-  })
+  try {
+    await apiRequest({
+      baseUrl: apiUrl,
+      path: `/surveys/${surveyId}/submit`,
+      method: "POST",
+      token: accessToken,
+      expectJson: false,
+    })
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      // Non-HTTP errors (network, timeout-as-thrown-before-status) propagate
+      // as before — this function does not classify them.
+      throw error
+    }
 
-  if (!response.ok) {
-    const payload = (await safeJson(response)) as { errors?: string[]; message?: string }
-    const message = payload.errors?.join(" | ") ?? payload.message ?? `HTTP ${response.status}`
+    const body = error.body as { errors?: string[]; message?: string } | null
+    const message =
+      (Array.isArray(body?.errors) && body.errors.length > 0
+        ? body.errors.join(" | ")
+        : undefined) ??
+      body?.message ??
+      error.message
     const nowIso = new Date().toISOString()
     const isExpiredSubmit =
       /survey is expired|survey_expired|expired and cannot be submitted/i.test(message)
-    const isValidationSubmit = response.status === 422
+    const isValidationSubmit = error.status === 422
 
     if (isExpiredSubmit) {
       await markSurveyExpiredLocally(surveyId)

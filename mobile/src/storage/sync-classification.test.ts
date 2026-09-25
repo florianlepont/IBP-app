@@ -65,12 +65,16 @@ describe("classifyBatchResult", () => {
 
   test.each([503, 429])("retryable_error with http_status %i is retryable", (httpStatus) => {
     expect(
-      classifyBatchResult(batchResult({ status: "retryable_error", error: { http_status: httpStatus } })),
+      classifyBatchResult(
+        batchResult({ status: "retryable_error", error: { http_status: httpStatus } }),
+      ),
     ).toBe("retryable")
   })
 
   test("retryable_error with no http_status is unknown", () => {
-    expect(classifyBatchResult(batchResult({ status: "retryable_error", error: {} }))).toBe("unknown")
+    expect(classifyBatchResult(batchResult({ status: "retryable_error", error: {} }))).toBe(
+      "unknown",
+    )
   })
 
   test("retryable_error with http_status 409 is unknown", () => {
