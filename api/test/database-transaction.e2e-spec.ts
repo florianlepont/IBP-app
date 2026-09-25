@@ -6,6 +6,7 @@ import request = require("supertest")
 import { AppModule } from "../src/app.module"
 import { configureApp } from "../src/app.setup"
 import { DatabaseService } from "../src/database/database.service"
+import { buildTestConfigService } from "./config-helper"
 import { installEventInsertFailure, removeEventInsertFailures } from "./e2e-fault-injection"
 
 // Real-PostgreSQL proof of DatabaseService.transaction (D-06) and of the
@@ -111,5 +112,44 @@ describe("DatabaseService.transaction (e2e)", () => {
       [randomUUID(), surveyId],
     )
     expect(afterRemoval.rows).toHaveLength(1)
+  })
+})
+
+// D-06: the pool's session settings reach a real PostgreSQL server, and a
+// runaway statement is cut with SQLSTATE 57014 (query_canceled).
+describe("DatabaseService pool limits (e2e)", () => {
+  const opened: DatabaseService[] = []
+
+  function openDb(overrides: Record<string, string | undefined> = {}): DatabaseService {
+    const db = new DatabaseService(buildTestConfigService(overrides))
+    opened.push(db)
+    return db
+  }
+
+  afterAll(async () => {
+    await Promise.all(opened.map((db) => db.onModuleDestroy()))
+  })
+
+  it("applies the 10 s statement_timeout default and the cortege-api application_name", async () => {
+    const db = openDb({ PG_STATEMENT_TIMEOUT_MS: undefined })
+
+    const timeout = await db.query<{ statement_timeout: string }>("SHOW statement_timeout")
+    expect(timeout.rows[0].statement_timeout).toBe("10s")
+
+    const name = await db.query<{ application_name: string }>("SHOW application_name")
+    expect(name.rows[0].application_name).toBe("cortege-api")
+  })
+
+  it("cuts a statement longer than PG_STATEMENT_TIMEOUT_MS with 57014", async () => {
+    const db = openDb({ PG_STATEMENT_TIMEOUT_MS: "300" })
+
+    const timeout = await db.query<{ statement_timeout: string }>("SHOW statement_timeout")
+    expect(timeout.rows[0].statement_timeout).toBe("300ms")
+
+    await expect(db.query("SELECT pg_sleep(1)")).rejects.toMatchObject({ code: "57014" })
+
+    // The pool stays usable after the cancelled statement.
+    const alive = await db.query<{ ok: number }>("SELECT 1 AS ok")
+    expect(alive.rows[0].ok).toBe(1)
   })
 })

@@ -1,5 +1,10 @@
 import { Logger } from "@nestjs/common"
 import { CadastreProviderService } from "../src/surveys/cadastre-provider.service"
+import { buildTestConfigService } from "./config-helper"
+
+function buildService(overrides: Record<string, string | undefined>): CadastreProviderService {
+  return new CadastreProviderService(buildTestConfigService(overrides))
+}
 
 type MockResponse = {
   ok: boolean
@@ -8,22 +13,18 @@ type MockResponse = {
 }
 
 describe("CadastreProviderService", () => {
-  const originalEnv = { ...process.env }
   const originalFetch = global.fetch
 
   beforeEach(() => {
-    process.env = { ...originalEnv }
     jest.clearAllMocks()
   })
 
   afterAll(() => {
-    process.env = originalEnv
     global.fetch = originalFetch
   })
 
   it("returns a deterministic synthetic parcel when synthetic mode is active", async () => {
-    process.env.CADASTRE_PROVIDER = "synthetic"
-    const service = new CadastreProviderService()
+    const service = buildService({ CADASTRE_PROVIDER: "synthetic" })
 
     const parcel = await service.resolveFromPoint(48.6431234, 1.8299876)
 
@@ -39,7 +40,7 @@ describe("CadastreProviderService", () => {
   })
 
   it("resolves an IGN parcel and enriches it with API Carto geometry", async () => {
-    process.env.CADASTRE_PROVIDER = "ign"
+    const overrides = { CADASTRE_PROVIDER: "ign" }
     const fetchMock = jest
       .fn<Promise<MockResponse>, [URL, RequestInit?]>()
       .mockResolvedValueOnce({
@@ -79,7 +80,7 @@ describe("CadastreProviderService", () => {
       })
     global.fetch = fetchMock as unknown as typeof global.fetch
 
-    const service = new CadastreProviderService()
+    const service = buildService(overrides)
     const parcel = await service.resolveFromPoint(48.8566, 2.3522)
 
     expect(parcel).toEqual({
@@ -114,15 +115,14 @@ describe("CadastreProviderService", () => {
   })
 
   it("falls back to a synthetic parcel when IGN returns no feature and fallback is enabled", async () => {
-    process.env.CADASTRE_PROVIDER = "ign"
-    process.env.CADASTRE_PROVIDER_ALLOW_FALLBACK = "true"
+    const overrides = { CADASTRE_PROVIDER: "ign", CADASTRE_PROVIDER_ALLOW_FALLBACK: "true" }
     const warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ features: [] }),
     } satisfies MockResponse) as typeof global.fetch
 
-    const service = new CadastreProviderService()
+    const service = buildService(overrides)
     const parcel = await service.resolveFromPoint(43.6, 1.44)
 
     expect(parcel?.source).toBe("synthetic_v1")
@@ -130,18 +130,17 @@ describe("CadastreProviderService", () => {
   })
 
   it("returns null when IGN fails and fallback is disabled", async () => {
-    process.env.CADASTRE_PROVIDER = "ign"
-    process.env.CADASTRE_PROVIDER_ALLOW_FALLBACK = "false"
+    const overrides = { CADASTRE_PROVIDER: "ign", CADASTRE_PROVIDER_ALLOW_FALLBACK: "false" }
     const warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     global.fetch = jest.fn().mockRejectedValue(new Error("network down")) as typeof global.fetch
 
-    const service = new CadastreProviderService()
+    const service = buildService(overrides)
     await expect(service.resolveFromPoint(43.6, 1.44)).resolves.toBeNull()
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("network down"))
   })
 
   it("keeps reverse geometry when API Carto lookup fails", async () => {
-    process.env.CADASTRE_PROVIDER = "ign"
+    const overrides = { CADASTRE_PROVIDER: "ign" }
     const warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const fetchMock = jest
       .fn<Promise<MockResponse>, [URL, RequestInit?]>()
@@ -164,7 +163,7 @@ describe("CadastreProviderService", () => {
       .mockRejectedValueOnce(new Error("carto unavailable"))
     global.fetch = fetchMock as unknown as typeof global.fetch
 
-    const service = new CadastreProviderService()
+    const service = buildService(overrides)
     const parcel = await service.resolveFromPoint(48.8566, 2.3522)
 
     expect(parcel?.geometry).toEqual({ type: "Polygon", coordinates: [[[1, 2]]] })
@@ -172,5 +171,26 @@ describe("CadastreProviderService", () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("IGN API Carto parcel geometry lookup failed"),
     )
+  })
+
+  it("aborts the IGN request after CADASTRE_PROVIDER_TIMEOUT_MS", async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    global.fetch = jest.fn(
+      (_url: URL, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted by timeout")))
+        }),
+    ) as unknown as typeof global.fetch
+
+    const service = buildService({
+      CADASTRE_PROVIDER: "ign",
+      CADASTRE_PROVIDER_ALLOW_FALLBACK: "false",
+      CADASTRE_PROVIDER_TIMEOUT_MS: "20",
+    })
+    const startedAt = Date.now()
+
+    await expect(service.resolveFromPoint(43.6, 1.44)).resolves.toBeNull()
+    expect(Date.now() - startedAt).toBeLessThan(2000)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("aborted by timeout"))
   })
 })
