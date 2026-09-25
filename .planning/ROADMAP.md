@@ -381,7 +381,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
 | 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
-| 1.5. Mobile sync engine reliability | 12/12 | Complete   | 2026-09-25 |
+| 1.5. Mobile sync engine reliability | 12/12 | Complete    | 2026-09-25 |
 | 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
