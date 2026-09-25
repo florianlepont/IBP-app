@@ -396,35 +396,6 @@ export function normalizeChangesLimit(limitRaw?: number): number {
   return Math.min(200, integer)
 }
 
-export function parseChangesCursor(cursor?: string): {
-  timestamp: string
-  eventId: string
-  original: string | null
-} {
-  if (!cursor || cursor.trim().length === 0) {
-    return {
-      timestamp: "1970-01-01T00:00:00.000Z",
-      eventId: "",
-      original: null,
-    }
-  }
-
-  const [timestampRaw, eventIdRaw] = cursor.split("|")
-  if (!timestampRaw || Number.isNaN(Date.parse(timestampRaw))) {
-    throw new BadRequestException("Invalid sync cursor")
-  }
-
-  return {
-    timestamp: timestampRaw,
-    eventId: eventIdRaw ?? "",
-    original: cursor,
-  }
-}
-
-export function buildChangesCursor(timestamp: string, eventId: string): string {
-  return `${timestamp}|${eventId}`
-}
-
 // Changes-feed cursor (D-01, D-12, D-13). The mobile app stores and replays the cursor without
 // parsing it, so the server is free to change the format. `v2:<xid8>:<seq>` pages on the
 // (xid8, seq) pair; the legacy `<created_at text>|<event or survey id>` form is still accepted
@@ -435,6 +406,8 @@ export type SyncChangesCursor =
   | { kind: "legacy"; timestamp: string; eventId: string; original: string }
 
 export const SYNC_CURSOR_V2_PATTERN = /^v2:(\d{1,20}):(\d{1,19})$/
+const XID8_MAX = BigInt("18446744073709551615")
+const BIGINT_MAX = BigInt("9223372036854775807")
 const LEGACY_CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}[ T]/
 
 export function parseSyncChangesCursor(cursor?: string): SyncChangesCursor {
@@ -444,6 +417,10 @@ export function parseSyncChangesCursor(cursor?: string): SyncChangesCursor {
 
   const position = SYNC_CURSOR_V2_PATTERN.exec(cursor)
   if (position) {
+    // Out-of-range values would make the `::xid8` / `::bigint` casts fail with a 500.
+    if (BigInt(position[1]) > XID8_MAX || BigInt(position[2]) > BIGINT_MAX) {
+      throw new BadRequestException("Invalid sync cursor")
+    }
     return { kind: "position", xid8: position[1], seq: position[2], original: cursor }
   }
   if (cursor.startsWith("v2:")) {
