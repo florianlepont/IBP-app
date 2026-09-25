@@ -88,6 +88,7 @@ Decisions table. Decisions affecting current work:
 - [Phase 01-04-iter2]: User rejected iteration 1's no-go as premature (150 img/class vs 4200+ available, smallest backbone vs 36x unused latency headroom); coordinator directed a second iteration rather than accepting the first result — Iteration 1 constrained itself by assumptions its own measurements invalidated
 - [Phase 01-04-iter2]: Iteration 2 (MobileNetV3-Large, ~2000 img/class, season-stratified) found a data-limited result: 32/34 genera improved by mean +19.9pp top-3, still 0/34 clearing the 95% bar — Distinguishes data-limited from approach-limited for the ADR; neither a clean go nor a clean no-go
 - [Phase 01-04-iter3]: Iteration 3 (MobileNetV3-Large, iteration 2's exact hyperparameters, corpus expanded 3.05x to 194,653 images at each class's real per-class ceiling) found 1/34 genera (Tamarix, 95.04%) clearing the D-02 95% bar for the first time, with a mean +6.74pp top-3 gain for the other 33 (vs +19.9pp for 1->2) — Diminishing but explicitly confounded by a fixed, never-saturating epoch budget at both iterations (EarlyStopping never triggered in either) -- a floor on the achievable gain, not proof of a hard ceiling. Model genuinely beat iteration 2 and was promoted to the canonical path.
+- [Phase 01-04-iter4]: User asked for a rebalance targeted at weak Ile-de-France temperate genera (spring specifically); reconnaissance-only per "report back before a long download" — found Section 11.5's "real property of GBIF's holdings" conclusion for Acer/Pinus/Prunus autumn scarcity is wrong: GBIF's own `month` filter (never used by the fetch) returns 40,603/23,517/34,016 autumn-dated permissive-licence records for those three genera against the 66/30/60 the corpus actually captured, traced to an unsound early-exit + non-season-aware fetch in prepare_dataset.py, not a real GBIF scarcity — every weak temperate genus checked has 2.3x-83.5x headroom against GBIF's true pool vs. what the flat 6,000/class cap captured. Four alternative sources checked: Pl@ntNet-300K rejected (CC-BY-4.0 but zero of the 34 CNPF genera in its 1,081-species list, confirmed directly); Tela Botanica blocked on SSO-gated API access (licence would clear the gate; flagged for a human decision, not routed around); iNaturalist-direct usable but redundant with GBIF's existing iNat-sourced records; Wikimedia Commons usable, licence-verifiable per-file, recommended as a supplement only if a gap remains. Recommendation: fix+rescale the existing GBIF pipeline first (no new licence risk, order-of-magnitude headroom already confirmed) before any new-source integration — full findings in measurement doc Section 13, awaiting user go-ahead before corpus expansion/retrain proceeds.
 
 ### Pending Todos
 
@@ -116,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-25T06:42:03.770Z
-Stopped at: Completed 01-04-PLAN.md iteration 3 (export, evaluation, three-way comparison, promotion)
-Resume file: None
+Last session: 2026-09-25T07:49:35.000Z
+Stopped at: 01-04-PLAN.md iteration 4 — source reconnaissance complete (measurement doc Section 13), reported back to the user per the "before committing to a long download" instruction; corpus expansion, longer training schedule and backbone change (levers 1/3/4) not yet started, awaiting go-ahead
+Resume file: docs/technical/species-recognition-spike-measurements-v1.md (Section 13)

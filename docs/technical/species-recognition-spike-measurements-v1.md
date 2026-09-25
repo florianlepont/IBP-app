@@ -2269,3 +2269,228 @@ specific, not model-wide: Acer, Pinus and Prunus each have a respectable whole-y
 autumn-specific evidence behind it. Whether that gap is acceptable to ship against, given the
 survey season, or must be closed first, is the ADR's call (plan 01-06) — this section's job is to
 put that specific, previously-invisible gap in evidence, which it now does.
+
+## 13. Iteration 4 — targeted temperate-genus rebalance: source reconnaissance (report-back-early checkpoint)
+
+**Status: reconnaissance only. No corpus expansion, no retrain, has happened yet as of this
+section.** The corpus-expansion instructions this iteration works under explicitly required
+reporting alternative-source findings back before committing to a long download; this section is
+that report. Levers 3 (longer training schedule) and 4 (stronger backbone) are deferred until the
+corpus question below is settled, since both depend on what corpus they would train against.
+
+Trigger: the user reviewed Section 12's per-genus × per-season table and observed that the model is
+strong on genera he will not survey (Mediterranean/evergreen: Olea, Ceratonia, Arbutus, Pistacia,
+Phillyrea, Tamarix, Cupressus, Juniperus, Taxus, 91–96%) and weaker on the genera that dominate
+Île-de-France forests (temperate deciduous: Fraxinus 78%, Ulmus 75%, Tilia 78%, Carpinus 81%,
+Acer 81%, Alnus 77%, Populus 80%, Prunus 80%, Betula 82%, Fagus 83%, Quercus deciduous 84%), and
+was specifically disappointed with spring (the weakest pooled season at 84.4%, with Fraxinus 74%,
+Ulmus 71%, Juglans 71%, Tilia 75% at their worst in that season).
+
+### 13.1 Primary finding: Section 11.5's "real property of GBIF's holdings, not a sampling
+artefact" claim for Acer/Pinus/Prunus autumn scarcity does not hold up
+
+Section 11.5 concluded, after three successive corpus-expansion passes each showing near-zero
+autumn representation for Acer, Pinus and Prunus, that "this reads as a real property of GBIF's
+CC0/CC-BY `StillImage` holdings for these three genera specifically, not a sampling artefact that a
+larger fetch would eventually correct." Re-querying GBIF's occurrence-search API directly with a
+`month` filter (a parameter `fetch_candidates_for_key` in `prepare_dataset.py` has never used)
+contradicts this:
+
+| Genus | GBIF CC0+CC-BY `StillImage`, autumn (month=9,10,11) | Our corpus's actual autumn count (Section 11.1/seasonal_balance_report.json) |
+|---|---|---|
+| Acer | 40,603 | 66 |
+| Prunus | 23,517 | 30 |
+| Pinus | 34,016 | 60 |
+
+The true autumn-dated, licence-clean, still-image pool for these three genera is four to five orders
+of magnitude larger than what three iterations of this pipeline ever captured. **This was a
+pipeline bug, not a GBIF scarcity.** Reading `fetch_candidates_for_key` (`prepare_dataset.py:277`)
+identifies two concrete causes:
+
+1. **The fetch is not season-aware.** It walks GBIF search results in whatever order the API
+   returns them (sequential `offset` pages, no `month` filter, no date sort), then hands whatever
+   it collected to `season_stratified_select` afterward. If autumn-dated records are not
+   well-distributed across the *early* pages the fetch actually reaches, the season-stratified
+   *selection* step has nothing autumn-dated to select from, no matter how much autumn data exists
+   deeper in GBIF's index.
+2. **The early-exit is unsound for high-supply genera.** `if not got_any and offset > page_size * 2:
+   break` (line 346) stops paginating once one full pass across both accepted licences at a given
+   offset adds zero new candidates. This is a reasonable heuristic for a genus actually near its
+   ceiling (e.g. Ceratonia, true pool ~4,200), but for a genus with a 200,000+ true pool a single
+   thin page — one page's worth of already-seen URLs, transient fetch failures folded into `data is
+   None: continue`, or a same-page run of NC/ND-licensed media — trips the same early-exit and
+   silently truncates the walk far short of the genus's real ceiling, well before `MAX_SEARCH_OFFSET
+   = 30000` is ever reached.
+
+Verified directly: `curl "https://api.gbif.org/v1/occurrence/search?genusKey=3189834&mediaType=
+StillImage&license=CC0_1_0&license=CC_BY_4_0&month=9&month=10&month=11&limit=2"` returns
+`"count": 40603` with real Acer records (`Acer platanoides`, `eventDate: 2026-09-04`, licence
+`CC-BY-4.0`) on the first page. The fix is a scoped change to the existing, already-trusted GBIF
+pipeline — not a new source: fetch per season using GBIF's `month` parameter directly (at minimum
+for Acer, Pinus, Prunus; ideally for every weak temperate genus, so spring-weak genera get the same
+targeted treatment), and either remove or tighten the early-exit heuristic so a single thin page
+cannot terminate the walk for a genus with a confirmed large true pool. This reopens Section 12.6's
+"cannot tell... not a resolvable gap within this measurement task" conclusion for Acer/Pinus/Prunus
+autumn accuracy — it was not unresolvable, it was unattempted with the right query shape.
+
+### 13.2 Secondary finding: the weak temperate genera generally, not just those three, are far
+below GBIF's real ceiling — the corpus caps were self-imposed, not GBIF-imposed
+
+`TARGET_TOTAL_PER_CLASS = 6000` / `MAX_CANDIDATES_TO_FETCH = 8000` were sized against iteration 2's
+finding that "most classes' real ceiling sits at 4,566–5,303" (prepare_dataset.py comment, line
+~189) — true for the Mediterranean/evergreen genera the corpus was originally built to cover
+uniformly, but not for the temperate broadleaves this iteration is targeting:
+
+| Genus | Our corpus (downloaded, iteration 3) | GBIF true CC0+CC-BY `StillImage` pool | Headroom |
+|---|---|---|---|
+| Fraxinus | 5,946 | 72,521 | 12.2x |
+| Ulmus | 5,979 | 65,671 | 11.0x |
+| Tilia | 5,750 | 40,566 | 7.1x |
+| Carpinus | 6,000 | 30,253 | 5.0x |
+| Acer | 6,000 | 235,139 | 39.2x |
+| Alnus | 6,000 | 76,096 | 12.7x |
+| Salix | 5,986 | 499,799 | 83.5x |
+| Prunus | 5,999 | 228,832 | 38.1x |
+| Populus | 5,978 | 100,817 | 16.9x |
+| Pyrus | 5,630 | 20,649 | 3.7x |
+| Malus | 5,615 | 30,692 | 5.5x |
+| Betula | 6,000 | 106,052 | 17.7x |
+| Fagus | 5,988 | 54,888 | 9.2x |
+| Castanea | 6,000 | 22,811 | 3.8x |
+| Ostrya | 5,401 | 12,541 | 2.3x |
+| Celtis | 5,998 | 46,615 | 7.8x |
+| Juglans | 5,891 | 28,029 | 4.8x |
+| Sorbus | 5,981 | 46,009 | 7.7x |
+| Pinus | (not a target genus in this pass) | 186,314 | — |
+
+For contrast, the Mediterranean/evergreen genera the user found already-strong are close to their
+true, much smaller ceilings — e.g. Ceratonia's true pool is ~4,200 (confirmed against Section
+11.5's 3,629-candidate figure, same order of magnitude), Olea ~13,900, Phillyrea ~8,400,
+Cupressus ~12,700 — consistent with why a flat 6,000-per-class target under-serves the temperate
+genera specifically without over-serving the Mediterranean ones. **Raising the per-class cap
+non-uniformly — targeted at the weak temperate list, left alone for the genera already near their
+true ceiling — is available on the existing pipeline today, with no new source and no licence risk,
+and has an order of magnitude more headroom than iteration 3 used.**
+
+Spring-specific note (the season the user is most disappointed with): unlike the Acer/Pinus/Prunus
+autumn case, the current corpus's spring shortfall for Fraxinus/Ulmus/Tilia/Juglans is not an
+absolute-scarcity problem in the same way — `seasonal_balance_report.json` shows Fraxinus already
+achieved 2,116 spring images against a 1,500 quota (i.e. spring was not starved in the fetched
+pool). The spring weakness is more likely a genuine difficulty signal — spring foliage emergence
+across these genera looks more similar to each other than summer/autumn foliage does — that more
+volume (13.2) plus a longer training schedule (lever 3, deferred) is the more relevant lever for,
+rather than a fetch-pipeline fix the way autumn was for Acer/Pinus/Prunus.
+
+### 13.3 Source-by-source report
+
+**Tela Botanica — checked, access-blocked (not licence-blocked); needs a human decision to pursue
+further.**
+The upload-consent text in the CEL (Carnet en Ligne) web app states contributed photos are
+published "sous licence CC-BY-SA 2.0 FR" — that clears this iteration's licence gate (CC0/CC-BY/
+CC-BY-SA minimum). Tela Botanica's CEL is independently confirmed as a GBIF publisher (dataset key
+`baa86fb2-7346-4507-a34f-44e4c1bd0d57`, 331,820 occurrence records) but **zero of those records
+carry `StillImage` media in GBIF's index** (`occurrence/search?datasetKey=baa86fb2...&mediaType=
+StillImage&limit=0` → `"count": 0`) — meaning Tela Botanica's photos are not reaching our existing
+GBIF-sourced corpus at all today; it is a genuinely distinct, untapped pool if it can be reached
+directly. It cannot be reached directly without a login: Tela Botanica's modern photo API
+(`api-cel.tela-botanica.org/api/photos`, and every other `/api/*` path tried, including its own
+Hydra API-docs endpoint) returned `403 "You must be logged into tela-botanica SSO system to access
+this part of the app."` on every unauthenticated request. The older `api.tela-botanica.org/
+service:cel/*` endpoints exist and respond `200`, but returned empty bodies for the query shapes
+tried and no public bulk photo-search surfaced within the time spent. **Verdict: checked and
+rejected on access, not licence — flagging as a blocker requiring an explicit human decision (create
+a Tela Botanica account, confirm the SSO-gated API's terms of use actually permit automated/bulk
+access under that account) rather than something to route around by scripting a login.** This
+mirrors the plan's Rule 3 package-legitimacy exclusion in spirit: an access gate that requires a
+human credential/ToS judgement call, not an auto-fixable blocker.
+
+**Pl@ntNet-300K — checked, rejected on content coverage, not licence.**
+Confirmed CC-BY-4.0 (Zenodo record 5645731, `access_right: open`). Rather than download the
+31.6 GB image archive, pulled the 46 KB `plantnet300K_species_id_2_name.json` metadata file (via
+`api-cel`'s sibling Seafile share API, `seafile.plantnet.org/api/v2.1/share-links/.../dirents/`) and
+checked all 1,081 species names against the full weak-genus list (Fraxinus, Ulmus, Tilia, Carpinus,
+Acer, Alnus, Salix, Prunus, Populus, Pyrus, Malus, Betula, Fagus, Castanea, Quercus, Ostrya, Celtis,
+Juglans, Sorbus) plus a broader tree-genus sanity list (Abies, Picea, Larix, Cedrus, Platanus,
+Robinia, Aesculus, Cercis, Morus, Ailanthus, Sambucus, Cornus, Corylus, Ilex, Taxus, Juniperus,
+Cupressus, Olea, Ficus, etc.). **Zero matches for every genus on both lists except Liriodendron (2
+species — an ornamental, not a CNPF Factor A class).** The dataset's actual composition, sampled
+directly from the metadata, is herbaceous/weed/garden-plant/fern-weighted (`Lactuca virosa`,
+`Pelargonium capitatum`, `Cirsium arvense`, `Tradescantia fluminensis`, `Mercurialis annua`,
+`Dryopteris affinis`, ...). **Verdict: reject. Do not download the 31.6 GB archive — it would yield
+nothing usable for any of the 34 CNPF genera.**
+
+**iNaturalist direct API — usable, licence-clean, but low marginal value over fixing the existing
+GBIF pipeline.**
+`api.inaturalist.org/v1/observations` supports a licence filter
+(`photo_license=cc0,cc-by,cc-by-sa`) and quality-grade/month filters directly. Acer:
+103,988 research-grade, permissively-licensed observations total, 22,849 in autumn — same order of
+magnitude as GBIF's own "iNaturalist Research-grade Observations" dataset
+(`50c9509d-22c7-4a22-a47d-8c48425ef4a7`), which is almost certainly the dominant contributor to the
+235,139-record GBIF total found in 13.2, i.e. largely the same underlying photos our existing
+pipeline can already reach once 13.1's fix is applied. The one genuine addition iNaturalist-direct
+offers is CC-BY-SA licensed photos, which GBIF's `license` facet for these genera showed essentially
+none of (Fraxinus's facet: 44,181 CC-BY, 28,340 CC0, 93,556 CC-BY-NC — rejected — 0 CC-BY-SA).
+**Verdict: usable if needed later, but de-prioritised — the existing GBIF pipeline, once fixed
+(13.1) and scaled (13.2), already reaches most of the same pool with less new integration risk.**
+
+**Wikimedia Commons — usable, licence-clean, moderate scale, best suited to closing residual
+seasonal gaps after 13.1/13.2.**
+Per-file licence is directly machine-readable (`imageinfo.extmetadata.LicenseShortName`, e.g.
+confirmed `CC0` on sampled `Acer platanoides` files) — cleaner to verify per-image than GBIF's
+occasionally-stale `license` field. Flat species-level categories are modest on their own
+(`Category:Acer platanoides`: 68 files; `Category:Fraxinus excelsior`: 170; `Category:Quercus
+robur`: 199; `Category:Ulmus minor`: 234) but each nests 18–30 subcategories (bark, leaves, flowers,
+cultivars, seasonal) not counted in that flat figure — full yield needs a recursive category-tree
+crawl, not attempted here. Notably, **genus-level season-specific categories exist** —
+`Category:Acer in autumn` (36 files, 38 further subcats) and `Category:Fraxinus in autumn`
+(6 files, 3 subcats) were confirmed to exist and be licence-tagged — small in absolute count but
+exactly on-target for the seasonal gap. **Verdict: usable as a scoped supplement (with a recursive
+category crawl + per-file licence check) once 13.1/13.2 are applied and a residual gap is measured
+to still exist; not the first lever to pull.**
+
+**PlantCLEF — not pursued for raw images; one side-lead on the backbone question (lever 4).**
+PlantCLEF's published training corpora are themselves aggregated from GBIF, Pl@ntNet and herbaria
+under mixed per-record licences requiring the same filtering our pipeline already does, with
+substantial expected overlap against sources already queried — given the time budget for this
+reconnaissance and 13.1/13.2's much larger and lower-risk headroom on the existing pipeline, this
+was not investigated further for raw images. One find worth flagging for later, not now: a
+CC-BY-4.0 "PlantCLEF 2024 pretrained models on the flora of south western Europe" artifact on
+Zenodo — a DINOv2 ViT backbone fine-tuned on Pl@ntNet-derived European-flora imagery. Potentially
+relevant to lever 4 (stronger backbone, domain-pretrained rather than generic ImageNet) in
+principle, but a ViT/DINOv2 backbone does not obviously fit this plan's `.tflite`-export-with-
+parity-check constraint the way MobileNetV3/EfficientNet do, and would need a dedicated export/size
+feasibility check before being taken seriously as a lever-4 candidate. Flagged, not pursued.
+
+### 13.4 Recommendation and priority order
+
+1. **Fix `fetch_candidates_for_key`'s early-exit and add season-scoped (`month=`) fetching**, at
+   minimum for Acer, Pinus, Prunus (autumn) and ideally for the full weak-genus list keyed to
+   whichever season each is weakest in (13.1). This is a surgical change to the existing, trusted,
+   already-licence-gated pipeline — no new source, no new licence risk — and directly reopens a gap
+   (12.6) previously recorded as unresolvable.
+2. **Raise the per-class fetch/target cap for the weak temperate genera specifically**, leaving the
+   Mediterranean/evergreen genera's caps alone since they are already near their true, much smaller
+   ceilings (13.2). Order-of-magnitude headroom exists for essentially every genus on the weak list.
+3. **Wikimedia Commons** as a scoped supplementary source (recursive category crawl, per-file
+   licence verification) only if a measured gap remains after 1–2.
+4. **Tela Botanica**: blocked on SSO-gated access. Needs an explicit human decision (create an
+   account, confirm the platform's ToS actually permit automated/bulk access) before further work —
+   raising this as a checkpoint rather than proceeding unilaterally.
+5. **Pl@ntNet-300K**: reject outright. Confirmed zero coverage of any of the 34 CNPF genera; do not
+   spend the 31.6 GB download.
+6. **iNaturalist direct**: not worth a separate integration; superseded by 1–2 on the existing
+   pipeline.
+7. **PlantCLEF**: images not pursued (redundant, mixed licence, low expected marginal yield vs.
+   effort). Its CC-BY-4.0 pretrained European-flora backbone is flagged as a possible lever-4 lead
+   for a later pass, pending an export-feasibility check against the `.tflite` constraint.
+
+**What this changes about the corpus-expansion plan:** the highest-leverage, lowest-risk next step
+is a targeted bug fix plus a non-uniform scale-up of the *existing* GBIF pipeline for the specific
+weak genera — not new-source integration. This is faster, carries no new licence/ToS risk, and
+(13.1) has a specific, already-confirmed supply of exactly the missing autumn imagery sitting in
+GBIF today. Recommend running that fix-and-rescale pass first, measuring the result, and only then
+deciding whether Wikimedia Commons or Tela Botanica are still needed to close any residual gap —
+rather than committing hours of new-source integration work before the cheaper, lower-risk lever has
+even been tried. Levers 3 (longer training schedule, EarlyStopping-driven) and 4 (stronger backbone)
+remain open and are unaffected by this recommendation; they apply to whichever corpus results from
+this decision.
