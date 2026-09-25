@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common"
 import { AuthModule } from "../auth/auth.module"
+import { StorageModule } from "../storage/storage.module"
 import { CadastreProviderService } from "./cadastre-provider.service"
 import { ParcelsController } from "./parcels.controller"
 import { PublicController } from "./public.controller"
@@ -11,7 +12,7 @@ import { IbpRulesService } from "./ibp-rules.service"
 import { SyncController } from "./sync.controller"
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, StorageModule],
   controllers: [SurveysController, SyncController, PublicController, ParcelsController],
   providers: [
     SurveysService,
