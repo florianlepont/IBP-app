@@ -214,7 +214,7 @@ Plans:
 **Source**: audit lots L10, L13, findings ARCH-6, A-H3, A-M3, A-M4, the `isAllowedMimeType` finding, the unbounded `/sync/changes` fallback
 **Success Criteria** (what must be TRUE):
 
-  1. `/v1/sync/changes` pages on a monotonic sequence (`survey_events.seq`), still accepts the old `(created_at, id)` cursor, and an event committed late is never skipped (E2E test).
+  1. `/v1/sync/changes` pages on a commit-safe monotonic order (`survey_events` `(xid8, seq)`, filtered by the snapshot minimum `xid8 < pg_snapshot_xmin(pg_current_snapshot())`), still accepts the old `(created_at, id)` cursor, and an event committed late is never skipped (E2E test).
   2. Two devices sending the same `sync_version` with different content get a `sync_version_conflict` instead of a silent replay; the fallback that re-sends event-less surveys on every poll is gone.
   3. One `StorageService` owns the S3 client, bucket and local mode for surveys, attachments and users; profile pictures are in object storage and survive a container restart.
   4. Storage keys are built only from validated identifiers and stay inside the upload directory in local mode; the presigned PUT enforces `ContentLength` and confirmation rejects a size mismatch with 422.

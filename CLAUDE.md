@@ -184,6 +184,7 @@ The mobile app is designed to work without connectivity. All survey data is pers
 | `users` | `api/src/users/` | Profile CRUD, profile picture upload, account deletion |
 | `surveys` | `api/src/surveys/` | Survey CRUD, sync endpoint, IBP validation, parcel linkage, attachments, public map |
 | `database` | `api/src/database/` | `DatabaseService` (pg Pool wrapper) |
+| `storage` | `api/src/storage/` | StorageService: single owner of object storage (S3/MinIO or local), key builder, size and MIME checks |
 | `reports` | `api/src/reports/` | Moderation/report endpoints |
 | `debug` | `api/src/debug/` | Dev-only data reset endpoints |
 | `common` | `api/src/common/` | Shared utilities and types |
@@ -237,6 +238,7 @@ Factor validation matrix: `docs/technical/ibp-validation-matrix-v1.md`
 | `api/src/surveys/ibp-rules.service.ts` | Server-side IBP scoring rules |
 | `api/src/surveys/surveys-sync.service.ts` | Batch sync handler |
 | `api/src/database/database.service.ts` | pg pool wrapper |
+| `api/src/storage/storage.service.ts` | Single object storage owner (S3 client, keys, presign, local mode) |
 | `api/migrations/` | Ordered SQL migration files |
 | `docs/technical/technical-architecture-v1.md` | Architecture reference |
 | `docs/technical/api-contract-v1.md` | API endpoint specifications |

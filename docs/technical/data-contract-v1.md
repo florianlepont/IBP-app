@@ -12,6 +12,7 @@ Define the shared data model between mobile app, backend API, and database for t
 - Backend is the source of truth for business validation.
 - Sync operations must be idempotent.
 - Cadastral parcel identifiers (`parcel_id`/`parcel_ids[]`) are canonicalized server-side.
+- Survey and attachment ids are client- or server-chosen text that must match `^[A-Za-z0-9_-]{1,128}$` (UUIDs today, `survey-<ms>` in early mobile builds), because they become storage key segments.
 
 ## Entities
 
@@ -27,7 +28,7 @@ Required fields:
 - `last_name` (string)
 - `display_name` (string)
 - `profile_picture_url` (string, nullable)
-- `profile_picture_storage_key` (string, nullable) // local storage key for uploaded picture
+- `profile_picture_storage_key` (string, nullable) // object storage key for the uploaded picture (`profiles/{user_id}/avatar{ext}`), read and written through `StorageService` (MinIO/S3 bucket, or the local uploads directory in local mode)
 - `profile_picture_mime_type` (string, nullable)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
@@ -75,9 +76,9 @@ Photo or media file linked to a survey.
 Required fields:
 - `id` (uuid)
 - `survey_id` (uuid)
-- `storage_key` (string) // object storage key/path
+- `storage_key` (string) // object storage key built by the server: `surveys/{survey_id}/{attachment_id}{ext}`
 - `mime_type` (string)
-- `size_bytes` (integer)
+- `size_bytes` (integer) // must equal the uploaded byte length; a mismatch at confirm is rejected (`422 attachment_size_mismatch`)
 - `created_at` (timestamp)
 
 Optional fields:
@@ -95,9 +96,20 @@ Required fields:
 - `id` (uuid)
 - `survey_id` (uuid)
 - `actor_id` (uuid, nullable for system events)
-- `event_type` (enum: `created` | `updated` | `submitted` | `synced` | `sync_failed` | `expired` | `visibility_changed` | `deleted` | `reported` | `attachment_created` | `attachment_uploaded` | `attachment_deleted`)
+- `event_type` (enum: `created` | `updated` | `submitted` | `synced` | `sync_failed` | `expired` | `visibility_changed` | `deleted` | `reported` | `attachment_created` | `attachment_uploaded` | `attachment_deleted` | `backfilled`)
 - `payload` (jsonb, nullable)
 - `created_at` (timestamp)
+- `seq` (bigint, identity) // insertion order; backfilled in `(created_at, id)` order by migration 014
+- `xid8` (xid8, `DEFAULT pg_current_xact_id()`) // id of the transaction that wrote the event
+
+Indexes:
+- unique (`xid8`, `seq`) // changes-feed order
+
+Rules:
+- `seq` and `xid8` always come from the column defaults; inserts never name them.
+- `GET /v1/sync/changes` returns events with `xid8 < pg_snapshot_xmin(pg_current_snapshot())`, paged by (`xid8`, `seq`); see `sync-conflict-resolution-v1.md`, "Changes Feed Ordering".
+- `backfilled` events (`actor_id` NULL, payload `{"reason":"migration_014"}`) were inserted once by migration 014 for owned surveys that had no event.
+- `xid8` values belong to the cluster that wrote them: after a logical dump/restore, run `UPDATE survey_events SET xid8 = pg_current_xact_id();` before starting the API (see `sync-conflict-resolution-v1.md`, "Database restore").
 
 ### 6) Sync Operation (Mobile Queue)
 Tracks local operations waiting for server acknowledgment.
