@@ -30,16 +30,16 @@ module.exports = {
   globals: {
     __DEV__: true,
   },
-  // Ratchet (phase 01.3, D-09): floor of values measured on 2026-09-24. Raise these when
+  // Ratchet (phase 01.3, D-09; raised in phase 01.5): floor of values measured on 2026-09-25. Raise these when
   // coverage improves; never lower them. Regenerate with node scripts/coverage-by-directory.js mobile.
   coverageThreshold: {
     global: { statements: 100, lines: 100 },
-    './src/api/': { statements: 92, branches: 91, functions: 85, lines: 93 },
+    './src/api/': { statements: 95, branches: 97, functions: 91, lines: 95 },
     './src/app/': { statements: 61, branches: 55, functions: 45, lines: 63 },
     './src/components/': { statements: 6, branches: 0, functions: 0, lines: 6 },
-    './src/hooks/': { statements: 82, branches: 65, functions: 80, lines: 83 },
-    './src/screens/': { statements: 9, branches: 3, functions: 6, lines: 9 },
-    './src/storage/': { statements: 56, branches: 35, functions: 68, lines: 58 },
+    './src/hooks/': { statements: 85, branches: 69, functions: 83, lines: 87 },
+    './src/screens/': { statements: 10, branches: 3, functions: 7, lines: 10 },
+    './src/storage/': { statements: 92, branches: 80, functions: 90, lines: 94 },
     './src/ui/': { statements: 29, branches: 28, functions: 21, lines: 30 },
   },
 };
