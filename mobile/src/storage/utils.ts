@@ -10,6 +10,8 @@ import {
 } from "./types"
 import { FACTOR_KEYS, LEGACY_DEFAULT_FACTOR_VALUES } from "./db"
 import type { DbExecutor } from "./transaction"
+import { ApiError } from "../api/client"
+import { LocalFileMissingError, UploadTimeoutError } from "./attachments"
 
 export const isFilledValue = (value: unknown): boolean => {
   if (value === null || value === undefined) return false
@@ -256,6 +258,96 @@ export function isTerminalAttachmentError(message: string): boolean {
   ].some((code) => message.includes(code))
 }
 
+// D-05/D-14: one tested vocabulary decides whether a failure counts toward
+// the 8-attempt retry cap. "fatal" blocks on the first attempt, "retryable"
+// never counts (network/timeout/5xx/429), "unknown" counts (it's the only
+// class that can eventually reach the cap).
+export type FailureClassification = "fatal" | "retryable" | "unknown"
+
+function isNetworkError(error: unknown): boolean {
+  return (
+    error instanceof TypeError &&
+    /network request failed|failed to fetch|network error/i.test(error.message)
+  )
+}
+
+function parseHttpCodeFromMessage(prefix: string, message: string): number | null {
+  const match = new RegExp(`${prefix} (\\d+)`).exec(message)
+  return match ? Number(match[1]) : null
+}
+
+/**
+ * Classifies a batch-request-level exception (network error, apiRequest's
+ * ApiError, an unparsable response, or anything else thrown while calling
+ * POST /sync or GET /sync/changes). Returns "auth" for a 401/403 so the
+ * caller can rethrow it untouched instead of touching any queue row.
+ */
+export function classifyRequestError(error: unknown): FailureClassification | "auth" {
+  if (isNetworkError(error)) return "retryable"
+
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "auth"
+    if (error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)) {
+      return "retryable"
+    }
+    return "unknown"
+  }
+
+  return "unknown"
+}
+
+/**
+ * Classifies a per-operation result returned inside a successful POST /sync
+ * batch response (server contract: api/src/surveys/sync-error.utils.ts).
+ */
+export function classifyBatchResult(result: SyncBatchResult): FailureClassification {
+  if (result.status === "fatal_error") return "fatal"
+
+  if (result.status === "retryable_error") {
+    const httpStatus = result.error?.http_status
+    if (httpStatus === 429 || (typeof httpStatus === "number" && httpStatus >= 500 && httpStatus < 600)) {
+      return "retryable"
+    }
+    return "unknown"
+  }
+
+  return "unknown"
+}
+
+/**
+ * Classifies an exception thrown while uploading or confirming an
+ * attachment: the plan-07 error classes, the legacy UPLOAD_HTTP/LOCAL_FILE_HTTP
+ * string-coded errors from sync.ts's own fetch-based upload helpers (plan 11
+ * still owns those), or an ApiError from apiRequest's confirm PUT call.
+ */
+export function classifyUploadFailure(error: unknown): FailureClassification {
+  if (error instanceof LocalFileMissingError) return "fatal"
+  if (error instanceof UploadTimeoutError) return "retryable"
+
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "unknown"
+    if (error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)) {
+      return "retryable"
+    }
+    return "fatal"
+  }
+
+  if (isNetworkError(error)) return "retryable"
+
+  if (error instanceof Error) {
+    const uploadCode = parseHttpCodeFromMessage("UPLOAD_HTTP", error.message)
+    if (uploadCode !== null) {
+      if (uploadCode === 401 || uploadCode === 403) return "unknown"
+      if (uploadCode === 408 || uploadCode === 429 || (uploadCode >= 500 && uploadCode < 600)) {
+        return "retryable"
+      }
+      return "fatal"
+    }
+  }
+
+  return "unknown"
+}
+
 export function computeNextRetryAt(now: Date, retryCount: number): string {
   const seconds = Math.min(300, Math.pow(2, Math.min(retryCount, 8)) * 5)
   return new Date(now.getTime() + seconds * 1000).toISOString()
@@ -277,13 +369,17 @@ export async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
-export function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit: number): string {
-  const base = apiUrl.replace(/\/+$/, "")
+export function buildSyncChangesPath(cursor: string | null, limit: number): string {
   const params = [`limit=${encodeURIComponent(String(limit))}`]
   if (cursor) {
     params.push(`cursor=${encodeURIComponent(cursor)}`)
   }
-  return `${base}/sync/changes?${params.join("&")}`
+  return `/sync/changes?${params.join("&")}`
+}
+
+export function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit: number): string {
+  const base = apiUrl.replace(/\/+$/, "")
+  return `${base}${buildSyncChangesPath(cursor, limit)}`
 }
 
 export function deriveQueueOpType(payload: unknown): QueueOpType {
