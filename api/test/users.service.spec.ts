@@ -1,8 +1,5 @@
 import { BadRequestException, Logger, NotFoundException } from "@nestjs/common"
-import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import { UsersService } from "../src/users/users.service"
-
-jest.mock("fs/promises")
 
 const AUTH_USER = {
   id: "user-1",
@@ -56,12 +53,24 @@ function buildService() {
     sendPasswordResetEmail: jest.fn(),
     deleteUser: jest.fn(),
   }
+  const storage = {
+    mode: "local" as const,
+    buildProfilePictureKey: jest.fn(
+      (userId: string, mimeType: string) =>
+        `profiles/${userId}/avatar${mimeType === "image/png" ? ".png" : ".jpg"}`,
+    ),
+    putObject: jest.fn().mockResolvedValue(undefined),
+    headObject: jest.fn(),
+    getObject: jest.fn(),
+    deleteObject: jest.fn().mockResolvedValue(undefined),
+  }
 
   return {
-    service: new UsersService(db as never, auth0Management as never),
+    service: new UsersService(db as never, auth0Management as never, storage as never),
     db,
     client,
     auth0Management,
+    storage,
   }
 }
 
@@ -90,6 +99,71 @@ describe("UsersService", () => {
     db.query.mockResolvedValueOnce({ rows: [] })
 
     await expect(service.getMe(AUTH_USER.id)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  describe("getMe profile picture presence", () => {
+    let loggerWarnSpy: jest.SpyInstance
+
+    beforeEach(() => {
+      loggerWarnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+      loggerWarnSpy.mockRestore()
+    })
+
+    const withPicture = () =>
+      buildUserRow({
+        profile_picture_url: "/me/profile-picture?v=1",
+        profile_picture_storage_key: "profiles/user-1/avatar.png",
+        profile_picture_mime_type: "image/png",
+      })
+
+    it("returns a null url when the stored object is missing", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({ rows: [withPicture()] })
+      storage.headObject.mockResolvedValueOnce(null)
+
+      const result = await service.getMe(AUTH_USER.id)
+
+      expect(storage.headObject).toHaveBeenCalledWith("profiles/user-1/avatar.png")
+      expect(result.profile_picture_url).toBeNull()
+      // getMe never clears the columns itself.
+      expect(db.query).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps the url when the stored object exists", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({ rows: [withPicture()] })
+      storage.headObject.mockResolvedValueOnce({ contentLength: 9 })
+
+      const result = await service.getMe(AUTH_USER.id)
+
+      expect(result.profile_picture_url).toBe("/me/profile-picture?v=1")
+    })
+
+    it("does not check storage when no key is stored", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_url: "https://example.com/external.png" })],
+      })
+
+      const result = await service.getMe(AUTH_USER.id)
+
+      expect(storage.headObject).not.toHaveBeenCalled()
+      expect(result.profile_picture_url).toBe("https://example.com/external.png")
+    })
+
+    it("keeps the url and logs a warning when the object store is unreachable", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({ rows: [withPicture()] })
+      storage.headObject.mockRejectedValueOnce(new Error("connect ECONNREFUSED"))
+
+      const result = await service.getMe(AUTH_USER.id)
+
+      expect(result.profile_picture_url).toBe("/me/profile-picture?v=1")
+      expect(loggerWarnSpy).toHaveBeenCalledTimes(1)
+    })
   })
 
   it("patches profile fields", async () => {
@@ -197,20 +271,29 @@ describe("UsersService", () => {
       ).rejects.toBeInstanceOf(BadRequestException)
     })
 
-    it("throws BadRequestException when file is not an image", async () => {
-      const { service } = buildService()
+    it.each(["application/pdf", "image/gif", "constructor", "__proto__", ""])(
+      "throws BadRequestException for unsupported type %p and never writes",
+      async (mimetype) => {
+        const { service, db, storage } = buildService()
+        await expect(
+          service.uploadProfilePicture(AUTH_USER, { buffer: Buffer.from("data"), mimetype }),
+        ).rejects.toBeInstanceOf(BadRequestException)
+        expect(storage.putObject).not.toHaveBeenCalled()
+        expect(db.query).not.toHaveBeenCalled()
+      },
+    )
+
+    it("rejects a missing mimetype with BadRequestException", async () => {
+      const { service, storage } = buildService()
       await expect(
-        service.uploadProfilePicture(AUTH_USER, {
-          buffer: Buffer.from("data"),
-          mimetype: "application/pdf",
-        }),
+        service.uploadProfilePicture(AUTH_USER, { buffer: Buffer.from("data") }),
       ).rejects.toBeInstanceOf(BadRequestException)
+      expect(storage.putObject).not.toHaveBeenCalled()
     })
 
-    it("uploads and updates profile picture successfully", async () => {
-      const { service, db } = buildService()
-      ;(mkdir as jest.Mock).mockResolvedValue(undefined)
-      ;(writeFile as jest.Mock).mockResolvedValue(undefined)
+    it("writes through StorageService and updates the profile picture", async () => {
+      const { service, db, storage } = buildService()
+      const buffer = Buffer.from("img")
       // findUserMeRow (no previous picture)
       db.query.mockResolvedValueOnce({
         rows: [buildUserRow({ profile_picture_storage_key: null })],
@@ -221,21 +304,45 @@ describe("UsersService", () => {
       })
 
       const result = await service.uploadProfilePicture(AUTH_USER, {
-        buffer: Buffer.from("img"),
-        mimetype: "image/jpeg",
+        buffer,
+        mimetype: "Image/PNG ",
       })
 
       expect(result.profile_picture_url).toMatch(/\/me\/profile-picture/)
-      expect(writeFile).toHaveBeenCalled()
+      expect(storage.buildProfilePictureKey).toHaveBeenCalledWith(AUTH_USER.id, "image/png")
+      expect(storage.putObject).toHaveBeenCalledWith(
+        "profiles/user-1/avatar.png",
+        buffer,
+        "image/png",
+      )
+      expect(db.query).toHaveBeenLastCalledWith(expect.stringContaining("UPDATE users"), [
+        AUTH_USER.id,
+        expect.stringMatching(/^\/me\/profile-picture\?v=\d+$/),
+        "profiles/user-1/avatar.png",
+        "image/png",
+      ])
+      expect(storage.deleteObject).not.toHaveBeenCalled()
     })
 
-    it("deletes old picture when a different storage key exists", async () => {
-      const { service, db } = buildService()
-      ;(mkdir as jest.Mock).mockResolvedValue(undefined)
-      ;(writeFile as jest.Mock).mockResolvedValue(undefined)
-      ;(rm as jest.Mock).mockResolvedValue(undefined)
+    it("keeps the object when the previous key is the same", async () => {
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({
-        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/old-avatar.png" })],
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
+      })
+      db.query.mockResolvedValueOnce({ rows: [buildUserRow()] })
+
+      await service.uploadProfilePicture(AUTH_USER, {
+        buffer: Buffer.from("img"),
+        mimetype: "image/png",
+      })
+
+      expect(storage.deleteObject).not.toHaveBeenCalled()
+    })
+
+    it("deletes the previous object after the DB update when the key differs", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
       })
       db.query.mockResolvedValueOnce({
         rows: [buildUserRow({ profile_picture_url: "/me/profile-picture?v=2" })],
@@ -246,17 +353,44 @@ describe("UsersService", () => {
         mimetype: "image/jpeg",
       })
 
-      expect(rm).toHaveBeenCalledWith(
-        expect.stringContaining("old-avatar.png"),
-        expect.objectContaining({ force: true }),
-      )
+      expect(storage.deleteObject).toHaveBeenCalledWith("profiles/user-1/avatar.png")
+      const updateOrder = db.query.mock.invocationCallOrder[1] as number
+      expect(storage.deleteObject.mock.invocationCallOrder[0]).toBeGreaterThan(updateOrder)
     })
 
-    it("throws NotFoundException when user not found after writing file", async () => {
-      const { service, db } = buildService()
-      ;(mkdir as jest.Mock).mockResolvedValue(undefined)
-      ;(writeFile as jest.Mock).mockResolvedValue(undefined)
+    it("does not delete the previous object when the DB update fails", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
+      })
+      db.query.mockRejectedValueOnce(new Error("db down"))
+
+      await expect(
+        service.uploadProfilePicture(AUTH_USER, {
+          buffer: Buffer.from("img"),
+          mimetype: "image/jpeg",
+        }),
+      ).rejects.toThrow("db down")
+      expect(storage.deleteObject).not.toHaveBeenCalled()
+    })
+
+    it("throws NotFoundException and writes nothing when the user is not found", async () => {
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({ rows: [] }) // findUserMeRow returns nothing
+
+      await expect(
+        service.uploadProfilePicture(AUTH_USER, {
+          buffer: Buffer.from("img"),
+          mimetype: "image/png",
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException)
+      expect(storage.putObject).not.toHaveBeenCalled()
+    })
+
+    it("throws NotFoundException when the user disappears before the update", async () => {
+      const { service, db } = buildService()
+      db.query.mockResolvedValueOnce({ rows: [buildUserRow()] })
+      db.query.mockResolvedValueOnce({ rows: [] })
 
       await expect(
         service.uploadProfilePicture(AUTH_USER, {
@@ -269,16 +403,17 @@ describe("UsersService", () => {
 
   describe("getProfilePicture", () => {
     it("throws NotFoundException when no storage key in DB", async () => {
-      const { service, db } = buildService()
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({
         rows: [{ profile_picture_storage_key: null, profile_picture_mime_type: null }],
       })
 
       await expect(service.getProfilePicture(AUTH_USER)).rejects.toBeInstanceOf(NotFoundException)
+      expect(storage.getObject).not.toHaveBeenCalled()
     })
 
-    it("throws NotFoundException when file is missing on disk", async () => {
-      const { service, db } = buildService()
+    it("throws NotFoundException and clears the stale columns when the object is missing", async () => {
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({
         rows: [
           {
@@ -287,13 +422,40 @@ describe("UsersService", () => {
           },
         ],
       })
-      ;(readFile as jest.Mock).mockRejectedValueOnce(new Error("ENOENT"))
+      db.query.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      storage.getObject.mockResolvedValueOnce(null)
 
       await expect(service.getProfilePicture(AUTH_USER)).rejects.toBeInstanceOf(NotFoundException)
+
+      expect(storage.getObject).toHaveBeenCalledWith("profiles/user-1/avatar.jpg")
+      expect(db.query).toHaveBeenCalledTimes(2)
+      const [sql, params] = db.query.mock.calls[1] as [string, unknown[]]
+      expect(sql).toContain("UPDATE users")
+      expect(sql).toContain("profile_picture_url = NULL")
+      expect(sql).toContain("profile_picture_storage_key = NULL")
+      expect(sql).toContain("profile_picture_mime_type = NULL")
+      expect(sql).toMatch(/WHERE id = \$1\s+AND profile_picture_storage_key = \$2/)
+      expect(params).toEqual([AUTH_USER.id, "profiles/user-1/avatar.jpg"])
     })
 
-    it("returns buffer and mimeType when file exists", async () => {
-      const { service, db } = buildService()
+    it("propagates storage errors other than a missing object", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [
+          {
+            profile_picture_storage_key: "profiles/user-1/avatar.jpg",
+            profile_picture_mime_type: "image/jpeg",
+          },
+        ],
+      })
+      storage.getObject.mockRejectedValueOnce(new Error("connect ECONNREFUSED"))
+
+      await expect(service.getProfilePicture(AUTH_USER)).rejects.toThrow("ECONNREFUSED")
+      expect(db.query).toHaveBeenCalledTimes(1)
+    })
+
+    it("returns buffer and mimeType when the object exists", async () => {
+      const { service, db, storage } = buildService()
       const imageBuffer = Buffer.from("fake-image")
       db.query.mockResolvedValueOnce({
         rows: [
@@ -303,28 +465,45 @@ describe("UsersService", () => {
           },
         ],
       })
-      ;(readFile as jest.Mock).mockResolvedValueOnce(imageBuffer)
+      storage.getObject.mockResolvedValueOnce(imageBuffer)
 
       const result = await service.getProfilePicture(AUTH_USER)
 
+      expect(result).toEqual({ buffer: imageBuffer, mimeType: "image/jpeg" })
       expect(result.buffer).toBe(imageBuffer)
-      expect(result.mimeType).toBe("image/jpeg")
+    })
+
+    it("falls back to application/octet-stream when no mime type is stored", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [
+          {
+            profile_picture_storage_key: "profiles/user-1/avatar.jpg",
+            profile_picture_mime_type: null,
+          },
+        ],
+      })
+      storage.getObject.mockResolvedValueOnce(Buffer.from("x"))
+
+      const result = await service.getProfilePicture(AUTH_USER)
+
+      expect(result.mimeType).toBe("application/octet-stream")
     })
   })
 
   describe("removeProfilePicture", () => {
     it("throws NotFoundException when user is not found", async () => {
-      const { service, db } = buildService()
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({ rows: [] })
 
       await expect(service.removeProfilePicture(AUTH_USER)).rejects.toBeInstanceOf(
         NotFoundException,
       )
+      expect(storage.deleteObject).not.toHaveBeenCalled()
     })
 
-    it("removes file and clears picture url when storage key exists", async () => {
-      const { service, db } = buildService()
-      ;(rm as jest.Mock).mockResolvedValue(undefined)
+    it("clears the picture url, then deletes the object", async () => {
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({
         rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.jpg" })],
       })
@@ -332,15 +511,38 @@ describe("UsersService", () => {
 
       const result = await service.removeProfilePicture(AUTH_USER)
 
-      expect(rm).toHaveBeenCalledWith(
-        expect.stringContaining("avatar.jpg"),
-        expect.objectContaining({ force: true }),
-      )
+      expect(storage.deleteObject).toHaveBeenCalledWith("profiles/user-1/avatar.jpg")
+      const updateOrder = db.query.mock.invocationCallOrder[1] as number
+      expect(storage.deleteObject.mock.invocationCallOrder[0]).toBeGreaterThan(updateOrder)
       expect(result.profile_picture_url).toBeNull()
     })
 
-    it("skips file deletion when no storage key exists", async () => {
-      const { service, db } = buildService()
+    it("keeps the object when the DB update fails", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.jpg" })],
+      })
+      db.query.mockRejectedValueOnce(new Error("db down"))
+
+      await expect(service.removeProfilePicture(AUTH_USER)).rejects.toThrow("db down")
+      expect(storage.deleteObject).not.toHaveBeenCalled()
+    })
+
+    it("throws NotFoundException when the user disappears before the update", async () => {
+      const { service, db, storage } = buildService()
+      db.query.mockResolvedValueOnce({
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.jpg" })],
+      })
+      db.query.mockResolvedValueOnce({ rows: [] })
+
+      await expect(service.removeProfilePicture(AUTH_USER)).rejects.toBeInstanceOf(
+        NotFoundException,
+      )
+      expect(storage.deleteObject).not.toHaveBeenCalled()
+    })
+
+    it("skips object deletion when no storage key exists", async () => {
+      const { service, db, storage } = buildService()
       db.query.mockResolvedValueOnce({
         rows: [buildUserRow({ profile_picture_storage_key: null })],
       })
@@ -348,7 +550,7 @@ describe("UsersService", () => {
 
       await service.removeProfilePicture(AUTH_USER)
 
-      expect(rm).not.toHaveBeenCalled()
+      expect(storage.deleteObject).not.toHaveBeenCalled()
     })
   })
 
@@ -364,7 +566,7 @@ describe("UsersService", () => {
     })
 
     it("commits the DB transaction, anonymizes submitted surveys and removes the user row, then deletes the Auth0 user", async () => {
-      const { service, db, client, auth0Management } = buildService()
+      const { service, db, client, auth0Management, storage } = buildService()
       db.query.mockResolvedValueOnce({
         rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
       })
@@ -421,12 +623,20 @@ describe("UsersService", () => {
       expect(auth0Management.deleteUser.mock.invocationCallOrder[0]).toBeGreaterThan(
         lastDbCallOrder,
       )
+
+      // Storage cleanup (picture and draft attachment objects) runs only after the commit.
+      expect(storage.deleteObject).toHaveBeenCalledTimes(2)
+      expect(storage.deleteObject).toHaveBeenCalledWith("profiles/user-1/avatar.png")
+      expect(storage.deleteObject).toHaveBeenCalledWith("attachments/survey-draft/photo.jpg")
+      for (const order of storage.deleteObject.mock.invocationCallOrder) {
+        expect(order).toBeGreaterThan(lastDbCallOrder)
+      }
     })
 
-    it("rolls back and never calls Auth0 when the DB transaction fails", async () => {
-      const { service, db, client, auth0Management } = buildService()
+    it("rolls back and never calls Auth0 or storage when the DB transaction fails", async () => {
+      const { service, db, client, auth0Management, storage } = buildService()
       db.query.mockResolvedValueOnce({
-        rows: [buildUserRow({ profile_picture_storage_key: null })],
+        rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
       })
       const dbError = new Error("db failed")
       client.query
@@ -438,11 +648,12 @@ describe("UsersService", () => {
 
       expect(client.query).toHaveBeenCalledWith("ROLLBACK")
       expect(auth0Management.deleteUser).not.toHaveBeenCalled()
+      expect(storage.deleteObject).not.toHaveBeenCalled()
       expect(db.transaction).toHaveBeenCalledTimes(1)
     })
 
     it("resolves and logs a structured error when Auth0 deletion fails after commit", async () => {
-      const { service, db, client, auth0Management } = buildService()
+      const { service, db, client, auth0Management, storage } = buildService()
       db.query.mockResolvedValueOnce({
         rows: [buildUserRow({ profile_picture_storage_key: "profiles/user-1/avatar.png" })],
       })
@@ -466,7 +677,7 @@ describe("UsersService", () => {
       expect(message).toContain(AUTH_USER.id)
       expect(message).toContain(AUTH_USER.auth0_sub)
       // storage cleanup still attempted despite the Auth0 failure
-      expect(rm).toHaveBeenCalled()
+      expect(storage.deleteObject).toHaveBeenCalledWith("profiles/user-1/avatar.png")
     })
 
     it("throws NotFoundException and never calls Auth0 when the user row is missing", async () => {
