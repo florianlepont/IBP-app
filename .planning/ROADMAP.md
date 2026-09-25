@@ -197,9 +197,9 @@ Plans:
 - [x] 01.5-02-PLAN.md — API: attachment download URL / content route (wave 1)
 - [x] 01.5-03-PLAN.md — SQLite user_version migrations, transaction helper with reentrancy guard (wave 1)
 - [x] 01.5-04-PLAN.md — Offline cold start with cached profile, autosave fix (wave 1)
-- [ ] 01.5-05-PLAN.md — Transactional survey writes, UUIDs (wave 2)
-- [ ] 01.5-06-PLAN.md — Server photos fetched on demand and cached, unavailable state (wave 2)
-- [ ] 01.5-07-PLAN.md — Photo capture: resize, durable storage, streaming upload helper (wave 2)
+- [x] 01.5-05-PLAN.md — Transactional survey writes, UUIDs (wave 2)
+- [x] 01.5-06-PLAN.md — Server photos fetched on demand and cached, unavailable state (wave 2)
+- [x] 01.5-07-PLAN.md — Photo capture: resize, durable storage, streaming upload helper (wave 2)
 - [ ] 01.5-08-PLAN.md — Retry classification, timeouts, pull guard (wave 3)
 - [ ] 01.5-09-PLAN.md — expo-image thumbnails and carousel, missing/unavailable states (wave 3)
 - [ ] 01.5-10-PLAN.md — Single flight, batches of 100, synced only when queue empty (wave 4)
@@ -381,7 +381,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
 | 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
-| 1.5. Mobile sync engine reliability | 4/12 | In Progress|  |
+| 1.5. Mobile sync engine reliability | 7/12 | In Progress|  |
 | 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
