@@ -2512,3 +2512,200 @@ rather than committing hours of new-source integration work before the cheaper, 
 even been tried. Levers 3 (longer training schedule, EarlyStopping-driven) and 4 (stronger backbone)
 remain open and are unaffected by this recommendation; they apply to whichever corpus results from
 this decision.
+
+**Coordinator decision (2026-09-25), relayed after independent verification of Section 13.1's
+headline query against the live GBIF API: proceed with the pipeline-fix-first plan (Section 13.4
+points 1–2); do not pursue Tela Botanica for now.** Tela Botanica remains parked, not closed: its
+CC-BY-SA 2.0 FR licence is confirmed compatible with this iteration's gate, and its GBIF-published
+CEL dataset carries zero `StillImage`-tagged records today (Section 13.3), so it stays the most
+relevant candidate source if the temperate genera still fall short after this pass. Pl@ntNet-300K
+and iNaturalist-direct are closed, as recommended.
+
+## 14. Iteration 4 — execution
+
+### 14.1 Corpus collection — complete
+
+**Pipeline fix applied to `prepare_dataset.py` (gitignored, effects recorded here per the project's
+established `spike/`-is-throwaway convention — see `01-04-SUMMARY.md` key-decisions for prior
+iterations' identical treatment of `finetune.py`/`evaluate_accuracy.py`):**
+
+- **Early-exit heuristic widened, not removed.** `fetch_candidates_for_key`'s loop used to stop
+  paginating GBIF after a single page-round (2 pages' worth of offset, ~600) produced zero new
+  candidates. Section 13.1 showed this is unsound for high-supply genera — a single thin page (a
+  run of NC/ND-licensed media, a transient fetch failure, or a cluster of duplicate URLs) is not
+  evidence a genus's true ceiling was reached. Threshold raised to 8 pages' worth of offset (2,400)
+  before concluding a genus is exhausted. Genuinely licence-scarce genera (e.g. Ceratonia, true pool
+  ~4,200) still stop promptly; they were never the problem.
+- **Season-scoped fetching added.** A new `fetch_candidates_seasonal()` queries GBIF directly with
+  its `month=` filter per season (winter/spring/summer/autumn), so season balance is achieved by
+  asking for it directly rather than hoping a season-agnostic sequential walk happens to surface
+  season-diverse records before the (still-present) ceiling/ceiling-adjacent early exit fires.
+  Applied to the 20 weak temperate genera plus Pinus (see below).
+- **Per-class target raised non-uniformly.** `WEAK_TEMPERATE_TARGET_TOTAL_PER_CLASS = 10,000` (up
+  from the flat `TARGET_TOTAL_PER_CLASS = 6,000`), applied only to the 20 genera Section 13.2 found
+  had the most headroom against GBIF's true ceiling and are the genera the user actually surveys:
+  Fraxinus, Ulmus, Tilia, Carpinus, Acer, Alnus, Salix, Prunus, Populus, Pyrus, Malus, Betula,
+  Fagus, Castanea, both Quercus classes, Ostrya, Celtis, Juglans, Sorbus. Cap chosen at 10,000, not
+  each genus's full true ceiling (up to 499,799 for Salix) — bounded by disk, download wall-clock
+  (empirically ~8–13 img/s sustained against GBIF once season-scoped, well above the ~0.1–0.2 img/s
+  a first attempt hit while still trying to top up already-near-ceiling genera outside this list —
+  see the `--only-classes`/`--only-weak-temperate` note below) and training wall-clock on this
+  fanless MacBook Air, and comfortably below the smallest true ceiling in the list (Ostrya,
+  ~12,541), so no class in it was expected to exhaust its real GBIF pool at this cap. The
+  Mediterranean/evergreen genera were left at the unchanged 6,000 target and were not touched by
+  this pass at all (see below) — Section 13.2 found they are already near their true, much smaller
+  ceilings, so raising or even re-attempting their cap would have bought nothing.
+- **Pinus: season-scoped fetch at its unchanged 6,000 target.** Pinus was not on the coordinator's
+  cap-raise list, but the same instruction separately named it (with Acer and Prunus) for the
+  autumn-specific fix. Pinus was already below its own 6,000 target (5,773 downloaded) when this
+  iteration started, so it was routed through the same season-scoped fetch machinery
+  (`SEASON_SCOPED_FETCH_GENERA = WEAK_TEMPERATE_GENERA | {"Pinus"}`) without raising its target —
+  the fix asks for exactly the season shortfall (autumn 1,440 needed, summer 299 needed) rather
+  than growing the total.
+- **`--only-classes`/`--only-weak-temperate` CLI restriction added, and used.** A first run without
+  it processed classes least-progressed-first across all 34 labels, which meant genera *outside*
+  this iteration's target list but still below the unchanged 6,000 (Ceratonia, Cupressus, Taxus,
+  Tamarix, Phillyrea, Cercis, Pistacia, Pinus, Olea, Picea, Juniperus) were attempted first —
+  wasted effort, since their target did not change and most are already near their true, scarce
+  ceiling: Ceratonia's attempted top-up ran at ~0.1–0.2 img/s (slow/scarce remaining candidates from
+  its near-exhausted true pool) before being killed and restarted scoped to only the 20 weak
+  temperate genera via `--only-weak-temperate`, followed by a separate `--only-classes=Pinus` pass.
+  No corruption resulted — `write_outputs()`'s per-class checkpointing (Section 11, manifest-
+  truncation-bug fix) meant the killed run's in-progress class (Ceratonia, not yet checkpointed)
+  reverted cleanly to its prior state on restart, confirmed directly
+  (`per_class_counts.json`'s `Ceratonia` entry unchanged after the restart).
+- **Every existing safeguard kept, unmodified:** the CC0/CC-BY licence gate (`ACCEPTED_LICENSES`),
+  homonym-safe `kingdom=Plantae` resolution, the per-species Quercus split
+  (`QUERCUS_DECIDUOUS_SPECIES`/`QUERCUS_EVERGREEN_SPECIES`), the manifest-truncation-bug fix
+  (`load_prior_manifest_by_class()`), the global shuffle (Section 10.2's fix, `collect_split()`),
+  the hardened network deadlines with exponential backoff (`robust_fetch_bytes`), progress logging,
+  and `verify_corpus_complete()`.
+
+**Per-class counts reached (raw files retained on disk vs. the current corpus's selected/manifest
+count — these differ because `data/raw/<genus>/` accumulates every image ever downloaded across all
+iterations, while `season_stratified_select()` picks up to the *current* target from that pool; the
+extra raw files are not lost, they are simply not part of this iteration's selected corpus and
+remain available for a future top-up):**
+
+| genus | raw files on disk | selected (manifest) | winter | spring | summer | **autumn** |
+|---|---:|---:|---:|---:|---:|---:|
+| Fraxinus | 9,919 | 9,919 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Ulmus | 9,840 | 9,840 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Tilia | 9,059 | 9,059 | 988 | 2,776 | 2,652 | 2,859 |
+| Carpinus | 9,334 | 9,334 | 1,417 | 2,676 | 2,789 | 2,862 |
+| **Acer** | 11,245 | 9,998 | 2,500 | 2,500 | 2,500 | **2,500** |
+| Alnus | 9,828 | 9,828 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Salix | 9,860 | 9,661 | 2,500 | 2,500 | 2,500 | 2,500 |
+| **Prunus** | 10,773 | 9,999 | 2,500 | 2,500 | 2,500 | **2,500** |
+| Populus | 9,897 | 9,897 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Pyrus | 9,043 | 9,043 | 1,026 | 2,740 | 2,820 | 2,862 |
+| Malus | 8,350 | 8,350 | 593 | 2,700 | 2,711 | 2,850 |
+| Betula | 9,976 | 9,976 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Fagus | 9,987 | 9,987 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Castanea | 8,645 | 8,645 | 704 | 2,842 | 2,556 | 2,808 |
+| Quercus_deciduae | 9,511 | 9,511 | 1,821 | 2,709 | 2,752 | 2,705 |
+| Quercus_sempervirens | 8,554 | 8,554 | 2,064 | 2,792 | 2,260 | 2,287 |
+| Ostrya | 7,631 | 7,631 | 787 | 2,845 | 2,755 | 1,735 |
+| Celtis | 9,585 | 9,585 | 2,500 | 2,500 | 2,500 | 2,500 |
+| Juglans | 9,450 | 9,450 | 1,577 | 2,812 | 2,707 | 2,835 |
+| Sorbus | 8,883 | 8,883 | 854 | 2,684 | 2,624 | 2,850 |
+| **Pinus** | 7,553 | 6,000 | 1,500 | 1,500 | 1,500 | **1,500** |
+
+**Total corpus: 269,341 raw files on disk, 265,546 images selected into the current train/val/test
+split (up from iteration 3's 194,653 — a 1.36x increase, deliberately moderate next to iteration
+3's 3.05x jump given the coordinator's memory/wall-clock caution).**
+
+**Autumn counts, before and after the fix — the number that reopens Section 12.6's "cannot tell"
+verdict:**
+
+| genus | autumn images, iteration 3 (Section 11.1/12.4) | autumn images, iteration 4 |
+|---|---:|---:|
+| Acer | 66 | **2,500** (+2,434, 37.9x) |
+| Prunus | 30 | **2,500** (+2,470, 83.3x) |
+| Pinus | 60 | **1,500** (+1,440, 25.0x) |
+
+All three genera that iteration 3 (and iteration 2, and iteration 1's 30-image sample) found to have
+near-zero, apparently-irreducible autumn representation now clear the D-02/Section 12.4 n≥30
+insufficient-samples threshold by two orders of magnitude. Section 12.6's "cannot tell... not a
+resolvable gap within this measurement task" verdict is directly reopened by this number — whether
+the model's autumn accuracy for these three genera holds up is now measurable, for the first time
+across four iterations. That measurement itself happens in Section 14.3, after training.
+
+**`verify_corpus_complete()`: PASSED before training started** (confirmed in
+`/tmp/iter4_training.log`: `"Corpus precondition check PASSED: all 34 classes have non-empty,
+count-consistent train/val/test splits."`) — every one of the 34 classes has non-empty,
+count-consistent train/val/test splits, run immediately after the `GATE-CORPUS: PASS` check and
+before any data loading, per the precondition this check exists to enforce (Section 11).
+`GATE-CORPUS: PASS`, `CLASSES-USABLE: 32/34` (Betula and Phillyrea remain composition-excluded,
+unchanged from iterations 1–3 — Section 3a's finding, not re-audited this iteration).
+
+### 14.2 Training — in progress
+
+**Launched** 2026-09-25 13:29 CEST as a background process (PID 19098):
+`finetune.py --backbone efficientnet_b0 --output-suffix _v4 --head-epochs 8 --finetune-epochs 20
+--unfreeze-last-n-layers 76`.
+
+**Backbone: EfficientNetB0** (lever 4), chosen over EfficientNetB3 given this is a fanless MacBook
+Air that already showed memory/load pressure training the lighter MobileNetV3Large in iteration 3 —
+B3 would be substantially heavier compute-wise (native 300x300 input, roughly 2x the parameter
+count) for a machine this iteration's own evidence says is already under strain. B0's backbone is
+4,049,571 params (4,093,125 total with the 34-way head) — the same order of magnitude as
+MobileNetV3Large's 3,029,026, so the exported `.tflite` size is expected to stay in the same
+single-digit-MB range (verified in Section 14.4 once exported). `include_preprocessing=True` is not
+a valid kwarg for `keras.applications.EfficientNetB0` in this TensorFlow version (verified directly,
+`TypeError` on the old MobileNetV3-style call) — EfficientNet's Keras implementation bakes its own
+`Rescaling`+`Normalization` layers in as the model's first two layers instead, expecting the same
+raw `[0,255]` float input `make_dataset()`'s `_load()` already produces, so no pipeline change was
+needed there. `unfreeze_last_n_layers=76` scales MobileNetV3Large's tuned 60/188 layers (32%) to
+EfficientNetB0's 239 total layers proportionally (76/239 ≈ 32%).
+
+**Epoch budget raised substantially, `EarlyStopping` left to decide (lever 3).** Iteration 3 ran a
+fixed `--finetune-epochs 8` and `best_finetune_epoch_1indexed` was 8 of 8 — `val_top3` was still
+climbing every epoch with no plateau, meaning the fixed epoch budget, not the model or data, was the
+binding constraint (Section 11.7). This run raises `--finetune-epochs` to 20 (2.5x), letting
+`EarlyStopping(monitor="val_top3", mode="max", patience=3, restore_best_weights=True)` — confirmed
+present and unchanged from iteration 2/3's own finetune.py, verified directly against the running
+process's source (`train/finetune.py:414-416`, file last modified 10:13 CEST, process launched
+13:29 CEST, so the running process is confirmed to be executing this exact configuration) — decide
+when training has genuinely plateaued rather than being cut off mid-climb a second time.
+`restore_best_weights=True` means the exported model comes from the best-`val_top3` epoch specifically,
+not whichever epoch the loop happens to stop on — with a 20-epoch budget this matters more than
+iteration 3's 8-epoch one, where the last epoch and the best epoch were the same by construction.
+Head-phase epochs raised to 8 (from iteration 3's 6) for the same reason, though the head phase's
+own history (Section 11.2) already showed a plateau by epoch 3–4, so this is a smaller, lower-stakes
+change.
+
+**Memory/load check, before launch and during (coordinator flagged: iteration 3 hit 5/6GB swap,
+load average 11.5 under similar pressure).** Before any download or training in this iteration
+started, the machine was already at 15/16GB physical memory used with 6GB in the compressor
+(`vm_stat`, captured before launching corpus expansion) — a pre-existing condition from other
+concurrent processes (a `com.apple.VirtualMachine` process alone accounted for ~2.6GB compressed;
+various editor/agent helper processes for the rest), not something this iteration's pipeline
+introduced. A genuine, fixable memory issue in `finetune.py`'s own pipeline was found and fixed
+before launch regardless: `make_dataset()`'s per-epoch `.shuffle(8192)` call ran *after*
+`.map(_load, ...)`, i.e. on fully decoded 224x224x3 float32 image tensors (~602KB each) rather than
+on the lightweight `(path, label)` pairs `collect_split()` already globally shuffles at the Python
+level before `tf.data` ever sees them. A shuffle buffer of 8,192 decoded images holds ~4.9GB in
+memory simultaneously, regardless of corpus size (the cost is set by buffer element count, not
+dataset size) — a large, fixed, and entirely avoidable cost, and a direct, plausible contributor to
+iteration 3's observed swap pressure. Fixed by moving the `.shuffle()` call to run on `path_ds`
+*before* `.map(_load, ...)` — same statistical shuffle behaviour (each element is now a short string
++ an int, negligible memory) at a small fraction of the cost; standard `tf.data` ordering
+(shuffle-before-expensive-map) that the original code did not follow. **With the fix applied and
+training running (PID 19098), the process's own RSS is 1.04GB** — not itself memory-heavy. The
+machine-wide load average (13.69/22.91/25.23 one/five/fifteen-minute) and swap (2.79/4GB used)
+observed during this run are consistent with the same shared-machine contention present before this
+iteration's work began, not a new leak in the training pipeline; the per-image footprint through the
+fixed pipeline (decode of an already-≤384px-on-disk JPEG, batch of 32, `AUTOTUNE` prefetch) is small
+and bounded regardless of corpus size. This is reported as observed, not as a claim that the
+shared-machine contention is fully resolved — a later reader retiming this on a quieter machine
+should expect a materially lower load average for the same job.
+
+**Expected duration.** Head phase: ~16.7 min/epoch observed directly (6,639 steps/epoch at ~152ms/
+step, backbone frozen) x 8 epochs ≈ 2.2 hours. Fine-tune phase (backbone partially unfrozen, more
+compute per step): expected slower per epoch than the head phase; if `EarlyStopping` does not fire
+before the 20-epoch cap, total fine-tune time could run into the 7–10 hour range on this hardware,
+for a total iteration-4 training wall-clock in the range of iteration 3's 4h46min to as much as
+10–12 hours end-to-end, depending on where `EarlyStopping` actually triggers. Reported here as a
+planning number, not a promise — the actual duration and the epoch `EarlyStopping` stops at are
+recorded in Section 14.3 once training completes.
