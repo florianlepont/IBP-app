@@ -1704,3 +1704,52 @@ own report records both the Keras-side and TFLite-side accuracy on that same 68-
 reads as ordinary float16 rounding noise on a near-tied prediction rather than a quantisation
 regression of the kind the int8 scheme produced in iteration 1 (Section 4: 79.4% agreement, 2x
 probability shifts). Still comfortably inside the plan's own 90% parity threshold.
+
+### 11.3 Per-genus accuracy — three-way comparison (iterations 1, 2, 3)
+
+**Source model:** `genus_classifier_v3.tflite` (Section 11.2, not yet promoted — see Section 11.6).
+**Test split:** iteration 3's own held-out test split, 19,466 images across 34 classes (up from
+iteration 2's 6,387, iteration 1's 1,183). **Measured:** 2026-09-25, same
+`eval/evaluate_accuracy.py` script, same D-03/D-04 rules (per genus, raw counts alongside
+percentages, no headline average). Composition-filtering decision unchanged from iterations 1–2:
+raw, unfiltered test split (Section 5).
+
+**Raw numbers below, exactly as `eval/results_v3/per_genus_accuracy.csv` reports them — committed
+before any interpretation.**
+
+| genus | it1 n | it1 top1 | it1 top3 | it2 n | it2 top1 | it2 top3 | it3 n | it3 top1 | it3 top3 | it3 clears | top3 Δ 1→2 | top3 Δ 2→3 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|---:|---:|
+| Abies | 35 | 45.7% | 60.00% | 198 | 55.0% | 81.31% | 600 | 70.2% | 89.67% | No | +21.3pp | +8.4pp |
+| Acer | 35 | 14.3% | 25.71% | 191 | 58.6% | 79.58% | 600 | 61.5% | 80.83% | No | +53.9pp | +1.3pp |
+| Alnus | 35 | 31.4% | 54.29% | 199 | 54.8% | 70.85% | 600 | 59.2% | 77.33% | No | +16.6pp | +6.5pp |
+| Arbutus | 35 | 54.3% | 80.00% | 197 | 66.5% | 87.82% | 600 | 80.2% | 91.17% | No | +7.8pp | +3.3pp |
+| Betula | 35 | 42.9% | 51.43% | 191 | 50.8% | 68.59% | 600 | 61.8% | 82.33% | No | +17.2pp | +13.7pp |
+| Carpinus | 35 | 37.1% | 51.43% | 199 | 61.8% | 79.40% | 600 | 59.7% | 81.00% | No | +28.0pp | +1.6pp |
+| Castanea | 35 | 37.1% | 51.43% | 192 | 63.5% | 81.77% | 600 | 74.0% | 83.83% | No | +30.3pp | +2.1pp |
+| Celtis | 35 | 31.4% | 48.57% | 170 | 38.8% | 65.88% | 600 | 59.7% | 80.67% | No | +17.3pp | +14.8pp |
+| Cupressus | 35 | 37.1% | 74.29% | 165 | 64.2% | 83.64% | 530 | 72.6% | 90.94% | No | +9.4pp | +7.3pp |
+| Fagus | 35 | 51.4% | 71.43% | 169 | 56.8% | 78.11% | 599 | 66.9% | 83.47% | No | +6.7pp | +5.4pp |
+| Fraxinus | 35 | 5.7% | 22.86% | 141 | 29.8% | 63.12% | 594 | 48.3% | 77.61% | No | +40.3pp | +14.5pp |
+| Juglans | 35 | 14.3% | 42.86% | 179 | 52.5% | 73.74% | 589 | 59.4% | 80.81% | No | +30.9pp | +7.1pp |
+| Juniperus | 35 | 25.7% | 60.00% | 177 | 53.7% | 76.27% | 597 | 71.5% | 90.79% | No | +16.3pp | +14.5pp |
+| Larix | 35 | 42.9% | 54.29% | 176 | 62.5% | 79.55% | 599 | 72.0% | 87.65% | No | +25.3pp | +8.1pp |
+| Malus | 35 | 54.3% | 71.43% | 191 | 53.4% | 72.25% | 561 | 60.6% | 80.21% | No | +0.8pp | +8.0pp |
+| Ostrya | 35 | 22.9% | 34.29% | 185 | 53.0% | 69.19% | 540 | 65.7% | 84.26% | No | +34.9pp | +15.1pp |
+| Pinus | 35 | 42.9% | 74.29% | 189 | 59.3% | 83.07% | 578 | 73.0% | 91.35% | No | +8.8pp | +8.3pp |
+| Picea | 35 | 34.3% | 65.71% | 186 | 48.4% | 82.26% | 595 | 63.2% | 88.74% | No | +16.5pp | +6.5pp |
+| Populus | 35 | 17.1% | 40.00% | 191 | 47.1% | 69.11% | 598 | 55.7% | 79.60% | No | +29.1pp | +10.5pp |
+| Prunus | 35 | 31.4% | 48.57% | 197 | 49.8% | 73.60% | 600 | 56.0% | 80.50% | No | +25.0pp | +6.9pp |
+| Pyrus | 35 | 20.0% | 42.86% | 188 | 43.1% | 71.28% | 563 | 62.2% | 82.42% | No | +28.4pp | +11.1pp |
+| Quercus_deciduae | 35 | 40.0% | 60.00% | 196 | 69.9% | 84.69% | 467 | 73.0% | 84.15% | No | +24.7pp | -0.5pp |
+| Quercus_sempervirens | 35 | 37.1% | 62.86% | 195 | 63.6% | 82.05% | 568 | 70.4% | 85.74% | No | +19.2pp | +3.7pp |
+| Salix | 35 | 37.1% | 60.00% | 196 | 56.1% | 81.63% | 598 | 64.5% | 84.95% | No | +21.6pp | +3.3pp |
+| Sorbus | 35 | 37.1% | 62.86% | 194 | 69.1% | 81.96% | 598 | 77.6% | 87.96% | No | +19.1pp | +6.0pp |
+| Tamarix | 35 | 51.4% | 65.71% | 179 | 81.0% | 88.27% | 544 | 88.6% | 95.04% | **Yes** | +22.6pp | +6.8pp |
+| Taxus | 35 | 45.7% | 68.57% | 197 | 67.5% | 85.28% | 533 | 74.7% | 91.93% | No | +16.7pp | +6.7pp |
+| Tilia | 35 | 25.7% | 60.00% | 199 | 55.3% | 78.89% | 575 | 59.1% | 77.74% | No | +18.9pp | -1.2pp |
+| Ulmus | 30 | 0.0% | 16.67% | 197 | 45.2% | 67.51% | 598 | 48.7% | 74.92% | No | +50.8pp | +7.4pp |
+| Ceratonia | 35 | 65.7% | 85.71% | 193 | 80.8% | 92.75% | 363 | 77.1% | 90.63% | No | +7.0pp | -2.1pp |
+| Cercis | 35 | 42.9% | 65.71% | 191 | 73.3% | 80.63% | 571 | 82.0% | 89.49% | No | +14.9pp | +8.9pp |
+| Olea | 35 | 60.0% | 94.29% | 193 | 71.5% | 88.60% | 591 | 75.1% | 91.20% | No | -5.7pp | +2.6pp |
+| Phillyrea | 35 | 60.0% | 88.57% | 199 | 71.4% | 88.44% | 546 | 79.1% | 92.67% | No | -0.1pp | +4.2pp |
+| Pistacia | 33 | 48.5% | 81.82% | 187 | 61.0% | 82.35% | 571 | 78.5% | 91.07% | No | +0.5pp | +8.7pp |
