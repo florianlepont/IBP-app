@@ -189,7 +189,21 @@ Plans:
   6. Attachments pulled from the server are displayable (no more `local_uri=""` dead rows: fetched on demand through their presigned URL and cached), and thumbnails and the detail carousel render through `expo-image` from downsized sources.
   7. A cold start with no network and valid stored credentials opens the app on the signed-in screens with the last known profile, instead of the login overlay; the profile refreshes from `/me` once the API is reachable.
 
-**Plans**: TBD
+**Plans**: 12 plans
+
+Plans:
+- [ ] 01.5-01-PLAN.md — Install the 4 Expo modules, Jest mocks, photo path helpers (wave 1)
+- [ ] 01.5-02-PLAN.md — API: attachment download URL / content route (wave 1)
+- [ ] 01.5-03-PLAN.md — SQLite user_version migrations, transaction helper with reentrancy guard (wave 1)
+- [ ] 01.5-04-PLAN.md — Offline cold start with cached profile, autosave fix (wave 1)
+- [ ] 01.5-05-PLAN.md — Transactional survey writes, UUIDs (wave 2)
+- [ ] 01.5-06-PLAN.md — Server photos fetched on demand and cached, unavailable state (wave 2)
+- [ ] 01.5-07-PLAN.md — Photo capture: resize, durable storage, streaming upload helper (wave 2)
+- [ ] 01.5-08-PLAN.md — Retry classification, timeouts, pull guard (wave 3)
+- [ ] 01.5-09-PLAN.md — expo-image thumbnails and carousel, missing/unavailable states (wave 3)
+- [ ] 01.5-10-PLAN.md — Single flight, batches of 100, synced only when queue empty (wave 4)
+- [ ] 01.5-11-PLAN.md — Streaming upload wired into sync, missing file handling (wave 5)
+- [ ] 01.5-12-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 6)
 
 ### Phase 01.6: Sync feed ordering and unified object storage (INSERTED)
 
