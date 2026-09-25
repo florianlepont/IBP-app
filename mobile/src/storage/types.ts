@@ -14,6 +14,18 @@ export type LocalSurvey = {
   completion_rate: number
 }
 
+export type QueueOpType =
+  | "survey_upsert"
+  | "survey_delete"
+  | "survey_visibility"
+  | "attachment_upload"
+  | "attachment_delete"
+  | "unknown"
+
+// "unavailable" = the server has no downloadable bytes for a pulled attachment
+// (404/409), set by plan 06. "missing" is set later by plans 06/11.
+export type AttachmentFileState = "local" | "remote" | "missing" | "unavailable"
+
 export type LocalAttachment = {
   id: string
   survey_id: string
@@ -29,6 +41,7 @@ export type LocalAttachment = {
   last_sync_error_code: string | null
   last_sync_error_at: string | null
   updated_at: string
+  file_state: AttachmentFileState
 }
 
 export type QueueRow = {
@@ -38,6 +51,7 @@ export type QueueRow = {
   status: "pending" | "failed"
   retry_count: number
   next_retry_at: string | null
+  op_type: QueueOpType | null
 }
 
 export type AttachmentQueuePayload = {

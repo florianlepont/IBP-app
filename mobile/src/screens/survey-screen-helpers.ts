@@ -1,4 +1,6 @@
 import { FactorKey } from "../app/types"
+import { resolveAttachmentUri } from "../storage/attachment-files"
+import type { LocalAttachment } from "../storage/types"
 
 const FACTOR_ORDER: FactorKey[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 const FACTOR_KEYS = new Set<FactorKey>(FACTOR_ORDER)
@@ -28,6 +30,51 @@ export const resolveDisplayCoordinates = (
 
   return { lat, lng }
 }
+
+// Preview-state helper (D-10, D-11): decides which of the four attachment
+// preview states a screen should render, from `file_state` alone. Screens
+// are not rendered in Jest, so all of this logic lives here where it is
+// unit-tested, instead of inline in SurveyDetailScreen/SurveyListScreen.
+export const MISSING_PHOTO_MESSAGE =
+  "Photo introuvable sur cet appareil. Supprimez-la ou reprenez la photo."
+export const LOADING_PHOTO_MESSAGE = "Photo en cours de chargement…"
+export const UNAVAILABLE_PHOTO_MESSAGE = "Photo non disponible pour le moment."
+
+export type AttachmentPreview =
+  | { kind: "image"; uri: string }
+  | { kind: "loading"; message: string }
+  | { kind: "missing"; message: string }
+  | { kind: "unavailable"; message: string }
+
+export const isPhotoAttachment = (attachment: Pick<LocalAttachment, "mime_type">): boolean =>
+  attachment.mime_type.startsWith("image/")
+
+export const resolveAttachmentPreview = (
+  attachment: Pick<LocalAttachment, "file_state" | "local_uri">,
+): AttachmentPreview => {
+  if (attachment.file_state === "missing") {
+    return { kind: "missing", message: MISSING_PHOTO_MESSAGE }
+  }
+  if (attachment.file_state === "unavailable") {
+    return { kind: "unavailable", message: UNAVAILABLE_PHOTO_MESSAGE }
+  }
+  if (attachment.file_state === "remote") {
+    return { kind: "loading", message: LOADING_PHOTO_MESSAGE }
+  }
+  // file_state === "local"
+  const uri = attachment.local_uri?.trim() ?? ""
+  if (!uri) {
+    return { kind: "loading", message: LOADING_PHOTO_MESSAGE }
+  }
+  return { kind: "image", uri: resolveAttachmentUri(uri) }
+}
+
+export const selectPreviewCandidates = (attachments: LocalAttachment[]): LocalAttachment[] =>
+  attachments.filter(
+    (attachment) =>
+      isPhotoAttachment(attachment) &&
+      (attachment.file_state === "remote" || attachment.file_state === "local"),
+  )
 
 export const toAddressLabel = (item: Record<string, unknown>): string => {
   const streetNumber = typeof item.streetNumber === "string" ? item.streetNumber.trim() : ""

@@ -3,6 +3,7 @@ import { Alert, StyleSheet, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
 import { initLocalDb } from "./src/storage/db"
+import { persistLegacyAttachmentFiles } from "./src/storage/attachments"
 import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
 import { styles } from "./src/app/styles"
 import { SurveyDetailTab } from "./src/app/types"
@@ -128,6 +129,10 @@ export default function App() {
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
       await initLocalDb()
+      // Best-effort: rescue photos captured by older app versions from the
+      // OS-purgeable cache before the app starts using them (T-01.5-26). Must
+      // never block startup.
+      await persistLegacyAttachmentFiles().catch(() => undefined)
       await refreshLocalSurveys()
       await refreshLocalAttachments()
     }

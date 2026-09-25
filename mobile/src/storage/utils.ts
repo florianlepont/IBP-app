@@ -1,4 +1,3 @@
-import * as SQLite from "expo-sqlite"
 import {
   SurveyQueuePayload,
   SurveyDeleteQueuePayload,
@@ -7,8 +6,12 @@ import {
   AttachmentDeleteQueuePayload,
   UploadTargetResponse,
   SyncBatchResult,
+  QueueOpType,
 } from "./types"
 import { FACTOR_KEYS, LEGACY_DEFAULT_FACTOR_VALUES } from "./db"
+import type { DbExecutor } from "./transaction"
+import { ApiError } from "../api/client"
+import { LocalFileMissingError, UploadTimeoutError } from "./attachments"
 
 export const isFilledValue = (value: unknown): boolean => {
   if (value === null || value === undefined) return false
@@ -208,16 +211,18 @@ export function deriveSurveyErrorCode(message: string): string {
 }
 
 export function deriveAttachmentErrorCode(message: string): string {
+  // D-14: an "unknown" failure that reached MAX_RETRY_COUNT is always
+  // reported as retry_cap_reached, even when its underlying message also
+  // contains an UPLOAD_HTTP/CONFIRM_HTTP code (e.g. eight capped 401s) — the
+  // cap having been reached is the more actionable fact for the user.
+  if (message.includes("retry cap reached")) return "retry_cap_reached"
+  if (message.includes("Local file missing")) return "local_file_missing"
   if (message.includes("UPLOAD_HTTP 400")) return "attachment_bad_request"
   if (message.includes("UPLOAD_HTTP 401") || message.includes("CONFIRM_HTTP 401"))
     return "unauthorized"
   if (message.includes("UPLOAD_HTTP 403") || message.includes("CONFIRM_HTTP 403"))
     return "forbidden"
-  if (
-    message.includes("UPLOAD_HTTP 404") ||
-    message.includes("CONFIRM_HTTP 404") ||
-    message.includes("LOCAL_FILE_HTTP 404")
-  )
+  if (message.includes("UPLOAD_HTTP 404") || message.includes("CONFIRM_HTTP 404"))
     return "not_found"
   if (message.includes("UPLOAD_HTTP 429") || message.includes("CONFIRM_HTTP 429"))
     return "rate_limited"
@@ -225,34 +230,109 @@ export function deriveAttachmentErrorCode(message: string): string {
     return "transient_upstream_error"
   if (message.includes("HTTP 409")) return "sync_version_conflict"
   if (message.includes("HTTP 422")) return "attachment_validation_failed"
-  if (message.includes("retry cap reached")) return "retry_cap_reached"
   return "attachment_sync_failed"
 }
 
-export function isTerminalSurveyError(message: string): boolean {
-  return ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404", "HTTP 409", "HTTP 422"].some((code) =>
-    message.includes(code),
+// D-05/D-14: one tested vocabulary decides whether a failure counts toward
+// the 8-attempt retry cap. "fatal" blocks on the first attempt, "retryable"
+// never counts (network/timeout/5xx/429), "unknown" counts (it's the only
+// class that can eventually reach the cap).
+export type FailureClassification = "fatal" | "retryable" | "unknown"
+
+function isNetworkError(error: unknown): boolean {
+  return (
+    error instanceof TypeError &&
+    /network request failed|failed to fetch|network error/i.test(error.message)
   )
 }
 
-export function isTerminalAttachmentError(message: string): boolean {
-  return [
-    "HTTP 400",
-    "HTTP 401",
-    "HTTP 403",
-    "HTTP 404",
-    "HTTP 409",
-    "HTTP 422",
-    "UPLOAD_HTTP 400",
-    "UPLOAD_HTTP 401",
-    "UPLOAD_HTTP 403",
-    "UPLOAD_HTTP 404",
-    "CONFIRM_HTTP 400",
-    "CONFIRM_HTTP 401",
-    "CONFIRM_HTTP 403",
-    "CONFIRM_HTTP 404",
-    "LOCAL_FILE_HTTP 404",
-  ].some((code) => message.includes(code))
+function parseHttpCodeFromMessage(prefix: string, message: string): number | null {
+  const match = new RegExp(`${prefix} (\\d+)`).exec(message)
+  return match ? Number(match[1]) : null
+}
+
+/**
+ * Classifies a batch-request-level exception (network error, apiRequest's
+ * ApiError, an unparsable response, or anything else thrown while calling
+ * POST /sync or GET /sync/changes). Returns "auth" for a 401/403 so the
+ * caller can rethrow it untouched instead of touching any queue row.
+ */
+export function classifyRequestError(error: unknown): FailureClassification | "auth" {
+  if (isNetworkError(error)) return "retryable"
+
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "auth"
+    if (
+      error.status === 408 ||
+      error.status === 429 ||
+      (error.status >= 500 && error.status < 600)
+    ) {
+      return "retryable"
+    }
+    return "unknown"
+  }
+
+  return "unknown"
+}
+
+/**
+ * Classifies a per-operation result returned inside a successful POST /sync
+ * batch response (server contract: api/src/surveys/sync-error.utils.ts).
+ */
+export function classifyBatchResult(result: SyncBatchResult): FailureClassification {
+  if (result.status === "fatal_error") return "fatal"
+
+  if (result.status === "retryable_error") {
+    const httpStatus = result.error?.http_status
+    if (
+      httpStatus === 429 ||
+      (typeof httpStatus === "number" && httpStatus >= 500 && httpStatus < 600)
+    ) {
+      return "retryable"
+    }
+    return "unknown"
+  }
+
+  return "unknown"
+}
+
+/**
+ * Classifies an exception thrown while uploading or confirming an
+ * attachment: the plan-07 error classes (LocalFileMissingError,
+ * UploadTimeoutError), the UPLOAD_HTTP-coded error thrown by sync.ts when
+ * uploadAttachmentFile resolves a non-2xx status, or an ApiError from
+ * apiRequest's confirm PUT call.
+ */
+export function classifyUploadFailure(error: unknown): FailureClassification {
+  if (error instanceof LocalFileMissingError) return "fatal"
+  if (error instanceof UploadTimeoutError) return "retryable"
+
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "unknown"
+    if (
+      error.status === 408 ||
+      error.status === 429 ||
+      (error.status >= 500 && error.status < 600)
+    ) {
+      return "retryable"
+    }
+    return "fatal"
+  }
+
+  if (isNetworkError(error)) return "retryable"
+
+  if (error instanceof Error) {
+    const uploadCode = parseHttpCodeFromMessage("UPLOAD_HTTP", error.message)
+    if (uploadCode !== null) {
+      if (uploadCode === 401 || uploadCode === 403) return "unknown"
+      if (uploadCode === 408 || uploadCode === 429 || (uploadCode >= 500 && uploadCode < 600)) {
+        return "retryable"
+      }
+      return "fatal"
+    }
+  }
+
+  return "unknown"
 }
 
 export function computeNextRetryAt(now: Date, retryCount: number): string {
@@ -268,27 +348,29 @@ export function safeParseJson(value: string): unknown {
   }
 }
 
-export async function safeJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return {}
-  }
-}
-
-export function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit: number): string {
-  const base = apiUrl.replace(/\/+$/, "")
+export function buildSyncChangesPath(cursor: string | null, limit: number): string {
   const params = [`limit=${encodeURIComponent(String(limit))}`]
   if (cursor) {
     params.push(`cursor=${encodeURIComponent(cursor)}`)
   }
-  return `${base}/sync/changes?${params.join("&")}`
+  return `/sync/changes?${params.join("&")}`
 }
 
-export async function deleteQueuedSurveyUpserts(
-  db: SQLite.SQLiteDatabase,
-  surveyId: string,
-): Promise<void> {
+export function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit: number): string {
+  const base = apiUrl.replace(/\/+$/, "")
+  return `${base}${buildSyncChangesPath(cursor, limit)}`
+}
+
+export function deriveQueueOpType(payload: unknown): QueueOpType {
+  if (isSurveyDeleteQueuePayload(payload)) return "survey_delete"
+  if (isSurveyVisibilityQueuePayload(payload)) return "survey_visibility"
+  if (isAttachmentDeleteQueuePayload(payload)) return "attachment_delete"
+  if (isAttachmentQueuePayload(payload)) return "attachment_upload"
+  if (isSurveyQueuePayload(payload)) return "survey_upsert"
+  return "unknown"
+}
+
+export async function deleteQueuedSurveyUpserts(db: DbExecutor, surveyId: string): Promise<void> {
   const rows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
     `SELECT id, payload
      FROM sync_queue
@@ -304,10 +386,7 @@ export async function deleteQueuedSurveyUpserts(
   }
 }
 
-export async function hasPendingQueueForSurvey(
-  db: SQLite.SQLiteDatabase,
-  surveyId: string,
-): Promise<boolean> {
+export async function hasPendingQueueForSurvey(db: DbExecutor, surveyId: string): Promise<boolean> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count
      FROM sync_queue

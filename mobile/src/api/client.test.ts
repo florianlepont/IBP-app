@@ -100,4 +100,53 @@ describe("apiRequest", () => {
       body: null,
     })
   })
+
+  it("rejects with a timeout ApiError if the response body never resolves", async () => {
+    jest.useFakeTimers()
+    try {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => new Promise<string>(() => {}),
+      } satisfies MockResponse) as typeof global.fetch
+
+      const pending = apiRequest({
+        baseUrl: "https://api.example.com",
+        path: "/hangs",
+        timeoutMs: 1000,
+      })
+      const assertion = expect(pending).rejects.toMatchObject({
+        status: 408,
+        message: "Request timeout after 1000ms",
+        body: null,
+      })
+
+      await jest.advanceTimersByTimeAsync(1000)
+      await assertion
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it("still parses a normal response and clears the timer on success", async () => {
+    jest.useFakeTimers()
+    try {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true }),
+      } satisfies MockResponse) as typeof global.fetch
+
+      const result = await apiRequest<{ ok: boolean }>({
+        baseUrl: "https://api.example.com",
+        path: "/fine",
+        timeoutMs: 1000,
+      })
+
+      expect(result).toEqual({ ok: true })
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
 })

@@ -1,4 +1,6 @@
 import * as SQLite from "expo-sqlite"
+import { runInTransaction, TxHandle } from "./transaction"
+import { deriveQueueOpType, safeParseJson } from "./utils"
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null
 
@@ -11,6 +13,12 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
 }
 
 export const MAX_RETRY_COUNT = 8
+export const SYNC_BATCH_SIZE = 100
+// PRAGMA user_version target. Bump this and push a new entry onto MIGRATIONS
+// (below) whenever the schema changes; initLocalDb() migrates any existing
+// install from its current version up to this one, one migration at a time.
+export const SCHEMA_VERSION = 1
+
 export const FACTOR_KEYS: Array<"A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"> = [
   "A",
   "B",
@@ -36,9 +44,107 @@ export const LEGACY_DEFAULT_FACTOR_VALUES: Record<string, Record<string, number>
   J: { type_count: 1 },
 }
 
+/**
+ * Adds `columnName` to `table` via `ALTER TABLE ... ADD COLUMN` unless it
+ * already exists (checked through `PRAGMA table_info`). Unlike the old
+ * catch-all this lets a real ALTER failure propagate instead of being
+ * swallowed (T-01.5-09): a half-migrated schema should surface, not hide.
+ */
+async function ensureColumn(
+  tx: TxHandle,
+  table: string,
+  columnName: string,
+  columnDef: string,
+): Promise<void> {
+  const columns = await tx.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`)
+  if (columns.some((column) => column.name === columnName)) {
+    return
+  }
+  await tx.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef};`)
+}
+
+/**
+ * Migration 1 (version 0 -> 1). Additive only: every step either adds a
+ * column guarded by ensureColumn, or updates/backfills rows already in
+ * place. Nothing is dropped or recreated, so a version-0 phone keeps every
+ * survey, queue row, photo row and metadata row it had (D-08, T-01.5-08).
+ */
+async function migration1(tx: TxHandle): Promise<void> {
+  await ensureColumn(tx, "local_surveys", "last_sync_error", "last_sync_error TEXT")
+  await ensureColumn(tx, "local_surveys", "last_sync_error_code", "last_sync_error_code TEXT")
+  await ensureColumn(tx, "local_surveys", "last_sync_error_at", "last_sync_error_at TEXT")
+  await ensureColumn(tx, "local_surveys", "sync_blocked", "sync_blocked INTEGER NOT NULL DEFAULT 0")
+  await ensureColumn(tx, "local_surveys", "payload_json", "payload_json TEXT")
+  await ensureColumn(tx, "local_surveys", "created_at", "created_at TEXT")
+  await tx.runAsync(
+    `UPDATE local_surveys SET created_at = updated_at WHERE created_at IS NULL OR created_at = ''`,
+  )
+  await ensureColumn(
+    tx,
+    "local_surveys",
+    "visibility",
+    `visibility TEXT NOT NULL DEFAULT 'private'`,
+  )
+  await tx.runAsync(
+    `UPDATE local_surveys SET visibility = 'private' WHERE visibility IS NULL OR visibility = ''`,
+  )
+
+  await ensureColumn(tx, "sync_queue", "next_retry_at", "next_retry_at TEXT")
+  await ensureColumn(tx, "local_attachments", "remote_attachment_id", "remote_attachment_id TEXT")
+  await ensureColumn(tx, "local_attachments", "storage_key", "storage_key TEXT")
+  await ensureColumn(tx, "local_attachments", "upload_url", "upload_url TEXT")
+  await ensureColumn(tx, "local_attachments", "confirm_url", "confirm_url TEXT")
+  await ensureColumn(tx, "local_attachments", "last_sync_error", "last_sync_error TEXT")
+  await ensureColumn(tx, "local_attachments", "last_sync_error_code", "last_sync_error_code TEXT")
+  await ensureColumn(tx, "local_attachments", "last_sync_error_at", "last_sync_error_at TEXT")
+
+  // Every queue row gets an explicit op_type, backfilled from its existing
+  // payload guards; an unrecognised payload is tagged "unknown", never
+  // guessed (REQ-AUD-local-storage, Pitfall 4).
+  await ensureColumn(tx, "sync_queue", "op_type", "op_type TEXT")
+  const queueRows = await tx.getAllAsync<{ id: number; payload: string }>(
+    `SELECT id, payload FROM sync_queue`,
+  )
+  for (const row of queueRows) {
+    const opType = deriveQueueOpType(safeParseJson(row.payload))
+    await tx.runAsync(`UPDATE sync_queue SET op_type = ? WHERE id = ?`, [opType, row.id])
+  }
+
+  // Reset every existing queue row's retry state (D-06, owner decision): rows
+  // inflated by the old retry-cap bug get a fresh MAX_RETRY_COUNT attempts.
+  await tx.runAsync(`UPDATE sync_queue SET retry_count = 0, next_retry_at = NULL`)
+
+  await ensureColumn(
+    tx,
+    "local_attachments",
+    "file_state",
+    `file_state TEXT NOT NULL DEFAULT 'local'`,
+  )
+  await tx.runAsync(
+    `UPDATE local_attachments SET file_state = 'remote' WHERE local_uri IS NULL OR local_uri = ''`,
+  )
+
+  await tx.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_sync_queue_status_next_retry ON sync_queue(status, next_retry_at, id);`,
+  )
+  await tx.execAsync(`CREATE INDEX IF NOT EXISTS idx_sync_queue_survey ON sync_queue(survey_id);`)
+}
+
+// Migration N lives at index N-1; MIGRATIONS[currentVersion] is the next one
+// to run on the way up to SCHEMA_VERSION.
+const MIGRATIONS: Array<(tx: TxHandle) => Promise<void>> = [migration1]
+
 export async function initLocalDb(): Promise<void> {
   const db = await getDb()
 
+  // SQLite refuses to change the journal mode inside a transaction, and
+  // :memory: databases (the test double) always report "memory" regardless
+  // (C9), so this runs once, outside runInTransaction, and is never asserted
+  // on in tests.
+  await db.execAsync(`PRAGMA journal_mode = WAL;`)
+
+  // Fresh installs get this pre-phase baseline, then migrate through the
+  // same steps as every other install (below).
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS local_surveys (
       id TEXT PRIMARY KEY NOT NULL,
@@ -95,37 +201,22 @@ export async function initLocalDb(): Promise<void> {
     );
   `)
 
-  // Run schema upgrades column-by-column so one duplicate-column error
-  // does not prevent later columns from being added.
-  await addColumnIfMissing(db, "local_surveys", "last_sync_error TEXT")
-  await addColumnIfMissing(db, "local_surveys", "last_sync_error_code TEXT")
-  await addColumnIfMissing(db, "local_surveys", "last_sync_error_at TEXT")
-  await addColumnIfMissing(db, "local_surveys", "sync_blocked INTEGER NOT NULL DEFAULT 0")
-  await addColumnIfMissing(db, "local_surveys", "payload_json TEXT")
-  await addColumnIfMissing(db, "local_surveys", "created_at TEXT")
-  await db.runAsync(
-    `UPDATE local_surveys SET created_at = updated_at WHERE created_at IS NULL OR created_at = ''`,
-  )
-  await addColumnIfMissing(db, "local_surveys", `visibility TEXT NOT NULL DEFAULT 'private'`)
-  await db.runAsync(
-    `UPDATE local_surveys SET visibility = 'private' WHERE visibility IS NULL OR visibility = ''`,
-  )
-  await addColumnIfMissing(db, "sync_queue", "next_retry_at TEXT")
-  await addColumnIfMissing(db, "local_attachments", "remote_attachment_id TEXT")
-  await addColumnIfMissing(db, "local_attachments", "storage_key TEXT")
-  await addColumnIfMissing(db, "local_attachments", "upload_url TEXT")
-  await addColumnIfMissing(db, "local_attachments", "confirm_url TEXT")
-  await addColumnIfMissing(db, "local_attachments", "last_sync_error TEXT")
-  await addColumnIfMissing(db, "local_attachments", "last_sync_error_code TEXT")
-  await addColumnIfMissing(db, "local_attachments", "last_sync_error_at TEXT")
-}
+  const versionRow = await db.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
+  const currentVersion = versionRow?.user_version ?? 0
 
-async function addColumnIfMissing(
-  db: SQLite.SQLiteDatabase,
-  table: string,
-  columnDef: string,
-): Promise<void> {
-  await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef};`).catch(() => {
-    // Column likely already exists; keep migration idempotent.
-  })
+  for (let version = currentVersion; version < SCHEMA_VERSION; version += 1) {
+    const migration = MIGRATIONS[version]
+    if (!migration) {
+      throw new Error(`Missing migration for schema version ${version + 1}`)
+    }
+    const nextVersion = version + 1
+    await runInTransaction(async (tx) => {
+      await migration(tx)
+      // SQLite allows PRAGMA user_version inside a transaction, so the
+      // version bump commits atomically with the migration's own writes: a
+      // crash mid-migration leaves the previous version intact and the
+      // migration simply re-runs next launch (T-01.5-08).
+      await tx.execAsync(`PRAGMA user_version = ${nextVersion};`)
+    })
+  }
 }
