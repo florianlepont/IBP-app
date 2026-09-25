@@ -5,6 +5,7 @@ import request = require("supertest")
 import { AppModule } from "../src/app.module"
 import { configureApp } from "../src/app.setup"
 import { DatabaseService } from "../src/database/database.service"
+import { StorageService } from "../src/storage/storage.service"
 import { installEventInsertFailure, removeEventInsertFailures } from "./e2e-fault-injection"
 
 // T-01.4-17/18/19: proves that attachment create/upload/delete and report
@@ -15,6 +16,7 @@ import { installEventInsertFailure, removeEventInsertFailures } from "./e2e-faul
 describe("Attachments and reports transactions (e2e)", () => {
   let app: NestExpressApplication
   let db: DatabaseService
+  let storage: StorageService
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -24,6 +26,7 @@ describe("Attachments and reports transactions (e2e)", () => {
     app = moduleFixture.createNestApplication<NestExpressApplication>()
     configureApp(app)
     db = moduleFixture.get(DatabaseService)
+    storage = moduleFixture.get(StorageService)
     await app.init()
   })
 
@@ -168,10 +171,11 @@ describe("Attachments and reports transactions (e2e)", () => {
       const surveyId = `e2e-atx-uploaded-${Date.now()}`
       await createDraftSurvey(accessToken, surveyId)
 
+      const uploadBytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
       const createRes = await request(app.getHttpServer())
         .post(`/v1/surveys/${surveyId}/attachments`)
         .set("Authorization", `Bearer ${accessToken}`)
-        .send({ mime_type: "image/jpeg", size_bytes: 1000 })
+        .send({ mime_type: "image/jpeg", size_bytes: uploadBytes.length })
         .expect(201)
 
       const attachmentId = createRes.body.attachment_id as string
@@ -181,15 +185,24 @@ describe("Attachments and reports transactions (e2e)", () => {
 
       await installEventInsertFailure(db, { surveyId, eventType: "attachment_uploaded" })
 
-      await request(app.getHttpServer())
-        .put(`/v1/surveys/${surveyId}/attachments/${attachmentId}/upload`)
-        .set("Authorization", `Bearer ${accessToken}`)
-        .query({ token: uploadToken })
-        .attach("file", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
-          filename: "photo.jpg",
-          contentType: "image/jpeg",
-        })
-        .expect(500)
+      if (process.env.OBJECT_STORAGE_MODE === "minio") {
+        await storage.putObject(createRes.body.storage_key as string, uploadBytes, "image/jpeg")
+
+        await request(app.getHttpServer())
+          .put(`/v1${createRes.body.confirm_url as string}`)
+          .set("Authorization", `Bearer ${accessToken}`)
+          .expect(500)
+      } else {
+        await request(app.getHttpServer())
+          .put(`/v1/surveys/${surveyId}/attachments/${attachmentId}/upload`)
+          .set("Authorization", `Bearer ${accessToken}`)
+          .query({ token: uploadToken })
+          .attach("file", uploadBytes, {
+            filename: "photo.jpg",
+            contentType: "image/jpeg",
+          })
+          .expect(500)
+      }
 
       const attachment = await db.query<{ uploaded_at: string | null }>(
         `SELECT uploaded_at::text FROM attachments WHERE id = $1`,

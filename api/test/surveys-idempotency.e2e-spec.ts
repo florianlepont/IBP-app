@@ -1016,12 +1016,13 @@ describe("Surveys idempotency (e2e)", () => {
       })
       .expect(201)
 
+    const uploadBytes = Buffer.from("fake-jpeg-binary")
     const created = await request(app.getHttpServer())
       .post(`/v1/surveys/${surveyId}/attachments`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
         mime_type: "image/jpeg",
-        size_bytes: 2048000,
+        size_bytes: uploadBytes.length,
       })
       .expect(201)
 
@@ -1039,7 +1040,7 @@ describe("Surveys idempotency (e2e)", () => {
         headers: {
           "Content-Type": "image/jpeg",
         },
-        body: Buffer.from("fake-jpeg-binary"),
+        body: uploadBytes,
       })
       expect(presignedUpload.ok).toBe(true)
 
@@ -1058,7 +1059,7 @@ describe("Surveys idempotency (e2e)", () => {
       const uploaded = await request(app.getHttpServer())
         .put(`/v1${created.body.upload_url}`)
         .set("Authorization", `Bearer ${accessToken}`)
-        .attach("file", Buffer.from("fake-jpeg-binary"), {
+        .attach("file", uploadBytes, {
           filename: "sample.jpg",
           contentType: "image/jpeg",
         })
@@ -1314,6 +1315,7 @@ describe("Surveys idempotency (e2e)", () => {
       })
       .expect(201)
 
+    const uploadBytes = Buffer.from("fake-jpeg-binary")
     const created = await request(app.getHttpServer())
       .post("/v1/sync")
       .set("Authorization", `Bearer ${accessToken}`)
@@ -1326,7 +1328,7 @@ describe("Surveys idempotency (e2e)", () => {
             survey_id: surveyId,
             payload: {
               mime_type: "image/jpeg",
-              size_bytes: 1024,
+              size_bytes: uploadBytes.length,
             },
           },
         ],
@@ -1345,7 +1347,7 @@ describe("Surveys idempotency (e2e)", () => {
         headers: {
           "Content-Type": "image/jpeg",
         },
-        body: Buffer.from("fake-jpeg-binary"),
+        body: uploadBytes,
       })
       expect(presignedUpload.ok).toBe(true)
 
@@ -1357,7 +1359,7 @@ describe("Surveys idempotency (e2e)", () => {
       await request(app.getHttpServer())
         .put(`/v1${uploadUrl}`)
         .set("Authorization", `Bearer ${accessToken}`)
-        .attach("file", Buffer.from("fake-jpeg-binary"), {
+        .attach("file", uploadBytes, {
           filename: "sample.jpg",
           contentType: "image/jpeg",
         })
