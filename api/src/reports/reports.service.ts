@@ -7,6 +7,7 @@ import {
 import { randomUUID } from "crypto"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService } from "../database/database.service"
+import { SurveyEventsService } from "../surveys/survey-events.service"
 import { CreateReportBody, PatchReportBody, ReportRow, ReportStatus } from "./reports.types"
 
 type ReportedSurveyRow = {
@@ -18,7 +19,11 @@ type ReportedSurveyRow = {
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    // D-07: the single survey event writer, from SurveysDataModule.
+    private readonly events: SurveyEventsService,
+  ) {}
 
   async createReport(
     user: AuthenticatedUser,
@@ -54,11 +59,8 @@ export class ReportsService {
         [reportId, surveyId, user.id, reason],
       )
 
-      await db.query(
-        `INSERT INTO survey_events (id, survey_id, event_type, payload)
-         VALUES ($1, $2, 'reported', $3::jsonb)`,
-        [randomUUID(), surveyId, JSON.stringify({ report_id: reportId })],
-      )
+      // 01.2 A-M6: reported events never carry the reporter's identity, so the actor is null.
+      await this.events.insert(db, surveyId, null, "reported", { report_id: reportId })
 
       return result.rows[0]
     })

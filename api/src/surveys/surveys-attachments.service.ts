@@ -7,10 +7,12 @@ import {
 } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { DatabaseService, Queryable } from "../database/database.service"
+import { DatabaseService } from "../database/database.service"
 import { isAllowedMimeType } from "../common/file.utils"
 import { DOWNLOAD_URL_TTL_SECONDS, StorageService } from "../storage/storage.service"
-import { AttachmentRow, CreateAttachmentBody, SurveyRow } from "./surveys.types"
+import { SurveyEventsService } from "./survey-events.service"
+import { SurveysRepository } from "./surveys.repository"
+import { AttachmentRow, CreateAttachmentBody } from "./surveys.types"
 
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
@@ -20,52 +22,10 @@ export class SurveysAttachmentsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly storage: StorageService,
+    // D-07: ownership checks read only the ownership columns; events use the single writer.
+    private readonly repository: SurveysRepository,
+    private readonly events: SurveyEventsService,
   ) {}
-
-  private async getSurveyForUserOrThrow(
-    db: Queryable,
-    surveyId: string,
-    userId: string,
-    options?: { forUpdate?: boolean },
-  ): Promise<SurveyRow> {
-    const survey = await this.getSurveyForUser(db, surveyId, userId, true, options)
-    if (!survey) {
-      throw new NotFoundException("Survey not found")
-    }
-    return survey
-  }
-
-  private async getSurveyForUser(
-    db: Queryable,
-    surveyId: string,
-    userId: string,
-    activeOnly: boolean,
-    options?: { forUpdate?: boolean },
-  ): Promise<SurveyRow | null> {
-    const where = activeOnly ? "AND deleted_at IS NULL" : ""
-    const forUpdate = options?.forUpdate ? "FOR UPDATE" : ""
-    const result = await db.query<SurveyRow>(
-      `SELECT *
-       FROM surveys
-       WHERE id = $1 AND user_id = $2 ${where} ${forUpdate}`,
-      [surveyId, userId],
-    )
-    return result.rows[0] ?? null
-  }
-
-  private async insertEvent(
-    db: Queryable,
-    surveyId: string,
-    actorId: string,
-    eventType: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await db.query(
-      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
-    )
-  }
 
   private buildConfirmUrl(surveyId: string, attachmentId: string, uploadToken: string): string {
     const token = encodeURIComponent(uploadToken)
@@ -119,7 +79,11 @@ export class SurveysAttachmentsService {
         : confirmUrl
 
     await this.db.transaction(async (db) => {
-      await this.getSurveyForUserOrThrow(db, surveyId, user.id, { forUpdate: true })
+      await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+        activeOnly: true,
+        forUpdate: true,
+        columns: "ownership",
+      })
 
       const countResult = await db.query<{ count: string }>(
         `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
@@ -145,7 +109,7 @@ export class SurveysAttachmentsService {
         ],
       )
 
-      await this.insertEvent(db, surveyId, user.id, "attachment_created", {
+      await this.events.insert(db, surveyId, user.id, "attachment_created", {
         attachment_id: attachmentId,
         storage_key: storageKey,
         mime_type: body.mime_type,
@@ -172,7 +136,10 @@ export class SurveysAttachmentsService {
       throw new BadRequestException("upload token is required")
     }
 
-    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const existing = await this.db.query<AttachmentRow>(
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
@@ -239,7 +206,7 @@ export class SurveysAttachmentsService {
         [attachmentId, surveyId],
       )
 
-      await this.insertEvent(db, surveyId, user.id, "attachment_uploaded", {
+      await this.events.insert(db, surveyId, user.id, "attachment_uploaded", {
         attachment_id: attachmentId,
         storage_key: attachment.storage_key,
         object_storage_mode: this.storage.mode,
@@ -261,7 +228,10 @@ export class SurveysAttachmentsService {
     attachmentId: string,
     options?: { allowMissing?: boolean },
   ): Promise<{ survey_id: string; attachment_id: string; missing: boolean; deleted: boolean }> {
-    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const existing = await this.db.query<AttachmentRow>(
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
@@ -290,7 +260,7 @@ export class SurveysAttachmentsService {
         [attachmentId, surveyId],
       )
 
-      await this.insertEvent(db, surveyId, user.id, "attachment_deleted", {
+      await this.events.insert(db, surveyId, user.id, "attachment_deleted", {
         attachment_id: attachmentId,
         storage_key: existing.rows[0].storage_key,
       })
@@ -323,7 +293,10 @@ export class SurveysAttachmentsService {
       >
     >
   }> {
-    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const result = await this.db.query<
       Pick<
@@ -395,7 +368,10 @@ export class SurveysAttachmentsService {
     surveyId: string,
     attachmentId: string,
   ): Promise<{ url: string; expires_at: string; requires_auth: boolean }> {
-    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const attachment = await this.getUploadedAttachmentOrThrow(surveyId, attachmentId)
     const { url, requires_auth } = await this.buildDownloadUrl(
@@ -416,7 +392,10 @@ export class SurveysAttachmentsService {
     surveyId: string,
     attachmentId: string,
   ): Promise<{ buffer: Buffer; mimeType: string }> {
-    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     if (this.storage.mode !== "local") {
       throw new NotFoundException("Attachment content not found")

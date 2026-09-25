@@ -13,11 +13,12 @@ import { DatabaseService, Queryable } from "../database/database.service"
 import { StorageService } from "../storage/storage.service"
 import { CadastreProviderService } from "./cadastre-provider.service"
 import { IbpRulesService } from "./ibp-rules.service"
+import { SurveyEventsService } from "./survey-events.service"
+import { SurveysRepository } from "./surveys.repository"
 import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
 import {
   AttachmentRow,
   ParcelRow,
-  SurveyEventRow,
   SurveyPatchBody,
   SurveyVisibilityPatchBody,
   SurveyRow,
@@ -59,6 +60,9 @@ export class SurveysService {
     private readonly cadastreProvider: CadastreProviderService,
     private readonly storage: StorageService,
     config: ConfigService,
+    // D-07: the shared ownership lookup, parcel links and event writer (SurveysDataModule).
+    private readonly repository: SurveysRepository,
+    private readonly events: SurveyEventsService,
   ) {
     // D-01: the WFS count cap (3000) and the defaults live in app-config.ts.
     const cadastre = appConfigOf(config).cadastre
@@ -189,8 +193,10 @@ export class SurveysService {
     const surveyId = body.id
 
     return this.db.transaction(async (db) => {
-      let existing = await this.getSurveyForUser(db, surveyId, user.id, false, {
+      let existing = await this.repository.findOwned(db, surveyId, user.id, {
+        activeOnly: false,
         forUpdate: true,
+        columns: "full",
       })
 
       if (!existing) {
@@ -242,9 +248,9 @@ export class SurveysService {
         )
 
         if (insertResult.rows[0]) {
-          await this.syncSurveyParcels(db, surveyId, selectedParcelIds)
+          await this.repository.syncSurveyParcels(db, surveyId, selectedParcelIds)
 
-          await this.insertEvent(db, surveyId, user.id, "created", {
+          await this.events.insert(db, surveyId, user.id, "created", {
             sync_version: syncVersion,
             site_name: siteName,
             warnings: draftValidation.warnings,
@@ -262,8 +268,10 @@ export class SurveysService {
         // A concurrent create committed first: re-read under lock and either
         // continue through the existing-row path below (same user) or reject
         // as a survey id owned by someone else (T-01.4-15).
-        const raced = await this.getSurveyForUser(db, surveyId, user.id, false, {
+        const raced = await this.repository.findOwned(db, surveyId, user.id, {
+          activeOnly: false,
           forUpdate: true,
+          columns: "full",
         })
         if (!raced) {
           throw new ConflictException({
@@ -275,7 +283,7 @@ export class SurveysService {
         existing = raced
       }
 
-      const existingParcelIds = await this.getSurveyParcelIds(db, existing.id)
+      const existingParcelIds = await this.repository.getSurveyParcelIds(db, existing.id)
 
       if (syncVersion < existing.sync_version) {
         throw new ConflictException({
@@ -343,8 +351,10 @@ export class SurveysService {
         )
 
         if (!restrictedUpdateResult.rows[0]) {
-          const reRead = await this.getSurveyForUser(db, surveyId, user.id, false, {
+          const reRead = await this.repository.findOwned(db, surveyId, user.id, {
+            activeOnly: false,
             forUpdate: true,
+            columns: "full",
           })
           if (!reRead) {
             throw new NotFoundException("Survey not found")
@@ -354,7 +364,7 @@ export class SurveysService {
             const content = classifySameVersionContent(
               body,
               reRead,
-              await this.getSurveyParcelIds(db, reRead.id),
+              await this.repository.getSurveyParcelIds(db, reRead.id),
             )
             return {
               id: reRead.id,
@@ -383,7 +393,7 @@ export class SurveysService {
           })
         }
 
-        await this.insertEvent(db, surveyId, user.id, "updated", {
+        await this.events.insert(db, surveyId, user.id, "updated", {
           sync_version: syncVersion,
           site_name: siteName,
           warnings: draftValidation.warnings,
@@ -454,8 +464,10 @@ export class SurveysService {
       if (!updateResult.rows[0]) {
         // Zero rows updated: another request already advanced sync_version.
         // Re-read under lock and decide idempotent-replay vs conflict (T-01.4-11).
-        const reRead = await this.getSurveyForUser(db, surveyId, user.id, false, {
+        const reRead = await this.repository.findOwned(db, surveyId, user.id, {
+          activeOnly: false,
           forUpdate: true,
+          columns: "full",
         })
         if (!reRead) {
           throw new NotFoundException("Survey not found")
@@ -465,7 +477,7 @@ export class SurveysService {
           const content = classifySameVersionContent(
             body,
             reRead,
-            await this.getSurveyParcelIds(db, reRead.id),
+            await this.repository.getSurveyParcelIds(db, reRead.id),
           )
           return {
             id: reRead.id,
@@ -494,9 +506,9 @@ export class SurveysService {
         })
       }
 
-      await this.syncSurveyParcels(db, surveyId, selectedParcelIds)
+      await this.repository.syncSurveyParcels(db, surveyId, selectedParcelIds)
 
-      await this.insertEvent(db, surveyId, user.id, "updated", {
+      await this.events.insert(db, surveyId, user.id, "updated", {
         sync_version: syncVersion,
         site_name: siteName,
         warnings: draftValidation.warnings,
@@ -568,7 +580,10 @@ export class SurveysService {
     body: SurveyPatchBody,
   ): Promise<{ id: string; updated_at: string }> {
     return this.db.transaction(async (db) => {
-      const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id)
+      const existing = await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+        activeOnly: true,
+        columns: "full",
+      })
       const forbiddenPostSubmitFields = getSubmittedReadOnlyFields(body)
 
       if (existing.status === "submitted" && forbiddenPostSubmitFields.length > 0) {
@@ -607,7 +622,7 @@ export class SurveysService {
       const hasLegacyParcelIdPatch = Object.prototype.hasOwnProperty.call(body, "parcel_id")
       const normalizedParcelIdsFromPatch = normalizeParcelIds(body.parcel_ids)
       const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
-      const currentParcelIds = await this.getSurveyParcelIds(db, existing.id)
+      const currentParcelIds = await this.repository.getSurveyParcelIds(db, existing.id)
 
       let targetParcelIds =
         currentParcelIds.length > 0
@@ -682,16 +697,16 @@ export class SurveysService {
         throw new NotFoundException("Survey not found")
       }
 
-      await this.insertEvent(db, surveyId, user.id, "updated", {
+      await this.events.insert(db, surveyId, user.id, "updated", {
         changed_fields: Object.keys(body),
       })
 
       if (shouldUpdateParcels) {
-        await this.syncSurveyParcels(db, surveyId, targetParcelIds)
+        await this.repository.syncSurveyParcels(db, surveyId, targetParcelIds)
       }
 
       if (body.visibility && body.visibility !== existing.visibility) {
-        await this.insertEvent(db, surveyId, user.id, "visibility_changed", {
+        await this.events.insert(db, surveyId, user.id, "visibility_changed", {
           from: existing.visibility,
           to: body.visibility,
         })
@@ -712,7 +727,12 @@ export class SurveysService {
     const visibility = body.visibility
 
     return this.db.transaction(async (db) => {
-      const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id)
+      // "full", not "ownership": the no-op answer returns updated_at, which is not an
+      // ownership column (D-07).
+      const existing = await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+        activeOnly: true,
+        columns: "full",
+      })
       if (existing.visibility === visibility) {
         return {
           id: existing.id,
@@ -756,7 +776,7 @@ export class SurveysService {
       throw new NotFoundException("Survey not found")
     }
 
-    await this.insertEvent(db, surveyId, userId, "visibility_changed", {
+    await this.events.insert(db, surveyId, userId, "visibility_changed", {
       from,
       to: result.rows[0].visibility,
     })
@@ -834,8 +854,11 @@ export class SurveysService {
       | "sync_version"
     > & { display_location: { lat: number; lng: number } | null }
   > {
-    const survey = await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
-    const parcelIds = await this.getSurveyParcelIds(this.db, survey.id)
+    const survey = await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "full",
+    })
+    const parcelIds = await this.repository.getSurveyParcelIds(this.db, survey.id)
     const displayLocation = await this.computeSurveyDisplayLocation(survey.id, survey.parcel_id)
 
     return {
@@ -887,8 +910,10 @@ export class SurveysService {
 
     try {
       const outcome: SubmitOutcome = await this.db.transaction(async (db) => {
-        const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id, {
+        const existing = await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+          activeOnly: true,
           forUpdate: true,
+          columns: "full",
         })
 
         const validation = this.ibpRules.validateSubmit({
@@ -901,7 +926,7 @@ export class SurveysService {
         // D-08/T-01.4-12: lock the affected parcels in a consistent (sorted)
         // order before resolving the submit version, so two concurrent
         // submits on the same parcel serialise instead of racing.
-        const surveyParcelIds = await this.getSurveyParcelIds(db, existing.id)
+        const surveyParcelIds = await this.repository.getSurveyParcelIds(db, existing.id)
         const parcelIdsToLock =
           surveyParcelIds.length > 0
             ? surveyParcelIds
@@ -947,7 +972,7 @@ export class SurveysService {
                WHERE id = $1 AND user_id = $2`,
               [surveyId, user.id],
             )
-            await this.insertEvent(db, surveyId, user.id, "expired", {
+            await this.events.insert(db, surveyId, user.id, "expired", {
               reason: "submit_after_deadline",
               expires_at: existing.expires_at,
             })
@@ -989,7 +1014,7 @@ export class SurveysService {
           throw new NotFoundException("Survey not found")
         }
 
-        await this.insertEvent(db, surveyId, user.id, "submitted", {
+        await this.events.insert(db, surveyId, user.id, "submitted", {
           scores: validation.scores,
           warnings: validation.warnings,
         })
@@ -1037,7 +1062,11 @@ export class SurveysService {
     already_deleted: boolean
     missing: boolean
   }> {
-    const existing = await this.getSurveyForUser(this.db, surveyId, user.id, false)
+    // D-07: delete reads only id and deleted_at.
+    const existing = await this.repository.findOwned(this.db, surveyId, user.id, {
+      activeOnly: false,
+      columns: "ownership",
+    })
     if (!existing) {
       if (options?.allowMissing) {
         return { id: surveyId, deleted_at: null, already_deleted: false, missing: true }
@@ -1082,7 +1111,7 @@ export class SurveysService {
         [surveyId, user.id],
       )
 
-      await this.insertEvent(db, surveyId, user.id, "deleted", {
+      await this.events.insert(db, surveyId, user.id, "deleted", {
         attachment_count_deleted: attachmentsResult.rows.length,
       })
 
@@ -1105,20 +1134,6 @@ export class SurveysService {
       already_deleted: false,
       missing: false,
     }
-  }
-
-  async getEvents(user: AuthenticatedUser, surveyId: string): Promise<{ items: SurveyEventRow[] }> {
-    await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
-
-    const events = await this.db.query<SurveyEventRow>(
-      `SELECT id, survey_id, actor_id, event_type, payload, created_at::text
-       FROM survey_events
-       WHERE survey_id = $1
-       ORDER BY created_at DESC`,
-      [surveyId],
-    )
-
-    return { items: events.rows }
   }
 
   async getPublicMapItems(input?: { from?: string; to?: string; region?: string }): Promise<{
@@ -1579,81 +1594,6 @@ export class SurveysService {
     }
   }
 
-  private async getSurveyForUserOrThrow(
-    db: Queryable,
-    surveyId: string,
-    userId: string,
-    options?: { forUpdate?: boolean },
-  ): Promise<SurveyRow> {
-    const survey = await this.getSurveyForUser(db, surveyId, userId, true, options)
-    if (!survey) {
-      throw new NotFoundException("Survey not found")
-    }
-    return survey
-  }
-
-  private async getSurveyForUser(
-    db: Queryable,
-    surveyId: string,
-    userId: string,
-    activeOnly: boolean,
-    options?: { forUpdate?: boolean },
-  ): Promise<SurveyRow | null> {
-    const where = activeOnly ? "AND deleted_at IS NULL" : ""
-    const forUpdateClause = options?.forUpdate ? "FOR UPDATE" : ""
-    const result = await db.query<SurveyRow>(
-      `SELECT *
-       FROM surveys
-       WHERE id = $1 AND user_id = $2 ${where}
-       ${forUpdateClause}`,
-      [surveyId, userId],
-    )
-    return result.rows[0] ?? null
-  }
-
-  private async insertEvent(
-    db: Queryable,
-    surveyId: string,
-    actorId: string,
-    eventType: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await db.query(
-      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
-    )
-  }
-
-  private async getSurveyParcelIds(db: Queryable, surveyId: string): Promise<string[]> {
-    const result = await db.query<{ parcel_id: string }>(
-      `SELECT parcel_id
-       FROM survey_parcels
-       WHERE survey_id = $1
-       ORDER BY parcel_id ASC`,
-      [surveyId],
-    )
-    return result.rows.map((row) => row.parcel_id)
-  }
-
-  private async syncSurveyParcels(
-    db: Queryable,
-    surveyId: string,
-    parcelIds: string[],
-  ): Promise<void> {
-    const normalized = normalizeParcelIds(parcelIds)
-    await db.query(`DELETE FROM survey_parcels WHERE survey_id = $1`, [surveyId])
-    if (normalized.length === 0) {
-      return
-    }
-    await db.query(
-      `INSERT INTO survey_parcels (survey_id, parcel_id)
-       SELECT $1, unnest($2::text[])
-       ON CONFLICT (survey_id, parcel_id) DO NOTHING`,
-      [surveyId, normalized],
-    )
-  }
-
   private async computeSurveyDisplayLocation(
     surveyId: string,
     fallbackParcelId?: string | null,
@@ -1841,7 +1781,7 @@ export class SurveysService {
     const errors: string[] = []
     const observationYear = survey.observation_year
     const versionNumber = survey.version_number
-    const surveyParcelIds = await this.getSurveyParcelIds(db, survey.id)
+    const surveyParcelIds = await this.repository.getSurveyParcelIds(db, survey.id)
     const parcelIds =
       surveyParcelIds.length > 0 ? surveyParcelIds : survey.parcel_id ? [survey.parcel_id] : []
 

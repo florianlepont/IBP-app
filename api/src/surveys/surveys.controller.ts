@@ -25,6 +25,7 @@ import { AuthenticatedUser } from "../auth/auth.types"
 import { UPLOAD_THROTTLE } from "../common/rate-limit.config"
 import { SafeIdPipe } from "../common/safe-id.pipe"
 import { SurveysService } from "./surveys.service"
+import { SurveyEventsService } from "./survey-events.service"
 import { SurveysAttachmentsService } from "./surveys-attachments.service"
 import { SurveyUpsertDto } from "./dtos/survey-upsert.dto"
 import { SurveyPatchDto } from "./dtos/survey-patch.dto"
@@ -37,6 +38,7 @@ export class SurveysController {
   constructor(
     private readonly surveysService: SurveysService,
     private readonly attachmentsService: SurveysAttachmentsService,
+    private readonly surveyEvents: SurveyEventsService,
   ) {}
 
   @Get()
@@ -161,6 +163,6 @@ export class SurveysController {
 
   @Get(":id/events")
   async events(@CurrentUser() user: AuthenticatedUser, @Param("id", SafeIdPipe) id: string) {
-    return this.surveysService.getEvents(user, id)
+    return this.surveyEvents.listForSurvey(user, id)
   }
 }
