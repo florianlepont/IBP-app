@@ -517,6 +517,41 @@ Response `200`:
 }
 ```
 
+### GET /surveys/{id}/attachments/{attachment_id}/download-url
+
+Get a short-lived, mode-independent URL to fetch the attachment's stored bytes. Only the survey owner may call this.
+
+Response `200`:
+
+```json
+{
+  "url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+  "expires_at": "2026-03-09T09:17:00Z",
+  "requires_auth": false
+}
+```
+
+Rules:
+
+- The URL is valid for 5 minutes (`expires_at`).
+- In MinIO/S3 mode, `url` is a presigned GET for the object and `requires_auth` is `false`. Clients must not send the bearer token to this URL — it is a plain, unauthenticated GET.
+- In local storage mode, `url` is the relative path of `GET /surveys/{id}/attachments/{attachment_id}/content` and `requires_auth` is `true`. Clients must call it with `Authorization: Bearer <token>`.
+- `404` if the survey does not exist, is not owned by the caller, is deleted, or the attachment does not exist or is deleted.
+- `409` with `{ "code": "attachment_not_uploaded" }` if the attachment record exists but has not been uploaded yet.
+- `401` if no bearer token is provided.
+
+### GET /surveys/{id}/attachments/{attachment_id}/content
+
+Stream the stored bytes of an uploaded attachment. Local storage mode only — this route always returns `404` when `OBJECT_STORAGE_MODE=minio`, since the presigned URL from `download-url` serves the bytes directly in that mode.
+
+Response `200`: binary body with `Content-Type` set to the attachment's stored MIME type.
+
+Rules:
+
+- Requires `Authorization: Bearer <token>`; `401` with no token.
+- Same ownership, deletion and upload-state rules as `download-url`: `404` for another user's survey, a deleted survey/attachment or an unknown id; `409` with `{ "code": "attachment_not_uploaded" }` if not yet uploaded.
+- The server resolves `storage_key` against the local uploads directory and refuses to serve any path that escapes it.
+
 ### PUT /surveys/{id}/attachments/{attachment_id}/upload?token=
 
 Consume the upload target with a real file upload and mark attachment as uploaded.
