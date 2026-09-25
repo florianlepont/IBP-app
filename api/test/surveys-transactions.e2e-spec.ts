@@ -380,7 +380,7 @@ describe("Surveys transactions (e2e)", () => {
     }
   })
 
-  it("never 500s and converges on one sync_version for two concurrent upserts at the same sync_version", async () => {
+  it("never 500s and converges on one winner for two concurrent upserts at the same sync_version", async () => {
     const accessToken = await login(`e2e-tx-concurrent-upsert-${Date.now()}@ibp.local`)
     const surveyId = `e2e-tx-cu-${Date.now()}`
 
@@ -428,14 +428,24 @@ describe("Surveys transactions (e2e)", () => {
     expect(responseB.status).toBe(200)
     expect(responseA.body.results[0].status).not.toBe("retryable_error")
     expect(responseB.body.results[0].status).not.toBe("retryable_error")
-    expect(responseA.body.results[0].status).not.toBe("fatal_error")
-    expect(responseB.body.results[0].status).not.toBe("fatal_error")
 
-    const surveyRow = await db.query<{ sync_version: number }>(
-      `SELECT sync_version FROM surveys WHERE id = $1`,
+    // D-04: the two writers carry the same sync_version with different
+    // content, so exactly one wins and the other gets sync_version_conflict
+    // instead of a silent replay that would drop its site_name.
+    const results = [responseA.body.results[0], responseB.body.results[0]]
+    const winners = results.filter((result) => result.status === "synced")
+    const losers = results.filter((result) => result.status === "fatal_error")
+    expect(winners).toHaveLength(1)
+    expect(losers).toHaveLength(1)
+    expect(losers[0].error.code).toBe("sync_version_conflict")
+    expect(losers[0].error.http_status).toBe(409)
+
+    const surveyRow = await db.query<{ sync_version: number; site_name: string }>(
+      `SELECT sync_version, site_name FROM surveys WHERE id = $1`,
       [surveyId],
     )
     expect(surveyRow.rows[0].sync_version).toBe(2)
+    expect(winners[0].client_ref).toBe(`cu-${surveyRow.rows[0].site_name}`)
 
     const events = await db.query<{ count: string }>(
       `SELECT count(*)::text AS count
