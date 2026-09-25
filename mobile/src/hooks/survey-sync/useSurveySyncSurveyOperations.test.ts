@@ -17,6 +17,8 @@ const mockQueueLocalAttachment = jest.fn()
 const mockQueueDeleteAttachment = jest.fn()
 const mockMarkSurveyExpiredLocally = jest.fn()
 const mockSyncPending = jest.fn()
+const mockPreparePhotoForStorage = jest.fn()
+const mockDeleteAttachmentFile = jest.fn()
 
 // auth-errors.ts imports react-native-auth0 for CredentialsManagerError; mock it
 // minimally so the module resolves under the node test environment (no native code).
@@ -48,6 +50,12 @@ jest.mock("../../storage", () => ({
   queueDeleteAttachment: mockQueueDeleteAttachment,
   markSurveyExpiredLocally: mockMarkSurveyExpiredLocally,
   syncPending: mockSyncPending,
+}))
+jest.mock("../../storage/attachments", () => ({
+  preparePhotoForStorage: mockPreparePhotoForStorage,
+}))
+jest.mock("../../storage/attachment-files", () => ({
+  deleteAttachmentFile: mockDeleteAttachmentFile,
 }))
 
 import React from "react"
@@ -473,7 +481,7 @@ describe("useSurveySyncSurveyOperations", () => {
       expect(setStatus).toHaveBeenCalledWith("No image selected")
     })
 
-    test("queues attachment and sets status on success", async () => {
+    test("prepares the photo and queues it with the prepared uri/size on success", async () => {
       ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
         granted: true,
       })
@@ -490,11 +498,80 @@ describe("useSurveySyncSurveyOperations", () => {
           },
         ],
       })
+      mockPreparePhotoForStorage.mockResolvedValue({
+        uri: "file:///mock/documents/attachments/abc.jpg",
+        sizeBytes: 54321,
+        mimeType: "image/jpeg",
+        width: 100,
+        height: 100,
+      })
       mockQueueLocalAttachment.mockResolvedValue(undefined)
       const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
-      expect(mockQueueLocalAttachment).toHaveBeenCalled()
+
+      expect(mockPreparePhotoForStorage).toHaveBeenCalledWith({
+        uri: "file://photo.jpg",
+        width: 100,
+        height: 100,
+        mimeType: "image/jpeg",
+      })
+      expect(mockQueueLocalAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          survey_id: "survey-1",
+          local_uri: "file:///mock/documents/attachments/abc.jpg",
+          mime_type: "image/jpeg",
+          size_bytes: 54321,
+          metadata: expect.objectContaining({
+            source: "library",
+            width: 100,
+            height: 100,
+            original_width: 100,
+            original_height: 100,
+          }),
+        }),
+      )
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("queued"))
+    })
+
+    test("does not queue and reports the error when preparePhotoForStorage rejects", async () => {
+      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: true,
+      })
+      ;(ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: "file://photo.jpg", width: 100, height: 100 }],
+      })
+      mockPreparePhotoForStorage.mockRejectedValue(new Error("resize failed"))
+      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      await handleQueueAttachmentFromLibrary("survey-1")
+
+      expect(mockQueueLocalAttachment).not.toHaveBeenCalled()
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Attachment queue error"))
+    })
+
+    test("deletes the persisted file when queueLocalAttachment rejects after preparation", async () => {
+      ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+        granted: true,
+      })
+      ;(ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: "file://photo.jpg", width: 100, height: 100 }],
+      })
+      mockPreparePhotoForStorage.mockResolvedValue({
+        uri: "file:///mock/documents/attachments/abc.jpg",
+        sizeBytes: 54321,
+        mimeType: "image/jpeg",
+        width: 100,
+        height: 100,
+      })
+      mockQueueLocalAttachment.mockRejectedValue(new Error("db error"))
+      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      await handleQueueAttachmentFromLibrary("survey-1")
+
+      expect(mockDeleteAttachmentFile).toHaveBeenCalledWith(
+        "file:///mock/documents/attachments/abc.jpg",
+      )
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Attachment queue error"))
     })
   })
 
@@ -516,6 +593,55 @@ describe("useSurveySyncSurveyOperations", () => {
       const { handleQueueAttachmentFromCamera, setStatus } = useBuildHook()
       await handleQueueAttachmentFromCamera("survey-1")
       expect(setStatus).toHaveBeenCalledWith("No photo captured")
+    })
+
+    test("prepares the captured photo and queues it with the prepared uri/size on success", async () => {
+      ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true })
+      ;(ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [
+          {
+            uri: "file://camera-photo.jpg",
+            mimeType: "image/jpeg",
+            fileName: "camera-photo.jpg",
+            width: 4032,
+            height: 3024,
+          },
+        ],
+      })
+      mockPreparePhotoForStorage.mockResolvedValue({
+        uri: "file:///mock/documents/attachments/def.jpg",
+        sizeBytes: 98765,
+        mimeType: "image/jpeg",
+        width: 2048,
+        height: 1536,
+      })
+      mockQueueLocalAttachment.mockResolvedValue(undefined)
+      const { handleQueueAttachmentFromCamera, setStatus } = useBuildHook()
+      await handleQueueAttachmentFromCamera("survey-1")
+
+      expect(mockPreparePhotoForStorage).toHaveBeenCalledWith({
+        uri: "file://camera-photo.jpg",
+        width: 4032,
+        height: 3024,
+        mimeType: "image/jpeg",
+      })
+      expect(mockQueueLocalAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          survey_id: "survey-1",
+          local_uri: "file:///mock/documents/attachments/def.jpg",
+          mime_type: "image/jpeg",
+          size_bytes: 98765,
+          metadata: expect.objectContaining({
+            source: "camera",
+            width: 2048,
+            height: 1536,
+            original_width: 4032,
+            original_height: 3024,
+          }),
+        }),
+      )
+      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("queued"))
     })
   })
 
