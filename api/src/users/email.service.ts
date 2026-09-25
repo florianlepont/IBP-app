@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import * as nodemailer from "nodemailer"
+import { appConfigOf } from "../config/app-config"
 
 type EmailChangeMessage = {
   toEmail: string
@@ -14,22 +16,23 @@ export class EmailService {
   private readonly smtpEnabled: boolean
   private readonly transporter: nodemailer.Transporter | null
   private readonly fromAddress: string
+  private readonly confirmUrlTemplate: string
 
-  constructor() {
-    const isTestEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "test"
-    this.smtpEnabled = !isTestEnv && (process.env.SMTP_ENABLED ?? "false").toLowerCase() === "true"
-    this.fromAddress = process.env.SMTP_FROM ?? "noreply@ibp.local"
+  constructor(config: ConfigService) {
+    const app = appConfigOf(config)
+    const smtp = app.smtp
+    // SMTP stays off under NODE_ENV=test whatever SMTP_ENABLED says.
+    this.smtpEnabled = app.nodeEnv !== "test" && smtp.enabled
+    this.fromAddress = smtp.from
+    this.confirmUrlTemplate = smtp.emailChangeConfirmUrlTemplate
 
     if (!this.smtpEnabled) {
       this.transporter = null
       return
     }
 
-    const host = process.env.SMTP_HOST?.trim()
-    const port = Number(process.env.SMTP_PORT ?? 587)
-    const user = process.env.SMTP_USER?.trim()
-    const pass = process.env.SMTP_PASSWORD ?? ""
-    const secure = (process.env.SMTP_SECURE ?? "false").toLowerCase() === "true"
+    const { host, port, user, secure } = smtp
+    const pass = smtp.password
 
     if (!host || !user || !pass || !Number.isFinite(port)) {
       throw new Error("SMTP_ENABLED=true requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD")
@@ -82,7 +85,7 @@ export class EmailService {
   }
 
   private buildConfirmUrl(token: string): string | null {
-    const template = process.env.EMAIL_CHANGE_CONFIRM_URL_TEMPLATE?.trim()
+    const template = this.confirmUrlTemplate
     if (!template) {
       return null
     }

@@ -5,6 +5,7 @@ import { mkdir, readFile, rm, stat, writeFile } from "fs/promises"
 import { resolve, sep } from "path"
 import { DOWNLOAD_URL_TTL_SECONDS, StorageService } from "../src/storage/storage.service"
 import { StorageModule } from "../src/storage/storage.module"
+import { buildTestConfigService } from "./config-helper"
 
 jest.mock("fs/promises", () => {
   const actual = jest.requireActual("fs/promises")
@@ -55,24 +56,14 @@ function buildService(
   mode: "local" | "minio",
   env: Record<string, string | undefined> = {},
 ): StorageService {
-  const keys = ["OBJECT_STORAGE_MODE", "ATTACHMENTS_UPLOAD_DIR", "OBJECT_STORAGE_BUCKET"]
-  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]))
-  process.env.OBJECT_STORAGE_MODE = mode
-  process.env.ATTACHMENTS_UPLOAD_DIR = UPLOAD_ROOT
-  delete process.env.OBJECT_STORAGE_BUCKET
-  for (const [key, value] of Object.entries(env)) {
-    if (value === undefined) delete process.env[key]
-    else process.env[key] = value
-  }
-
-  const service = new StorageService()
-
-  for (const key of keys) {
-    const value = previous[key]
-    if (value === undefined) delete process.env[key]
-    else process.env[key] = value
-  }
-  return service
+  return new StorageService(
+    buildTestConfigService({
+      OBJECT_STORAGE_MODE: mode,
+      ATTACHMENTS_UPLOAD_DIR: UPLOAD_ROOT,
+      OBJECT_STORAGE_BUCKET: undefined,
+      ...env,
+    }),
+  )
 }
 
 function sentCommands(): unknown[] {

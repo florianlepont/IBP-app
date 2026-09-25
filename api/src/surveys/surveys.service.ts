@@ -5,8 +5,10 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import { randomUUID } from "crypto"
 import { AuthenticatedUser } from "../auth/auth.types"
+import { appConfigOf } from "../config/app-config"
 import { DatabaseService, Queryable } from "../database/database.service"
 import { StorageService } from "../storage/storage.service"
 import { CadastreProviderService } from "./cadastre-provider.service"
@@ -56,18 +58,15 @@ export class SurveysService {
     private readonly ibpRules: IbpRulesService,
     private readonly cadastreProvider: CadastreProviderService,
     private readonly storage: StorageService,
+    config: ConfigService,
   ) {
-    this.useIgnParcelWfs =
-      (process.env.CADASTRE_PROVIDER ?? "synthetic").trim().toLowerCase() === "ign"
-    this.ignParcelWfsUrl = process.env.CADASTRE_IGN_WFS_URL ?? "https://data.geopf.fr/wfs/ows"
-    this.ignParcelWfsTypeName =
-      process.env.CADASTRE_IGN_WFS_TYPENAME ?? "CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle"
-    const countRaw = Number(process.env.CADASTRE_IGN_WFS_COUNT ?? 1200)
-    this.ignParcelWfsCount =
-      Number.isFinite(countRaw) && countRaw > 0 ? Math.min(3000, Math.trunc(countRaw)) : 1200
-    const timeoutRaw = Number(process.env.CADASTRE_PROVIDER_TIMEOUT_MS ?? 2500)
-    this.ignParcelWfsTimeoutMs =
-      Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.trunc(timeoutRaw) : 2500
+    // D-01: the WFS count cap (3000) and the defaults live in app-config.ts.
+    const cadastre = appConfigOf(config).cadastre
+    this.useIgnParcelWfs = cadastre.provider === "ign"
+    this.ignParcelWfsUrl = cadastre.wfsUrl
+    this.ignParcelWfsTypeName = cadastre.wfsTypename
+    this.ignParcelWfsCount = cadastre.wfsCount
+    this.ignParcelWfsTimeoutMs = cadastre.timeoutMs
   }
 
   async listForUser(

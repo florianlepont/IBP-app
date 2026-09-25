@@ -1,4 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
+import { appConfigOf } from "../config/app-config"
 
 type JsonRecord = Record<string, unknown>
 
@@ -21,19 +23,15 @@ export class CadastreProviderService {
   private readonly ignReverseUrl: string
   private readonly ignApiCartoParcelUrl: string
 
-  constructor() {
-    const configuredProvider = (process.env.CADASTRE_PROVIDER ?? "synthetic").trim().toLowerCase()
-    this.provider = configuredProvider === "ign" ? "ign" : "synthetic"
-    this.allowFallback =
-      (process.env.CADASTRE_PROVIDER_ALLOW_FALLBACK ?? "true").trim().toLowerCase() !== "false"
-
-    const timeoutRaw = Number(process.env.CADASTRE_PROVIDER_TIMEOUT_MS ?? 2500)
-    this.timeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.trunc(timeoutRaw) : 2500
-    this.ignReverseUrl =
-      process.env.CADASTRE_IGN_REVERSE_URL ?? "https://data.geopf.fr/geocodage/reverse"
-    this.ignApiCartoParcelUrl =
-      process.env.CADASTRE_IGN_APICARTO_PARCEL_URL ??
-      "https://apicarto.ign.fr/api/cadastre/parcelle"
+  constructor(config: ConfigService) {
+    // D-01: parsing and defaults live in app-config.ts (provider trimmed and lowercased,
+    // fallback on unless "false", positive integer timeout defaulting to 2500 ms).
+    const cadastre = appConfigOf(config).cadastre
+    this.provider = cadastre.provider === "ign" ? "ign" : "synthetic"
+    this.allowFallback = cadastre.allowFallback
+    this.timeoutMs = cadastre.timeoutMs
+    this.ignReverseUrl = cadastre.reverseUrl
+    this.ignApiCartoParcelUrl = cadastre.apiCartoParcelUrl
   }
 
   async resolveFromPoint(lat: number, lng: number): Promise<CadastreResolvedParcel | null> {
