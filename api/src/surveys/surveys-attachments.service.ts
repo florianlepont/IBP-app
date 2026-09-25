@@ -3,58 +3,24 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common"
-import {
-  CreateBucketCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadBucketCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { randomUUID } from "crypto"
-import { mkdir, readFile, rm, writeFile } from "fs/promises"
-import { dirname, join, resolve, sep } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService, Queryable } from "../database/database.service"
-import { extensionFromMime, isAllowedMimeType } from "../common/file.utils"
+import { isAllowedMimeType } from "../common/file.utils"
+import { DOWNLOAD_URL_TTL_SECONDS, StorageService } from "../storage/storage.service"
 import { AttachmentRow, CreateAttachmentBody, SurveyRow } from "./surveys.types"
 
-const DOWNLOAD_URL_TTL_SECONDS = 300
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 @Injectable()
 export class SurveysAttachmentsService {
-  private readonly objectStorageMode: "local" | "minio"
-  private readonly s3Bucket: string
-  private readonly s3Client?: S3Client
-  private s3BucketReady = false
-  private readonly uploadsRootDir: string
-
-  constructor(private readonly db: DatabaseService) {
-    this.objectStorageMode =
-      (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-media"
-    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
-
-    if (this.objectStorageMode === "minio") {
-      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
-      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
-      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
-      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
-
-      this.s3Client = new S3Client({
-        endpoint,
-        region,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      })
-    }
-  }
+  // D-05: every read, write, delete and presign goes through StorageService.
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly storage: StorageService,
+  ) {}
 
   private async getSurveyForUserOrThrow(
     db: Queryable,
@@ -106,64 +72,12 @@ export class SurveysAttachmentsService {
     return `/surveys/${surveyId}/attachments/${attachmentId}/upload?token=${token}`
   }
 
-  private async buildUploadUrl(
-    storageKey: string,
-    mimeType: string,
-    fallbackUrl: string,
-  ): Promise<string> {
-    if (this.objectStorageMode !== "minio" || !this.s3Client) {
-      return fallbackUrl
-    }
-
-    await this.ensureS3Bucket()
-
-    const command = new PutObjectCommand({
-      Bucket: this.s3Bucket,
-      Key: storageKey,
-      ContentType: mimeType,
+  // D-08: the refusal shared by both modes when the stored bytes differ from size_bytes.
+  private sizeMismatch(): UnprocessableEntityException {
+    return new UnprocessableEntityException({
+      code: "attachment_size_mismatch",
+      message: "Uploaded file size does not match declared size",
     })
-
-    return getSignedUrl(this.s3Client, command, { expiresIn: 15 * 60 })
-  }
-
-  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
-    if (this.objectStorageMode === "minio") {
-      if (this.s3Client) {
-        await this.s3Client
-          .send(
-            new DeleteObjectCommand({
-              Bucket: this.s3Bucket,
-              Key: storageKey,
-            }),
-          )
-          .catch(() => undefined)
-      }
-      return
-    }
-
-    const storagePath = join(this.uploadsRootDir, storageKey)
-    await rm(storagePath, { force: true }).catch(() => undefined)
-  }
-
-  private async ensureS3Bucket(): Promise<void> {
-    if (this.s3BucketReady || !this.s3Client) return
-
-    try {
-      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }))
-      this.s3BucketReady = true
-      return
-    } catch {
-      // Bucket might not exist yet.
-    }
-
-    try {
-      await this.s3Client.send(new CreateBucketCommand({ Bucket: this.s3Bucket }))
-      this.s3BucketReady = true
-    } catch {
-      // If created concurrently by another request/process, verify it exists now.
-      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }))
-      this.s3BucketReady = true
-    }
   }
 
   async createAttachment(
@@ -184,7 +98,7 @@ export class SurveysAttachmentsService {
       throw new BadRequestException("size_bytes must be a positive integer")
     }
 
-    if ((body.size_bytes ?? 0) > 25 * 1024 * 1024) {
+    if ((body.size_bytes ?? 0) > MAX_ATTACHMENT_BYTES) {
       throw new BadRequestException("size_bytes exceeds V1 max size (25MB)")
     }
 
@@ -194,10 +108,15 @@ export class SurveysAttachmentsService {
 
     const attachmentId = randomUUID()
     const uploadToken = randomUUID()
-    const extension = extensionFromMime(body.mime_type)
-    const storageKey = `surveys/${surveyId}/${attachmentId}${extension}`
+    // D-14: the key is built only by StorageService, from safe ids.
+    const storageKey = this.storage.buildAttachmentKey(surveyId, attachmentId, body.mime_type)
     const confirmUrl = this.buildConfirmUrl(surveyId, attachmentId, uploadToken)
-    const uploadUrl = await this.buildUploadUrl(storageKey, body.mime_type, confirmUrl)
+    // D-08: the presigned PUT signs Content-Length = size_bytes. Local mode uploads through
+    // the API route, which checks the size itself.
+    const uploadUrl =
+      this.storage.mode === "minio"
+        ? await this.storage.presignPut(storageKey, body.mime_type, body.size_bytes as number)
+        : confirmUrl
 
     await this.db.transaction(async (db) => {
       await this.getSurveyForUserOrThrow(db, surveyId, user.id, { forUpdate: true })
@@ -277,34 +196,38 @@ export class SurveysAttachmentsService {
       }
     }
 
-    if (this.objectStorageMode === "minio") {
-      if (!this.s3Client) {
-        throw new BadRequestException("object storage client is not configured")
-      }
-      // In MinIO mode, file upload is done directly via presigned URL.
-      // Here we only confirm object existence before marking uploaded.
-      try {
-        await this.s3Client.send(
-          new HeadObjectCommand({
-            Bucket: this.s3Bucket,
-            Key: existing.rows[0].storage_key,
-          }),
-        )
-      } catch {
+    const attachment = existing.rows[0]
+    const declaredSize = Number(attachment.size_bytes)
+
+    if (this.storage.mode === "minio") {
+      // In MinIO mode, the file is uploaded directly via the presigned URL. Here we check the
+      // stored object before marking it uploaded (D-08: its size must match size_bytes).
+      const head = await this.storage.headObject(attachment.storage_key)
+      if (!head) {
         throw new BadRequestException("uploaded object not found in storage")
+      }
+      if (head.contentLength !== declaredSize) {
+        await this.storage.deleteObject(attachment.storage_key)
+        throw this.sizeMismatch()
       }
     } else {
       if (!file?.buffer || file.buffer.length === 0) {
         throw new BadRequestException("file is required")
       }
 
-      if (file.buffer.length > 25 * 1024 * 1024) {
+      if (file.buffer.length > MAX_ATTACHMENT_BYTES) {
         throw new BadRequestException("file exceeds V1 max size (25MB)")
       }
 
-      const storagePath = join(this.uploadsRootDir, existing.rows[0].storage_key)
-      await mkdir(dirname(storagePath), { recursive: true })
-      await writeFile(storagePath, file.buffer)
+      if (file.buffer.length !== declaredSize) {
+        throw this.sizeMismatch()
+      }
+
+      await this.storage.putObject(
+        attachment.storage_key,
+        file.buffer,
+        attachment.mime_type ?? "application/octet-stream",
+      )
     }
 
     const updated = await this.db.transaction(async (db) => {
@@ -318,8 +241,8 @@ export class SurveysAttachmentsService {
 
       await this.insertEvent(db, surveyId, user.id, "attachment_uploaded", {
         attachment_id: attachmentId,
-        storage_key: existing.rows[0].storage_key,
-        object_storage_mode: this.objectStorageMode,
+        storage_key: attachment.storage_key,
+        object_storage_mode: this.storage.mode,
         bytes_written: file?.buffer?.length ?? null,
       })
 
@@ -373,7 +296,7 @@ export class SurveysAttachmentsService {
       })
     })
 
-    await this.cleanupAttachmentStorage(existing.rows[0].storage_key)
+    await this.storage.deleteObject(existing.rows[0].storage_key)
 
     return {
       survey_id: surveyId,
@@ -457,19 +380,8 @@ export class SurveysAttachmentsService {
     surveyId: string,
     attachmentId: string,
   ): Promise<{ url: string; requires_auth: boolean }> {
-    if (this.objectStorageMode === "minio" && this.s3Client) {
-      await this.ensureS3Bucket()
-
-      const command = new GetObjectCommand({
-        Bucket: this.s3Bucket,
-        Key: storageKey,
-      })
-
-      const url = await getSignedUrl(this.s3Client, command, {
-        expiresIn: DOWNLOAD_URL_TTL_SECONDS,
-      })
-
-      return { url, requires_auth: false }
+    if (this.storage.mode === "minio") {
+      return { url: await this.storage.presignGet(storageKey), requires_auth: false }
     }
 
     return {
@@ -506,19 +418,18 @@ export class SurveysAttachmentsService {
   ): Promise<{ buffer: Buffer; mimeType: string }> {
     await this.getSurveyForUserOrThrow(this.db, surveyId, user.id)
 
-    if (this.objectStorageMode !== "local") {
+    if (this.storage.mode !== "local") {
       throw new NotFoundException("Attachment content not found")
     }
 
     const attachment = await this.getUploadedAttachmentOrThrow(surveyId, attachmentId)
 
-    const root = resolve(this.uploadsRootDir)
-    const filePath = resolve(root, attachment.storage_key)
-    if (filePath !== root && !filePath.startsWith(root + sep)) {
-      throw new NotFoundException("Attachment content not found")
-    }
-
-    const buffer = await readFile(filePath).catch(() => null)
+    // D-07: StorageService refuses keys that resolve outside the upload root (400); the
+    // content route keeps answering 404 for them, as for a missing file.
+    const buffer = await this.storage.getObject(attachment.storage_key).catch((err: unknown) => {
+      if (err instanceof BadRequestException) return null
+      throw err
+    })
     if (!buffer) {
       throw new NotFoundException("Attachment content not found")
     }

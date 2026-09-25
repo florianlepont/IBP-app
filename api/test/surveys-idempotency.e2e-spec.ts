@@ -1016,12 +1016,13 @@ describe("Surveys idempotency (e2e)", () => {
       })
       .expect(201)
 
+    const uploadBytes = Buffer.from("fake-jpeg-binary")
     const created = await request(app.getHttpServer())
       .post(`/v1/surveys/${surveyId}/attachments`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
         mime_type: "image/jpeg",
-        size_bytes: 2048000,
+        size_bytes: uploadBytes.length,
       })
       .expect(201)
 
@@ -1039,7 +1040,7 @@ describe("Surveys idempotency (e2e)", () => {
         headers: {
           "Content-Type": "image/jpeg",
         },
-        body: Buffer.from("fake-jpeg-binary"),
+        body: uploadBytes,
       })
       expect(presignedUpload.ok).toBe(true)
 
@@ -1058,7 +1059,7 @@ describe("Surveys idempotency (e2e)", () => {
       const uploaded = await request(app.getHttpServer())
         .put(`/v1${created.body.upload_url}`)
         .set("Authorization", `Bearer ${accessToken}`)
-        .attach("file", Buffer.from("fake-jpeg-binary"), {
+        .attach("file", uploadBytes, {
           filename: "sample.jpg",
           contentType: "image/jpeg",
         })
@@ -1314,6 +1315,7 @@ describe("Surveys idempotency (e2e)", () => {
       })
       .expect(201)
 
+    const uploadBytes = Buffer.from("fake-jpeg-binary")
     const created = await request(app.getHttpServer())
       .post("/v1/sync")
       .set("Authorization", `Bearer ${accessToken}`)
@@ -1326,7 +1328,7 @@ describe("Surveys idempotency (e2e)", () => {
             survey_id: surveyId,
             payload: {
               mime_type: "image/jpeg",
-              size_bytes: 1024,
+              size_bytes: uploadBytes.length,
             },
           },
         ],
@@ -1345,7 +1347,7 @@ describe("Surveys idempotency (e2e)", () => {
         headers: {
           "Content-Type": "image/jpeg",
         },
-        body: Buffer.from("fake-jpeg-binary"),
+        body: uploadBytes,
       })
       expect(presignedUpload.ok).toBe(true)
 
@@ -1357,7 +1359,7 @@ describe("Surveys idempotency (e2e)", () => {
       await request(app.getHttpServer())
         .put(`/v1${uploadUrl}`)
         .set("Authorization", `Bearer ${accessToken}`)
-        .attach("file", Buffer.from("fake-jpeg-binary"), {
+        .attach("file", uploadBytes, {
           filename: "sample.jpg",
           contentType: "image/jpeg",
         })
@@ -1546,91 +1548,11 @@ describe("Surveys idempotency (e2e)", () => {
     expect(deltaChanges.body.cursor_out).not.toBe(cursorOut)
   })
 
-  it("returns surveys without events via GET /v1/sync/changes fallback", async () => {
-    const email = `e2e-sync-changes-fallback-${Date.now()}@ibp.local`
-    const login = await request(app.getHttpServer())
-      .post("/v1/debug/test-token")
-      .send({ email })
-      .expect(201)
-
-    const accessToken = login.body.access_token as string
-
-    const me = await request(app.getHttpServer())
-      .get("/v1/me")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .expect(200)
-    const userId = me.body.id as string
-
-    const surveyId = `e2e-sync-no-event-${Date.now()}`
-    const nowIso = new Date().toISOString()
-    const payloadFactors = JSON.stringify({
-      A: 1,
-      B: 1,
-      C: 1,
-      D: 1,
-      E: 1,
-      F: 1,
-      G: 1,
-      H: 1,
-      I: 2,
-      J: 2,
-    })
-    const payloadScores = JSON.stringify({
-      ibp_peuplement_gestion: 7,
-      ibp_contexte: 5,
-      ibp_total: 12,
-    })
-    const payloadLocation = JSON.stringify({
-      source: "gps",
-      lat: 48.643,
-      lng: 1.829,
-    })
-
-    await db.query(
-      `INSERT INTO surveys (
-         id, user_id, site_name, status, visibility, region_version, vegetation_stage,
-         factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
-       ) VALUES (
-         $1, $2, $3, 'submitted', 'public', 'ACA', 'collineen',
-         $4::jsonb, '{}'::jsonb, $5::jsonb, $6::jsonb, $7::timestamptz, $8::timestamptz, $9::timestamptz, ($8::timestamptz + INTERVAL '365 days'), 1
-       )`,
-      [
-        surveyId,
-        userId,
-        "No Event Forest",
-        payloadFactors,
-        payloadScores,
-        payloadLocation,
-        nowIso,
-        nowIso,
-        nowIso,
-      ],
-    )
-
-    const changes = await request(app.getHttpServer())
-      .get("/v1/sync/changes")
-      .query({ limit: 20 })
-      .set("Authorization", `Bearer ${accessToken}`)
-      .expect(200)
-
-    expect(Array.isArray(changes.body.events)).toBe(true)
-    expect(changes.body.events.length).toBe(0)
-    expect(Array.isArray(changes.body.surveys)).toBe(true)
-    expect(changes.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true)
-    expect(typeof changes.body.cursor_out).toBe("string")
-
-    const cursorOut = changes.body.cursor_out as string
-    const delta = await request(app.getHttpServer())
-      .get("/v1/sync/changes")
-      .query({ cursor: cursorOut, limit: 20 })
-      .set("Authorization", `Bearer ${accessToken}`)
-      .expect(200)
-
-    expect(delta.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true)
-  })
-
-  it("returns surveys without events even when cursor is newer than survey.updated_at", async () => {
-    const email = `e2e-sync-changes-fallback-cursor-${Date.now()}@ibp.local`
+  it("does not re-send event-less surveys on every poll", async () => {
+    // Migration 014 gave every existing event-less survey one synthetic event, so the feed no
+    // longer needs the fallback that re-sent them on every poll (D-03, D-16). A row written
+    // behind the API's back without an event is simply not part of the feed.
+    const email = `e2e-sync-changes-no-event-${Date.now()}@ibp.local`
     const login = await request(app.getHttpServer())
       .post("/v1/debug/test-token")
       .send({ email })
@@ -1659,16 +1581,8 @@ describe("Surveys idempotency (e2e)", () => {
       })
       .expect(201)
 
-    const anchorChanges = await request(app.getHttpServer())
-      .get("/v1/sync/changes")
-      .query({ limit: 20 })
-      .set("Authorization", `Bearer ${accessToken}`)
-      .expect(200)
-    const anchorCursor = anchorChanges.body.cursor_out as string
-    expect(typeof anchorCursor).toBe("string")
-
-    const surveyId = `e2e-sync-no-event-old-${Date.now()}`
-    const oldIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const surveyId = `e2e-sync-no-event-${Date.now()}`
+    const nowIso = new Date().toISOString()
     const payloadLocation = JSON.stringify({ source: "gps", lat: 48.643, lng: 1.829 })
 
     await db.query(
@@ -1677,17 +1591,36 @@ describe("Surveys idempotency (e2e)", () => {
          factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
        ) VALUES (
          $1, $2, $3, 'submitted', 'public', 'ACA', 'collineen',
-         '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, $4::jsonb, $5::timestamptz, $6::timestamptz, $7::timestamptz, ($6::timestamptz + INTERVAL '365 days'), 1
+         '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, $4::jsonb, $5::timestamptz, $5::timestamptz, $5::timestamptz, ($5::timestamptz + INTERVAL '365 days'), 1
        )`,
-      [surveyId, userId, "No Event Forest Old", payloadLocation, oldIso, oldIso, oldIso],
+      [surveyId, userId, "No Event Forest", payloadLocation, nowIso],
     )
 
-    const delta = await request(app.getHttpServer())
-      .get("/v1/sync/changes")
-      .query({ cursor: anchorCursor, limit: 20 })
-      .set("Authorization", `Bearer ${accessToken}`)
-      .expect(200)
+    const seenSurveyIds: string[] = []
+    const seenEventSurveyIds: string[] = []
+    let cursor: string | null = null
+    for (let poll = 0; poll < 3; poll += 1) {
+      const changes = await request(app.getHttpServer())
+        .get("/v1/sync/changes")
+        .query(cursor ? { cursor, limit: 20 } : { limit: 20 })
+        .set("Authorization", `Bearer ${accessToken}`)
+        .expect(200)
 
-    expect(delta.body.surveys.some((survey: { id: string }) => survey.id === surveyId)).toBe(true)
+      seenSurveyIds.push(...(changes.body.surveys as Array<{ id: string }>).map((s) => s.id))
+      seenEventSurveyIds.push(
+        ...(changes.body.events as Array<{ survey_id: string }>).map((e) => e.survey_id),
+      )
+      if (poll > 0) {
+        expect(changes.body.events).toHaveLength(0)
+        expect(changes.body.surveys).toHaveLength(0)
+        expect(changes.body.cursor_out).toBe(cursor)
+      }
+      expect(typeof changes.body.cursor_out).toBe("string")
+      cursor = changes.body.cursor_out as string
+    }
+
+    expect(seenSurveyIds).toContain(eventSurveyId)
+    expect(seenSurveyIds).not.toContain(surveyId)
+    expect(seenEventSurveyIds).not.toContain(surveyId)
   })
 })

@@ -214,7 +214,7 @@ Plans:
 **Source**: audit lots L10, L13, findings ARCH-6, A-H3, A-M3, A-M4, the `isAllowedMimeType` finding, the unbounded `/sync/changes` fallback
 **Success Criteria** (what must be TRUE):
 
-  1. `/v1/sync/changes` pages on a monotonic sequence (`survey_events.seq`), still accepts the old `(created_at, id)` cursor, and an event committed late is never skipped (E2E test).
+  1. `/v1/sync/changes` pages on a commit-safe monotonic order (`survey_events` `(xid8, seq)`, filtered by the snapshot minimum `xid8 < pg_snapshot_xmin(pg_current_snapshot())`), still accepts the old `(created_at, id)` cursor, and an event committed late is never skipped (E2E test).
   2. Two devices sending the same `sync_version` with different content get a `sync_version_conflict` instead of a silent replay; the fallback that re-sends event-less surveys on every poll is gone.
   3. One `StorageService` owns the S3 client, bucket and local mode for surveys, attachments and users; profile pictures are in object storage and survive a container restart.
   4. Storage keys are built only from validated identifiers and stay inside the upload directory in local mode; the presigned PUT enforces `ContentLength` and confirmation rejects a size mismatch with 422.
@@ -224,14 +224,15 @@ Plans:
 **Plans**: 9 plans
 
 Plans:
-- [ ] 01.6-01-PLAN.md — Migration 014 (seq + xid8, backfill, synthetic events), migration E2E, v2 cursor helpers (wave 1)
-- [ ] 01.6-02-PLAN.md — StorageService + module, safe-id rule, own-property MIME check (wave 1)
-- [ ] 01.6-03-PLAN.md — /sync/changes on (xid8, seq) with snapshot filter, legacy cursor, fallback removed, concurrency E2E (wave 2)
-- [ ] 01.6-04-PLAN.md — Profile pictures through StorageService, bytes served by the API (wave 2)
-- [ ] 01.6-05-PLAN.md — Safe-id validation at the API boundary (pipe + DTOs) (wave 2)
-- [ ] 01.6-06-PLAN.md — Same-version conflict rule (visibility-only applied), SurveysService drops its S3 client (wave 3)
-- [ ] 01.6-07-PLAN.md — Attachments through StorageService, presigned ContentLength, 422 on size mismatch (wave 3)
-- [ ] 01.6-08-PLAN.md — MinIO-mode E2E CI job and documentation (wave 4)
+
+- [x] 01.6-01-PLAN.md — Migration 014 (seq + xid8, backfill, synthetic events), migration E2E, v2 cursor helpers (wave 1)
+- [x] 01.6-02-PLAN.md — StorageService + module, safe-id rule, own-property MIME check (wave 1)
+- [x] 01.6-03-PLAN.md — /sync/changes on (xid8, seq) with snapshot filter, legacy cursor, fallback removed, concurrency E2E (wave 2)
+- [x] 01.6-04-PLAN.md — Profile pictures through StorageService, bytes served by the API (wave 2)
+- [x] 01.6-05-PLAN.md — Safe-id validation at the API boundary (pipe + DTOs) (wave 2)
+- [x] 01.6-06-PLAN.md — Same-version conflict rule (visibility-only applied), SurveysService drops its S3 client (wave 3)
+- [x] 01.6-07-PLAN.md — Attachments through StorageService, presigned ContentLength, 422 on size mismatch (wave 3)
+- [x] 01.6-08-PLAN.md — MinIO-mode E2E CI job and documentation (wave 4)
 - [ ] 01.6-09-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 5)
 
 ### Phase 01.7: API configuration, service split and database tuning (INSERTED)
@@ -393,7 +394,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
 | 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
 | 1.5. Mobile sync engine reliability | 12/12 | Complete    | 2026-09-25 |
-| 1.6. Sync feed ordering and unified object storage | 0/9 | Planned | - |
+| 1.6. Sync feed ordering and unified object storage | 8/9 | In Progress|  |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
 | 1.9. Mobile state architecture, i18n, accessibility and hygiene | 0/TBD | Not started | - |

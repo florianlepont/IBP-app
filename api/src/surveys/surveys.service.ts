@@ -5,12 +5,10 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common"
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { randomUUID } from "crypto"
-import { rm } from "fs/promises"
-import { join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService, Queryable } from "../database/database.service"
+import { StorageService } from "../storage/storage.service"
 import { CadastreProviderService } from "./cadastre-provider.service"
 import { IbpRulesService } from "./ibp-rules.service"
 import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
@@ -26,6 +24,7 @@ import {
 import {
   buildFallbackParcelGeometry,
   buildParcelKey,
+  classifySameVersionContent,
   getChangedSubmittedReadOnlyFields,
   getSubmittedReadOnlyFields,
   normalizeCentroid,
@@ -40,15 +39,12 @@ import {
   normalizeVersionNumber,
   parseBbox,
   parseParcelIdentifier,
+  SameVersionContent,
   toFiniteNumber,
 } from "./surveys-normalize.utils"
 
 @Injectable()
 export class SurveysService {
-  private readonly objectStorageMode: "local" | "minio"
-  private readonly s3Bucket: string
-  private readonly s3Client?: S3Client
-  private readonly uploadsRootDir: string
   private readonly useIgnParcelWfs: boolean
   private readonly ignParcelWfsUrl: string
   private readonly ignParcelWfsTypeName: string
@@ -59,29 +55,8 @@ export class SurveysService {
     private readonly db: DatabaseService,
     private readonly ibpRules: IbpRulesService,
     private readonly cadastreProvider: CadastreProviderService,
+    private readonly storage: StorageService,
   ) {
-    this.objectStorageMode =
-      (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-media"
-    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
-
-    if (this.objectStorageMode === "minio") {
-      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
-      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
-      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
-      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
-
-      this.s3Client = new S3Client({
-        endpoint,
-        region,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      })
-    }
-
     this.useIgnParcelWfs =
       (process.env.CADASTRE_PROVIDER ?? "synthetic").trim().toLowerCase() === "ign"
     this.ignParcelWfsUrl = process.env.CADASTRE_IGN_WFS_URL ?? "https://data.geopf.fr/wfs/ows"
@@ -316,10 +291,21 @@ export class SurveysService {
       }
 
       if (syncVersion === existing.sync_version) {
+        // D-04/D-16: same version is an idempotent replay only when the
+        // content matches by value; a visibility-only difference is applied
+        // last-writer-wins, any read-only difference is a 409.
+        const content = classifySameVersionContent(body, existing, existingParcelIds)
         return {
           id: existing.id,
           server_status: "synced" as const,
-          updated_at: existing.updated_at,
+          updated_at: await this.resolveSameVersionUpsert(
+            db,
+            user.id,
+            existing,
+            body,
+            syncVersion,
+            content,
+          ),
           warnings: draftValidation.warnings,
           factor_results: draftValidation.factor_results ?? undefined,
         }
@@ -366,10 +352,22 @@ export class SurveysService {
           }
 
           if (reRead.sync_version === syncVersion) {
+            const content = classifySameVersionContent(
+              body,
+              reRead,
+              await this.getSurveyParcelIds(db, reRead.id),
+            )
             return {
               id: reRead.id,
               server_status: "synced" as const,
-              updated_at: reRead.updated_at,
+              updated_at: await this.resolveSameVersionUpsert(
+                db,
+                user.id,
+                reRead,
+                body,
+                syncVersion,
+                content,
+              ),
               warnings: draftValidation.warnings,
               factor_results: draftValidation.factor_results ?? undefined,
             }
@@ -465,10 +463,22 @@ export class SurveysService {
         }
 
         if (reRead.sync_version === syncVersion) {
+          const content = classifySameVersionContent(
+            body,
+            reRead,
+            await this.getSurveyParcelIds(db, reRead.id),
+          )
           return {
             id: reRead.id,
             server_status: "synced" as const,
-            updated_at: reRead.updated_at,
+            updated_at: await this.resolveSameVersionUpsert(
+              db,
+              user.id,
+              reRead,
+              body,
+              syncVersion,
+              content,
+            ),
             warnings: draftValidation.warnings,
             factor_results: draftValidation.factor_results ?? undefined,
           }
@@ -700,10 +710,11 @@ export class SurveysService {
     if (body.visibility !== "private" && body.visibility !== "public") {
       throw new BadRequestException("visibility must be private or public")
     }
+    const visibility = body.visibility
 
     return this.db.transaction(async (db) => {
       const existing = await this.getSurveyForUserOrThrow(db, surveyId, user.id)
-      if (existing.visibility === body.visibility) {
+      if (existing.visibility === visibility) {
         return {
           id: existing.id,
           visibility: existing.visibility,
@@ -711,31 +722,90 @@ export class SurveysService {
         }
       }
 
-      const result = await db.query<{
-        id: string
-        visibility: "private" | "public"
-        updated_at: string
-      }>(
-        `UPDATE surveys
-         SET visibility = $3,
-             updated_at = NOW()
-         WHERE id = $1
-           AND user_id = $2
-         RETURNING id, visibility, updated_at::text`,
-        [surveyId, user.id, body.visibility],
-      )
-
-      if (!result.rows[0]) {
-        throw new NotFoundException("Survey not found")
-      }
-
-      await this.insertEvent(db, surveyId, user.id, "visibility_changed", {
-        from: existing.visibility,
-        to: result.rows[0].visibility,
-      })
-
-      return result.rows[0]
+      return this.applyVisibilityChange(db, user.id, surveyId, existing.visibility, visibility)
     })
+  }
+
+  /**
+   * The visibility_update write: new visibility, updated_at = NOW() and a
+   * visibility_changed event, in the caller's transaction. sync_version is not
+   * touched. Shared by patchSurveyVisibility and the same-version upsert path
+   * so both apply visibility the same way (D-16 amended 2026-09-25).
+   */
+  private async applyVisibilityChange(
+    db: Queryable,
+    userId: string,
+    surveyId: string,
+    from: "private" | "public",
+    to: "private" | "public",
+  ): Promise<{ id: string; visibility: "private" | "public"; updated_at: string }> {
+    const result = await db.query<{
+      id: string
+      visibility: "private" | "public"
+      updated_at: string
+    }>(
+      `UPDATE surveys
+       SET visibility = $3,
+           updated_at = NOW()
+       WHERE id = $1
+         AND user_id = $2
+       RETURNING id, visibility, updated_at::text`,
+      [surveyId, userId, to],
+    )
+
+    if (!result.rows[0]) {
+      throw new NotFoundException("Survey not found")
+    }
+
+    await this.insertEvent(db, surveyId, userId, "visibility_changed", {
+      from,
+      to: result.rows[0].visibility,
+    })
+
+    return result.rows[0]
+  }
+
+  /**
+   * Resolve an upsert whose sync_version equals the stored one (D-04, D-16
+   * amended 2026-09-25) and return the updated_at to answer with.
+   * - conflict: 409 sync_version_conflict, nothing written.
+   * - visibility_only: applied like visibility_update. A soft-deleted row is
+   *   left untouched (patchSurveyVisibility refuses deleted surveys) and the
+   *   replay is still answered synced, never 404.
+   * - identical: idempotent replay, nothing written.
+   */
+  private async resolveSameVersionUpsert(
+    db: Queryable,
+    userId: string,
+    row: SurveyRow,
+    body: SurveyUpsertBody,
+    syncVersion: number,
+    content: SameVersionContent,
+  ): Promise<string> {
+    if (content === "conflict") {
+      throw new ConflictException({
+        code: "sync_version_conflict",
+        message: "Same sync_version with different content",
+        details: {
+          survey_id: row.id,
+          server_sync_version: row.sync_version,
+          client_sync_version: syncVersion,
+        },
+      })
+    }
+
+    if (content === "visibility_only" && !row.deleted_at && body.visibility) {
+      const applied = await this.applyVisibilityChange(
+        db,
+        userId,
+        row.id,
+        row.visibility,
+        body.visibility,
+      )
+      return applied.updated_at
+    }
+
+    return row.updated_at
   }
 
   async getSurveyById(
@@ -1024,8 +1094,10 @@ export class SurveysService {
     })
 
     // D-07: object-storage cleanup is best-effort and runs only after commit.
+    // StorageService.deleteObject never throws, so a storage failure cannot
+    // undo the committed deletion.
     for (const storageKey of storageKeys) {
-      await this.cleanupAttachmentStorage(storageKey)
+      await this.storage.deleteObject(storageKey)
     }
 
     return {
@@ -1552,25 +1624,6 @@ export class SurveysService {
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
     )
-  }
-
-  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
-    if (this.objectStorageMode === "minio") {
-      if (this.s3Client) {
-        await this.s3Client
-          .send(
-            new DeleteObjectCommand({
-              Bucket: this.s3Bucket,
-              Key: storageKey,
-            }),
-          )
-          .catch(() => undefined)
-      }
-      return
-    }
-
-    const storagePath = join(this.uploadsRootDir, storageKey)
-    await rm(storagePath, { force: true }).catch(() => undefined)
   }
 
   private async getSurveyParcelIds(db: Queryable, surveyId: string): Promise<string[]> {

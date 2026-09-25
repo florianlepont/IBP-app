@@ -412,4 +412,163 @@ describe("Installed-app sync payload compatibility (e2e)", () => {
       .expect(200)
     expect(draftBatch.body.results[0].status).toBe("synced")
   })
+
+  // Installed apps persist the changes cursor verbatim (mobile/src/storage/sync.ts:1141-1152)
+  // and replay it on the next pull. Before this phase the server emitted
+  // `<created_at::text>|<event id>`, and the removed event-less fallback emitted
+  // `<updated_at::text>|<survey id>` (C-6). Both must still resume without a skip and without a
+  // full resend, and the server answers with a v2 cursor the app then stores (D-13).
+  describe("legacy changes cursor", () => {
+    type ChangesBody = {
+      cursor_out: string | null
+      has_more: boolean
+      events: Array<{ id: string; survey_id: string }>
+    }
+
+    async function pull(accessToken: string, cursor: string): Promise<ChangesBody> {
+      const response = await request(app.getHttpServer())
+        .get("/v1/sync/changes")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .query({ cursor, limit: 200 })
+        .expect(200)
+      return response.body as ChangesBody
+    }
+
+    async function upsert(accessToken: string, parcelId: string, surveyId: string) {
+      const batch = await request(app.getHttpServer())
+        .post("/v1/sync")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send(
+          mobileOps([
+            {
+              client_ref: "1",
+              entity: "survey",
+              action: "upsert",
+              payload: {
+                id: surveyId,
+                sync_version: 1,
+                site_name: `Legacy Cursor ${surveyId}`,
+                status: "draft",
+                visibility: "private",
+                parcel_ids: [parcelId],
+                region_version: "ACA",
+                vegetation_stage: "collineen",
+                factors: validFactors,
+              },
+            },
+          ]),
+        )
+        .expect(200)
+      expect(batch.body.results[0].status).toBe("synced")
+    }
+
+    // Events a pre-phase server would have sent after `cursor`, in the feed's (xid8, seq) order.
+    async function eventsAfterLegacy(userId: string, timestamp: string, id: string) {
+      const rows = await db.query<{ id: string }>(
+        `SELECT e.id
+         FROM survey_events e
+         JOIN surveys s ON s.id = e.survey_id
+         WHERE s.user_id = $1
+           AND (e.created_at, e.id) > ($2::timestamptz, $3)
+         ORDER BY e.xid8, e.seq`,
+        [userId, timestamp, id],
+      )
+      return rows.rows.map((row) => row.id)
+    }
+
+    let accessToken: string
+    let userId: string
+    let firstSurveyId: string
+    let secondSurveyId: string
+    let events: Array<{ created_at: string; id: string; survey_id: string }>
+    let lastPosition: string
+
+    beforeAll(async () => {
+      accessToken = await login(`e2e-legacy-cursor-${Date.now()}@ibp.local`)
+      const parcelId = await resolveParcel(accessToken, 45.2, 2.2)
+      firstSurveyId = `e2e-legacy-cursor-a-${Date.now()}`
+      secondSurveyId = `e2e-legacy-cursor-b-${Date.now()}`
+      await upsert(accessToken, parcelId, firstSurveyId)
+      await upsert(accessToken, parcelId, secondSurveyId)
+
+      const owner = await db.query<{ user_id: string }>(
+        `SELECT user_id FROM surveys WHERE id = $1`,
+        [firstSurveyId],
+      )
+      userId = owner.rows[0].user_id
+
+      const rows = await db.query<{ created_at: string; id: string; survey_id: string }>(
+        `SELECT created_at::text, id, survey_id
+         FROM survey_events
+         WHERE survey_id = ANY($1)
+         ORDER BY created_at, id`,
+        [[firstSurveyId, secondSurveyId]],
+      )
+      events = rows.rows
+      expect(events.some((event) => event.survey_id === firstSurveyId)).toBe(true)
+      expect(events.some((event) => event.survey_id === secondSurveyId)).toBe(true)
+
+      const last = await db.query<{ xid8: string; seq: string }>(
+        `SELECT e.xid8::text AS xid8, e.seq::text AS seq
+         FROM survey_events e
+         JOIN surveys s ON s.id = e.survey_id
+         WHERE s.user_id = $1
+         ORDER BY e.xid8 DESC, e.seq DESC
+         LIMIT 1`,
+        [userId],
+      )
+      lastPosition = `v2:${last.rows[0].xid8}:${last.rows[0].seq}`
+    })
+
+    it("resumes after an event-derived legacy cursor without resending earlier events", async () => {
+      const first = events[0]
+      const body = await pull(accessToken, `${first.created_at}|${first.id}`)
+      const returned = body.events.map((event) => event.id)
+
+      expect(returned).not.toContain(first.id)
+      for (const event of events.filter((e) => e.survey_id === secondSurveyId)) {
+        expect(returned).toContain(event.id)
+      }
+      expect(returned).toEqual(await eventsAfterLegacy(userId, first.created_at, first.id))
+      expect(body.has_more).toBe(false)
+      expect(body.cursor_out).toMatch(/^v2:\d+:\d+$/)
+      expect(body.cursor_out).toBe(lastPosition)
+    })
+
+    it("resumes after a survey-derived legacy cursor without resending earlier events", async () => {
+      const survey = await db.query<{ updated_at: string }>(
+        `SELECT updated_at::text FROM surveys WHERE id = $1`,
+        [secondSurveyId],
+      )
+      const updatedAt = survey.rows[0].updated_at
+      const body = await pull(accessToken, `${updatedAt}|${secondSurveyId}`)
+      const returned = body.events.map((event) => event.id)
+
+      const after = await eventsAfterLegacy(userId, updatedAt, secondSurveyId)
+      const atOrBefore = events.filter((event) => !after.includes(event.id))
+      expect(atOrBefore.length).toBeGreaterThan(0)
+      for (const event of atOrBefore) {
+        expect(returned).not.toContain(event.id)
+      }
+      expect(returned).not.toContain(events[0].id)
+      expect(returned).toEqual(after)
+      expect(body.cursor_out).toMatch(/^v2:\d+:\d+$/)
+    })
+
+    it("answers a legacy cursor newer than every event with the translated v2 cursor", async () => {
+      const legacy = `2999-01-01 00:00:00+00|${secondSurveyId}`
+      const body = await pull(accessToken, legacy)
+
+      expect(body.events).toEqual([])
+      expect(body.has_more).toBe(false)
+      expect(body.cursor_out).not.toBe(legacy)
+      expect(body.cursor_out).toMatch(/^v2:\d+:\d+$/)
+      expect(body.cursor_out).toBe(lastPosition)
+
+      // Replaying the translated cursor is stable: nothing new, same cursor.
+      const replay = await pull(accessToken, body.cursor_out as string)
+      expect(replay.events).toEqual([])
+      expect(replay.cursor_out).toBe(body.cursor_out)
+    })
+  })
 })

@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 01.2-09-PLAN.md
-last_updated: "2026-09-25T14:59:11.023Z"
-last_activity: 2026-09-25 -- Phase null planning complete
+last_updated: "2026-09-25T15:08:16.867Z"
+last_activity: 2026-09-25 -- Phase null execution started
 progress:
   total_phases: 16
   completed_phases: 4
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** An ecologist can complete a full IBP survey offline on a real parcel and have it reach the server intact on reconnection — no data loss, no duplicates.
-**Current focus:** Phase 01.5 — Mobile sync engine reliability
+**Current focus:** Phase null
 
 ## Current Position
 
-Phase: 01.6 (Sync feed ordering and unified object storage)
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-25 -- Phase null planning complete
+Phase: null — EXECUTING
+Plan: 1 of ?
+Status: Executing Phase null
+Last activity: 2026-09-25 -- Phase null execution started
 
 Progress: [█░░░░░░░░░] 13%
 
@@ -96,6 +96,7 @@ Decisions table. Decisions affecting current work:
 
 ### Pending Todos
 
+- Switch local and VPS MinIO image (2026-09-25): upstream MinIO is archived; `quay.io/minio/minio` answers 401 and Docker Hub `minio/minio` is gone. `infra/docker-compose.yml` and `infra/docker-compose.vps.yml` still use `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`, which works only while cached, so a fresh host or a `docker image prune` breaks storage. The owner chose the `pgsty/minio` fork, already used by CI since phase 01.6. Move both compose files to it (pinned by digest) and check that the existing `/data` volume starts on the VPS.
 - Investigate iOS Release build navigation (2026-09-25): `npx expo run:ios --device --configuration Release` shows the JS tab bar instead of the native liquid-glass one, and "Mes relevés" does not work. The dev build also shows a non-glass bar; first check `mobile/.env` for a leftover `EXPO_PUBLIC_ENABLE_NATIVE_TABS=false`. Then re-run the offline cold-start device check (phase 01.5 criterion 7) on a working Release build.
 
 - Verify nearby-parcels list on device near known parcels (carried over from Phase 01.2-09 step 6; automated coverage exists in `useNearbyParcels.test.ts` / `map-viewport.test.ts`)

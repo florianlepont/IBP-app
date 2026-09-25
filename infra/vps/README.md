@@ -71,8 +71,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now cortege-deploy.timer
 ```
 
-The MinIO bucket named in `OBJECT_STORAGE_BUCKET` must exist — create it from
-the console on `127.0.0.1:9001` through an SSH tunnel, or with `mc`.
+The API creates the MinIO bucket named in `OBJECT_STORAGE_BUCKET` on first use
+if it is missing; you can also create it from the console on `127.0.0.1:9001`
+through an SSH tunnel, or with `mc`. Attachments and profile pictures both live
+in that bucket.
 
 ## Operating it
 
@@ -102,6 +104,39 @@ docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.e
 # Re-enable the timer only once the fix has landed on main
 sudo systemctl start cortege-deploy.timer
 ```
+
+## Restoring the database
+
+The sync changes feed (`GET /v1/sync/changes`) orders events by the id of the
+transaction that wrote them (`survey_events.xid8`) and only serves events older
+than the oldest running transaction. Those ids belong to the cluster that wrote
+them. After restoring a **logical dump** (`pg_dump`/`pg_restore`, a new VPS, a
+major PostgreSQL upgrade by dump), the new cluster's counter starts lower, the
+restored events look like they come from the future, and the feed would withhold
+all of them from every device.
+
+So after any logical restore, and before starting the API, run this once:
+
+```bash
+# Keep the API stopped (and the deploy timer, which would restart it)
+sudo systemctl stop cortege-deploy.timer
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env stop api
+
+# ... restore the dump into the postgres service ...
+
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env \
+  exec postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "BEGIN; UPDATE survey_events SET xid8 = pg_current_xact_id(); COMMIT;"'
+
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env up -d api
+sudo systemctl start cortege-deploy.timer
+```
+
+Every event then carries the restore transaction's id and keeps its `seq` order.
+Phones holding an older cursor get the whole feed again from the beginning (the
+API detects a cursor from the future and restarts it). A physical copy of the
+data directory or a volume move keeps the same cluster and needs none of this.
+Background: `docs/technical/sync-conflict-resolution-v1.md`, "Database restore".
 
 ## Sharing the machine
 
