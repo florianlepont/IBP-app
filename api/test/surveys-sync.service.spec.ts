@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common"
+import { BadRequestException, Logger } from "@nestjs/common"
 import { SurveysSyncService } from "../src/surveys/surveys-sync.service"
 
 const AUTH_USER = {
@@ -312,5 +312,176 @@ describe("SurveysSyncService.syncBatch", () => {
     expect(result.results[0].status).toBe("retryable_error")
     expect(warnSpy).toHaveBeenCalled()
     expect(warnSpy.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(true)
+  })
+})
+
+describe("SurveysSyncService.getSyncChanges", () => {
+  const USER_ID = AUTH_USER.id
+
+  function eventRow(id: string, xid8: string, seq: string) {
+    return {
+      id,
+      survey_id: "survey-1",
+      actor_id: USER_ID,
+      event_type: "survey_upserted",
+      payload: { sync_version: 1 },
+      created_at: "2026-03-09 10:20:31.991+00",
+      xid8,
+      seq,
+    }
+  }
+
+  function sqlOf(db: { query: jest.Mock }, index: number): string {
+    return String(db.query.mock.calls[index][0])
+  }
+
+  function findEventsCall(db: { query: jest.Mock }) {
+    const call = db.query.mock.calls.find((c) =>
+      String(c[0]).includes("pg_snapshot_xmin(pg_current_snapshot())"),
+    )
+    if (!call) throw new Error("events query not issued")
+    return { sql: String(call[0]), params: call[1] as unknown[] }
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it("reads events below the snapshot minimum in (xid8, seq) order and emits a v2 cursor", async () => {
+    const { service, db } = buildService()
+    db.query
+      .mockResolvedValueOnce({ rows: [eventRow("e1", "900", "3"), eventRow("e2", "901", "2")] })
+      .mockResolvedValueOnce({ rows: [{ id: "survey-1" }] })
+
+    const result = await service.getSyncChanges(AUTH_USER as never, undefined, 10)
+
+    const { sql, params } = findEventsCall(db)
+    expect(sqlOf(db, 0)).toBe(sql)
+    expect(sql).toContain("(e.xid8, e.seq) >")
+    expect(sql).toContain("ORDER BY e.xid8 ASC, e.seq ASC")
+    expect(params).toEqual([USER_ID, "0", "0", 11])
+    expect(result.cursor_in).toBeNull()
+    expect(result.cursor_out).toBe("v2:901:2")
+    expect(result.has_more).toBe(false)
+    expect(result.events.map((event) => event.id)).toEqual(["e1", "e2"])
+    // The public event shape the mobile app parses is unchanged: no xid8/seq leak out.
+    expect(Object.keys(result.events[0]).sort()).toEqual(
+      ["actor_id", "created_at", "event_type", "id", "payload", "survey_id"].sort(),
+    )
+    expect(result.surveys).toEqual([{ id: "survey-1" }])
+  })
+
+  it("reports has_more and builds the cursor from the limit-th row when limit + 1 rows come back", async () => {
+    const { service, db } = buildService()
+    db.query
+      .mockResolvedValueOnce({
+        rows: [eventRow("e1", "900", "1"), eventRow("e2", "900", "2"), eventRow("e3", "901", "3")],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+
+    const result = await service.getSyncChanges(AUTH_USER as never, undefined, 2)
+
+    expect(findEventsCall(db).params).toEqual([USER_ID, "0", "0", 3])
+    expect(result.has_more).toBe(true)
+    expect(result.events.map((event) => event.id)).toEqual(["e1", "e2"])
+    expect(result.cursor_out).toBe("v2:900:2")
+  })
+
+  it("binds a v2 cursor as strings and echoes it back when there are no new events", async () => {
+    const { service, db } = buildService()
+    db.query.mockResolvedValueOnce({ rows: [{ future: false }] }).mockResolvedValueOnce({ rows: [] })
+
+    const result = await service.getSyncChanges(AUTH_USER as never, "v2:9843:7", 10)
+
+    expect(sqlOf(db, 0)).toContain("pg_snapshot_xmax(pg_current_snapshot())")
+    expect(db.query.mock.calls[0][1]).toEqual(["9843"])
+    expect(findEventsCall(db).params).toEqual([USER_ID, "9843", "7", 11])
+    expect(result.cursor_in).toBe("v2:9843:7")
+    expect(result.cursor_out).toBe("v2:9843:7")
+    expect(result.has_more).toBe(false)
+    expect(result.events).toEqual([])
+  })
+
+  it("translates a legacy cursor with (created_at, id) <= and returns the translated v2 cursor", async () => {
+    const { service, db } = buildService()
+    db.query
+      .mockResolvedValueOnce({ rows: [{ xid8: "9000", seq: "12" }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const legacy = "2026-03-09 10:20:31.991+00|survey-1"
+
+    const result = await service.getSyncChanges(AUTH_USER as never, legacy, 10)
+
+    expect(sqlOf(db, 0)).toContain("(e.created_at, e.id) <=")
+    expect(sqlOf(db, 0)).toContain("s.user_id = $1")
+    expect(db.query.mock.calls[0][1]).toEqual([USER_ID, "2026-03-09 10:20:31.991+00", "survey-1"])
+    expect(findEventsCall(db).params).toEqual([USER_ID, "9000", "12", 11])
+    expect(result.cursor_in).toBe(legacy)
+    expect(result.cursor_out).toBe("v2:9000:12")
+  })
+
+  it("starts a legacy cursor with no matching event from the beginning", async () => {
+    const { service, db } = buildService()
+    db.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
+
+    const result = await service.getSyncChanges(
+      AUTH_USER as never,
+      "2020-01-01 00:00:00+00|nothing",
+      10,
+    )
+
+    expect(findEventsCall(db).params).toEqual([USER_ID, "0", "0", 11])
+    expect(result.cursor_out).toBe("v2:0:0")
+  })
+
+  it("returns a null cursor and never re-sends event-less surveys when there is nothing new", async () => {
+    const { service, db } = buildService()
+    db.query.mockResolvedValueOnce({ rows: [] })
+
+    const result = await service.getSyncChanges(AUTH_USER as never, undefined, 10)
+
+    expect(result).toEqual({
+      cursor_in: null,
+      cursor_out: null,
+      has_more: false,
+      events: [],
+      surveys: [],
+      attachments: [],
+    })
+    // Only the events query runs: the old fallback that read `surveys` directly is gone.
+    expect(db.query).toHaveBeenCalledTimes(1)
+    expect(sqlOf(db, 0)).toContain("FROM survey_events e")
+  })
+
+  it("restarts from the beginning when a v2 cursor is beyond the current xid counter", async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const { service, db } = buildService()
+    db.query.mockResolvedValueOnce({ rows: [{ future: true }] }).mockResolvedValueOnce({ rows: [] })
+
+    const result = await service.getSyncChanges(AUTH_USER as never, "v2:99999999999:5", 10)
+
+    expect(findEventsCall(db).params).toEqual([USER_ID, "0", "0", 11])
+    expect(result.cursor_out).toBe("v2:0:0")
+    expect(warnSpy).toHaveBeenCalled()
+    const logged = warnSpy.mock.calls.map((call) => String(call[0])).join("\n")
+    expect(logged).toContain(USER_ID)
+    expect(logged).not.toContain("99999999999")
+  })
+
+  it("keeps a v2 cursor that is not beyond the current xid counter", async () => {
+    const { service, db } = buildService()
+    db.query.mockResolvedValueOnce({ rows: [{ future: false }] }).mockResolvedValueOnce({ rows: [] })
+
+    await service.getSyncChanges(AUTH_USER as never, "v2:99999999999:5", 10)
+
+    expect(findEventsCall(db).params).toEqual([USER_ID, "99999999999", "5", 11])
+  })
+
+  it("rejects a malformed cursor with 400 before touching the database", async () => {
+    const { service, db } = buildService()
+
+    await expect(service.getSyncChanges(AUTH_USER as never, "garbage", 10)).rejects.toBeInstanceOf(
+      BadRequestException,
+    )
+    expect(db.query).not.toHaveBeenCalled()
   })
 })
