@@ -1380,8 +1380,9 @@ decision to make with this evidence in hand — not this document's.
 
 ## 11. Iteration 3 — data alone, backbone held constant
 
-**Status: IN PROGRESS (started 2026-09-23, user approved a further extension after reviewing
-iteration 2's data-limited result).**
+**Status: COMPLETE (started 2026-09-23, corpus expansion and training completed 2026-09-24/25,
+export/evaluation/promotion completed 2026-09-25; user approved a further extension after
+reviewing iteration 2's data-limited result).**
 
 **Why this iteration changes exactly one variable.** Iteration 2 changed both the corpus (9x more
 images) and the backbone (MobileNetV3-Small → Large) at once, so its +19.9pp mean gain cannot be
