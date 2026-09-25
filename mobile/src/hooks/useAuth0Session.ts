@@ -12,6 +12,7 @@ import {
 } from "../app/auth0-config"
 import { extractIdTokenClaims, IdTokenClaims } from "../app/id-token"
 import { AuthUser } from "../app/types"
+import { clearCachedProfile, loadCachedProfile, saveCachedProfile } from "../storage/profile-cache"
 import {
   AUTH_REQUIRED_ERROR,
   AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
@@ -23,6 +24,11 @@ import { OperationScope, OperationState } from "./operation-status"
 import { isOnlineNetworkState } from "./survey-sync/utils"
 
 export { AUTH_REQUIRED_ERROR, AUTH_TEMPORARILY_UNAVAILABLE_ERROR } from "./auth-errors"
+
+// D-13: while the profile comes from the cache, retry GET /me when the
+// network comes back online and periodically while online, until it
+// succeeds once and stops (T-01.5-14: never hammer /me).
+const PROFILE_REFRESH_INTERVAL_MS = 60_000
 
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
@@ -79,7 +85,9 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState("Not logged in")
   const [sessionOwner, setSessionOwner] = useState<IdTokenClaims | null>(null)
+  const [profileFromCache, setProfileFromCache] = useState(false)
   const auth0Ref = useRef<Auth0 | null>(null)
+  const profileRefreshInFlightRef = useRef(false)
 
   const apiUrlRef = useRef(apiUrl)
   apiUrlRef.current = apiUrl
@@ -103,6 +111,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     setCurrentUser(null)
     setProfile("Not logged in")
     setSessionOwner(null)
+    setProfileFromCache(false)
+    void clearCachedProfile()
     await onSessionCleared?.()
   }, [onSessionCleared])
 
@@ -185,8 +195,14 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     async (options?: { silent?: boolean }): Promise<AuthUser | null> => {
       const silent = options?.silent ?? false
       try {
-        const user = await withAuthRetry((token) => getMyProfile(apiUrl, token))
+        let tokenSubForCache: string | null = null
+        const user = await withAuthRetry((token, tokenSub) => {
+          tokenSubForCache = tokenSub
+          return getMyProfile(apiUrl, token)
+        })
         setProfileFromUser(user)
+        setProfileFromCache(false)
+        if (tokenSubForCache) void saveCachedProfile(tokenSubForCache, user)
         if (!silent) reportStatus("profile", "success", "Profile loaded")
         return user
       } catch (error) {
@@ -236,6 +252,21 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         if (!active) return
 
         if (!user) {
+          const cached = sessionOwner?.sub ? await loadCachedProfile(sessionOwner.sub) : null
+          if (!active) return
+
+          if (cached) {
+            setProfileFromUser(cached)
+            setProfileFromCache(true)
+            reportStatus(
+              "session",
+              "success",
+              "Session restaurée hors ligne (dernier profil connu)",
+            )
+            setSessionRestoring(false)
+            return
+          }
+
           reportStatus(
             "session",
             "success",
@@ -246,6 +277,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         }
 
         setProfileFromUser(user)
+        setProfileFromCache(false)
+        if (sessionOwner?.sub) void saveCachedProfile(sessionOwner.sub, user)
         reportStatus("session", "success", "Session restored")
         setSessionRestoring(false)
       } catch (error) {
@@ -291,7 +324,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
-      setSessionOwner(extractIdTokenClaims(credentials.idToken))
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setSessionOwner(claims)
 
       let user: AuthUser
       try {
@@ -309,6 +343,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
 
       setProfileFromUser(user)
+      setProfileFromCache(false)
+      if (claims?.sub) void saveCachedProfile(claims.sub, user)
       reportStatus("auth", "success", "Logged in")
       return null
     } catch (error) {
@@ -341,7 +377,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
-      setSessionOwner(extractIdTokenClaims(credentials.idToken))
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setSessionOwner(claims)
 
       let user: AuthUser
       try {
@@ -359,6 +396,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
 
       setProfileFromUser(user)
+      setProfileFromCache(false)
+      if (claims?.sub) void saveCachedProfile(claims.sub, user)
       reportStatus("auth", "success", "Logged in")
       return null
     } catch (error) {
@@ -388,7 +427,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       // If the user ended up logging in during the reset flow, treat it as a login
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
-      setSessionOwner(extractIdTokenClaims(credentials.idToken))
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setSessionOwner(claims)
       let refused = false
       const user = await getMyProfile(apiUrl, credentials.accessToken).catch((error: unknown) => {
         refused = isEmailAlreadyLinkedError(error)
@@ -400,6 +440,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
       if (user) {
         setProfileFromUser(user)
+        setProfileFromCache(false)
+        if (claims?.sub) void saveCachedProfile(claims.sub, user)
         reportStatus("auth", "success", "Logged in")
       }
     } catch {
@@ -431,6 +473,45 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       throw error
     }
   }, [getValidAccessToken])
+
+  // D-13: while the currently-shown profile came from the cache, retry GET
+  // /me as soon as the network comes back and periodically while online, and
+  // replace the cached profile once it succeeds. Stops (effect cleanup runs)
+  // once handleLoadMyProfile succeeds and flips profileFromCache to false.
+  useEffect(() => {
+    if (!profileFromCache) {
+      return
+    }
+
+    const attemptRefresh = async (): Promise<void> => {
+      if (profileRefreshInFlightRef.current) return
+      profileRefreshInFlightRef.current = true
+      try {
+        await handleLoadMyProfile({ silent: true })
+      } finally {
+        profileRefreshInFlightRef.current = false
+      }
+    }
+
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (isOnlineNetworkState(state)) {
+        void attemptRefresh()
+      }
+    })
+
+    const intervalId = setInterval(() => {
+      void (async () => {
+        if (await isDeviceOnline()) {
+          void attemptRefresh()
+        }
+      })()
+    }, PROFILE_REFRESH_INTERVAL_MS)
+
+    return () => {
+      subscription.remove()
+      clearInterval(intervalId)
+    }
+  }, [profileFromCache, handleLoadMyProfile])
 
   return {
     accessToken,
