@@ -16,6 +16,8 @@ import {
   syncPending,
   updateSurveyVisibility,
 } from "../../storage"
+import { deleteAttachmentFile } from "../../storage/attachment-files"
+import { preparePhotoForStorage } from "../../storage/attachments"
 import { isAuthRequiredError } from "../auth-errors"
 import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
 import { isSyncSuspendedError, SyncActivity } from "./sync-activity"
@@ -84,22 +86,34 @@ export function useSurveySyncSurveyOperations({
       source: "camera" | "library",
     ): Promise<void> => {
       const mimeType = asset.mimeType ?? guessMimeType(asset.uri)
-      const sizeBytes =
-        typeof asset.fileSize === "number" && asset.fileSize > 0 ? asset.fileSize : 500_000
 
-      await queueLocalAttachment({
-        survey_id: surveyId,
-        local_uri: asset.uri,
-        mime_type: mimeType,
-        size_bytes: sizeBytes,
-        captured_at: new Date().toISOString(),
-        metadata: {
-          source,
-          file_name: asset.fileName ?? null,
-          width: asset.width ?? null,
-          height: asset.height ?? null,
-        },
+      const prepared = await preparePhotoForStorage({
+        uri: asset.uri,
+        width: asset.width,
+        height: asset.height,
+        mimeType,
       })
+
+      try {
+        await queueLocalAttachment({
+          survey_id: surveyId,
+          local_uri: prepared.uri,
+          mime_type: prepared.mimeType,
+          size_bytes: prepared.sizeBytes,
+          captured_at: new Date().toISOString(),
+          metadata: {
+            source,
+            file_name: asset.fileName ?? null,
+            width: prepared.width,
+            height: prepared.height,
+            original_width: asset.width ?? null,
+            original_height: asset.height ?? null,
+          },
+        })
+      } catch (error) {
+        await deleteAttachmentFile(prepared.uri)
+        throw error
+      }
 
       await refreshLocalAttachments()
       setStatus(`${source === "camera" ? "Camera photo" : "Photo"} queued for survey ${surveyId}`)
