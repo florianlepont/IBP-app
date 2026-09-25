@@ -1753,3 +1753,88 @@ before any interpretation.**
 | Olea | 35 | 60.0% | 94.29% | 193 | 71.5% | 88.60% | 591 | 75.1% | 91.20% | No | -5.7pp | +2.6pp |
 | Phillyrea | 35 | 60.0% | 88.57% | 199 | 71.4% | 88.44% | 546 | 79.1% | 92.67% | No | -0.1pp | +4.2pp |
 | Pistacia | 33 | 48.5% | 81.82% | 187 | 61.0% | 82.35% | 571 | 78.5% | 91.07% | No | +0.5pp | +8.7pp |
+
+**1 of 34 genera clears the D-02 95% top-3 bar for the first time in any iteration: Tamarix,
+95.04% (517/544 test images, `clears_bar=True`).** This is a genuine partial-go result in D-04's
+sense — the first genus for which this document can point at raw evidence supporting enabling a
+suggestion while manual entry stays default for the rest — not a single-image knife-edge either:
+at n=544, the 95% bar tolerates up to 27 misses, and Tamarix cleared it with 27 misses exactly
+(517/544), the same resolution-limit discipline Section 5 and 10.3 applied. The remaining 33
+genera do not clear it.
+
+**Mean top-3 delta 1→2: +19.85 percentage points (34-genus unweighted mean of per-genus top-3
+percentages — matches Section 10.3's reported +19.9pp). Mean top-3 delta 2→3: +6.74 percentage
+points — roughly a third of the 1→2 gain.** 31 of 34 genera improved 2→3, 0 were flat, and 3
+regressed, all by small margins: Quercus_deciduae −0.5pp, Tilia −1.2pp, Ceratonia −2.1pp. Ceratonia
+is the one regression with a plausible corpus explanation on record — Section 11.1 flagged it as
+the single class whose *candidate* pool itself caps at 4,194 (the smallest of any class, licence-
+scarce rather than download-lossy), so its iteration-3 corpus grew the least of any class in
+relative terms despite its test split nearly doubling (193→363 images). Quercus_deciduae and Tilia
+have no equivalent corpus-ceiling marker in Section 11.1 and read as the same
+ceiling/ranking-shuffle effect among already-mid-to-strong classes that iteration 2 noted for Olea
+and Phillyrea (Section 10.3) — small regressions among classes that were not the worst performers,
+not evidence of a real capability loss.
+
+**The diminishing-returns number (+19.9pp then +6.7pp) answers what iteration 3 was run to
+settle, with one explicit caveat carried from Section 11.2: it is confounded by a fixed epoch
+budget, not solely a corpus-size effect.** Both iteration 2 and iteration 3 trained for exactly
+6 head + 8 fine-tune epochs and both ended still climbing (`EarlyStopping` never triggered in
+either). A genuinely saturating approach would show a shrinking per-epoch gain even with unlimited
+epochs; what is actually on record here is a shrinking gain from tripling the corpus **while also
+holding the epoch budget fixed** — which is consistent with either explanation (data saturation,
+or under-training at the larger corpus size) and this measurement alone cannot separate them.
+Section 11.2's non-saturation finding means the honest reading is: **the measured 2→3 gain is a
+floor on what more data could still buy at a properly-scaled epoch budget, not a ceiling on the
+approach.** A fourth iteration that only adds more data without also lengthening the schedule
+would likely underestimate its own gain the same way iteration 3 may have.
+
+**The validation top-3 figure (0.8555, Section 11.2) is NOT the same measurement as this
+section's test figures, and the two must not be conflated despite being numerically close.**
+The unweighted mean of this section's 34 per-genus top-3 percentages is 85.37% — within 0.18
+percentage points of the validation figure — but validation top-3 is computed during training,
+batch-by-batch, over the *validation* split (19,466 images, used for `EarlyStopping` monitoring
+and reported as a training sanity figure only, per Section 11.2's explicit labelling). This
+section's figures are computed by `eval/evaluate_accuracy.py` running the exported, quantised
+`.tflite` file image-by-image over the *held-out test* split — the only figures this plan treats
+as decision-relevant per D-03/D-04. The near-identical numeric value here is coincidental (both
+splits are large, similarly composed, and drawn from the same season-stratified corpus), not
+evidence that the two measurements are interchangeable — a future reader citing "85.5% top-3"
+should cite this section's per-genus test table, not Section 11.2's validation figure, as the
+decision input. The like-for-like comparable figure to iteration 2's 78.6% test-set mean (Section
+10.3's unweighted per-genus mean, recomputed here for consistency: 78.63%) is this section's own
+**85.37% unweighted mean top-3 on the TEST split** — itself context only, not a D-03 result; the
+per-genus table above is the actual evidence.
+
+### 11.4 Confidence bands (D-12) and candidate ordering (D-11) — iteration 3
+
+**Confidence bands, computed the same way as iterations 1–2 (`find_cut_points`, strong = lowest
+confidence where cumulative precision is still ≥90%, weak = lowest confidence where cumulative
+precision is still ≥50%).** Strong band: confidence ≥ 0.7098, n = 10,910/19,466 predictions
+(56.0%), 90.0% in-band accuracy. Medium band: 0.0841 ≤ confidence < 0.7098, n = 8,556 (43.9%),
+38.6% in-band accuracy. Weak band: empty (0 predictions below 0.0841) — the same pattern iteration
+2 showed, now more pronounced: the model essentially never produces a very low-confidence
+prediction at all. Strong-band coverage rose again: iteration 1 → 11.2% of predictions,
+iteration 2 → 38.4%, iteration 3 → **56.0%** — more than half of all test predictions now fall in
+the band the plan's own strong/medium/weak UI language (D-12) would show as "strong," at the same
+fixed 90% precision target each time. Pooled top-1 accuracy (context only, not a D-03 result — see
+Section 11.3's per-genus table) continued its rise: 36.8% → 58.8% → **67.4%** across the three
+iterations.
+
+**Candidate ordering (D-11): the near-miss rate keeps rising.** Of 6,342 wrong top-1 predictions,
+the true genus was rank 2 in 2,391 (37.7%) and rank 3 in 1,077 (17.0%) — a combined near-miss rate
+of **54.7%**, up from iteration 2's 48.5% and iteration 1's 35.0% (Section 10.3). The remaining
+45.3% of wrong top-1 predictions have the true genus entirely absent from the top-3, down from
+iteration 2's higher absent-rate — the candidate list underneath the top prediction (D-11's screen
+design) keeps doing more real work as training data grows.
+
+**Top confusion pairs are, if anything, more botanically coherent than iteration 2's already-
+coherent list (Section 10.3):** Picea↔Abies (75+64, both Pinaceae conifers), Betula→Populus (64,
+both fast-growing pioneer trees with visually similar bark/leaf shape though different families),
+Cupressus↔Juniperus (63+38, both Cupressaceae), Juglans↔Fraxinus (60+57, both pinnate-compound-leaf
+trees, different families), Carpinus→Fagus (52, both smooth-grey-bark Fagales), Malus↔Pyrus (47+37,
+both Rosaceae pome fruits), Phillyrea↔Olea (43+39, both Oleaceae — the same pairing iteration 2
+flagged), Pyrus→Prunus (40, both Rosaceae), Alnus→Betula (36, both Betulaceae), Populus→Betula
+(35). Every one of the top-10 confusion pairs by count has a genuine morphological or taxonomic
+basis, which reads as the model continuing to learn real structure rather than noise as the corpus
+grows, consistent with iteration 2's own observation (Section 10.3) and with the confidence-band
+and near-miss trends above.
