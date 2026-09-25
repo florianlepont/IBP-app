@@ -2069,3 +2069,203 @@ comparison, verdict) follows in 12.3–12.6.
 **5 of 136 cells (34 genera × 4 seasons) fall below the n≥30 threshold: Acer autumn (n=4), Pinus
 autumn (n=3), Prunus autumn (n=1), Malus winter (n=13), Sorbus winter (n=16).** No cell has zero
 images. Discussed in 12.4.
+
+### 12.3 Season margins — does accuracy degrade in autumn, in aggregate?
+
+**Two readings, reported side by side per D-03's own discipline: neither is a substitute for the
+per-genus table above, both are context only, and the pooled one is the one that answers "with
+counts" literally.**
+
+**Pooled (image-weighted) top-1/top-3 by season, all 34 genera combined:**
+
+| season | n | top-1 | top-3 |
+|---|---:|---:|---:|
+| spring | 6,106 | 66.44% (4,057/6,106) | 84.41% (5,154/6,106) |
+| summer | 5,839 | 68.88% (4,022/5,839) | 85.72% (5,005/5,839) |
+| **autumn** | **4,324** | **68.83% (2,976/4,324)** | **86.47% (3,739/4,324)** |
+| winter | 3,170 | 64.61% (2,048/3,170) | 84.13% (2,667/3,170) |
+| unknown | 27 | 77.78% (21/27) | 100.00% (27/27) |
+
+**Autumn is the highest-scoring season of the four on the pooled figure, not the lowest** — 86.47%
+top-3, ahead of summer (85.72%), spring (84.41%) and winter (84.13%, the actual low point).
+`unknown`'s 100% top-3 on 27 images is not a real finding — 27 images is far below any reporting
+threshold and is shown only for completeness, per 12.1's coverage note.
+
+**Unweighted per-genus mean, same ranking, computed only over genera clearing n≥30 for that season
+(the genera below threshold are excluded, never averaged in at a percentage computed on a handful
+of images):**
+
+| season | genera included | mean top-1 | mean top-3 | genera excluded (n<30) |
+|---|---:|---:|---:|---|
+| spring | 34/34 | 66.97% | 84.63% | none |
+| summer | 34/34 | 69.38% | 85.92% | none |
+| **autumn** | **31/34** | **68.26%** | **86.01%** | **Acer (4), Pinus (3), Prunus (1)** |
+| winter | 32/34 | 61.21% | 81.32% | Malus (13), Sorbus (16) |
+
+**Read plainly: for the 31 (pooled) or up-to-34 (per-genus mean) genera this table can actually
+speak to, the model does not degrade in autumn — autumn accuracy is comparable to, and on both
+measures here slightly better than, spring and summer, and clearly better than winter.** Winter is
+the season that reads weakest on both the pooled and unweighted figures, an unplanned secondary
+finding (12.6).
+
+**This aggregate reading is not the whole answer, and must not be read as covering the three
+genera whose autumn representation this document has flagged since Section 3b.** Acer, Pinus and
+Prunus contribute a combined 8 images to autumn's 4,324-image pool (Acer 4, Pinus 3, Prunus 1) —
+under 0.2% of the autumn test set. Removing them from the pooled or unweighted figures above moves
+neither number meaningfully, precisely *because* they are barely present in it — which is the
+finding, not an artefact of the aggregation. The season-margin table answers "does the model
+degrade in autumn, on average, for the genera this test split can measure in autumn" — it does not
+and cannot answer that question for these three specifically. 12.4 and 12.6 address them directly.
+
+### 12.4 Insufficient-sample cells — what the thinness itself says
+
+**Three of the five thin cells are the same three genera Section 11.1/11.5 already named as
+near-absent in the autumn *training* corpus, now confirmed as equally near-absent in the autumn
+*test* split — the same corpus-composition constraint propagates through both halves of the
+pipeline, as expected, since train/val/test are all drawn from the same season-stratified
+`prepare_dataset.py` output at a fixed 80/10/10 split.**
+
+| genus | season | n | raw top1/top3 hits | verdict |
+|---|---|---:|---|---|
+| Acer | autumn | 4 | 1/3 | insufficient — cannot assess; matches Section 11.5's 1.1% autumn training share |
+| Pinus | autumn | 3 | 3/3 | insufficient — cannot assess; matches Section 11.5's 1.0% autumn training share |
+| Prunus | autumn | 1 | 0/1 | insufficient — cannot assess; matches Section 11.5's 0.5% autumn training share |
+| Malus | winter | 13 | 7/9 | insufficient — cannot assess; a new finding, not previously flagged at the corpus level |
+| Sorbus | winter | 16 | 10/12 | insufficient — cannot assess; a new finding, not previously flagged at the corpus level |
+
+**Reporting the raw hit counts above is explicitly not a percentage claim** — 3/3 for Pinus autumn
+looks like "100%" but is not reported as such anywhere in 12.2/12.3's tables, per this document's
+own D-03 rule (Section 0: "never silently dropped and never folded into an average"): at n=3, one
+different test image would swing the figure by 33 points, which is not a resolution this document
+treats as evidence of anything.
+
+**Malus and Sorbus's winter thinness is a genuinely new observation this section surfaces — it was
+not visible in any prior section, because Sections 3b/11.1/11.5's seasonal-skew analysis was scoped
+to autumn specifically (the field-survey season), not to every season.** Both classes' training
+corpora evidently skew away from winter GBIF observations specifically (consistent with these being
+predominantly spring/summer-flowering Rosaceae fruit trees, less commonly photographed in winter
+dormancy) — worth a note for any future corpus-expansion effort, though outside this section's
+autumn-focused remit to pursue further.
+
+### 12.5 Autumn vs. overall, per genus — who holds up, who doesn't
+
+**For the 31 genera with a measurable autumn cell, autumn top-3 compared directly against that same
+genus's whole-year top-3 from Section 11.3** (both computed from the identical underlying test
+predictions — the "overall" figure here is the same number Section 11.3 already reports, recomputed
+from this section's raw file as a cross-check, and it matches exactly).
+
+| genus | overall top3 (n) | autumn top3 (n) | delta |
+|---|---:|---:|---:|
+| Abies | 89.7% (538/600) | 89.9% (160/178) | +0.2pp |
+| Acer | 80.8% (485/600) | insufficient (3/4) | n/a |
+| Alnus | 77.3% (464/600) | 73.1% (125/171) | -4.2pp |
+| Arbutus | 91.2% (547/600) | 93.1% (162/174) | +1.9pp |
+| Betula | 82.3% (494/600) | 83.8% (83/99) | +1.5pp |
+| Carpinus | 81.0% (486/600) | 80.9% (123/152) | -0.1pp |
+| Castanea | 83.8% (503/600) | 85.4% (135/158) | +1.6pp |
+| Celtis | 80.7% (484/600) | 82.4% (145/176) | +1.7pp |
+| Cupressus | 90.9% (482/530) | 91.2% (124/136) | +0.2pp |
+| Fagus | 83.5% (500/599) | 78.8% (78/99) | -4.7pp |
+| Fraxinus | 77.6% (461/594) | 75.3% (73/97) | -2.4pp |
+| Juglans | 80.8% (476/589) | 87.0% (140/161) | +6.1pp |
+| Juniperus | 90.8% (542/597) | 88.6% (70/79) | -2.2pp |
+| Larix | 87.6% (525/599) | 89.2% (149/167) | +1.6pp |
+| Malus | 80.2% (450/561) | 80.7% (113/140) | +0.5pp |
+| Ostrya | 84.3% (455/540) | 82.6% (109/132) | -1.7pp |
+| Pinus | 91.3% (528/578) | insufficient (3/3) | n/a |
+| Picea | 88.7% (528/595) | 83.3% (150/180) | -5.4pp |
+| Populus | 79.6% (476/598) | 82.0% (73/89) | +2.4pp |
+| Prunus | 80.5% (483/600) | insufficient (1/1) | n/a |
+| Pyrus | 82.4% (464/563) | 81.9% (118/144) | -0.5pp |
+| Quercus_deciduae | 84.2% (393/467) | 90.8% (59/65) | +6.6pp |
+| Quercus_sempervirens | 85.7% (487/568) | 93.5% (157/168) | +7.7pp |
+| Salix | 84.9% (508/598) | 73.3% (44/60) | -11.6pp |
+| Sorbus | 88.0% (526/598) | 87.5% (126/144) | -0.5pp |
+| Tamarix | 95.0% (517/544) | 96.3% (131/136) | +1.3pp |
+| Taxus | 91.9% (490/533) | 96.0% (143/149) | +4.0pp |
+| Tilia | 77.7% (447/575) | 80.4% (115/143) | +2.7pp |
+| Ulmus | 74.9% (448/598) | 79.2% (122/154) | +4.3pp |
+| Ceratonia | 90.6% (329/363) | 91.4% (127/139) | +0.7pp |
+| Cercis | 89.5% (511/571) | 88.7% (118/133) | -0.8pp |
+| Olea | 91.2% (539/591) | 92.4% (158/171) | +1.2pp |
+| Phillyrea | 92.7% (506/546) | 92.9% (143/154) | +0.2pp |
+| Pistacia | 91.1% (520/571) | 94.6% (159/168) | +3.6pp |
+
+**21 of the 31 measurable genera fall within ±3 percentage points of their whole-year figure** —
+the majority read as noise-level ranking shuffle, not a real season effect, at this test split's
+resolution (n≈60–280 per autumn cell for the measured genera).
+
+**4 genera show a real autumn-specific weakness beyond ±3pp, all at adequate sample sizes (n≥60,
+not thin cells): Salix (-11.6pp, 73.3% on n=60), Picea (-5.4pp, 83.3% on n=180), Fagus (-4.7pp,
+78.8% on n=99), Alnus (-4.2pp, 73.1% on n=171).** Salix's drop is the largest single finding in this
+section by margin — nearly 12 points below its own whole-year figure, on a sample size (60) well
+above the insufficient-samples threshold, so this is not a resolution-limit artefact the way the
+three near-zero-autumn genera are. This genus-specific autumn weakness was invisible in every prior
+section of this document, since Section 11.3's whole-year Salix figure (84.9%) reads as an
+unremarkable mid-table result.
+
+**6 genera improve by more than 3pp in autumn: Quercus_sempervirens (+7.7pp), Quercus_deciduae
+(+6.6pp), Juglans (+6.1pp), Ulmus (+4.3pp), Taxus (+4.0pp), Pistacia (+3.6pp).** No obvious common
+cause across these six (different families: Fagaceae, Juglandaceae, Ulmaceae, Taxaceae,
+Anacardiaceae) — reads as genuine per-genus variation rather than a shared seasonal-feature
+explanation, consistent with 12.3's finding that autumn is not a systematically weaker season.
+
+**Tamarix — the one genus that already clears the D-02 95% top-3 bar overall (Section 11.3,
+95.04%) — holds up, and slightly strengthens, in autumn specifically: 96.3% (131/136), +1.3pp.**
+This is the single most decision-relevant number in this section for D-04's partial-go question:
+the one genus this document can currently recommend enabling a suggestion for does not lose its
+evidentiary basis in the season that matters.
+
+### 12.6 Verdict — holds up, degrades, or cannot tell?
+
+**All three answers apply, to different, explicitly-named parts of the genus list — a single
+one-line verdict across all 34 genera would misstate the evidence.**
+
+**For 27 of the 34 genera (the 31 with a measurable autumn cell, minus the 4 flagged in 12.5): the
+model holds up in autumn.** Both the pooled and unweighted season margins (12.3) place autumn at or
+above spring/summer/winter, and 21 of 31 measurable genera sit within ±3pp of their whole-year
+figure. This includes Tamarix, the genus with the strongest current evidentiary claim to a partial
+go — its autumn figure is, if anything, the strongest point in favour of shipping a suggestion for
+that genus specifically.
+
+**For 4 genera — Salix, Picea, Fagus, Alnus — it degrades, at a sample size large enough to trust
+the finding (n=60–180, all well above the insufficient-samples threshold).** Salix's -11.6pp drop
+in particular is a genuine, adequately-evidenced autumn-specific weakness that the whole-year
+figure in Section 11.3 does not surface at all. None of these four clear the D-02 bar even at their
+whole-year figure, so this does not change any go/no-go call already on record, but it is relevant
+if a future iteration considers a narrower per-genus enablement list, since it shows the whole-year
+figure alone is not always a safe proxy for autumn-specific performance even for genera with ample
+autumn test data.
+
+**For 3 genera — Acer, Pinus, Prunus — we cannot tell from this data, and this is not a
+resolvable gap within this measurement task.** These are exactly the three genera Section 3b first
+flagged at a 30-image composition sample, Section 10.1 confirmed at ~5,000-candidate scale, and
+Section 11.1/11.5 confirmed a third time at ~6,000–10,000-candidate scale as having near-zero
+autumn representation in GBIF's CC0/CC-BY `StillImage` collection specifically. That absence
+propagates directly into the test split (12.4: 1–4 autumn images each) and therefore into this
+evaluation — there is no way to measure autumn accuracy for these three genera without autumn test
+images to measure it on, regardless of how the rest of the corpus or model changes. **What would be
+needed: real autumn-season photographs of Acer, Pinus and Prunus from a source other than GBIF's
+CC0/CC-BY `StillImage` collection**, which three successive corpus-expansion passes have now
+confirmed does not hold a usable quantity of autumn imagery for these genera at any scale tried so
+far (Section 11.5). The two live options already on record elsewhere in this document: a dedicated
+field-photo collection run in autumn (D-16's still-open field-validation gap, Section 6 — currently
+empty, no field photographs exist at all for any genus), or a differently-licensed image source not
+yet surveyed. Neither is this measurement task's to resolve; both are noted here so the ADR has the
+concrete next step in front of it rather than an open-ended "more data" caveat.
+
+**Unplanned secondary finding: winter, not autumn, is the season with the weakest aggregate
+accuracy (12.3: 84.13% pooled, 81.32% unweighted mean, both the lowest of the four) and the season
+with its own two thin cells (Malus, Sorbus — 12.4).** IBP surveys are scoped to autumn, so this does
+not bear on the current go/no-go question, but is recorded for completeness in case survey timing
+is ever reconsidered.
+
+**Bears directly on the US-C9 / D-04 decision this document was commissioned to inform:** the
+central Section 11.3 finding — 1 of 34 genera (Tamarix) currently clears the D-02 bar — is not
+weakened by a season-specific gap; if anything Tamarix's autumn figure is marginally stronger than
+its whole-year one. The genuine, unresolved gap this section adds to the evidence base is genus-
+specific, not model-wide: Acer, Pinus and Prunus each have a respectable whole-year top-3 figure
+(80.8%, 91.3%, 80.5% — Section 11.3, none clearing D-02 but none alarming either) that carries zero
+autumn-specific evidence behind it. Whether that gap is acceptable to ship against, given the
+survey season, or must be closed first, is the ADR's call (plan 01-06) — this section's job is to
+put that specific, previously-invisible gap in evidence, which it now does.
