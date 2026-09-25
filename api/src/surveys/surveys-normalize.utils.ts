@@ -425,6 +425,50 @@ export function buildChangesCursor(timestamp: string, eventId: string): string {
   return `${timestamp}|${eventId}`
 }
 
+// Changes-feed cursor (D-01, D-12, D-13). The mobile app stores and replays the cursor without
+// parsing it, so the server is free to change the format. `v2:<xid8>:<seq>` pages on the
+// (xid8, seq) pair; the legacy `<created_at text>|<event or survey id>` form is still accepted
+// and translated by the feed. xid8 and seq stay strings: both can exceed Number.MAX_SAFE_INTEGER.
+export type SyncChangesCursor =
+  | { kind: "none"; original: null }
+  | { kind: "position"; xid8: string; seq: string; original: string }
+  | { kind: "legacy"; timestamp: string; eventId: string; original: string }
+
+export const SYNC_CURSOR_V2_PATTERN = /^v2:(\d{1,20}):(\d{1,19})$/
+const LEGACY_CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}[ T]/
+
+export function parseSyncChangesCursor(cursor?: string): SyncChangesCursor {
+  if (!cursor || cursor.trim().length === 0) {
+    return { kind: "none", original: null }
+  }
+
+  const position = SYNC_CURSOR_V2_PATTERN.exec(cursor)
+  if (position) {
+    return { kind: "position", xid8: position[1], seq: position[2], original: cursor }
+  }
+  if (cursor.startsWith("v2:")) {
+    throw new BadRequestException("Invalid sync cursor")
+  }
+
+  // Every legacy cursor was built as `${timestamptz}|${id}`. Requiring the separator and a
+  // leading ISO date matters because V8's Date.parse accepts strings such as "seq:5".
+  const [timestampRaw, eventIdRaw] = cursor.split("|")
+  if (
+    eventIdRaw === undefined ||
+    !timestampRaw ||
+    !LEGACY_CURSOR_TIMESTAMP_PATTERN.test(timestampRaw) ||
+    Number.isNaN(Date.parse(timestampRaw))
+  ) {
+    throw new BadRequestException("Invalid sync cursor")
+  }
+
+  return { kind: "legacy", timestamp: timestampRaw, eventId: eventIdRaw ?? "", original: cursor }
+}
+
+export function buildSyncChangesCursor(xid8: string, seq: string): string {
+  return `v2:${xid8}:${seq}`
+}
+
 export function extractAttachmentId(payload: Record<string, unknown> | null): string | null {
   if (!payload || typeof payload !== "object") {
     return null

@@ -266,13 +266,19 @@ describe("parseSyncChangesCursor", () => {
     })
   })
 
-  it.each(["v2:abc:1", "v2:1", "v2:1:2:3", "v2:-1:2", "not-a-date|x", "seq:5"])(
-    "rejects the malformed cursor %p with 400 Invalid sync cursor",
-    (cursor) => {
-      expect(() => parseSyncChangesCursor(cursor)).toThrow(BadRequestException)
-      expect(() => parseSyncChangesCursor(cursor)).toThrow("Invalid sync cursor")
-    },
-  )
+  it.each([
+    "v2:abc:1",
+    "v2:1",
+    "v2:1:2:3",
+    "v2:-1:2",
+    "not-a-date|x",
+    "seq:5",
+    "seq:5|x",
+    "2026-03-09T10:20:31.991Z",
+  ])("rejects the malformed cursor %p with 400 Invalid sync cursor", (cursor) => {
+    expect(() => parseSyncChangesCursor(cursor)).toThrow(BadRequestException)
+    expect(() => parseSyncChangesCursor(cursor)).toThrow("Invalid sync cursor")
+  })
 })
 
 describe("buildSyncChangesCursor", () => {
