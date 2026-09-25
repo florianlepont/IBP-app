@@ -78,6 +78,8 @@ Response `200`:
 }
 ```
 
+- `profile_picture_url` is `null` when the user has no picture, and also when a picture is recorded but its stored object can no longer be found (the app then shows its initials fallback, with no error). If the object store cannot be reached, the stored URL is returned unchanged.
+
 ### PATCH /me
 
 Partially update editable profile fields.
@@ -151,6 +153,11 @@ Notes:
 
 Upload user profile picture (`multipart/form-data`, field name: `file`).
 
+Rules:
+
+- Max size 10MB. Accepted types: `image/jpeg`, `image/jpg`, `image/png`, `image/heic`, `image/webp`. Any other type (for example `image/gif`) gets `400 Unsupported profile picture type`, never a `500`.
+- The picture is stored in object storage (the MinIO/S3 bucket in production, the local uploads directory in local mode) under the key `profiles/{user_id}/avatar{ext}`. Replacing a picture deletes the previous object after the database update.
+
 Response `200`:
 
 ```json
@@ -175,7 +182,12 @@ Response `200`:
 
 Download current authenticated user profile picture.
 
-Response `200`: binary image stream.
+Response `200`: binary image stream, with the stored `Content-Type` and `Cache-Control: private, max-age=60`.
+
+Rules:
+
+- The API streams the bytes itself and requires `Authorization: Bearer <token>`; it never redirects to a presigned URL (installed apps send the Bearer header to this route).
+- `404` when the user has no picture. `404` also when a picture is recorded but its stored object is missing: the server then clears the stale `profile_picture_*` columns, so the next `GET /me` returns `profile_picture_url: null`.
 
 ### DELETE /me/profile-picture
 
@@ -256,6 +268,30 @@ status is `submitted` is rejected with `409 survey_submitted_read_only` and
 `details.fields` listing the changed field names. Resending identical values (including a
 resync of a pulled survey) is accepted and only refreshes `visibility`/`sync_version`;
 `scores` is excluded from this comparison (it is recomputed server-side).
+
+**Same `sync_version` (phase 01.6):** an upsert that carries the `sync_version` the server
+already stored is compared by value with the stored survey on the same read-only fields
+(`site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`,
+`previous_survey_id`, `region_version`, `vegetation_stage`, `factors`) plus `visibility`;
+`scores`, `status` and `expires_at` are excluded. Identical values are an idempotent replay
+(`synced`, nothing written). When only `visibility` differs, it is applied last-writer-wins
+like `PATCH /surveys/{id}/visibility` (new `updated_at`, one `visibility_changed` event) and
+the answer is `synced`. Any read-only difference is rejected with `409 sync_version_conflict`
+("Same sync_version with different content", `details.server_sync_version` /
+`client_sync_version`) and nothing is written. This check runs before the submitted-survey
+rule above, so a same-version resend that changes a submitted survey also gets
+`sync_version_conflict`. Of two concurrent upserts at the same new `sync_version` with
+different content, one is `synced` and the other gets `409 sync_version_conflict`. A lower
+`sync_version` than the stored one is always `409 sync_version_conflict` ("Older sync_version
+received").
+
+**Identifiers (phase 01.6):** survey ids (`id`, and the `{id}` path parameter of every
+`/surveys/{id}` route) and attachment ids (`{attachment_id}` path parameters,
+`attachment_id` in `/sync` payloads) must match `^[A-Za-z0-9_-]{1,128}$`. This accepts every
+id format installed apps have generated (`survey-<ms>`, UUIDs). An unsafe path parameter
+gets `400 Invalid identifier` (the rejected value is never echoed), an unsafe body `id` a
+normal `400` validation error, and an unsafe id in `POST /sync` a per-operation
+`fatal_error` `invalid_sync_operation` (`400`).
 
 Response `200`:
 
@@ -483,7 +519,7 @@ Response `201`:
 {
   "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
   "storage_key": "surveys/2f3d8a59/photo-1.jpg",
-  "upload_url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+  "upload_url": "https://minio.local/ibp-media/surveys/.../photo-1.jpg?X-Amz-...",
   "confirm_url": "/surveys/2f3d8a59-7c53-4fdf-8df4-8e2325b6172c/attachments/6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0/upload?token=generated-token"
 }
 ```
@@ -491,9 +527,12 @@ Response `201`:
 Rules:
 
 - `size_bytes` must be a positive integer and <= 25MB in V1
+- `size_bytes` must be the exact byte length of the file the client uploads.
 - `upload_url` is the generated upload target for binary data
+- In MinIO/S3 mode, `upload_url` is a presigned PUT (valid 15 minutes) that signs `Content-Type = mime_type` and `Content-Length = size_bytes`. Clients must send exactly `size_bytes` bytes; the store refuses a body of any other length (`403`).
 - `confirm_url` must be called after upload to mark `uploaded_at`
 - In local mode, `upload_url` can be the same API upload endpoint as `confirm_url`
+- The storage key is built by the server as `surveys/{survey_id}/{attachment_id}{ext}` from validated ids only.
 
 ### GET /surveys/{id}/attachments
 
@@ -525,7 +564,7 @@ Response `200`:
 
 ```json
 {
-  "url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+  "url": "https://minio.local/ibp-media/surveys/.../photo-1.jpg?X-Amz-...",
   "expires_at": "2026-03-09T09:17:00Z",
   "requires_auth": false
 }
@@ -550,7 +589,7 @@ Rules:
 
 - Requires `Authorization: Bearer <token>`; `401` with no token.
 - Same ownership, deletion and upload-state rules as `download-url`: `404` for another user's survey, a deleted survey/attachment or an unknown id; `409` with `{ "code": "attachment_not_uploaded" }` if not yet uploaded.
-- The server resolves `storage_key` against the local uploads directory and refuses to serve any path that escapes it.
+- The server resolves `storage_key` against the local uploads directory and refuses to serve any path that escapes it: such a key, like a missing file, answers `404`.
 
 ### PUT /surveys/{id}/attachments/{attachment_id}/upload?token=
 
@@ -569,6 +608,11 @@ Response `200`:
   "uploaded_at": "2026-03-09T09:12:00Z"
 }
 ```
+
+Rules:
+
+- In MinIO/S3 mode this call confirms the object already uploaded to the presigned `upload_url` (no file part is needed). `400 uploaded object not found in storage` if nothing was uploaded.
+- The stored size is compared with the declared `size_bytes`, in both modes. On a mismatch the API answers `422` with `{ "code": "attachment_size_mismatch", "message": "Uploaded file size does not match declared size" }`: in MinIO/S3 mode the object is deleted, in local mode the file is never written. `uploaded_at` stays `null` and no `attachment_uploaded` event is recorded. The client must re-create the attachment with the real size.
 
 ### DELETE /surveys/{id}/attachments/{attachment_id}
 
@@ -644,7 +688,7 @@ Response `200`:
       "data": {
         "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
         "storage_key": "surveys/2f3d8a59/photo-1.jpg",
-        "upload_url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+        "upload_url": "https://minio.local/ibp-media/surveys/.../photo-1.jpg?X-Amz-...",
         "confirm_url": "/surveys/2f3d8a59-7c53-4fdf-8df4-8e2325b6172c/attachments/6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0/upload?token=generated-token"
       }
     },
@@ -705,6 +749,9 @@ Rules:
 - `parcel_ids` (on `survey.upsert` payloads, and on the REST `POST /surveys` / `PATCH /surveys/{id}` bodies) is bounded at `50` entries; each entry must match `^[0-9A-Z]{1,32}$` (case-insensitive) — the pattern accepts both synthetic cadastral IDs and the 14-character IGN `idu` values the server itself generates. A batch entry over the limit or containing a malformed ID is rejected the same way as any other invalid payload (`invalid_sync_operation`, `400`); on the REST routes it is a normal `400` validation error.
 - `status` and `expires_at` on a `survey.upsert` payload are accepted for compatibility with installed apps and always ignored: status changes only through `POST /surveys/{id}/submit`, and `expires_at` is computed server-side at creation (`created_at` + 7 days), never moved by an upsert (D-03).
 - An upsert on a `submitted` survey that changes the value of `site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`, `previous_survey_id`, `region_version`, `vegetation_stage` or `factors` returns `fatal_error` with `error.code: "survey_submitted_read_only"`, `error.http_status: 409` and `error.details.fields` listing the changed field names. Resending identical values (a pulled-survey replay) is `synced` and only refreshes `visibility`/`sync_version`; `scores` is excluded from the comparison since it is recomputed server-side (D-04, D-13).
+- An upsert with the same `sync_version` the server already stored follows the same-version rule of `POST /surveys`: identical read-only fields and visibility are `synced`; a visibility-only difference is applied last-writer-wins like `survey.visibility_update` and answered `synced`; any read-only difference returns `fatal_error` with `error.code: "sync_version_conflict"`, `error.http_status: 409`, `error.message: "Same sync_version with different content"` and `server_sync_version`/`client_sync_version` in `error.details`. The client keeps its local data (Case B in `sync-conflict-resolution-v1.md`).
+- `survey_id`, the `survey.delete` payload `id`, the `survey.upsert` payload `id` and the `attachment.delete` payload `attachment_id` must match `^[A-Za-z0-9_-]{1,128}$`; otherwise that operation alone fails with `invalid_sync_operation` (`400`).
+- `attachment.create` results carry the same presigned `upload_url` as the REST route: it signs `Content-Length = size_bytes`, and confirming an object of another size answers `422 attachment_size_mismatch`.
 
 ### GET /sync/changes?cursor=&limit=
 
@@ -712,15 +759,23 @@ Fetch user-scoped incremental changes for downsync (server -> mobile).
 
 Query params:
 
-- `cursor` (optional): opaque cursor from previous response (`{timestamp}|{event_id}`)
+- `cursor` (optional): opaque cursor from the previous response's `cursor_out`. Current format `v2:<xid8>:<seq>`. Clients must store it and send it back verbatim, never parse or build it.
 - `limit` (optional): default `50`, max `200`
+
+Rules:
+
+- Events are returned only once their writing transaction has finished (`xid8 < pg_snapshot_xmin(pg_current_snapshot())`), ordered and paged by `(xid8, seq)`, so an event committed late is never skipped. A long-running writing transaction anywhere on the database cluster can delay new events; it never makes the feed skip one. See `sync-conflict-resolution-v1.md`, "Changes Feed Ordering".
+- Legacy cursors issued before phase 01.6, in the form `<created_at>|<event or survey id>`, are still accepted: the server resumes after the user's last event at or before that point. When nothing new is available it answers with the equivalent `v2:` cursor, so installed apps switch format without an update.
+- `cursor_out` is the cursor of the last returned event. With no new event it echoes the incoming cursor (or its `v2:` translation), and it is `null` when no cursor was sent.
+- A malformed cursor, or a `v2:` cursor with out-of-range values, gets `400 Invalid sync cursor`. A `v2:` cursor ahead of the server's current transaction id (after a database restore) restarts the feed from the beginning.
+- Surveys that never had an event are not re-sent on every poll any more; every survey has at least one event.
 
 Response `200`:
 
 ```json
 {
-  "cursor_in": "2026-03-09T10:12:00.123+00|d4f...",
-  "cursor_out": "2026-03-09T10:20:31.991+00|8ac...",
+  "cursor_in": "v2:48213:1057",
+  "cursor_out": "v2:48297:1063",
   "has_more": false,
   "events": [
     {
@@ -1011,4 +1066,6 @@ Common business error codes (non-exhaustive):
 - `survey_submitted_read_only` — an upsert changed the value of a read-only field on a `submitted` survey; `error.details.fields` lists the changed field names (identical values and `scores` are always accepted).
 - `survey_id_conflict` — an upsert's `id` already exists and is owned by another user.
 - `invalid_sync_operation` — a `/v1/sync` operation's envelope or payload failed class DTO validation; `error.details.fields` lists the offending property names.
+- `sync_version_conflict` (`409`) — an upsert carried an older `sync_version` than the stored one, or the same `sync_version` with different read-only content; `error.details` carries `survey_id`, `server_sync_version` and `client_sync_version`.
+- `attachment_size_mismatch` (`422`) — the uploaded attachment's size differs from the declared `size_bytes`; the object is deleted (or never written) and the attachment stays unconfirmed.
 - `invalid_operation` — a deterministic PostgreSQL data/constraint error (SQLSTATE class `22`/`23`) was raised while processing the request; the message is intentionally generic and carries no SQL detail.

@@ -261,6 +261,111 @@ jobs:
             exit 1
           fi
 
+  # Same suite as `e2e`, against a real MinIO: presigned PUT Content-Length
+  # enforcement, the 422 size path and the profile-picture round trip only run
+  # here (itMinio). Separate job so neither approaches its timeout. The bucket
+  # is not pre-created: StorageService creates it lazily, and this job proves it.
+  e2e-minio:
+    name: E2E tests — API (MinIO mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.shared == 'true'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ibp_test
+          POSTGRES_USER: ibp
+          POSTGRES_PASSWORD: ibp
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ibp_test
+      POSTGRES_USER: ibp
+      POSTGRES_PASSWORD: ibp
+      PGPASSWORD: ibp
+      OBJECT_STORAGE_MODE: minio
+      OBJECT_STORAGE_BUCKET: ibp-media
+      OBJECT_STORAGE_ENDPOINT: http://localhost:9000
+      OBJECT_STORAGE_REGION: us-east-1
+      OBJECT_STORAGE_ACCESS_KEY: minio
+      OBJECT_STORAGE_SECRET_KEY: minio123
+      ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
+      ACCESS_TOKEN_SECRET: ci-access-secret
+      REFRESH_TOKEN_SECRET: ci-refresh-secret
+      ACCESS_TOKEN_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN: 7d
+      AUTH_DEV_EXPOSE_EMAIL_TOKEN: true
+      AUTH_LOGIN_OR_CREATE_ENABLED: true
+      SMTP_ENABLED: false
+      DEBUG_DATA_RESET_ENABLED: true
+      CADASTRE_PROVIDER: synthetic
+      CADASTRE_PROVIDER_ALLOW_FALLBACK: true
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: modules
+        with:
+          path: |
+            node_modules
+            api/node_modules
+            mobile/node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # A service container cannot pass `server /data`, so MinIO starts here.
+      # Same pinned tag as infra/docker-compose.yml; test-only credentials.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minio \
+            -e MINIO_ROOT_PASSWORD=minio123 \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+
+      - name: Wait for MinIO
+        run: |
+          ok=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live > /dev/null; then
+              ok=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ok" != "true" ]; then
+            echo "MinIO did not become healthy in time" >&2
+            docker logs minio
+            exit 1
+          fi
+
+      - name: E2E run (MinIO mode)
+        run: npm run test:e2e
+
   mobile-build:
     name: Mobile build check
     runs-on: ubuntu-latest
@@ -432,7 +537,7 @@ jobs:
     timeout-minutes: 5
     if: always()
     needs:
-      [changes, check, unit-api, unit-mobile, e2e, mobile-build, audit, image-check]
+      [changes, check, unit-api, unit-mobile, e2e, e2e-minio, mobile-build, audit, image-check]
     steps:
       - name: Check required job results
         env:
@@ -442,6 +547,7 @@ jobs:
           UNIT_API_RESULT: ${{ needs.unit-api.result }}
           UNIT_MOBILE_RESULT: ${{ needs.unit-mobile.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
+          E2E_MINIO_RESULT: ${{ needs.e2e-minio.result }}
           MOBILE_BUILD_RESULT: ${{ needs.mobile-build.result }}
           IMAGE_CHECK_RESULT: ${{ needs.image-check.result }}
         run: |
@@ -451,6 +557,7 @@ jobs:
           echo "unit-api: $UNIT_API_RESULT"
           echo "unit-mobile: $UNIT_MOBILE_RESULT"
           echo "e2e: $E2E_RESULT"
+          echo "e2e-minio: $E2E_MINIO_RESULT"
           echo "mobile-build: $MOBILE_BUILD_RESULT"
           echo "image-check: $IMAGE_CHECK_RESULT"
 
@@ -460,7 +567,7 @@ jobs:
           if [ "$CHECK_RESULT" != "success" ]; then fail=true; fi
           if [ "$AUDIT_RESULT" != "success" ]; then fail=true; fi
 
-          for r in "$UNIT_API_RESULT" "$UNIT_MOBILE_RESULT" "$E2E_RESULT" "$MOBILE_BUILD_RESULT" "$IMAGE_CHECK_RESULT"; do
+          for r in "$UNIT_API_RESULT" "$UNIT_MOBILE_RESULT" "$E2E_RESULT" "$E2E_MINIO_RESULT" "$MOBILE_BUILD_RESULT" "$IMAGE_CHECK_RESULT"; do
             if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
               fail=true
             fi
