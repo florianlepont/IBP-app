@@ -389,7 +389,9 @@ describe("SurveysSyncService.getSyncChanges", () => {
 
   it("binds a v2 cursor as strings and echoes it back when there are no new events", async () => {
     const { service, db } = buildService()
-    db.query.mockResolvedValueOnce({ rows: [{ future: false }] }).mockResolvedValueOnce({ rows: [] })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ future: false }] })
+      .mockResolvedValueOnce({ rows: [] })
 
     const result = await service.getSyncChanges(AUTH_USER as never, "v2:9843:7", 10)
 
@@ -469,7 +471,9 @@ describe("SurveysSyncService.getSyncChanges", () => {
 
   it("keeps a v2 cursor that is not beyond the current xid counter", async () => {
     const { service, db } = buildService()
-    db.query.mockResolvedValueOnce({ rows: [{ future: false }] }).mockResolvedValueOnce({ rows: [] })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ future: false }] })
+      .mockResolvedValueOnce({ rows: [] })
 
     await service.getSyncChanges(AUTH_USER as never, "v2:99999999999:5", 10)
 
