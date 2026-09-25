@@ -17,8 +17,6 @@ Email confirmation can run in two modes:
 - `SMTP_ENABLED=false` (default): no SMTP send, token is logged in API output (dev flow).
 - `SMTP_ENABLED=true`: real SMTP delivery using `SMTP_*` variables.
 
-To hide `email_change_token_dev` outside local dev, keep `NODE_ENV` different from `development` (or set `AUTH_DEV_EXPOSE_EMAIL_TOKEN=false`).
-
 Auth0 configuration:
 - `AUTH0_DOMAIN`: tenant Auth0 domain used by the backend for management API calls.
 - `AUTH0_PUBLIC_DOMAIN`: optional public/custom Auth0 domain used by the mobile login flow. Set this when the app authenticates through a custom domain so JWT issuer validation matches the issued tokens.

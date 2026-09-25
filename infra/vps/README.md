@@ -223,10 +223,10 @@ démarrer et nomme la variable en cause, sans jamais afficher sa valeur, si :
   CORS) ou une liste d'origines `https://hôte` séparées par des virgules.
 
 `AUTH0_MGMT_CLIENT_ID` et `AUTH0_MGMT_CLIENT_SECRET` vides donnent seulement un
-avertissement (la suppression de compte côté Auth0 ne marchera pas). Les lignes
-`ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`, `ACCESS_TOKEN_EXPIRES_IN`,
-`REFRESH_TOKEN_EXPIRES_IN`, `AUTH_DEV_EXPOSE_EMAIL_TOKEN` et
-`AUTH_LOGIN_OR_CREATE_ENABLED` ne servent plus et peuvent être supprimées.
+avertissement (la suppression de compte côté Auth0 ne marchera pas). Les
+anciennes lignes de jetons maison (secrets et durées des jetons d'accès et de
+rafraîchissement, options `AUTH_*`) ne servent plus : `check-env.sh` les signale
+par une ligne `INFO`, et elles peuvent être supprimées.
 
 ### Vérifier le fichier avant la fusion
 
