@@ -68,6 +68,13 @@ jest.mock("./survey-sync/useSurveySyncSurveyOperations", () => ({
   useSurveySyncSurveyOperations: () => ({}),
 }))
 
+jest.mock("./survey-sync/useAttachmentPreviews", () => ({
+  useAttachmentPreviews: () => ({
+    handleEnsureAttachmentPreviews: jest.fn(),
+    handleSimulateMissingAttachmentFile: jest.fn(),
+  }),
+}))
+
 // A stable fake Auth0 session for account A (useCallback identities in the
 // real hook are stable; inline objects would re-run every effect).
 const OWNER_A = { sub: "auth0|a", email: "a@example.fr" }
