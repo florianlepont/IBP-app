@@ -69,9 +69,7 @@ export const resolveAttachmentPreview = (
   return { kind: "image", uri: resolveAttachmentUri(uri) }
 }
 
-export const selectPreviewCandidates = (
-  attachments: LocalAttachment[],
-): LocalAttachment[] =>
+export const selectPreviewCandidates = (attachments: LocalAttachment[]): LocalAttachment[] =>
   attachments.filter(
     (attachment) =>
       isPhotoAttachment(attachment) &&

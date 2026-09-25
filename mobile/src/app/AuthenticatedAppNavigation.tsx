@@ -20,6 +20,7 @@ import Constants, { ExecutionEnvironment } from "expo-constants"
 import type { SearchBarCommands } from "react-native-screens"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors } from "./brand-tokens"
+import { devOnlyHandler } from "./dev-tools"
 import { styles } from "./styles"
 import {
   FactorKey,
@@ -420,6 +421,7 @@ function SurveysTabNavigator({
                 onOpenSurvey(surveyId)
                 navigation.navigate("surveyDetail")
               }}
+              onEnsureAttachmentPreviews={surveySync.handleEnsureAttachmentPreviews}
             />
           )}
         </SurveysStack.Screen>
@@ -472,6 +474,10 @@ function SurveysTabNavigator({
                       navigation.navigate("surveyParcels", { surveyId, mode: "edit" })
                     }
                   }}
+                  onEnsureAttachmentPreviews={surveySync.handleEnsureAttachmentPreviews}
+                  onSimulateMissingAttachmentFile={devOnlyHandler(
+                    surveySync.handleSimulateMissingAttachmentFile,
+                  )}
                 />
               ) : null}
             </>

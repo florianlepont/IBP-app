@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  ActivityIndicator,
   Animated,
   Image,
   Platform,
@@ -11,6 +12,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native"
+import { Image as ExpoImage } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
 import * as Haptics from "expo-haptics"
 import Swipeable from "react-native-gesture-handler/Swipeable"
@@ -40,6 +42,11 @@ import {
 } from "../app/types"
 import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { LocalAttachment, LocalSurvey } from "../storage"
+import {
+  isPhotoAttachment,
+  resolveAttachmentPreview,
+  selectPreviewCandidates,
+} from "./survey-screen-helpers"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppChoiceChip } from "../ui/AppChoiceChip"
@@ -86,6 +93,7 @@ type SurveyListScreenProps = {
   onDeleteSurvey: (surveyId: string) => void
   onOpenCreateSurvey: () => void
   onOpenSurvey: (surveyId: string) => void
+  onEnsureAttachmentPreviews?: (attachments: LocalAttachment[]) => Promise<void> | void
 }
 
 type SurveyRowTone = "neutral" | "success" | "warning" | "danger"
@@ -302,6 +310,7 @@ export function SurveyListScreen({
   onDeleteSurvey,
   onOpenCreateSurvey,
   onOpenSurvey,
+  onEnsureAttachmentPreviews,
 }: SurveyListScreenProps) {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -384,6 +393,24 @@ export function SurveyListScreen({
     () => (showHero ? visibleSurveys.filter((s) => !excludedIds.has(s.id)) : visibleSurveys),
     [showHero, visibleSurveys, excludedIds],
   )
+
+  // D-11: ask for the first photo of every visible survey so a pulled ("remote")
+  // attachment downloads on demand instead of staying hidden in the list.
+  const firstPhotoPerVisibleSurveyKey = visibleSurveys
+    .map((survey) => {
+      const firstPhoto = (attachmentsBySurvey[survey.id] ?? []).find(isPhotoAttachment)
+      return firstPhoto ? `${firstPhoto.id}:${firstPhoto.file_state}` : null
+    })
+    .filter((key): key is string => key !== null)
+    .join(",")
+
+  useEffect(() => {
+    const candidates = visibleSurveys
+      .map((survey) => (attachmentsBySurvey[survey.id] ?? []).find(isPhotoAttachment))
+      .filter((attachment): attachment is LocalAttachment => Boolean(attachment))
+    void onEnsureAttachmentPreviews?.(selectPreviewCandidates(candidates))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstPhotoPerVisibleSurveyKey, onEnsureAttachmentPreviews])
 
   // ── Summary labels ──────────────────────────────────────────────────────────
 
@@ -991,13 +1018,16 @@ export function SurveyListScreen({
         {/* ── Survey cards list ─────────────────────────────────────────────── */}
         {mainListSurveys.map((survey) => {
           const attachments = attachmentsBySurvey[survey.id] ?? []
-          const firstAttachmentWithPreview = attachments.find((a) => Boolean(a.local_uri?.trim()))
+          const firstPhotoAttachment = attachments.find(isPhotoAttachment)
+          const attachmentPreview = firstPhotoAttachment
+            ? resolveAttachmentPreview(firstPhotoAttachment)
+            : null
           const uiStatus = resolveSurveyUiStatus(survey)
           const uiStatusLabel = formatSurveyUiStatusLabel(uiStatus)
           const supportText = survey.last_sync_error?.trim() ? survey.last_sync_error : null
           const rowTone = resolveSurveyRowTone(uiStatus)
           const isSelected = selectedSurveyId === survey.id
-          const hasPhoto = Boolean(firstAttachmentWithPreview?.local_uri)
+          const hasPhoto = Boolean(firstPhotoAttachment)
           let swipeableRef: Swipeable | null = null
 
           return (
@@ -1058,12 +1088,40 @@ export function SurveyListScreen({
                 />
 
                 {/* P2-COMPACT-01: thumbnail only when photo exists */}
-                {hasPhoto ? (
+                {hasPhoto && attachmentPreview ? (
                   <View style={styles.surveyCardMedia}>
-                    <Image
-                      source={{ uri: firstAttachmentWithPreview!.local_uri! }}
-                      style={styles.surveyCardPreview}
-                    />
+                    {attachmentPreview.kind === "image" ? (
+                      <ExpoImage
+                        source={{ uri: attachmentPreview.uri }}
+                        style={styles.surveyCardPreview}
+                        contentFit="cover"
+                        cachePolicy="memory"
+                        recyclingKey={firstPhotoAttachment?.id}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.surveyCardPreview,
+                          { alignItems: "center", justifyContent: "center" },
+                        ]}
+                      >
+                        {attachmentPreview.kind === "loading" ? (
+                          <ActivityIndicator size="small" color={brandColors.textSecondary} />
+                        ) : attachmentPreview.kind === "missing" ? (
+                          <Ionicons
+                            name="warning-outline"
+                            size={18}
+                            color={brandColors.textSecondary}
+                          />
+                        ) : (
+                          <Ionicons
+                            name="image-outline"
+                            size={18}
+                            color={brandColors.textSecondary}
+                          />
+                        )}
+                      </View>
+                    )}
                   </View>
                 ) : null}
 

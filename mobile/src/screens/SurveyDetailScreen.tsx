@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  ActivityIndicator,
   Alert,
-  Image,
+  ImageStyle,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
   ScrollView,
+  StyleProp,
   Text,
   View,
+  ViewStyle,
   useWindowDimensions,
 } from "react-native"
+import { Image as ExpoImage } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
+import { shouldShowDevTools } from "../app/dev-tools"
 import MapView, { Marker, Region } from "react-native-maps"
 import {
   computeIbpTotalsFromRetainedScores,
@@ -33,7 +38,7 @@ import {
   isLessThan24HoursRemaining,
   resolveSubmissionDeadline,
 } from "../app/formatters"
-import { brandColors, brandSpacing } from "../app/brand-tokens"
+import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
 import {
   formatSurveySyncDisplayLabel,
   formatSurveyWorkflowStatusLabel,
@@ -59,7 +64,14 @@ import { AppField } from "../ui/AppField"
 import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip, AppStatusChipTone } from "../ui/AppStatusChip"
-import { isFactorKey, resolveDisplayCoordinates } from "./survey-screen-helpers"
+import {
+  AttachmentPreview,
+  isFactorKey,
+  isPhotoAttachment,
+  resolveAttachmentPreview,
+  resolveDisplayCoordinates,
+  selectPreviewCandidates,
+} from "./survey-screen-helpers"
 import { styles } from "./SurveyDetailScreen.styles"
 
 type SurveyDetailScreenProps = {
@@ -86,6 +98,8 @@ type SurveyDetailScreenProps = {
   onUpdateRegionVersion: (surveyId: string, region: RegionVersion) => Promise<void> | void
   onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void> | void
   onOpenParcels: (surveyId: string) => Promise<void> | void
+  onEnsureAttachmentPreviews?: (attachments: LocalAttachment[]) => Promise<void> | void
+  onSimulateMissingAttachmentFile?: (localAttachmentId: string) => Promise<void> | void
 }
 
 const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -125,6 +139,52 @@ const DEFAULT_FRANCE_REGION: Region = {
   longitudeDelta: 3.8,
 }
 
+// Renders one attachment as an image (expo-image, from the downsized local
+// file), a loading placeholder (server photo not cached yet), or a static
+// missing/unavailable placeholder (D-10, D-11). Used by the carousel, hero
+// thumb and debug tab so the "which state to show" decision stays in the one
+// tested helper (resolveAttachmentPreview).
+function AttachmentPhotoPreview({
+  attachment,
+  imageStyle,
+  placeholderStyle,
+}: {
+  attachment: LocalAttachment
+  imageStyle: StyleProp<ImageStyle>
+  placeholderStyle: StyleProp<ViewStyle>
+}) {
+  const preview: AttachmentPreview = resolveAttachmentPreview(attachment)
+
+  if (preview.kind === "image") {
+    return (
+      <ExpoImage
+        source={{ uri: preview.uri }}
+        style={imageStyle}
+        contentFit="cover"
+        cachePolicy="memory"
+        recyclingKey={attachment.id}
+      />
+    )
+  }
+
+  return (
+    <View style={[placeholderStyle, { alignItems: "center", justifyContent: "center", gap: 6 }]}>
+      {preview.kind === "loading" ? (
+        <ActivityIndicator size="small" color={brandColors.forest} />
+      ) : (
+        <Ionicons
+          name={preview.kind === "unavailable" ? "image-outline" : "alert-circle-outline"}
+          size={20}
+          color={brandColors.textSecondary}
+        />
+      )}
+      <Text style={{ ...brandTypography.meta, color: brandColors.textSecondary }}>
+        {preview.message}
+      </Text>
+    </View>
+  )
+}
+
 const resolveSyncTone = (
   syncDisplay: ReturnType<typeof resolveSurveySyncDisplay>,
 ): AppStatusChipTone => {
@@ -157,6 +217,8 @@ export function SurveyDetailScreen({
   onUpdateRegionVersion,
   onUpdateVegetationStage,
   onOpenParcels,
+  onEnsureAttachmentPreviews,
+  onSimulateMissingAttachmentFile,
 }: SurveyDetailScreenProps) {
   const { width: viewportWidth } = useWindowDimensions()
   const isHeroCompressedRef = useRef(false)
@@ -173,9 +235,7 @@ export function SurveyDetailScreen({
   const loadedEventCount = surveyEvents[selectedSurvey.id]?.length ?? 0
   const publishableOnPublicMap =
     detailStatus === "submitted" && selectedSurvey.visibility === "public"
-  const photoAttachments = selectedSurveyAttachments.filter((attachment) =>
-    Boolean(attachment.local_uri?.trim()),
-  )
+  const photoAttachments = selectedSurveyAttachments.filter(isPhotoAttachment)
   const canonicalFactorEntries = useMemo(
     () =>
       detail
@@ -226,6 +286,15 @@ export function SurveyDetailScreen({
   useEffect(() => {
     setMediaPageIndex(0)
   }, [selectedSurvey.id, photoSlides.length])
+
+  const attachmentPreviewKey = selectedSurveyAttachments
+    .map((attachment) => `${attachment.id}:${attachment.file_state}`)
+    .join(",")
+
+  useEffect(() => {
+    void onEnsureAttachmentPreviews?.(selectPreviewCandidates(selectedSurveyAttachments))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachmentPreviewKey, onEnsureAttachmentPreviews])
 
   useEffect(() => {
     if (hasMapPreview) {
@@ -759,10 +828,10 @@ export function SurveyDetailScreen({
                     key={slide.key}
                     style={[styles.detailHeroPhotoSlide, { width: mediaSlideWidth }]}
                   >
-                    <Image
-                      source={{ uri: slide.attachment.local_uri ?? undefined }}
-                      style={styles.detailHeroPhotoImage}
-                      resizeMode="cover"
+                    <AttachmentPhotoPreview
+                      attachment={slide.attachment}
+                      imageStyle={styles.detailHeroPhotoImage}
+                      placeholderStyle={styles.detailHeroPhotoImage}
                     />
                   </View>
                 ))}
@@ -811,11 +880,13 @@ export function SurveyDetailScreen({
               onPress={() => setHeroMode(heroMode === "map" ? "photo" : "map")}
             >
               {heroMode === "map" ? (
-                <Image
-                  source={{ uri: photoSlides[0]?.attachment.local_uri ?? undefined }}
-                  style={styles.detailHeroSwitchThumbImage}
-                  resizeMode="cover"
-                />
+                photoSlides[0] ? (
+                  <AttachmentPhotoPreview
+                    attachment={photoSlides[0].attachment}
+                    imageStyle={styles.detailHeroSwitchThumbImage}
+                    placeholderStyle={styles.detailHeroSwitchThumbImage}
+                  />
+                ) : null
               ) : (
                 <MapView
                   style={styles.detailHeroSwitchThumbMap}
@@ -1218,20 +1289,24 @@ export function SurveyDetailScreen({
                   padding={14}
                   style={styles.debugAttachmentCard}
                 >
-                  {attachment.local_uri ? (
-                    <Image
-                      source={{ uri: attachment.local_uri }}
-                      style={styles.debugAttachmentPreview}
+                  <AttachmentPhotoPreview
+                    attachment={attachment}
+                    imageStyle={styles.debugAttachmentPreview}
+                    placeholderStyle={styles.debugAttachmentPreviewPlaceholder}
+                  />
+                  {shouldShowDevTools() && onSimulateMissingAttachmentFile ? (
+                    <AppButton
+                      label="Simuler un fichier manquant"
+                      leadingIcon="bug-outline"
+                      variant="secondary"
+                      onPress={() => void onSimulateMissingAttachmentFile(attachment.id)}
                     />
-                  ) : (
-                    <View style={styles.debugAttachmentPreviewPlaceholder}>
-                      <Text style={styles.rowMeta}>No local preview</Text>
-                    </View>
-                  )}
+                  ) : null}
                   <Text style={styles.rowMeta}>#{index + 1}</Text>
                   <Text style={styles.rowMeta}>id: {attachment.id}</Text>
                   <Text style={styles.rowMeta}>survey_id: {attachment.survey_id}</Text>
                   <Text style={styles.rowMeta}>local_uri: {attachment.local_uri}</Text>
+                  <Text style={styles.rowMeta}>file_state: {attachment.file_state}</Text>
                   <Text style={styles.rowMeta}>mime_type: {attachment.mime_type}</Text>
                   <Text style={styles.rowMeta}>
                     size: {attachment.size_bytes} bytes ({Math.round(attachment.size_bytes / 1024)}{" "}

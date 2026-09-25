@@ -8,3 +8,14 @@
 export function shouldShowDevTools(isDev: boolean = __DEV__): boolean {
   return isDev
 }
+
+/**
+ * Passes a handler through only in dev builds (plan 09's "Simuler un fichier
+ * manquant" wiring, D-11); a release build gets `undefined`, so the prop is
+ * never reachable in production (T-01.5-32). Kept here, tested, so screens
+ * and navigation never inline the `shouldShowDevTools() ? x : undefined`
+ * branch themselves.
+ */
+export function devOnlyHandler<T>(handler: T, isDev: boolean = __DEV__): T | undefined {
+  return shouldShowDevTools(isDev) ? handler : undefined
+}
