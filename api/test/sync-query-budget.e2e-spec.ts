@@ -122,4 +122,60 @@ describe("Sync query budget (e2e)", () => {
     const count = await countSyncStatements("updates3", upsertBatch(3, 2))
     expect(count).toBeLessThanOrEqual(BASELINE.updates3)
   })
+
+  // D-10: ensureParcelIds registers any number of parcels in one statement, so the statement
+  // count of one create does not depend on how many (brand-new) parcels it links.
+  it("parcel ids are written in one statement: 50 parcels cost the same as 1", async () => {
+    const countSingleCreate = async (label: string, parcelCount: number): Promise<number> => {
+      const id = `qb-${runToken}-wide-${parcelCount}`
+      const operations = [
+        {
+          client_ref: `op-${label}`,
+          entity: "survey",
+          action: "upsert",
+          payload: {
+            id,
+            sync_version: 1,
+            site_name: `Query Budget Wide ${parcelCount}`,
+            status: "draft",
+            visibility: "private",
+            parcel_ids: Array.from(
+              { length: parcelCount },
+              (_, k) => `QB${runToken}W${parcelCount}K${k}`,
+            ),
+            factors: {},
+            scores: {},
+          },
+        },
+      ]
+      const spy = jest.spyOn(Client.prototype, "query")
+      let count: number
+      let results: SyncResult[]
+      try {
+        const response = await request(app.getHttpServer())
+          .post("/v1/sync")
+          .set("Authorization", `Bearer ${accessToken}`)
+          .send({ operations })
+          .expect(200)
+        count = spy.mock.calls.length
+        results = response.body.results as SyncResult[]
+      } finally {
+        spy.mockRestore()
+      }
+
+      process.stdout.write(`query-budget ${label}: ${count}\n`)
+      expect(results).toEqual([expect.objectContaining({ status: "synced" })])
+      return count
+    }
+
+    const oneParcel = await countSingleCreate("create-1-parcel", 1)
+    const fiftyParcels = await countSingleCreate("create-50-parcels", 50)
+    expect(fiftyParcels).toBe(oneParcel)
+
+    const linked = await request(app.getHttpServer())
+      .get(`/v1/surveys/qb-${runToken}-wide-50`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200)
+    expect(linked.body.parcel_ids).toHaveLength(50)
+  })
 })
