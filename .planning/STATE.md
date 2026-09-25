@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: Completed 01-04-PLAN.md plus iteration-2 deviation
-last_updated: "2026-09-23T13:36:50.263Z"
-last_activity: 2026-09-22
-last_activity_desc: Phase 1 execution started
+stopped_at: Completed 01-04-PLAN.md iteration 3 (export, evaluation, three-way comparison, promotion)
+last_updated: "2026-09-25T06:42:03.774Z"
+last_activity: 2026-09-25
+last_activity_desc: Phase 1 plan 04 iteration 3 complete -- 1/34 genera clear the D-02 bar
 progress:
   total_phases: 8
   completed_phases: 0
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
 Plan: 5 of 6
 Status: Ready to execute
-Last activity: 2026-09-22 — Phase 1 execution started
+Last activity: 2026-09-25 — 01-04 iteration 3 complete (1/34 genera clear the D-02 bar, model promoted)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-species-recognition-approach-decision P03 | ~3h | 2 tasks | 18 files |
 | Phase 01 P04 | 50min | 2 tasks | 8 files |
 | Phase 01 P04b | ~5.5h | 1 tasks | 5 files |
+| Phase 01 P04-iter3 | ~9-10h (2 sessions, corpus expansion+2 bug fixes) | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,7 @@ Decisions table. Decisions affecting current work:
 - [Phase 01-04]: Evaluated per-genus accuracy against the raw, composition-unfiltered test split rather than hand-filtering it — Per-image filtering at 1,183-image test-split scale is the same hand-classify-at-scale work plan 02's coordinator guidance ruled out, and results already miss the bar by wide margins except one genus
 - [Phase 01-04-iter2]: User rejected iteration 1's no-go as premature (150 img/class vs 4200+ available, smallest backbone vs 36x unused latency headroom); coordinator directed a second iteration rather than accepting the first result — Iteration 1 constrained itself by assumptions its own measurements invalidated
 - [Phase 01-04-iter2]: Iteration 2 (MobileNetV3-Large, ~2000 img/class, season-stratified) found a data-limited result: 32/34 genera improved by mean +19.9pp top-3, still 0/34 clearing the 95% bar — Distinguishes data-limited from approach-limited for the ADR; neither a clean go nor a clean no-go
+- [Phase 01-04-iter3]: Iteration 3 (MobileNetV3-Large, iteration 2's exact hyperparameters, corpus expanded 3.05x to 194,653 images at each class's real per-class ceiling) found 1/34 genera (Tamarix, 95.04%) clearing the D-02 95% bar for the first time, with a mean +6.74pp top-3 gain for the other 33 (vs +19.9pp for 1->2) — Diminishing but explicitly confounded by a fixed, never-saturating epoch budget at both iterations (EarlyStopping never triggered in either) -- a floor on the achievable gain, not proof of a hard ceiling. Model genuinely beat iteration 2 and was promoted to the canonical path.
 
 ### Pending Todos
 
@@ -114,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-23T13:36:50.259Z
-Stopped at: Completed 01-04-PLAN.md plus iteration-2 deviation
+Last session: 2026-09-25T06:42:03.770Z
+Stopped at: Completed 01-04-PLAN.md iteration 3 (export, evaluation, three-way comparison, promotion)
 Resume file: None
