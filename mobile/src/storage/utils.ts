@@ -1,4 +1,3 @@
-import * as SQLite from "expo-sqlite"
 import {
   SurveyQueuePayload,
   SurveyDeleteQueuePayload,
@@ -7,8 +6,10 @@ import {
   AttachmentDeleteQueuePayload,
   UploadTargetResponse,
   SyncBatchResult,
+  QueueOpType,
 } from "./types"
 import { FACTOR_KEYS, LEGACY_DEFAULT_FACTOR_VALUES } from "./db"
+import type { DbExecutor } from "./transaction"
 
 export const isFilledValue = (value: unknown): boolean => {
   if (value === null || value === undefined) return false
@@ -285,8 +286,17 @@ export function buildSyncChangesUrl(apiUrl: string, cursor: string | null, limit
   return `${base}/sync/changes?${params.join("&")}`
 }
 
+export function deriveQueueOpType(payload: unknown): QueueOpType {
+  if (isSurveyDeleteQueuePayload(payload)) return "survey_delete"
+  if (isSurveyVisibilityQueuePayload(payload)) return "survey_visibility"
+  if (isAttachmentDeleteQueuePayload(payload)) return "attachment_delete"
+  if (isAttachmentQueuePayload(payload)) return "attachment_upload"
+  if (isSurveyQueuePayload(payload)) return "survey_upsert"
+  return "unknown"
+}
+
 export async function deleteQueuedSurveyUpserts(
-  db: SQLite.SQLiteDatabase,
+  db: DbExecutor,
   surveyId: string,
 ): Promise<void> {
   const rows = await db.getAllAsync<Array<{ id: number; payload: string }>[number]>(
@@ -305,7 +315,7 @@ export async function deleteQueuedSurveyUpserts(
 }
 
 export async function hasPendingQueueForSurvey(
-  db: SQLite.SQLiteDatabase,
+  db: DbExecutor,
   surveyId: string,
 ): Promise<boolean> {
   const row = await db.getFirstAsync<{ count: number }>(

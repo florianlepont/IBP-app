@@ -142,6 +142,7 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
     last_sync_error_code: null,
     last_sync_error_at: null,
     updated_at: now,
+    file_state: "local",
   }
 }
 
