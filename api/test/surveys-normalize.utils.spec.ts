@@ -1,6 +1,7 @@
 import { BadRequestException } from "@nestjs/common"
 import {
   buildSyncChangesCursor,
+  classifySameVersionContent,
   getChangedSubmittedReadOnlyFields,
   parseSyncChangesCursor,
 } from "../src/surveys/surveys-normalize.utils"
@@ -294,5 +295,105 @@ describe("buildSyncChangesCursor", () => {
       seq: "7",
       original: cursor,
     })
+  })
+})
+
+describe("classifySameVersionContent", () => {
+  function sameBody(existing: SurveyRow): SurveyUpsertBody {
+    return {
+      site_name: existing.site_name,
+      visibility: existing.visibility,
+      parcel_ids: existing.parcel_ids,
+      observation_year: existing.observation_year ?? undefined,
+      version_number: existing.version_number ?? undefined,
+      region_version: existing.region_version as SurveyUpsertBody["region_version"],
+      vegetation_stage: existing.vegetation_stage ?? undefined,
+      factors: existing.factors,
+    }
+  }
+
+  it("returns identical when the body matches the stored row", () => {
+    const existing = makeRow()
+    expect(classifySameVersionContent(sameBody(existing), existing, ["12345AB0042"])).toBe(
+      "identical",
+    )
+  })
+
+  it("ignores factor key order", () => {
+    const existing = makeRow({ factors: { A: 1, B: { x: 1, y: [1, 2] } } })
+    const body = { ...sameBody(existing), factors: { B: { y: [1, 2], x: 1 }, A: 1 } }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("identical")
+  })
+
+  it("ignores parcel id order and case", () => {
+    const existing = makeRow({ parcel_ids: ["12345AB0042", "12345AB0043"] })
+    const body = { ...sameBody(existing), parcel_ids: ["12345ab0043", "12345AB0042"] }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042", "12345AB0043"])).toBe(
+      "identical",
+    )
+  })
+
+  it("returns conflict when site_name differs", () => {
+    const existing = makeRow()
+    const body = { ...sameBody(existing), site_name: "Autre parcelle" }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("conflict")
+  })
+
+  it("returns conflict when one factor value differs", () => {
+    const existing = makeRow()
+    const body = { ...sameBody(existing), factors: { A: 1, B: 3 } }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("conflict")
+  })
+
+  it("returns conflict when the parcel id set differs", () => {
+    const existing = makeRow()
+    const body = { ...sameBody(existing), parcel_ids: ["12345AB0042", "12345AB0099"] }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("conflict")
+  })
+
+  it("returns visibility_only when only visibility differs", () => {
+    const existing = makeRow({ visibility: "private" })
+    const body: SurveyUpsertBody = { ...sameBody(existing), visibility: "public" }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("visibility_only")
+  })
+
+  it("returns identical when visibility is absent from the body", () => {
+    const existing = makeRow({ visibility: "public" })
+    const body = sameBody(existing)
+    delete body.visibility
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("identical")
+  })
+
+  it("returns conflict when site_name and visibility both differ", () => {
+    const existing = makeRow({ visibility: "private" })
+    const body: SurveyUpsertBody = {
+      ...sameBody(existing),
+      site_name: "Autre parcelle",
+      visibility: "public",
+    }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("conflict")
+  })
+
+  it("excludes scores, status and expires_at", () => {
+    const existing = makeRow()
+    const body: SurveyUpsertBody = {
+      ...sameBody(existing),
+      scores: { ibp_total: 99 },
+      status: "draft",
+      expires_at: "2030-01-01T00:00:00.000Z",
+    }
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("identical")
+  })
+
+  it("does not treat absent or null fields as changes", () => {
+    const existing = makeRow()
+    const body = {
+      site_name: null,
+      factors: null,
+      parcel_ids: undefined,
+      visibility: null,
+    } as unknown as SurveyUpsertBody
+    expect(classifySameVersionContent(body, existing, ["12345AB0042"])).toBe("identical")
+    expect(classifySameVersionContent({}, existing, ["12345AB0042"])).toBe("identical")
   })
 })

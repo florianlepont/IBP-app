@@ -190,6 +190,39 @@ export function getChangedSubmittedReadOnlyFields(
   return changed
 }
 
+export type SameVersionContent = "identical" | "visibility_only" | "conflict"
+
+/**
+ * Classify an upsert that carries the sync_version the server already stored
+ * (D-04, D-16 amended 2026-09-25).
+ *
+ * - "conflict": a read-only field differs by value. Racing writers on the same
+ *   version must not overwrite each other silently, so the caller answers 409.
+ * - "visibility_only": only visibility differs. Visibility is last-writer-wins,
+ *   like the version-less visibility_update action: installed apps rewrite a
+ *   pending upsert's visibility without bumping sync_version, so a retry after
+ *   a lost response must be applied, not blocked.
+ * - "identical": an idempotent replay.
+ *
+ * The comparison is by value and computed on the fly (no stored hash): JSONB
+ * reorders object keys, so hashing raw JSON would report false conflicts.
+ * scores, status and expires_at are excluded, and absent or null body fields
+ * are never treated as changes.
+ */
+export function classifySameVersionContent(
+  body: SurveyUpsertBody,
+  existing: SurveyRow,
+  existingParcelIds: string[],
+): SameVersionContent {
+  if (getChangedSubmittedReadOnlyFields(body, existing, existingParcelIds).length > 0) {
+    return "conflict"
+  }
+  if ((body.visibility ?? existing.visibility) !== existing.visibility) {
+    return "visibility_only"
+  }
+  return "identical"
+}
+
 export function normalizeParcelId(value: unknown): string | null {
   if (typeof value !== "string") {
     return null
