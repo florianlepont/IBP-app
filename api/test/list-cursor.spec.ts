@@ -62,6 +62,8 @@ describe("encodeListCursor / decodeListCursor", () => {
     ["a JSON null", `v1:${b64url("null")}`],
     ["a padded body", `${encodeListCursor({ t: "2026-03-09T10:20:31Z", i: "a" })}=`],
     ["a standard base64 alphabet body", "v1:+/+/"],
+    // "QR" decodes to the same byte as "QQ" (the trailing bits differ); only the canonical form passes.
+    ["a non-canonical body", "v1:QR"],
   ])("throws Invalid cursor for %s", (_label, raw) => {
     expectInvalidCursor(raw)
   })
