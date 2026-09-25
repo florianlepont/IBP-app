@@ -203,7 +203,7 @@ Plans:
 - [x] 01.5-08-PLAN.md — Retry classification, timeouts, pull guard (wave 3)
 - [x] 01.5-09-PLAN.md — expo-image thumbnails and carousel, missing/unavailable states (wave 3)
 - [x] 01.5-10-PLAN.md — Single flight, batches of 100, synced only when queue empty (wave 4)
-- [ ] 01.5-11-PLAN.md — Streaming upload wired into sync, missing file handling (wave 5)
+- [x] 01.5-11-PLAN.md — Streaming upload wired into sync, missing file handling (wave 5)
 - [ ] 01.5-12-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 6)
 
 ### Phase 01.6: Sync feed ordering and unified object storage (INSERTED)
@@ -381,7 +381,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
 | 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
-| 1.5. Mobile sync engine reliability | 10/12 | In Progress|  |
+| 1.5. Mobile sync engine reliability | 11/12 | In Progress|  |
 | 1.6. Sync feed ordering and unified object storage | 0/TBD | Not started | - |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
