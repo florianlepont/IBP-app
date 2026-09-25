@@ -3,21 +3,18 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import { Request } from "express"
 import * as jwt from "jsonwebtoken"
 import { JwksClient } from "jwks-rsa"
+import { appConfigOf } from "../config/app-config"
+import { NodeEnv } from "../config/config.types"
 import { DatabaseService } from "../database/database.service"
+import { getTestTokenSecret } from "../debug/test-token-secret"
 import { AuthenticatedUser } from "./auth.types"
-
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN ?? ""
-const AUTH0_PUBLIC_DOMAIN = process.env.AUTH0_PUBLIC_DOMAIN?.trim() || AUTH0_DOMAIN
-const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE ?? ""
-const AUTH0_JWKS_DOMAINS = Array.from(new Set([AUTH0_PUBLIC_DOMAIN, AUTH0_DOMAIN].filter(Boolean)))
-const AUTH0_ACCEPTED_ISSUERS = Array.from(
-  new Set(AUTH0_JWKS_DOMAINS.map((domain) => `https://${domain}/`)),
-)
 
 /**
  * Stable error code returned (HTTP 403) when first-login provisioning refuses
@@ -31,12 +28,52 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && err.code === "23505"
 }
 
+/** Reads a string or number property from an unknown error without trusting its shape. */
+function errorField(err: unknown, key: "name" | "message" | "code"): string | undefined {
+  if (typeof err !== "object" || err === null || !(key in err)) {
+    return undefined
+  }
+  const value = (err as Record<string, unknown>)[key]
+  return typeof value === "string" || typeof value === "number" ? String(value) : undefined
+}
+
+/**
+ * D-06: the failure log carries the error name, message and code only. The
+ * token, the Authorization header, the stack and the error object itself are
+ * never passed to the logger.
+ */
+function describeAuthFailure(err: unknown): string {
+  const name = errorField(err, "name")
+  const message = errorField(err, "message")
+  const code = errorField(err, "code")
+  return `Token validation failed: ${name ?? "Error"}: ${message ?? "unknown"}${code ? ` (code=${code})` : ""}`
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly logger = new Logger(AuthGuard.name)
   private readonly jwksClients: JwksClient[]
+  private readonly nodeEnv: NodeEnv
+  private readonly publicDomain: string
+  private readonly audience: string
+  private readonly acceptedIssuers: string[]
+  private readonly httpTimeoutMs: number
 
-  constructor(private readonly db: DatabaseService) {
-    this.jwksClients = AUTH0_JWKS_DOMAINS.map(
+  constructor(
+    private readonly db: DatabaseService,
+    config: ConfigService,
+  ) {
+    // D-01: every Auth0 setting comes from the validated configuration.
+    const cfg = appConfigOf(config)
+    this.nodeEnv = cfg.nodeEnv
+    this.publicDomain = cfg.auth0.publicDomain
+    this.audience = cfg.auth0.audience
+    this.httpTimeoutMs = cfg.auth0.httpTimeoutMs
+    const jwksDomains = Array.from(
+      new Set([cfg.auth0.publicDomain, cfg.auth0.domain].filter(Boolean)),
+    )
+    this.acceptedIssuers = Array.from(new Set(jwksDomains.map((domain) => `https://${domain}/`)))
+    this.jwksClients = jwksDomains.map(
       (domain) =>
         new JwksClient({
           jwksUri: `https://${domain}/.well-known/jwks.json`,
@@ -57,7 +94,7 @@ export class AuthGuard implements CanActivate {
 
     const token = header.slice(7)
     try {
-      if (process.env.NODE_ENV === "test") {
+      if (this.nodeEnv === "test") {
         const user = await this.verifyTestToken(token)
         request.user = user
         return true
@@ -70,14 +107,15 @@ export class AuthGuard implements CanActivate {
       if (err instanceof ForbiddenException) {
         throw err
       }
-      console.error("[AuthGuard] Token validation failed:", err)
+      this.logger.warn(describeAuthFailure(err))
       throw new UnauthorizedException()
     }
   }
 
   private async verifyTestToken(token: string): Promise<AuthenticatedUser> {
-    const secret = process.env.ACCESS_TOKEN_SECRET
-    if (!secret) throw new Error("ACCESS_TOKEN_SECRET not set")
+    // D-04: per-process random secret, shared with POST /v1/debug/test-token.
+    const secret = getTestTokenSecret(this.nodeEnv)
+    if (!secret) throw new Error("test token secret unavailable")
     const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as jwt.JwtPayload
     const userId = payload.sub
     if (!userId) throw new Error("Missing sub in test token")
@@ -103,8 +141,8 @@ export class AuthGuard implements CanActivate {
             token,
             publicKey,
             {
-              audience: AUTH0_AUDIENCE,
-              issuer: AUTH0_ACCEPTED_ISSUERS as [string, ...string[]],
+              audience: this.audience,
+              issuer: this.acceptedIssuers as [string, ...string[]],
               algorithms: ["RS256"],
             },
             (verifyErr, verified) => {
@@ -214,15 +252,18 @@ export class AuthGuard implements CanActivate {
   private async fetchUserInfo(
     token: string,
   ): Promise<{ email?: string; name?: string; nickname?: string; email_verified?: boolean }> {
-    const response = await fetch(`https://${AUTH0_PUBLIC_DOMAIN}/userinfo`, {
+    // D-06: one timeout covers the headers and the body, which is awaited here
+    // while the same signal is still armed.
+    const response = await fetch(`https://${this.publicDomain}/userinfo`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(this.httpTimeoutMs),
     })
     if (!response.ok) throw new Error("Failed to fetch Auth0 userinfo")
-    return response.json() as Promise<{
+    return (await response.json()) as {
       email?: string
       name?: string
       nickname?: string
       email_verified?: boolean
-    }>
+    }
   }
 }

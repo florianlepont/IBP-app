@@ -1,7 +1,10 @@
-import { UnauthorizedException } from "@nestjs/common"
+import { Logger, UnauthorizedException } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import "reflect-metadata"
 import * as jwt from "jsonwebtoken"
 import { AuthGuard } from "../src/auth/auth.guard"
+import { getTestTokenSecret } from "../src/debug/test-token-secret"
+import { buildTestConfig } from "./config-helper"
 import { isDebugSurfaceEnabled } from "../src/debug/debug-gating"
 
 describe("isDebugSurfaceEnabled", () => {
@@ -55,25 +58,16 @@ describe("AppModule DebugModule gating by NODE_ENV", () => {
 })
 
 describe("AuthGuard HS256 branch stays closed in production", () => {
-  const originalNodeEnv = process.env.NODE_ENV
-  const originalSecret = process.env.ACCESS_TOKEN_SECRET
-  const TEST_SECRET = "prod-gate-test-secret"
-
-  beforeEach(() => {
-    process.env.NODE_ENV = "production"
-    process.env.ACCESS_TOKEN_SECRET = TEST_SECRET
-  })
-
-  afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv
-    process.env.ACCESS_TOKEN_SECRET = originalSecret
-  })
-
-  it("rejects an HS256 token signed with ACCESS_TOKEN_SECRET and never queries the DB", async () => {
-    const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined)
+  it("rejects an HS256 token signed with the test secret and never queries the DB", async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const db = { query: jest.fn() }
-    const guard = new AuthGuard(db as never)
-    const token = jwt.sign({ sub: "user-1" }, TEST_SECRET, { algorithm: "HS256" })
+    const config = new ConfigService({
+      app: { ...buildTestConfig(), nodeEnv: "production", isProduction: true },
+    })
+    const guard = new AuthGuard(db as never, config)
+    const token = jwt.sign({ sub: "user-1" }, getTestTokenSecret("test") as string, {
+      algorithm: "HS256",
+    })
     const request: { headers: Record<string, string>; user?: unknown } = {
       headers: { authorization: `Bearer ${token}` },
     }
@@ -84,6 +78,6 @@ describe("AuthGuard HS256 branch stays closed in production", () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(UnauthorizedException)
     expect(db.query).not.toHaveBeenCalled()
 
-    consoleErrorSpy.mockRestore()
+    warnSpy.mockRestore()
   })
 })
