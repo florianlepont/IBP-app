@@ -3,6 +3,11 @@ const path = require('path');
 const { Client } = require('pg');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
+// Session-level advisory lock key (D-14). The image CMD and a manual run can overlap; the lock
+// serialises them, and the second runner then finds every file already applied. Session level,
+// not transaction level, because each file runs in its own transaction.
+const MIGRATION_LOCK_KEY = 7017015;
+
 async function runMigrations(config) {
   const client = new Client(
     config || {
@@ -17,6 +22,8 @@ async function runMigrations(config) {
   await client.connect();
 
   try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         id SERIAL PRIMARY KEY,
@@ -47,11 +54,12 @@ async function runMigrations(config) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});
     await client.end();
   }
 }
 
-module.exports = { runMigrations };
+module.exports = { runMigrations, MIGRATION_LOCK_KEY };
 
 if (require.main === module) {
   runMigrations().catch((error) => {
