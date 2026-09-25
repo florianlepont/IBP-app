@@ -30,6 +30,7 @@ provides:
   - "Measurement document Section 4-9 (iteration 1, unmodified), Section 10 (iteration 2, unmodified) and new Section 11 (iteration 3: corpus expansion to per-class ceiling, training with the epoch-budget non-saturation finding, three-way per-genus comparison, confidence bands, promotion verdict, ADR-facing summary) filled in full"
   - "A genuine training-data shuffle bug found and fixed mid-iteration-2 (see key-decisions) -- the first iteration-2 attempt was discarded, not reported"
   - "A genuine corpus-manifest-truncation bug found and fixed mid-iteration-3, unrelated to the iteration-2 shuffle bug (see key-decisions) -- caught before it reached training via a new verify_corpus_complete() precondition check, no data lost"
+  - "POST-COMPLETION ADDENDUM (2026-09-25, ad-hoc measurement task, no retraining/re-export): per-genus x per-season accuracy breakdown for the promoted iteration-3 model, added as measurement document Section 12. Re-ran inference over the same 19,466-image test split, joined against manifest.csv's season column, 100% coverage (0 images dropped, 27/19,466 carry season=unknown from unparseable GBIF event_date). 5 of 136 genus x season cells (n>=30 threshold) are insufficient-samples: Acer/Pinus/Prunus autumn (n=4/3/1, confirming Section 11.1/11.5's near-zero-autumn-training finding propagates into the test split itself) plus a newly-surfaced Malus/Sorbus winter thinness (n=13/16). Season margins show autumn is NOT the weakest season -- it is the highest-scoring of the four, pooled (86.47% top3) and unweighted-per-genus-mean (86.01%, 31 genera); winter is the actual low point (84.13%/81.32%). 21 of 31 measurable genera sit within +-3pp of their whole-year figure; 4 show a real, adequately-sampled autumn-specific weakness (Salix -11.6pp on n=60, Picea -5.4pp, Fagus -4.7pp, Alnus -4.2pp); Tamarix (the one genus clearing D-02) strengthens slightly in autumn (+1.3pp). Verdict is explicitly three-way, not one line: holds up for 27/34 genera, degrades for 4, cannot tell for 3 (Acer/Pinus/Prunus -- zero resolvable autumn evidence, a GBIF-source limitation now confirmed three times, not fixable by further GBIF-only expansion)."
 affects: [01-05, 01-06]
 
 tech-stack:
@@ -44,8 +45,9 @@ key-files:
     - spike/species-recognition/train/finetune.py (gitignored)
     - spike/species-recognition/train/export_tflite.py (gitignored)
     - spike/species-recognition/eval/evaluate_accuracy.py (gitignored)
+    - spike/species-recognition/eval/evaluate_seasonal_accuracy.py (gitignored, added 2026-09-25 post-completion addendum -- per-genus x per-season inference over the promoted model, reused for Section 12)
   modified:
-    - docs/technical/species-recognition-spike-measurements-v1.md (Sections 4, 5, 6, 9, 10)
+    - docs/technical/species-recognition-spike-measurements-v1.md (Sections 4, 5, 6, 9, 10, and new Section 12 added 2026-09-25)
     - spike/species-recognition/train/prepare_dataset.py (gitignored -- iteration 2 corpus expansion)
 
 key-decisions:
@@ -62,6 +64,8 @@ key-decisions:
   - "Added a hard precondition check, verify_corpus_complete(), to finetune.py -- runs immediately after the corpus-gate check and before any data loading, asserting every one of the 34 classes has non-empty, count-consistent train/val/test splits, failing loudly rather than letting training silently proceed on a partial corpus. This is what actually caught and blocked training during the restoration window after the manifest-truncation fix, before this run's real training began"
   - "Fixed a separate, genuine indefinite-hang bug in prepare_dataset.py's network calls (occurrence-search/species-match path, not the already-hardened image-download path): plain requests.get(url, timeout=N) does not reliably bound every hang mode (DNS stalls, connect-then-nothing). Replaced with a thread-based hard deadline (Future.result(timeout=...)) for every network call, with exponential-backoff retry -- verified against an intentionally unreachable address (gave up cleanly in 13s instead of hanging)"
   - "genus_classifier_v3.tflite promoted to the canonical spike/species-recognition/train/genus_classifier.tflite path (and eval/results/) after verifying it genuinely beats iteration 2 on the test set (31/34 genera improved, mean +6.74pp top-3, every pooled/confidence-band measure moved the same direction) -- not assumed, checked explicitly per the plan's own instruction. Iterations 1 and 2's models/results preserved separately (gitignored, *_iteration1*/*_v2* suffixes) and their numbers in Sections 4-5/10 are unmodified regardless of what sits at the canonical path"
+  - "POST-COMPLETION ADDENDUM (2026-09-25): the per-genus x per-season raw CSV (spike/species-recognition/eval/results/per_genus_per_season.csv, 19,466 rows) is NOT committed to git -- confirmed as both a project-design choice (spike/ is gitignored project-wide, 'throwaway by design') and, in this worktree specifically, a hard git constraint (spike/ is a symlink to another session's checkout; `git add` through it fails with 'fatal: pathspec ... is beyond a symbolic link', verified directly). The committed, durable artefact is measurement document Section 12's cross-tabulation table itself, built from that raw file and committed in two steps (raw 34x4 table first, interpretation second) mirroring the exact 'raw numbers before interpretation' discipline Section 11.3 already established for iteration 3 (commit 094def3)"
+  - "Minimum sample threshold for genus x season cells set to n>=30, reusing evaluate_accuracy.py's existing TEST_REPORTING_THRESHOLD constant rather than introducing a new, undocumented cutoff -- consistency with the whole-year per-genus table's own resolution-limit discipline (D-03, Section 0)"
 
 requirements-completed: []
 
@@ -673,6 +677,82 @@ files would need `npm install` run first.
   specifically Section 11.3's three-way comparison table and Section 11.6's promotion verdict,
   before drafting the ADR.
 
+## Post-Completion Addendum (2026-09-25): Per-Genus × Per-Season Accuracy
+
+**Ad-hoc measurement task, requested directly by the user to inform the US-C9 ship decision: does
+the promoted iteration-3 model hold up in the season IBP surveys actually happen in (autumn)?**
+Section 11.3's 85.37% unweighted mean top-3 mixes all four seasons together and cannot answer this
+on its own. No retraining, no re-export — the already-promoted `genus_classifier.tflite` was
+re-evaluated image-by-image over the same 19,466-image test split iteration 3 used, with each
+image's season joined from `data/splits/manifest.csv`'s existing `season` column. New script:
+`spike/species-recognition/eval/evaluate_seasonal_accuracy.py`. Written up as measurement document
+**Section 12**, in two commits (raw 34×4 cross-tab first, interpretation second — the same
+raw-before-interpretation discipline Section 11.3 established).
+
+**Coverage: 100% (19,466/19,466 test images matched a manifest season value); 27 (0.14%) carry
+`season=unknown`** (GBIF `event_date` missing/unparseable for that image — an existing category,
+not a new gap), reported for transparency, excluded from the four-season breakdown on the same
+insufficient-samples basis as every other thin cell. Pooled top-1/top-3 recomputed from this raw
+file (67.42%/85.24%) matched Section 11.3/11.4's published figures exactly, confirming no
+measurement drift.
+
+**Central finding: autumn is not the weakest season — it is the strongest of the four, both pooled
+(86.47% top-3, 3,739/4,324) and as an unweighted per-genus mean (86.01%, 31 genera) — winter is
+actually the low point (84.13%/81.32%).** But this aggregate reading explicitly does not, and
+cannot, cover the three genera it matters most for: **Acer, Pinus and Prunus contribute a combined
+8 images to the entire 4,324-image autumn test pool** (4, 3 and 1 respectively) — the same
+near-zero-autumn-training finding Section 11.1/11.5 already confirmed at the corpus level now
+confirmed, a third time, to propagate directly into the *test* split and therefore into this
+evaluation. These three genera are `insufficient-samples` for autumn and cannot be assessed at all.
+
+**A previously-invisible finding the whole-year table did not surface: 4 genera show a real,
+adequately-sampled autumn-specific weakness — Salix (-11.6pp, 73.3% on n=60), Picea (-5.4pp), Fagus
+(-4.7pp), Alnus (-4.2pp).** 21 of the 31 measurable genera sit within ±3pp of their whole-year
+figure (noise-level ranking shuffle, not a real effect). **Tamarix — the one genus that already
+clears the D-02 95% bar — strengthens slightly in autumn (96.3% vs 95.04% whole-year, +1.3pp)**:
+the genus with the strongest current partial-go case does not lose its evidentiary basis in the
+survey season.
+
+**Verdict is explicitly three-way, not a single line, per the task's own instruction:** the model
+**holds up** in autumn for 27 of 34 genera (including Tamarix); it **degrades** for 4
+(Salix/Picea/Fagus/Alnus, all measured at adequate n); and for 3 (Acer/Pinus/Prunus) **we cannot
+tell from this data** — not "it degrades," genuinely unmeasurable, a GBIF-source limitation now
+confirmed at three successive corpus scales, not fixable by further GBIF-only expansion. What would
+be needed: autumn-season Acer/Pinus/Prunus photographs from a non-GBIF source (a dedicated
+field-photo collection run in autumn — D-16's still-open field-validation gap, Section 6 — or a
+different licensed image source), since GBIF's CC0/CC-BY `StillImage` collection has now been
+surveyed exhaustively for these three genera without finding usable autumn quantities at any scale
+tried.
+
+**Secondary, unplanned finding:** winter, not autumn, is the season with both the weakest aggregate
+accuracy and its own two thin cells (Malus n=13, Sorbus n=16) — outside this task's scope to pursue
+further, noted for completeness.
+
+**Bears on the US-C9 / D-04 ship decision:** the central Section 11.3 result (1/34 genera clearing
+D-02) is not weakened by a season-specific gap — if anything Tamarix's case strengthens. The
+genuine new gap this addendum adds to the evidence base is genus-specific: Acer, Pinus and Prunus
+each carry a respectable whole-year figure (80.8%/91.3%/80.5%, Section 11.3) with zero
+autumn-specific evidence behind it. Whether that gap must be closed before US-C9 ships, or is
+acceptable to carry forward, is the ADR's call (plan 01-06) — this addendum's job is to put that
+gap in evidence.
+
+**Addendum commits:**
+- `ea2f040` (docs) — Section 12 raw data: the 34×4 cross-tabulation (n, top1, top3 per genus per
+  season, thin cells marked), committed before interpretation
+- `ba58df7` (docs) — Section 12 analysis: season margins, thin-cell discussion, autumn-vs-overall
+  per-genus table, three-way verdict
+
+**Files:**
+- `docs/technical/species-recognition-spike-measurements-v1.md` — new Section 12 (12.1–12.6);
+  Sections 1–11 untouched (verified via `git diff`, zero deleted lines across both commits)
+- `spike/species-recognition/eval/evaluate_seasonal_accuracy.py` (gitignored, new) — per-image
+  seasonal inference script
+- `spike/species-recognition/eval/results/per_genus_per_season.csv` (gitignored, new, 19,466 rows)
+  — raw per-image results; **not committed to git** — `spike/` is gitignored project-wide by
+  design (see `key-decisions`), and in this worktree is additionally a symlink that `git add`
+  refuses to traverse (`fatal: pathspec ... is beyond a symbolic link`, verified directly). The
+  committed, durable artefact is Section 12's cross-tabulation table built from this file.
+
 ---
 
 _Phase: 01-species-recognition-approach-decision_
@@ -694,3 +774,13 @@ spike-measurements-v1.md`, the gitignored `spike/species-recognition/train/finet
 present in `git log`. The canonical model path re-passes the plan's own automated verify checks
 (export parity 98.5%, 34 output classes matching `genus_labels.txt` order, 34-row results CSV) run
 directly against it post-promotion.
+
+**Post-completion addendum self-check (2026-09-25):** `spike/species-recognition/eval/evaluate_seasonal_accuracy.py`
+and `spike/species-recognition/eval/results/per_genus_per_season.csv` (19,466 rows) confirmed
+present on disk. Both addendum commits (`ea2f040`, `ba58df7`) confirmed present in `git log`.
+Measurement document Section 12 (12.1–12.6) confirmed present; `git diff` across both commits shows
+zero deleted lines, confirming Sections 1–11 were not touched. Pooled top-1/top-3 recomputed
+directly from `per_genus_per_season.csv` (67.42%/85.24%) confirmed to match Section 11.3/11.4's
+already-published figures exactly, and three spot-checked per-genus top-3 figures (Abies 89.67%,
+Tamarix 95.04%, Ceratonia 90.63%) confirmed to match Section 11.3's table exactly — no measurement
+drift between this addendum and the original iteration-3 evaluation.
