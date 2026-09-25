@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from "@nestjs/common"
 import { readFile } from "fs/promises"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { SurveysAttachmentsService } from "../src/surveys/surveys-attachments.service"
 
 jest.mock("fs/promises", () => {
@@ -14,10 +15,17 @@ jest.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: jest.fn(),
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner") as {
-  getSignedUrl: jest.Mock
-}
+const mockS3Send = jest.fn().mockResolvedValue({})
+
+jest.mock("@aws-sdk/client-s3", () => {
+  const actual = jest.requireActual("@aws-sdk/client-s3")
+  return {
+    ...actual,
+    S3Client: jest.fn().mockImplementation(() => ({ send: mockS3Send })),
+  }
+})
+
+const mockGetSignedUrl = getSignedUrl as jest.Mock
 
 const AUTH_USER = {
   id: "user-1",
@@ -63,23 +71,28 @@ function buildService(objectStorageMode: "local" | "minio") {
 describe("SurveysAttachmentsService download", () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockS3Send.mockResolvedValue({})
   })
 
   describe("getAttachmentDownload", () => {
     it("minio mode: returns a presigned GET url with a 300s TTL and requires_auth false", async () => {
       const { service, db } = buildService("minio")
-      getSignedUrl.mockResolvedValue("https://minio.local/signed-get-url")
+      mockGetSignedUrl.mockResolvedValue("https://minio.local/signed-get-url")
       db.query
         .mockResolvedValueOnce({ rows: [buildSurveyRow()] })
         .mockResolvedValueOnce({ rows: [buildAttachmentRow()] })
 
       const before = Date.now()
-      const result = await service.getAttachmentDownload(AUTH_USER as never, SURVEY_ID, ATTACHMENT_ID)
+      const result = await service.getAttachmentDownload(
+        AUTH_USER as never,
+        SURVEY_ID,
+        ATTACHMENT_ID,
+      )
       const after = Date.now()
 
       expect(result.url).toBe("https://minio.local/signed-get-url")
       expect(result.requires_auth).toBe(false)
-      expect(getSignedUrl).toHaveBeenCalledWith(
+      expect(mockGetSignedUrl).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           input: expect.objectContaining({ Key: "surveys/survey-1/attachment-1.jpg" }),
@@ -97,11 +110,15 @@ describe("SurveysAttachmentsService download", () => {
         .mockResolvedValueOnce({ rows: [buildSurveyRow()] })
         .mockResolvedValueOnce({ rows: [buildAttachmentRow()] })
 
-      const result = await service.getAttachmentDownload(AUTH_USER as never, SURVEY_ID, ATTACHMENT_ID)
+      const result = await service.getAttachmentDownload(
+        AUTH_USER as never,
+        SURVEY_ID,
+        ATTACHMENT_ID,
+      )
 
       expect(result.url).toBe(`/surveys/${SURVEY_ID}/attachments/${ATTACHMENT_ID}/content`)
       expect(result.requires_auth).toBe(true)
-      expect(getSignedUrl).not.toHaveBeenCalled()
+      expect(mockGetSignedUrl).not.toHaveBeenCalled()
     })
 
     it("survey not owned: throws NotFoundException without querying the attachment", async () => {
@@ -131,17 +148,17 @@ describe("SurveysAttachmentsService download", () => {
         .mockResolvedValueOnce({ rows: [buildSurveyRow()] })
         .mockResolvedValueOnce({ rows: [buildAttachmentRow({ uploaded_at: null })] })
 
-      await expect(
-        service.getAttachmentDownload(AUTH_USER as never, SURVEY_ID, ATTACHMENT_ID),
-      ).rejects.toThrow(ConflictException)
-
+      let caught: unknown
       try {
         await service.getAttachmentDownload(AUTH_USER as never, SURVEY_ID, ATTACHMENT_ID)
       } catch (error) {
-        expect((error as ConflictException).getResponse()).toMatchObject({
-          code: "attachment_not_uploaded",
-        })
+        caught = error
       }
+
+      expect(caught).toBeInstanceOf(ConflictException)
+      expect((caught as ConflictException).getResponse()).toMatchObject({
+        code: "attachment_not_uploaded",
+      })
     })
   })
 
@@ -153,7 +170,11 @@ describe("SurveysAttachmentsService download", () => {
         .mockResolvedValueOnce({ rows: [buildAttachmentRow()] })
       ;(readFile as jest.Mock).mockResolvedValueOnce(Buffer.from("fake-jpeg-binary"))
 
-      const result = await service.getAttachmentContent(AUTH_USER as never, SURVEY_ID, ATTACHMENT_ID)
+      const result = await service.getAttachmentContent(
+        AUTH_USER as never,
+        SURVEY_ID,
+        ATTACHMENT_ID,
+      )
 
       expect(result.mimeType).toBe("image/jpeg")
       expect(result.buffer.toString()).toBe("fake-jpeg-binary")
