@@ -1838,3 +1838,114 @@ flagged), Pyrus→Prunus (40, both Rosaceae), Alnus→Betula (36, both Betulacea
 basis, which reads as the model continuing to learn real structure rather than noise as the corpus
 grows, consistent with iteration 2's own observation (Section 10.3) and with the confidence-band
 and near-miss trends above.
+
+**Resolution limit, coarser again.** Most classes now sit at 530–600 test images (up from
+iteration 2's ~165–199); at n≈550, the 95% bar tolerates roughly 27 misses rather than iteration
+2's ~10, and Tamarix's clearing figure above (517/544) sits comfortably inside that tolerance
+rather than on a knife-edge. A handful of classes remain smaller — Ceratonia at 363 (the
+licence-scarce class, Section 11.1) and Quercus_deciduae at 467 are the two smallest test splits in
+this iteration — their percentages should be read with correspondingly less resolution than the
+30-class majority.
+
+### 11.5 Corpus ceiling and seasonal-skew confirmation — cross-references
+
+These two findings were established with full evidence in Section 11.1 as the corpus expansion
+completed, ahead of training; restated here in summary form for a reader working through Section
+11 top to bottom.
+
+- **Per-class corpus ceilings are real and uneven, not a flat ~4,200/class assumption.** Section
+  11.1's table shows a spread from Ceratonia's 3,629-candidate hard ceiling (licence-scarce) to
+  eight classes flatly capped at the 6,000 target (Abies, Acer, Alnus, Arbutus, Betula, Carpinus,
+  Castanea, Prunus) that were still climbing when the target was reached — target-limited, not
+  ceiling-limited. This bounds what a fourth iteration focused on data volume alone could add: the
+  eight target-limited classes have headroom, the majority do not.
+- **Autumn representation is now confirmed, not merely improved, for 31 of 34 classes** (Section
+  11.1: double-digit autumn percentages, 10.9%–32.4%). **Three genera remain critically thin even
+  at ~6,000–10,000-candidate scale — Prunus (0.5%), Pinus (1.0%), Acer (1.1%)** — a revision of
+  iteration 2's "genuinely zero" reading (which itself already revised iteration 1's "zero" at a
+  30-image sample) to "near-absent but not literally zero." At three successive scales (30, then
+  ~5,000, then ~6,000–10,000 candidates) the answer for these three genera has stayed the same in
+  substance: this reads as a real property of GBIF's CC0/CC-BY `StillImage` holdings for these
+  three genera specifically, not a sampling artefact that a larger fetch would eventually correct.
+- **Every one of the 34 classes trained on had complete, non-empty, count-consistent train/val/test
+  splits, confirmed by evidence rather than assumed** (Section 11.2: `verify_corpus_complete()`
+  passed before training started). This directly answers the concern the manifest-truncation
+  incident raised (Section 11.1's progress-checkpoint narrative) — the bug that could have silently
+  trained on a truncated 4-class corpus was caught and fixed before it reached training, and the
+  precondition check that would have caught it if it hadn't is now a permanent part of
+  `finetune.py`.
+
+### 11.6 Promotion to the canonical model path — verdict
+
+**`genus_classifier_v3.tflite` genuinely beats `genus_classifier_v2.tflite` on the test set, by
+the same per-genus, non-averaged standard this document holds itself to (D-03) — promoted.**
+31 of 34 genera improved 2→3 (mean +6.74pp top-3), 0 were flat, and the 3 that regressed did so by
+small margins (largest −2.1pp) with a corpus-scarcity explanation for the largest of the three
+(Ceratonia, Section 11.1). Pooled test top-1/top-3 (context only, Section 11.4) rose from
+58.8%/78.8% to 67.4%/85.2%. Strong-confidence-band coverage rose from 38.4% to 56.0% at a fixed
+90% precision target. This is not a marginal or mixed result that would leave the promotion
+decision ambiguous — every measure this document tracks moved the same direction.
+
+**Promotion executed:** `spike/species-recognition/train/genus_classifier_v3.tflite` (verified
+byte-identical to the canonical file post-copy, MD5 `de7731077bbc1f81ed3afdc2e874237f`) copied to
+the canonical path `spike/species-recognition/train/genus_classifier.tflite`, replacing iteration
+2's file there. `genus_classifier_keras_v3/` copied to the canonical `genus_classifier_keras/`.
+`export_report_v3.json`/`training_report_v3.json` copied to the canonical (no-suffix)
+`export_report.json`/`training_report.json`. `eval/results_v3/` copied to the canonical
+`eval/results/`. **Iterations 1 and 2's files are untouched and remain separately archived**
+(`*_iteration1*`, `*_v2*` suffixes; `eval/results_iteration1/`, `eval/results_v2/`) — nothing about
+either iteration's evidence in Sections 4–5 or Section 10 depends on what currently sits at the
+canonical path. `eval/GATE` already read `GATE-MODEL: PASS` from iteration 2's promotion; the token
+itself is unchanged by this promotion (it does not encode which iteration), but it now refers to
+the iteration-3 model as a matter of fact, per the file it points at.
+
+**Verified against the plan's own automated checks, run directly against the canonical path
+post-promotion (not just the `_v3`-suffixed files):** `export_tflite.py --verify-parity` passes
+(98.5% agreement); the canonical `.tflite` loads with exactly 34 output classes matching
+`genus_labels.txt` order; `eval/results/per_genus_accuracy.csv` has exactly 35 lines (header + 34
+data rows). Plan 05 (device latency measurement) should time this model — it is materially the
+same size as iteration 2's (6,127,976 bytes either way, Section 11.2), so no new latency-budget
+concern is introduced by this promotion beyond what iteration 2 already established (Section 10.4:
+even a 3x latency increase from a bigger model leaves an enormous margin against D-05's 3,000ms
+budget).
+
+### 11.7 What this iteration means for the ADR
+
+**The central number: 1 of 34 genera now clears the D-02 95% top-3 bar (Tamarix), up from 0 of 34
+in both iterations 1 and 2 — the first genus-level evidence in this phase that a partial go
+(D-04) is achievable, not merely theoretical.** The other 33 genera still do not clear it, at
+progressively better-resolved test splits each iteration (35 → ~35–199 → 530–600 images/class).
+
+**The diminishing-returns question iteration 3 was run to settle: yes, returns are diminishing
+(+19.9pp mean top-3 for 1→2, +6.7pp for 2→3, roughly a third), but with the explicit caveat from
+Section 11.3 that this is confounded by a fixed epoch budget that neither iteration saturated
+(Section 11.2's `EarlyStopping`-never-triggered finding, repeated at 3x the corpus size).** The
+honest reading for the ADR: this is evidence of slowing gains from data volume alone under this
+training configuration, not proof that the approach itself has hit a hard ceiling — a schedule
+change (more epochs, not more data) was not tried and remains an open lever this document does not
+resolve.
+
+**Confounds now resolved with direct evidence, not carried forward as open items:**
+- Per-class corpus ceilings are measured and uneven (Section 11.5) — bounding, not open-ended,
+  headroom for a further data-only iteration.
+- The seasonal-skew gap (Section 3b) is substantially closed for 31 of 34 classes and is now
+  confirmed, at three successive scales, as a genuine data-source absence for the remaining three
+  (Prunus, Pinus, Acer) rather than an unexplored caveat.
+- The corpus-completeness question the manifest-truncation incident raised is answered by
+  `verify_corpus_complete()`'s pass, not assumed.
+
+**Confounds still open, unchanged from iteration 2 (Section 10.5) and not addressed by this
+iteration:** the composition audit (Section 3a) was not re-run at this scale; no field photographs
+exist (Section 6); latency was not re-measured (plan 05's job).
+
+**This is neither a clean go nor a clean no-go, now with one genus's worth of partial-go
+evidence rather than none.** On-device genus recognition has moved from "0 genera, broad and
+uniform miss" (iteration 1) through "0 genera, but improving broadly and substantially"
+(iteration 2) to "1 genus clearing the bar, the rest still improving but not yet crossing it, with
+a training-schedule confound left unresolved" (iteration 3). Whether one genus out of 34 is enough
+partial-go value to justify D-15's Factor A rework (a precondition either way — Section 1 of this
+document notes even a perfect model has nowhere to put its output today), whether the trajectory
+across three iterations supports proposing a fourth iteration or a longer training schedule instead
+of a data-only one, and what threshold of genus coverage would make a partial go worth shipping are
+all the ADR's decisions (plan 01-06) — this document's job across all three iterations has been to
+put the trajectory in evidence, which it now does.
