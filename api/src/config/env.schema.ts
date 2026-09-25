@@ -11,8 +11,8 @@ export const NODE_ENVS = ["development", "test", "production"] as const
  * development or test (D-02). Production rules live in production-rules.ts and
  * run on top, only when NODE_ENV is production.
  *
- * ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, *_EXPIRES_IN and AUTH_* are
- * deliberately absent (D-04).
+ * The retired token secrets, their expiry settings and the old AUTH_* flags
+ * are deliberately absent (D-04).
  */
 export class EnvironmentVariables {
   @IsOptional() @IsIn([...NODE_ENVS]) NODE_ENV?: string

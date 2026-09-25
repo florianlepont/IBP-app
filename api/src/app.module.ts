@@ -34,7 +34,7 @@ configModule.catch(() => undefined)
 
 // The throttler options and the debug gate are evaluated at decorator time,
 // before ConfigService exists: both read NODE_ENV through currentNodeEnv()
-// (src/config), never process.env directly (D-01).
+// (src/config), never the environment directly (D-01).
 @Module({
   imports: [
     configModule,
