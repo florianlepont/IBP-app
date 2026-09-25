@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1.3: CI and test safety net** (INSERTED) - Typecheck in CI, reproducible image, tests that run real SQL (completed 2026-09-24)
 - [x] **Phase 1.4: API sync integrity** (INSERTED) - Validated sync payloads, no submit bypass, transactional writes (completed 2026-09-24)
 - [x] **Phase 1.5: Mobile sync engine reliability** (INSERTED) - Single-flight drain, bounded batches, durable photos (completed 2026-09-25)
-- [ ] **Phase 1.6: Sync feed ordering and unified object storage** (INSERTED) - No skipped change between devices; one bounded storage service
+- [x] **Phase 1.6: Sync feed ordering and unified object storage** (INSERTED) - No skipped change between devices; one bounded storage service (completed 2026-09-25)
 - [ ] **Phase 1.7: API configuration, service split and database tuning** (INSERTED) - Fail-fast config, split SurveysService, bounded and indexed queries
 - [ ] **Phase 1.8: Shared IBP domain package and test completeness** (INSERTED) - IBP rules defined once; RS256 path tested
 - [ ] **Phase 1.9: Mobile state architecture, i18n, accessibility and hygiene** (INSERTED) - Targeted re-renders, French catalogue, accessible controls, accurate docs
@@ -233,7 +233,7 @@ Plans:
 - [x] 01.6-06-PLAN.md — Same-version conflict rule (visibility-only applied), SurveysService drops its S3 client (wave 3)
 - [x] 01.6-07-PLAN.md — Attachments through StorageService, presigned ContentLength, 422 on size mismatch (wave 3)
 - [x] 01.6-08-PLAN.md — MinIO-mode E2E CI job and documentation (wave 4)
-- [ ] 01.6-09-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 5)
+- [x] 01.6-09-PLAN.md — Phase gate: local gate, CI evidence, owner device check (wave 5)
 
 ### Phase 01.7: API configuration, service split and database tuning (INSERTED)
 
@@ -394,7 +394,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
 | 1.4. API sync integrity | 6/6 | Complete    | 2026-09-24 |
 | 1.5. Mobile sync engine reliability | 12/12 | Complete    | 2026-09-25 |
-| 1.6. Sync feed ordering and unified object storage | 8/9 | In Progress|  |
+| 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 0/TBD | Not started | - |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
 | 1.9. Mobile state architecture, i18n, accessibility and hygiene | 0/TBD | Not started | - |

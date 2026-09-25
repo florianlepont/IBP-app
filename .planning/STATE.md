@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 01.2-09-PLAN.md
-last_updated: "2026-09-25T15:08:16.867Z"
-last_activity: 2026-09-25 -- Phase null execution started
+last_updated: "2026-09-25T16:28:27.014Z"
+last_activity: 2026-09-25
 progress:
   total_phases: 16
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 49
-  completed_plans: 34
-  percent: 25
+  completed_plans: 43
+  percent: 31
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 ## Current Position
 
-Phase: null — EXECUTING
-Plan: 1 of ?
+Phase: 01.7
+Plan: Not started
 Status: Executing Phase null
-Last activity: 2026-09-25 -- Phase null execution started
+Last activity: 2026-09-25
 
 Progress: [█░░░░░░░░░] 13%
 
@@ -36,7 +36,7 @@ Progress: [█░░░░░░░░░] 13%
 
 **Velocity:**
 
-- Total plans completed: 34
+- Total plans completed: 43
 - Average duration: —
 - Total execution time: 0 hours
 
@@ -48,6 +48,7 @@ Progress: [█░░░░░░░░░] 13%
 | 01.3 | 7 | - | - |
 | 01.4 | 6 | - | - |
 | 01.5 | 12 | - | - |
+| 01.6 | 9 | - | - |
 
 **Recent Trend:**
 
@@ -77,6 +78,7 @@ Decisions table. Decisions affecting current work:
 - **Shipped status enum wins** (`draft|submitted|synced|error|expired`, `submitted_at`/`deleted_at`); `ibp-form-spec.md` §10.1 is stale
 - US-C9 species recognition stays in MVP but is gated behind an ML ADR (Phase 1) and a contract extension (Phase 2)
 - The current VPS is ratified as the hosting target, not migrated (Phase 6)
+- [2026-09-25] **Owner device checks are delegated to Claude for the audit phases (1.6–1.9).** The owner no longer tests on the phone. Each phase gate replays the owner steps against the built API (MinIO mode through the pinned `pgsty/minio` image, plus the debug test-token) with a committed simulation script, and records the results in VALIDATION.md. Only checks that genuinely need a phone UI go back to the owner, and they must be explicitly justified.
 - [Phase 01.2]: Tracker key = SHA-256(bearer token) when present, else client IP; trust proxy defaults to loopback
 - [Phase 01.2]: Production default raised 10/min shared to 600/min per client (60/min /sync, 240/min uploads) plus a 3000/min per-IP ceiling against token rotation
 - [Phase 01.2]: Email linking requires email_verified===true; unverified emails refuse to link and never write auth0_sub
