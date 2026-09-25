@@ -716,13 +716,15 @@ describe("syncPending", () => {
     // syncPending always calls pullRemoteChanges at the end (even with empty queue)
     ;(global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        cursor_in: null,
-        cursor_out: null,
-        has_more: false,
-        surveys: [],
-        attachments: [],
-      }),
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          cursor_in: null,
+          cursor_out: null,
+          has_more: false,
+          surveys: [],
+          attachments: [],
+        }),
     })
     const result = await syncPending("http://api", "token")
     expect(result.synced).toBe(0)
@@ -741,7 +743,8 @@ describe("syncPending", () => {
     })
     ;(global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({ results: [] }),
+      status: 200,
+      text: async () => JSON.stringify({ results: [] }),
     })
 
     await syncPending("http://api", "my-token")
@@ -785,13 +788,15 @@ describe("pullRemoteChanges", () => {
   test("returns zero counts when server returns empty response", async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        cursor_in: null,
-        cursor_out: null,
-        has_more: false,
-        surveys: [],
-        attachments: [],
-      }),
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          cursor_in: null,
+          cursor_out: null,
+          has_more: false,
+          surveys: [],
+          attachments: [],
+        }),
     })
 
     const result = await pullRemoteChanges("http://api", "token")
@@ -803,13 +808,15 @@ describe("pullRemoteChanges", () => {
   test("calls fetch with correct URL and Bearer token", async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        cursor_in: null,
-        cursor_out: null,
-        has_more: false,
-        surveys: [],
-        attachments: [],
-      }),
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          cursor_in: null,
+          cursor_out: null,
+          has_more: false,
+          surveys: [],
+          attachments: [],
+        }),
     })
 
     await pullRemoteChanges("http://api", "my-token")
@@ -824,16 +831,18 @@ describe("pullRemoteChanges", () => {
   test("counts pulled surveys correctly and writes both rows to local_surveys", async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        cursor_in: null,
-        cursor_out: "cursor-1",
-        has_more: false,
-        surveys: [
-          { id: "s1", site_name: "Site 1", status: "draft", sync_version: 1 },
-          { id: "s2", site_name: "Site 2", status: "draft", sync_version: 1 },
-        ],
-        attachments: [],
-      }),
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          cursor_in: null,
+          cursor_out: "cursor-1",
+          has_more: false,
+          surveys: [
+            { id: "s1", site_name: "Site 1", status: "draft", sync_version: 1 },
+            { id: "s2", site_name: "Site 2", status: "draft", sync_version: 1 },
+          ],
+          attachments: [],
+        }),
     })
 
     const result = await pullRemoteChanges("http://api", "token")
