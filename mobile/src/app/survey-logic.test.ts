@@ -46,6 +46,7 @@ const makeAttachment = (overrides: Partial<LocalAttachment>): LocalAttachment =>
   last_sync_error_code: null,
   last_sync_error_at: null,
   updated_at: "2026-03-01T10:00:00.000Z",
+  file_state: "local",
   ...overrides,
 })
 

@@ -142,6 +142,7 @@ export async function queueLocalAttachment(input: LocalAttachmentInput): Promise
     last_sync_error_code: null,
     last_sync_error_at: null,
     updated_at: now,
+    file_state: "local",
   }
 }
 
@@ -414,7 +415,7 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
   const db = await getDb()
   if (surveyId) {
     return db.getAllAsync<LocalAttachment>(
-      `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at
+      `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at, file_state
        FROM local_attachments
        WHERE survey_id = ?
        ORDER BY updated_at DESC`,
@@ -423,7 +424,7 @@ export async function listLocalAttachments(surveyId?: string): Promise<LocalAtta
   }
 
   return db.getAllAsync<LocalAttachment>(
-    `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at
+    `SELECT id, survey_id, local_uri, mime_type, size_bytes, sync_state, remote_attachment_id, storage_key, upload_url, confirm_url, last_sync_error, last_sync_error_code, last_sync_error_at, updated_at, file_state
      FROM local_attachments
      ORDER BY updated_at DESC`,
   )
