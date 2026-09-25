@@ -1868,6 +1868,16 @@ completed, ahead of training; restated here in summary form for a reader working
   ~5,000, then ~6,000–10,000 candidates) the answer for these three genera has stayed the same in
   substance: this reads as a real property of GBIF's CC0/CC-BY `StillImage` holdings for these
   three genera specifically, not a sampling artefact that a larger fetch would eventually correct.
+
+  > **CORRECTED — Section 13.1 (2026-09-25).** This conclusion is wrong. GBIF's own `month` filter,
+  > never used by the fetch that produced this reading, returns 40,603 / 23,517 / 34,016 autumn-
+  > dated, licence-clean `StillImage` records for Acer / Prunus / Pinus respectively — the near-zero
+  > figures above were a `fetch_candidates_for_key` bug (an early-exit heuristic unsound for
+  > high-supply genera, combined with a fetch that never queried by season), not a property of
+  > GBIF's holdings. See Section 13.1 for the verification query and root cause, and Section 14 for
+  > the iteration-4 fix and result. Left here, uncorrected in place, because a later reader must be
+  > able to find the wrong claim and its correction together, not have the wrong claim silently
+  > replaced.
 - **Every one of the 34 classes trained on had complete, non-empty, count-consistent train/val/test
   splits, confirmed by evidence rather than assumed** (Section 11.2: `verify_corpus_complete()`
   passed before training started). This directly answers the concern the manifest-truncation
@@ -2253,6 +2263,14 @@ field-photo collection run in autumn (D-16's still-open field-validation gap, Se
 empty, no field photographs exist at all for any genus), or a differently-licensed image source not
 yet surveyed. Neither is this measurement task's to resolve; both are noted here so the ADR has the
 concrete next step in front of it rather than an open-ended "more data" caveat.
+
+> **CORRECTED — Section 13.1 (2026-09-25).** "Not a resolvable gap within this measurement task" and
+> "a real property of GBIF's CC0/CC-BY `StillImage` holdings... not a sampling artefact" are both
+> wrong. GBIF's `month` filter — never used by the corpus-building fetch — returns tens of thousands
+> of autumn-dated, licence-clean records for all three genera (40,603 Acer, 23,517 Prunus, 34,016
+> Pinus); the gap was a fetch-pipeline bug, not a data ceiling. See Section 13.1 for the root cause
+> and Section 14 for the fix and the resulting autumn measurement. Left here, uncorrected in place,
+> so the wrong claim and its correction are both visible to a later reader.
 
 **Unplanned secondary finding: winter, not autumn, is the season with the weakest aggregate
 accuracy (12.3: 84.13% pooled, 81.32% unweighted mean, both the lowest of the four) and the season
