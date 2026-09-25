@@ -209,12 +209,6 @@ jobs:
       OBJECT_STORAGE_MODE: local
       OBJECT_STORAGE_BUCKET: ibp-media
       ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
-      ACCESS_TOKEN_SECRET: ci-access-secret
-      REFRESH_TOKEN_SECRET: ci-refresh-secret
-      ACCESS_TOKEN_EXPIRES_IN: 15m
-      REFRESH_TOKEN_EXPIRES_IN: 7d
-      AUTH_DEV_EXPOSE_EMAIL_TOKEN: true
-      AUTH_LOGIN_OR_CREATE_ENABLED: true
       SMTP_ENABLED: false
       DEBUG_DATA_RESET_ENABLED: true
       CADASTRE_PROVIDER: synthetic
@@ -303,12 +297,6 @@ jobs:
       OBJECT_STORAGE_ACCESS_KEY: minio
       OBJECT_STORAGE_SECRET_KEY: minio123
       ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
-      ACCESS_TOKEN_SECRET: ci-access-secret
-      REFRESH_TOKEN_SECRET: ci-refresh-secret
-      ACCESS_TOKEN_EXPIRES_IN: 15m
-      REFRESH_TOKEN_EXPIRES_IN: 7d
-      AUTH_DEV_EXPOSE_EMAIL_TOKEN: true
-      AUTH_LOGIN_OR_CREATE_ENABLED: true
       SMTP_ENABLED: false
       DEBUG_DATA_RESET_ENABLED: true
       CADASTRE_PROVIDER: synthetic
@@ -506,12 +494,6 @@ jobs:
             -e OBJECT_STORAGE_MODE=local \
             -e OBJECT_STORAGE_BUCKET=ibp-media \
             -e ATTACHMENTS_UPLOAD_DIR=/tmp/ibp-uploads \
-            -e ACCESS_TOKEN_SECRET=ci-access-secret \
-            -e REFRESH_TOKEN_SECRET=ci-refresh-secret \
-            -e ACCESS_TOKEN_EXPIRES_IN=15m \
-            -e REFRESH_TOKEN_EXPIRES_IN=7d \
-            -e AUTH_DEV_EXPOSE_EMAIL_TOKEN=true \
-            -e AUTH_LOGIN_OR_CREATE_ENABLED=true \
             -e SMTP_ENABLED=false \
             -e DEBUG_DATA_RESET_ENABLED=true \
             -e CADASTRE_PROVIDER=synthetic \
@@ -532,6 +514,56 @@ jobs:
             docker logs api-smoke
             exit 1
           fi
+
+      # D-05: production must refuse the dev defaults, on the image itself.
+      # The CMD is overridden because the default one runs migrate.js first,
+      # which would fail on the database and hide the configuration verdict.
+      - name: Smoke test — production refuses default configuration
+        run: |
+          set +e
+          timeout 60 docker run --rm \
+            -e NODE_ENV=production \
+            -e POSTGRES_PASSWORD=ibp \
+            -e OBJECT_STORAGE_MODE=minio \
+            -e OBJECT_STORAGE_SECRET_KEY=minio123 \
+            cortege:ci node api/dist/main.js > refusal.log 2>&1
+          code=$?
+          set -e
+          cat refusal.log
+          if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
+            echo "main.js should refuse production defaults (exit code $code)" >&2
+            exit 1
+          fi
+          grep -q POSTGRES_PASSWORD refusal.log
+
+          set +e
+          timeout 60 docker run --rm \
+            -e NODE_ENV=production \
+            -e POSTGRES_PASSWORD=ibp \
+            -e OBJECT_STORAGE_MODE=minio \
+            -e OBJECT_STORAGE_SECRET_KEY=minio123 \
+            cortege:ci node api/dist/config/check-config.js
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "check-config.js should exit 1 on production defaults (exit code $code)" >&2
+            exit 1
+          fi
+
+          timeout 60 docker run --rm \
+            -e NODE_ENV=production \
+            -e POSTGRES_HOST=postgres \
+            -e POSTGRES_PORT=5432 \
+            -e POSTGRES_USER=cortege \
+            -e POSTGRES_DB=cortege \
+            -e POSTGRES_PASSWORD=ci-smoke-db-password \
+            -e OBJECT_STORAGE_MODE=minio \
+            -e OBJECT_STORAGE_ENDPOINT=https://files.example.org \
+            -e OBJECT_STORAGE_SECRET_KEY=ci-smoke-storage-secret \
+            -e AUTH0_DOMAIN=example.eu.auth0.com \
+            -e AUTH0_AUDIENCE=https://api.example.org \
+            -e CORS_ORIGIN=none \
+            cortege:ci node api/dist/config/check-config.js
 
   ci-ok:
     name: CI OK
