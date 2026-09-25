@@ -97,6 +97,13 @@ jest.mock("./survey-sync/useSurveySyncSurveyOperations", () => ({
   useSurveySyncSurveyOperations: (...args: unknown[]) => mockUseSurveySyncSurveyOperations(...args),
 }))
 
+jest.mock("./survey-sync/useAttachmentPreviews", () => ({
+  useAttachmentPreviews: () => ({
+    handleEnsureAttachmentPreviews: jest.fn(),
+    handleSimulateMissingAttachmentFile: jest.fn(),
+  }),
+}))
+
 import React from "react"
 import { useSurveySync } from "./useSurveySync"
 
@@ -205,6 +212,8 @@ describe("useSurveySync", () => {
       expect(hook).toHaveProperty("handleDebugResetIbpData")
       expect(hook).toHaveProperty("handleDebugResetUserData")
       expect(hook).toHaveProperty("setStatus")
+      expect(hook).toHaveProperty("handleEnsureAttachmentPreviews")
+      expect(hook).toHaveProperty("handleSimulateMissingAttachmentFile")
     })
 
     test("does not return the removed pre-Auth0 stubs (D-02/ROADMAP criterion 7)", () => {

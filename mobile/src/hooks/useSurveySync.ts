@@ -20,6 +20,7 @@ import {
   purgeWhileSyncSuspended,
   SyncActivity,
 } from "./survey-sync/sync-activity"
+import { useAttachmentPreviews } from "./survey-sync/useAttachmentPreviews"
 import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
 import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
 import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
@@ -282,6 +283,15 @@ export function useSurveySync({
       syncActivity,
     },
   )
+
+  const { handleEnsureAttachmentPreviews, handleSimulateMissingAttachmentFile } =
+    useAttachmentPreviews({
+      apiUrl,
+      withAuthRetry,
+      syncActivity,
+      syncAllowed: localDataOwner.syncAllowed,
+      refreshLocalAttachments,
+    })
 
   const runDebugReset = useCallback(
     ({
@@ -554,5 +564,7 @@ export function useSurveySync({
     handleDeleteAttachment,
     handleLoadCanonicalDetails,
     handleLoadSurveyEvents,
+    handleEnsureAttachmentPreviews,
+    handleSimulateMissingAttachmentFile,
   }
 }
