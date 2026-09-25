@@ -6,8 +6,10 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
 } from "class-validator"
+import { SAFE_ID_PATTERN } from "../../common/safe-id"
 
 // D-02: the batch array bounds are validated here, at the controller. Items
 // are kept as `unknown[]` on purpose — no nested-object decorator that would
@@ -32,8 +34,10 @@ export class SyncOperationEnvelopeDto {
   @IsIn(["upsert", "create", "delete", "visibility_update"])
   action!: "upsert" | "create" | "delete" | "visibility_update"
 
+  // D-14: survey_id bypasses the route pipes, so the safe-id pattern is checked here.
   @IsOptional()
   @IsString()
+  @Matches(SAFE_ID_PATTERN)
   @MaxLength(128)
   survey_id?: string
 

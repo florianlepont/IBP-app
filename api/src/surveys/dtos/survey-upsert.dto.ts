@@ -8,11 +8,14 @@ import {
   IsString,
   Matches,
 } from "class-validator"
+import { SAFE_ID_PATTERN } from "../../common/safe-id"
 import { MAX_PARCEL_IDS, PARCEL_ID_PATTERN } from "./parcel-id.constants"
 
 export class SurveyUpsertDto {
+  // D-14: the id can become a storage key segment, so it must be a safe id.
   @IsOptional()
   @IsString()
+  @Matches(SAFE_ID_PATTERN)
   id?: string
 
   @IsOptional()
