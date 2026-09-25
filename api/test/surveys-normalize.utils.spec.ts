@@ -1,4 +1,9 @@
-import { getChangedSubmittedReadOnlyFields } from "../src/surveys/surveys-normalize.utils"
+import { BadRequestException } from "@nestjs/common"
+import {
+  buildSyncChangesCursor,
+  getChangedSubmittedReadOnlyFields,
+  parseSyncChangesCursor,
+} from "../src/surveys/surveys-normalize.utils"
 import { SurveyRow, SurveyUpsertBody } from "../src/surveys/surveys.types"
 
 function makeRow(overrides: Partial<SurveyRow> = {}): SurveyRow {
@@ -218,5 +223,73 @@ describe("getChangedSubmittedReadOnlyFields", () => {
         existing.parcel_ids ?? [],
       ),
     ).toEqual(["site_name", "observation_year", "factors"])
+  })
+})
+
+describe("parseSyncChangesCursor", () => {
+  it.each([undefined, "", "   "])("returns kind none for an empty cursor (%p)", (cursor) => {
+    expect(parseSyncChangesCursor(cursor)).toEqual({ kind: "none", original: null })
+  })
+
+  it("parses a v2 cursor into string xid8 and seq", () => {
+    expect(parseSyncChangesCursor("v2:9843:7")).toEqual({
+      kind: "position",
+      xid8: "9843",
+      seq: "7",
+      original: "v2:9843:7",
+    })
+  })
+
+  it("keeps values beyond Number.MAX_SAFE_INTEGER as exact strings", () => {
+    const cursor = "v2:18446744073709551615:9223372036854775807"
+    expect(parseSyncChangesCursor(cursor)).toEqual({
+      kind: "position",
+      xid8: "18446744073709551615",
+      seq: "9223372036854775807",
+      original: cursor,
+    })
+  })
+
+  it.each([
+    ["2026-03-09 10:20:31.991+00|8ac1", "2026-03-09 10:20:31.991+00", "8ac1"],
+    [
+      "2026-03-09T10:20:31.991Z|survey-1712345678901",
+      "2026-03-09T10:20:31.991Z",
+      "survey-1712345678901",
+    ],
+  ])("parses the legacy cursor %p", (cursor, timestamp, eventId) => {
+    expect(parseSyncChangesCursor(cursor)).toEqual({
+      kind: "legacy",
+      timestamp,
+      eventId,
+      original: cursor,
+    })
+  })
+
+  it.each([
+    "v2:abc:1",
+    "v2:1",
+    "v2:1:2:3",
+    "v2:-1:2",
+    "not-a-date|x",
+    "seq:5",
+    "seq:5|x",
+    "2026-03-09T10:20:31.991Z",
+  ])("rejects the malformed cursor %p with 400 Invalid sync cursor", (cursor) => {
+    expect(() => parseSyncChangesCursor(cursor)).toThrow(BadRequestException)
+    expect(() => parseSyncChangesCursor(cursor)).toThrow("Invalid sync cursor")
+  })
+})
+
+describe("buildSyncChangesCursor", () => {
+  it("builds a v2 cursor that round-trips through the parser", () => {
+    const cursor = buildSyncChangesCursor("9843", "7")
+    expect(cursor).toBe("v2:9843:7")
+    expect(parseSyncChangesCursor(cursor)).toEqual({
+      kind: "position",
+      xid8: "9843",
+      seq: "7",
+      original: cursor,
+    })
   })
 })
