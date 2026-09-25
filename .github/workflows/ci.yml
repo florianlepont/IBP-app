@@ -338,13 +338,15 @@ jobs:
         run: npm ci
 
       # A service container cannot pass `server /data`, so MinIO starts here.
-      # Same pinned tag as infra/docker-compose.yml; test-only credentials.
+      # Upstream MinIO images are no longer served (quay.io answers 401,
+      # Docker Hub minio/minio is gone), so CI uses the community-maintained
+      # fork pinned by digest (owner decision 2026-09-25). Test-only credentials.
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minio \
             -e MINIO_ROOT_PASSWORD=minio123 \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372 server /data
 
       - name: Wait for MinIO
         run: |
