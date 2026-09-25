@@ -138,6 +138,75 @@ API detects a cursor from the future and restarts it). A physical copy of the
 data directory or a volume move keeps the same cluster and needs none of this.
 Background: `docs/technical/sync-conflict-resolution-v1.md`, "Database restore".
 
+## MinIO: sauvegarde du volume et passage à pgsty/minio
+
+### Pourquoi l'image change
+
+Les images MinIO officielles ne sont plus servies : quay.io répond 401 et
+`minio/minio` a disparu de Docker Hub. Un VPS neuf ou un `docker image prune`
+laisserait donc le stockage sans image. Les deux fichiers compose utilisent
+maintenant `pgsty/minio`, le fork maintenu déjà utilisé par la CI, épinglé par
+le même digest.
+
+Le changement se fait **tout seul au premier déploiement après le merge** :
+`update-stack.sh` avance le dépôt, puis `compose up -d` télécharge la nouvelle
+image et recrée MinIO sur le même volume. Il n'y a rien à lancer à la main pour
+le changement d'image, mais **la sauvegarde du volume doit être faite avant le
+merge**.
+
+### Sauvegarder le volume (avant le merge)
+
+Compose préfixe le volume par le nom du projet ; on le retrouve donc par son
+suffixe au lieu d'écrire le préfixe en dur.
+
+```bash
+# Arrêter le timer, pour qu'un déploiement ne redémarre pas MinIO pendant la copie
+sudo systemctl stop cortege-deploy.timer
+cd /home/ubuntu/cortege
+
+VOL=$(docker volume ls -q | grep 'cortege_minio_data$')
+echo "$VOL"   # doit afficher exactement un nom
+
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env stop minio
+docker run --rm -v "$VOL":/data:ro -v /home/ubuntu:/backup alpine \
+  tar czf /backup/minio-data-$(date +%F).tgz -C /data .
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env start minio
+
+# L'archive ne doit pas être vide
+ls -lh /home/ubuntu/minio-data-*.tgz
+
+sudo systemctl start cortege-deploy.timer
+```
+
+### Restaurer le volume
+
+```bash
+sudo systemctl stop cortege-deploy.timer
+cd /home/ubuntu/cortege
+
+VOL=$(docker volume ls -q | grep 'cortege_minio_data$')
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env stop minio
+
+# Vider le volume puis y extraire l'archive (remplacer la date)
+docker run --rm -v "$VOL":/data -v /home/ubuntu:/backup alpine \
+  sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/minio-data-AAAA-MM-JJ.tgz -C /data'
+
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env start minio
+sudo systemctl start cortege-deploy.timer
+```
+
+### Vérifier après le déploiement
+
+```bash
+cd /home/ubuntu/cortege
+
+# Doit afficher 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9000/minio/health/live
+
+# La colonne IMAGE doit montrer pgsty/minio
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env ps minio
+```
+
 ## Sharing the machine
 
 This VPS has 2 cores and 3.7 GB of RAM, and runs other projects. The stack caps
