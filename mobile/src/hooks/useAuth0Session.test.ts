@@ -18,6 +18,11 @@ const mockAuthorize = jest.fn()
 const mockWebAuthClearSession = jest.fn()
 const mockGetNetworkStateAsync = jest.fn()
 const mockGetMyProfile = jest.fn()
+const mockAddNetworkStateListener = jest.fn()
+const mockLoadCachedProfile = jest.fn()
+const mockSaveCachedProfile = jest.fn()
+const mockClearCachedProfile = jest.fn()
+const mockRemoveNetworkListener = jest.fn()
 
 class MockCredentialsManagerError extends Error {
   type: string
@@ -63,10 +68,18 @@ jest.mock("react-native-auth0", () => ({
 
 jest.mock("expo-network", () => ({
   getNetworkStateAsync: (...args: unknown[]) => mockGetNetworkStateAsync(...args),
+  addNetworkStateListener: (...args: unknown[]) => mockAddNetworkStateListener(...args),
 }))
 
 jest.mock("../api/ibp-api", () => ({
   getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
+}))
+
+// Mocked the way sync-owner-gate.test.ts:18-22 mocks "../storage/local-owner".
+jest.mock("../storage/profile-cache", () => ({
+  loadCachedProfile: (...args: unknown[]) => mockLoadCachedProfile(...args),
+  saveCachedProfile: (...args: unknown[]) => mockSaveCachedProfile(...args),
+  clearCachedProfile: (...args: unknown[]) => mockClearCachedProfile(...args),
 }))
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react-native/pure"
@@ -113,6 +126,10 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockGetNetworkStateAsync.mockResolvedValue({ isConnected: true, isInternetReachable: true })
   mockGetMyProfile.mockResolvedValue(null)
+  mockLoadCachedProfile.mockResolvedValue(null)
+  mockSaveCachedProfile.mockResolvedValue(undefined)
+  mockClearCachedProfile.mockResolvedValue(undefined)
+  mockAddNetworkStateListener.mockImplementation(() => ({ remove: mockRemoveNetworkListener }))
 })
 
 describe("session restore", () => {
@@ -379,5 +396,224 @@ describe("refreshSessionTokens", () => {
     mockGetCredentials.mockRejectedValue(credErr("NO_REFRESH_TOKEN"))
 
     await expect(result.current.refreshSessionTokens()).resolves.toBeNull()
+  })
+})
+
+describe("D-13 offline cold start: cached profile", () => {
+  const cachedUser = {
+    id: "user-cached",
+    email: "cached@example.fr",
+    display_name: "Cached User",
+    role: "member",
+    first_name: "Cached",
+    last_name: "User",
+    profile_picture_url: null,
+  }
+
+  const newerUser = {
+    id: "user-cached",
+    email: "cached@example.fr",
+    display_name: "Newer User",
+    role: "member",
+    first_name: "Newer",
+    last_name: "User",
+    profile_picture_url: null,
+  }
+
+  test("restore offline with a usable cache for the id-token sub: isAuthenticated true, currentUser is the cached user", async () => {
+    mockHasValidCredentials.mockResolvedValue(true)
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "access-1",
+      idToken: buildIdToken("auth0|cached", "cached@example.fr"),
+    })
+    mockGetMyProfile.mockRejectedValue(new TypeError("Network request failed"))
+    mockLoadCachedProfile.mockResolvedValue(cachedUser)
+
+    const { result } = await setup()
+
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(result.current.isAuthenticated).toBe(true)
+    expect(result.current.currentUser).toEqual(cachedUser)
+    expect(mockLoadCachedProfile).toHaveBeenCalledWith("auth0|cached")
+  })
+
+  test("restore offline with no usable cache: isAuthenticated stays false (previous behaviour)", async () => {
+    mockHasValidCredentials.mockResolvedValue(true)
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "access-1",
+      idToken: buildIdToken("auth0|nocache", "nocache@example.fr"),
+    })
+    mockGetMyProfile.mockRejectedValue(new TypeError("Network request failed"))
+    mockLoadCachedProfile.mockResolvedValue(null)
+
+    const { result } = await setup()
+
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(result.current.isAuthenticated).toBe(false)
+    expect(mockLoadCachedProfile).toHaveBeenCalledWith("auth0|nocache")
+  })
+
+  test("restore online writes the profile to the cache", async () => {
+    mockHasValidCredentials.mockResolvedValue(true)
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "access-1",
+      idToken: buildIdToken("auth0|online", "online@example.fr"),
+    })
+    mockGetMyProfile.mockResolvedValue(cachedUser)
+
+    const { result } = await setup()
+
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(mockSaveCachedProfile).toHaveBeenCalledWith("auth0|online", cachedUser)
+  })
+
+  test("login success calls saveCachedProfile with the token's sub", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockAuthorize.mockResolvedValue({
+      accessToken: "token-login",
+      idToken: buildIdToken("auth0|login", "login@example.fr"),
+    })
+    mockSaveCredentials.mockResolvedValue(undefined)
+    mockGetMyProfile.mockResolvedValue(cachedUser)
+
+    await act(async () => {
+      await result.current.handleLogin()
+    })
+
+    expect(mockSaveCachedProfile).toHaveBeenCalledWith("auth0|login", cachedUser)
+  })
+
+  test("handleLoadMyProfile success calls saveCachedProfile with the token's sub", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "token-load",
+      idToken: buildIdToken("auth0|load", "load@example.fr"),
+    })
+    mockGetMyProfile.mockResolvedValue(cachedUser)
+
+    await act(async () => {
+      await result.current.handleLoadMyProfile()
+    })
+
+    expect(mockSaveCachedProfile).toHaveBeenCalledWith("auth0|load", cachedUser)
+  })
+
+  test("once online again, the cached profile refreshes and the network listener is removed", async () => {
+    mockHasValidCredentials.mockResolvedValue(true)
+    mockGetCredentials.mockResolvedValue({
+      accessToken: "access-1",
+      idToken: buildIdToken("auth0|refresh", "refresh@example.fr"),
+    })
+    mockGetMyProfile.mockRejectedValueOnce(new TypeError("Network request failed"))
+    mockLoadCachedProfile.mockResolvedValue(cachedUser)
+
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+    expect(result.current.currentUser).toEqual(cachedUser)
+    expect(mockAddNetworkStateListener).toHaveBeenCalledTimes(1)
+
+    const listener = mockAddNetworkStateListener.mock.calls[0][0] as (state: {
+      isConnected: boolean
+      isInternetReachable: boolean
+    }) => void
+
+    mockGetMyProfile.mockResolvedValue(newerUser)
+
+    await act(async () => {
+      listener({ isConnected: true, isInternetReachable: true })
+    })
+    await waitFor(() => expect(result.current.currentUser).toEqual(newerUser))
+
+    expect(mockSaveCachedProfile).toHaveBeenCalledWith("auth0|refresh", newerUser)
+    expect(mockRemoveNetworkListener).toHaveBeenCalled()
+  })
+
+  test("while online, /me keeps failing: retried every 60s, retry stops after it succeeds", async () => {
+    jest.useFakeTimers()
+    try {
+      mockHasValidCredentials.mockResolvedValue(true)
+      mockGetCredentials.mockResolvedValue({
+        accessToken: "access-1",
+        idToken: buildIdToken("auth0|retry", "retry@example.fr"),
+      })
+      mockGetMyProfile.mockRejectedValueOnce(new TypeError("Network request failed"))
+      mockLoadCachedProfile.mockResolvedValue(cachedUser)
+
+      const { result } = await setup()
+      await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+      expect(result.current.currentUser).toEqual(cachedUser)
+
+      const callsBefore = mockGetMyProfile.mock.calls.length
+
+      mockGetMyProfile.mockResolvedValue(newerUser)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000)
+      })
+
+      expect(mockGetMyProfile.mock.calls.length).toBe(callsBefore + 1)
+      await waitFor(() => expect(result.current.currentUser).toEqual(newerUser))
+
+      const callsAfterSuccess = mockGetMyProfile.mock.calls.length
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(120_000)
+      })
+
+      expect(mockGetMyProfile.mock.calls.length).toBe(callsAfterSuccess)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("handleLogout calls clearCachedProfile", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockWebAuthClearSession.mockResolvedValue(undefined)
+    mockClearCredentials.mockResolvedValue(undefined)
+
+    await act(async () => {
+      await result.current.handleLogout()
+    })
+
+    expect(mockClearCachedProfile).toHaveBeenCalled()
+  })
+
+  test("a restore classified session-ended calls clearCachedProfile", async () => {
+    mockHasValidCredentials.mockResolvedValue(true)
+    mockGetCredentials.mockRejectedValue(credErr("NO_CREDENTIALS"))
+
+    const { result } = await setup()
+
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(mockClearCachedProfile).toHaveBeenCalled()
+  })
+
+  test("a handleLoadMyProfile failure that is not AUTH_REQUIRED never calls clearCachedProfile", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({ accessToken: "token-1" })
+    mockGetMyProfile.mockRejectedValue(new TypeError("Network request failed"))
+
+    await act(async () => {
+      await result.current.handleLoadMyProfile()
+    })
+
+    expect(mockClearCachedProfile).not.toHaveBeenCalled()
+    expect(result.current.currentUser).toBeNull()
   })
 })
