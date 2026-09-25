@@ -1950,3 +1950,122 @@ across three iterations supports proposing a fourth iteration or a longer traini
 of a data-only one, and what threshold of genus coverage would make a partial go worth shipping are
 all the ADR's decisions (plan 01-06) — this document's job across all three iterations has been to
 put the trajectory in evidence, which it now does.
+
+---
+
+## 12. Per-genus × per-season accuracy — does the promoted model hold up in autumn?
+
+**Status: COMPLETE (measured 2026-09-25, ad-hoc measurement task against the already-promoted
+iteration-3 model — no retraining, no re-export).**
+
+**Why this section exists.** Section 11.3's 85.37% unweighted mean top-3 (and every per-genus
+figure in this document) is computed across the test split as a whole, mixing all four seasons
+together. IBP field surveys happen in **autumn**. Section 3b found 23 of 34 classes with zero
+autumn-dated training images before any stratification; Section 11.1/11.5 confirmed that after two
+rounds of season-stratified corpus expansion, 31 of 34 classes reached double-digit autumn
+percentages, but three — Prunus (0.5%), Pinus (1.0%), Acer (1.1%) — remain near-absent in the
+*training* corpus. This section asks the evaluation-side question that follows directly from that:
+does that same skew show up as a measurable accuracy gap in the *test* split, and if so, for which
+genera specifically? The aggregate figure cannot answer this; only a season-resolved, per-genus
+breakdown can.
+
+### 12.1 Method and coverage
+
+**Re-ran inference only — the promoted model and the existing test split are used exactly as
+Section 11.3 measured them, unmodified.** A new script,
+`spike/species-recognition/eval/evaluate_seasonal_accuracy.py`, loads
+`train/genus_classifier.tflite` (the canonical, promoted iteration-3 model — same file, same MD5
+as Section 11.6's promotion) and runs it image-by-image over the same 19,466-image held-out test
+split (`data/splits/<genus>/test.txt`) that produced Section 11.3's numbers, recording per image:
+genus, season, top-1-correct, top-3-correct, top-1 confidence. Each image's season is joined from
+`data/splits/manifest.csv`'s own `season` column (derived from GBIF `event_date`) by exact
+`local_path` match — no new season inference, no re-derivation, the same column plan 02/iteration 2
+already computed and iteration 3's corpus report already used.
+
+**Sanity check against Section 11.3/11.4, exact match.** Pooled over all 19,466 rows regardless of
+season: top-1 = 67.42% (13,119/19,466), top-3 = 85.24% (16,596/19,466) — identical to Section
+11.4's reported pooled 67.4%/85.2% to rounding, and Abies/Tamarix/Ceratonia's per-genus top-3
+recomputed from this file (89.67%, 95.04%, 90.63%) match Section 11.3's table exactly. This
+confirms the same model, same test split, no measurement drift — the breakdown below is a
+re-slicing of the identical evidence, not a new measurement run that could disagree with Section 11.
+
+**Season coverage: 19,466/19,466 test images (100%) matched a manifest row — none dropped, none
+missing.** Of those, 27 (0.14%) carry `season=unknown` in the manifest itself (GBIF `event_date`
+missing or unparseable for that specific image, an existing category from Section 3b/11.1, not a
+new gap introduced by this join) rather than one of the four calendar seasons; these 27 are spread
+thinly across several genera (Castanea 1, Ostrya 2, Pyrus 1, Tamarix 1, Tilia 1, Ceratonia 9,
+Phillyrea 10, Pistacia 2) and are excluded from the four-season breakdown below on the same
+insufficient-samples logic as every other thin cell (Section 12.4) — reported here for
+transparency, not silently folded into any season.
+
+**Minimum sample threshold: n ≥ 30 per genus×season cell**, the same `TEST_REPORTING_THRESHOLD`
+constant Section 0/`evaluate_accuracy.py` already uses for the whole-year per-genus table. A cell
+below 30 images is reported as `insufficient-samples` with its raw count, never as a percentage,
+and never folded into any mean — the same D-03 discipline this document holds itself to throughout,
+applied at the season level.
+
+**Raw per-image results: `spike/species-recognition/eval/results/per_genus_per_season.csv`
+(19,466 rows, one per test image) — generated but not committed to git, and this is a deliberate,
+forced adaptation of the task's original instruction, not an oversight.** The `spike/` tree is
+gitignored project-wide by explicit design (`.gitignore`: "Species-recognition spike (Phase 1) is
+throwaway by design"; `spike/species-recognition/README.md`: "This tree is throwaway... Its only
+durable output is `docs/technical/species-recognition-spike-measurements-v1.md`"), consistent with
+every prior iteration's `eval/results*/` CSVs, none of which were ever committed either. In this
+specific worktree the constraint is doubly enforced: `spike/` is a symlink to the checkout at
+`/Users/florian/Projects/cortege` (another session's working tree, per this plan's own setup), and
+git refuses any operation on a path traversing a symlink component (`git add
+spike/species-recognition/eval/results/per_genus_per_season.csv` fails with `fatal: pathspec ...
+is beyond a symbolic link`, verified directly). **The durable, committed artefact is this section's
+cross-tabulation below**, built from that raw file — the same "commit the raw numbers before
+interpretation" discipline Section 11.3 established (commit `094def3`) is applied here to the raw
+*table*, the actual committable output, immediately below, before any of this section's
+interpretation (12.3 onward, a separate commit).
+
+### 12.2 The 34 × 4 cross-tabulation — raw numbers, committed before interpretation
+
+**Exactly as computed from `per_genus_per_season.csv`, one row per genus, one column-triple
+(n, top-1, top-3) per season.** Cells below the n≥30 threshold read `insufficient` for both
+accuracy figures — their raw count is still shown in the `n` column, never dropped, never averaged
+in. Interpretation of this table (season margins, thin-cell discussion, autumn-vs-overall
+comparison, verdict) follows in 12.3–12.6.
+
+| genus | spring n | spring top1 | spring top3 | summer n | summer top1 | summer top3 | autumn n | autumn top1 | autumn top3 | winter n | winter top1 | winter top3 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Abies | 142 | 71.8% (102/142) | 90.8% (129/142) | 150 | 70.0% (105/150) | 86.0% (129/150) | 178 | 68.5% (122/178) | 89.9% (160/178) | 130 | 70.8% (92/130) | 92.3% (120/130) |
+| Acer | 373 | 65.7% (245/373) | 83.6% (312/373) | 153 | 64.7% (99/153) | 80.4% (123/153) | 4 | insufficient | insufficient | 70 | 34.3% (24/70) | 67.1% (47/70) |
+| Alnus | 162 | 66.0% (107/162) | 78.4% (127/162) | 171 | 59.6% (102/171) | 81.3% (139/171) | 171 | 53.2% (91/171) | 73.1% (125/171) | 96 | 57.3% (55/96) | 76.0% (73/96) |
+| Arbutus | 144 | 75.7% (109/144) | 87.5% (126/144) | 141 | 87.2% (123/141) | 94.3% (133/141) | 174 | 79.9% (139/174) | 93.1% (162/174) | 141 | 78.0% (110/141) | 89.4% (126/141) |
+| Betula | 203 | 66.0% (134/203) | 83.7% (170/203) | 191 | 53.9% (103/191) | 78.5% (150/191) | 99 | 59.6% (59/99) | 83.8% (83/99) | 107 | 70.1% (75/107) | 85.0% (91/107) |
+| Carpinus | 201 | 64.2% (129/201) | 83.6% (168/201) | 168 | 58.3% (98/168) | 79.8% (134/168) | 152 | 59.9% (91/152) | 80.9% (123/152) | 79 | 50.6% (40/79) | 77.2% (61/79) |
+| Castanea | 146 | 67.1% (98/146) | 78.1% (114/146) | 260 | 80.8% (210/260) | 89.2% (232/260) | 158 | 75.3% (119/158) | 85.4% (135/158) | 35 | 45.7% (16/35) | 60.0% (21/35) |
+| Celtis | 174 | 60.3% (105/174) | 80.5% (140/174) | 151 | 62.9% (95/151) | 82.1% (124/151) | 176 | 58.5% (103/176) | 82.4% (145/176) | 99 | 55.6% (55/99) | 75.8% (75/99) |
+| Cupressus | 131 | 74.0% (97/131) | 90.8% (119/131) | 132 | 73.5% (97/132) | 90.9% (120/132) | 136 | 74.3% (101/136) | 91.2% (124/136) | 131 | 68.7% (90/131) | 90.8% (119/131) |
+| Fagus | 216 | 64.8% (140/216) | 81.9% (177/216) | 177 | 68.4% (121/177) | 84.7% (150/177) | 99 | 63.6% (63/99) | 78.8% (78/99) | 107 | 72.0% (77/107) | 88.8% (95/107) |
+| Fraxinus | 199 | 45.2% (90/199) | 74.4% (148/199) | 227 | 58.1% (132/227) | 84.6% (192/227) | 97 | 41.2% (40/97) | 75.3% (73/97) | 71 | 35.2% (25/71) | 67.6% (48/71) |
+| Juglans | 143 | 51.7% (74/143) | 70.6% (101/143) | 207 | 62.8% (130/207) | 86.0% (178/207) | 161 | 63.4% (102/161) | 87.0% (140/161) | 78 | 56.4% (44/78) | 73.1% (57/78) |
+| Juniperus | 188 | 71.8% (135/188) | 90.4% (170/188) | 171 | 74.9% (128/171) | 91.2% (156/171) | 79 | 68.4% (54/79) | 88.6% (70/79) | 159 | 69.2% (110/159) | 91.8% (146/159) |
+| Larix | 153 | 69.3% (106/153) | 86.9% (133/153) | 207 | 70.0% (145/207) | 87.4% (181/207) | 167 | 77.8% (130/167) | 89.2% (149/167) | 72 | 69.4% (50/72) | 86.1% (62/72) |
+| Malus | 208 | 62.0% (129/208) | 82.2% (171/208) | 200 | 59.5% (119/200) | 78.5% (157/200) | 140 | 60.7% (85/140) | 80.7% (113/140) | 13 | insufficient | insufficient |
+| Ostrya | 145 | 61.4% (89/145) | 78.6% (114/145) | 185 | 75.7% (140/185) | 89.7% (166/185) | 132 | 64.4% (85/132) | 82.6% (109/132) | 76 | 51.3% (39/76) | 84.2% (64/76) |
+| Pinus | 283 | 70.3% (199/283) | 91.9% (260/283) | 108 | 75.9% (82/108) | 88.0% (95/108) | 3 | insufficient | insufficient | 184 | 75.0% (138/184) | 92.4% (170/184) |
+| Picea | 140 | 60.7% (85/140) | 90.7% (127/140) | 149 | 69.8% (104/149) | 91.9% (137/149) | 180 | 56.7% (102/180) | 83.3% (150/180) | 126 | 67.5% (85/126) | 90.5% (114/126) |
+| Populus | 212 | 46.7% (99/212) | 76.9% (163/212) | 190 | 63.7% (121/190) | 82.6% (157/190) | 89 | 60.7% (54/89) | 82.0% (73/89) | 107 | 55.1% (59/107) | 77.6% (83/107) |
+| Prunus | 337 | 61.4% (207/337) | 82.5% (278/337) | 159 | 43.4% (69/159) | 78.0% (124/159) | 1 | insufficient | insufficient | 103 | 58.3% (60/103) | 77.7% (80/103) |
+| Pyrus | 193 | 65.3% (126/193) | 87.0% (168/193) | 154 | 63.0% (97/154) | 83.8% (129/154) | 144 | 61.1% (88/144) | 81.9% (118/144) | 71 | 53.5% (38/71) | 67.6% (48/71) |
+| Quercus_deciduae | 157 | 66.2% (104/157) | 81.5% (128/157) | 166 | 74.7% (124/166) | 81.9% (136/166) | 65 | 80.0% (52/65) | 90.8% (59/65) | 79 | 77.2% (61/79) | 88.6% (70/79) |
+| Quercus_sempervirens | 131 | 62.6% (82/131) | 77.9% (102/131) | 131 | 71.0% (93/131) | 82.4% (108/131) | 168 | 76.8% (129/168) | 93.5% (157/168) | 138 | 69.6% (96/138) | 87.0% (120/138) |
+| Salix | 187 | 73.8% (138/187) | 91.4% (171/187) | 285 | 66.7% (190/285) | 87.7% (250/285) | 60 | 51.7% (31/60) | 73.3% (44/60) | 66 | 40.9% (27/66) | 65.2% (43/66) |
+| Sorbus | 205 | 81.0% (166/205) | 86.8% (178/205) | 233 | 80.3% (187/233) | 90.1% (210/233) | 144 | 70.1% (101/144) | 87.5% (126/144) | 16 | insufficient | insufficient |
+| Tamarix | 150 | 87.3% (131/150) | 94.0% (141/150) | 160 | 88.8% (142/160) | 95.0% (152/160) | 136 | 94.1% (128/136) | 96.3% (131/136) | 97 | 82.5% (80/97) | 94.8% (92/97) |
+| Taxus | 87 | 72.4% (63/87) | 86.2% (75/87) | 156 | 71.8% (112/156) | 90.4% (141/156) | 149 | 87.2% (130/149) | 96.0% (143/149) | 141 | 66.0% (93/141) | 92.9% (131/141) |
+| Tilia | 178 | 56.2% (100/178) | 74.7% (133/178) | 216 | 67.6% (146/216) | 82.4% (178/216) | 143 | 58.7% (84/143) | 80.4% (115/143) | 37 | 24.3% (9/37) | 54.1% (20/37) |
+| Ulmus | 181 | 44.2% (80/181) | 71.3% (129/181) | 196 | 55.1% (108/196) | 75.5% (148/196) | 154 | 54.5% (84/154) | 79.2% (122/154) | 67 | 28.4% (19/67) | 73.1% (49/67) |
+| Ceratonia | 93 | 73.1% (68/93) | 91.4% (85/93) | 70 | 77.1% (54/70) | 90.0% (63/70) | 139 | 80.6% (112/139) | 91.4% (127/139) | 52 | 76.9% (40/52) | 86.5% (45/52) |
+| Cercis | 229 | 87.8% (201/229) | 92.6% (212/229) | 156 | 82.7% (129/156) | 90.4% (141/156) | 133 | 78.2% (104/133) | 88.7% (118/133) | 53 | 64.2% (34/53) | 75.5% (40/53) |
+| Olea | 138 | 71.0% (98/138) | 92.0% (127/138) | 142 | 73.2% (104/142) | 90.1% (128/142) | 171 | 75.4% (129/171) | 92.4% (158/171) | 140 | 80.7% (113/140) | 90.0% (126/140) |
+| Phillyrea | 140 | 82.1% (115/140) | 94.3% (132/140) | 135 | 77.8% (105/135) | 89.6% (121/135) | 154 | 81.2% (125/154) | 92.9% (143/154) | 107 | 74.8% (80/107) | 93.5% (100/107) |
+| Pistacia | 137 | 77.4% (106/137) | 92.0% (126/137) | 142 | 76.1% (108/142) | 86.6% (123/142) | 168 | 80.4% (135/168) | 94.6% (159/168) | 122 | 79.5% (97/122) | 90.2% (110/122) |
+
+**5 of 136 cells (34 genera × 4 seasons) fall below the n≥30 threshold: Acer autumn (n=4), Pinus
+autumn (n=3), Prunus autumn (n=1), Malus winter (n=13), Sorbus winter (n=16).** No cell has zero
+images. Discussed in 12.4.
