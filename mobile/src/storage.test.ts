@@ -186,7 +186,9 @@ describe("createLocalDraft", () => {
   test("returns a LocalSurvey with correct shape", async () => {
     const result = await createLocalDraft(input)
 
-    expect(result.id).toMatch(/^survey-/)
+    expect(result.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
     expect(result.site_name).toBe("My forest")
     expect(result.status).toBe("draft")
     expect(result.visibility).toBe("private")
@@ -516,7 +518,9 @@ describe("queueLocalAttachment", () => {
   test("returns a LocalAttachment object with pending sync_state", async () => {
     await insertSurveyRow(makeSurveyRow())
     const result = await queueLocalAttachment(attachmentInput)
-    expect(result.id).toMatch(/^attachment-/)
+    expect(result.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
     expect(result.survey_id).toBe(TEST_SURVEY_ID)
     expect(result.mime_type).toBe("image/jpeg")
     expect(result.size_bytes).toBe(2048)
