@@ -40,6 +40,9 @@ import {
 } from "./utils"
 import { markSurveyExpiredLocally } from "./surveys"
 import { apiRequest, ApiError } from "../api/client"
+import { uploadAttachmentFile, LocalFileMissingError } from "./attachments"
+import { markAttachmentFileMissing } from "./attachment-cache"
+import { deleteAttachmentFile } from "./attachment-files"
 
 // D-07: POST /sync carries a longer timeout than the client default because a
 // batch can contain many operations; every other sync JSON call (changes,
@@ -56,6 +59,10 @@ const syncFlight = createSyncFlight()
 type FailureOptions = {
   classification: FailureClassification
   errorCode?: string
+  // D-10: set when the failure is a missing local photo file. In the same
+  // transaction as the queue-row/attachment failure write, the attachment
+  // row is also marked file_state 'missing' (never deleted).
+  markFileMissing?: boolean
 }
 
 async function markSurveyQueueRowSynced(row: QueueRow): Promise<void> {
@@ -84,11 +91,21 @@ async function markSurveyQueueRowSynced(row: QueueRow): Promise<void> {
 }
 
 async function markSurveyDeleteRowSynced(row: QueueRow): Promise<void> {
-  await runInTransaction(async (tx) => {
+  const deletedUris = await runInTransaction(async (tx) => {
+    const attachmentRows = await tx.getAllAsync<{ local_uri: string }>(
+      `SELECT local_uri FROM local_attachments WHERE survey_id = ?`,
+      [row.survey_id],
+    )
     await tx.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [row.id])
     await tx.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [row.survey_id])
     await tx.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [row.survey_id])
+    return attachmentRows.map((attachmentRow) => attachmentRow.local_uri)
   })
+
+  // D-09: files are freed only after the deleting transaction commits, and
+  // only best-effort — deleteAttachmentFile is a no-op outside the
+  // attachments dir, and any failure here must not undo the DB delete above.
+  await Promise.all(deletedUris.map((uri) => deleteAttachmentFile(uri).catch(() => undefined)))
 }
 
 async function markAttachmentDeleteRowSynced(row: QueueRow): Promise<void> {
@@ -112,11 +129,17 @@ async function uploadAttachmentAndMarkSynced(
     uploadTarget.includes("/attachments/") &&
     uploadTarget.includes("/upload?token=")
 
-  const uploadResponse = isApiUploadTarget
-    ? await uploadFileViaApi(uploadTarget, payload, accessToken)
-    : await uploadFileDirect(uploadTarget, payload)
+  // D-15: streams the file from disk via createUploadTask (120s cancellation)
+  // instead of loading it into memory as a blob.
+  const uploadResponse = await uploadAttachmentFile({
+    uploadTarget,
+    isApiUploadTarget,
+    localUri: payload.local_uri,
+    mimeType: payload.mime_type,
+    accessToken,
+  })
 
-  if (!uploadResponse.ok) {
+  if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
     throw new Error(`UPLOAD_HTTP ${uploadResponse.status}`)
   }
 
@@ -160,47 +183,6 @@ async function uploadAttachmentAndMarkSynced(
         payload.local_attachment_id,
       ],
     )
-  })
-}
-
-async function uploadFileViaApi(
-  uploadTarget: string,
-  payload: AttachmentQueuePayload,
-  accessToken: string,
-): Promise<Response> {
-  const form = new FormData()
-  const file = {
-    uri: payload.local_uri,
-    type: payload.mime_type,
-    name: `attachment-${payload.local_attachment_id}`,
-  } as unknown as Blob
-  form.append("file", file)
-
-  return fetch(uploadTarget, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: form,
-  })
-}
-
-async function uploadFileDirect(
-  uploadTarget: string,
-  payload: AttachmentQueuePayload,
-): Promise<Response> {
-  const fileResponse = await fetch(payload.local_uri)
-  if (!fileResponse.ok) {
-    throw new Error(`LOCAL_FILE_HTTP ${fileResponse.status}`)
-  }
-  const blob = await fileResponse.blob()
-
-  return fetch(uploadTarget, {
-    method: "PUT",
-    headers: {
-      "Content-Type": payload.mime_type,
-    },
-    body: blob,
   })
 }
 
@@ -256,10 +238,13 @@ async function applyRemoteChanges(
   db: DbExecutor,
   surveys: RemoteSurvey[],
   attachments: RemoteAttachment[],
-): Promise<{ surveys: number; attachments: number }> {
+): Promise<{ surveys: number; attachments: number; deletedFileUris: string[] }> {
   const now = new Date().toISOString()
   let appliedSurveys = 0
   let appliedAttachments = 0
+  // D-09: collected inside the transaction, deleted from disk only after it
+  // commits (see pullChanges below) — a rolled-back page must not lose files.
+  const deletedFileUris: string[] = []
 
   for (const survey of surveys) {
     if (!survey?.id) continue
@@ -287,6 +272,11 @@ async function applyRemoteChanges(
           continue
         }
       }
+      const attachmentRows = await db.getAllAsync<{ local_uri: string }>(
+        `SELECT local_uri FROM local_attachments WHERE survey_id = ?`,
+        [survey.id],
+      )
+      deletedFileUris.push(...attachmentRows.map((attachmentRow) => attachmentRow.local_uri))
       await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ?`, [survey.id])
       await db.runAsync(`DELETE FROM local_attachments WHERE survey_id = ?`, [survey.id])
       await db.runAsync(`DELETE FROM local_surveys WHERE id = ?`, [survey.id])
@@ -353,6 +343,13 @@ async function applyRemoteChanges(
     if (!attachment?.id || !attachment.survey_id) continue
 
     if (attachment.deleted_at) {
+      const deletedRow = await db.getFirstAsync<{ local_uri: string }>(
+        `SELECT local_uri FROM local_attachments WHERE remote_attachment_id = ? OR id = ? LIMIT 1`,
+        [attachment.id, `remote-${attachment.id}`],
+      )
+      if (deletedRow?.local_uri) {
+        deletedFileUris.push(deletedRow.local_uri)
+      }
       await db.runAsync(
         `DELETE FROM local_attachments
          WHERE remote_attachment_id = ?
@@ -428,7 +425,7 @@ async function applyRemoteChanges(
     appliedAttachments += 1
   }
 
-  return { surveys: appliedSurveys, attachments: appliedAttachments }
+  return { surveys: appliedSurveys, attachments: appliedAttachments, deletedFileUris }
 }
 
 function buildSurveyPayloadFromRemote(survey: RemoteSurvey): SurveyQueuePayload {
@@ -555,6 +552,18 @@ async function handleSurveySyncFailure(
   })
 }
 
+/**
+ * D-10: a LocalFileMissingError is always fatal and additionally marks the
+ * attachment row 'missing' in the same transaction as the failure write,
+ * instead of being classified generically like any other upload error.
+ */
+function buildUploadFailureOptions(error: unknown): FailureOptions {
+  if (error instanceof LocalFileMissingError) {
+    return { classification: "fatal", errorCode: "local_file_missing", markFileMissing: true }
+  }
+  return { classification: classifyUploadFailure(error) }
+}
+
 async function handleAttachmentSyncFailure(
   row: QueueRow,
   payload: AttachmentQueuePayload,
@@ -599,6 +608,13 @@ async function handleAttachmentSyncFailure(
        WHERE id = ?`,
       [finalMessage, errorCode, nowIso, nowIso, payload.local_attachment_id],
     )
+
+    if (options.markFileMissing) {
+      // D-10: the local_attachments row is never deleted by this path — the
+      // above UPDATE already recorded the failure; this additionally flips
+      // file_state to 'missing' in the same transaction.
+      await markAttachmentFileMissing(tx, payload.local_attachment_id)
+    }
   })
 }
 
@@ -1003,9 +1019,7 @@ async function drainQueue(
                 linked.row,
                 linked.payload,
                 (error as Error).message,
-                {
-                  classification: classifyUploadFailure(error),
-                },
+                buildUploadFailureOptions(error),
               )
             }
           } else if (isAttachmentDeleteQueuePayload(linked.payload)) {
@@ -1068,9 +1082,12 @@ async function drainQueue(
       synced += 1
     } catch (error) {
       failed += 1
-      await handleAttachmentSyncFailure(item.row, item.payload, (error as Error).message, {
-        classification: classifyUploadFailure(error),
-      })
+      await handleAttachmentSyncFailure(
+        item.row,
+        item.payload,
+        (error as Error).message,
+        buildUploadFailureOptions(error),
+      )
     }
   }
 
@@ -1135,6 +1152,11 @@ async function pullChanges(
       }
       return result
     })
+
+    // D-09: files freed only after the page's transaction commits, best-effort.
+    await Promise.all(
+      applied.deletedFileUris.map((uri) => deleteAttachmentFile(uri).catch(() => undefined)),
+    )
 
     totalSurveys += applied.surveys
     totalAttachments += applied.attachments

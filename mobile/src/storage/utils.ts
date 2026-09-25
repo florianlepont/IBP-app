@@ -211,16 +211,18 @@ export function deriveSurveyErrorCode(message: string): string {
 }
 
 export function deriveAttachmentErrorCode(message: string): string {
+  // D-14: an "unknown" failure that reached MAX_RETRY_COUNT is always
+  // reported as retry_cap_reached, even when its underlying message also
+  // contains an UPLOAD_HTTP/CONFIRM_HTTP code (e.g. eight capped 401s) — the
+  // cap having been reached is the more actionable fact for the user.
+  if (message.includes("retry cap reached")) return "retry_cap_reached"
+  if (message.includes("Local file missing")) return "local_file_missing"
   if (message.includes("UPLOAD_HTTP 400")) return "attachment_bad_request"
   if (message.includes("UPLOAD_HTTP 401") || message.includes("CONFIRM_HTTP 401"))
     return "unauthorized"
   if (message.includes("UPLOAD_HTTP 403") || message.includes("CONFIRM_HTTP 403"))
     return "forbidden"
-  if (
-    message.includes("UPLOAD_HTTP 404") ||
-    message.includes("CONFIRM_HTTP 404") ||
-    message.includes("LOCAL_FILE_HTTP 404")
-  )
+  if (message.includes("UPLOAD_HTTP 404") || message.includes("CONFIRM_HTTP 404"))
     return "not_found"
   if (message.includes("UPLOAD_HTTP 429") || message.includes("CONFIRM_HTTP 429"))
     return "rate_limited"
@@ -228,7 +230,6 @@ export function deriveAttachmentErrorCode(message: string): string {
     return "transient_upstream_error"
   if (message.includes("HTTP 409")) return "sync_version_conflict"
   if (message.includes("HTTP 422")) return "attachment_validation_failed"
-  if (message.includes("retry cap reached")) return "retry_cap_reached"
   return "attachment_sync_failed"
 }
 
@@ -297,9 +298,10 @@ export function classifyBatchResult(result: SyncBatchResult): FailureClassificat
 
 /**
  * Classifies an exception thrown while uploading or confirming an
- * attachment: the plan-07 error classes, the legacy UPLOAD_HTTP/LOCAL_FILE_HTTP
- * string-coded errors from sync.ts's own fetch-based upload helpers (plan 11
- * still owns those), or an ApiError from apiRequest's confirm PUT call.
+ * attachment: the plan-07 error classes (LocalFileMissingError,
+ * UploadTimeoutError), the UPLOAD_HTTP-coded error thrown by sync.ts when
+ * uploadAttachmentFile resolves a non-2xx status, or an ApiError from
+ * apiRequest's confirm PUT call.
  */
 export function classifyUploadFailure(error: unknown): FailureClassification {
   if (error instanceof LocalFileMissingError) return "fatal"
