@@ -1,9 +1,18 @@
 import { ForbiddenException, Injectable } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
+import { appConfigOf } from "../config/app-config"
 import { DatabaseService } from "../database/database.service"
 
 @Injectable()
 export class DebugService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly dataResetEnabled: boolean
+
+  constructor(
+    private readonly db: DatabaseService,
+    config: ConfigService,
+  ) {
+    this.dataResetEnabled = appConfigOf(config).debug.dataResetEnabled
+  }
 
   async resetIbpData(): Promise<{
     surveys_deleted: number
@@ -69,8 +78,7 @@ export class DebugService {
   }
 
   private assertEnabled(): void {
-    const enabled = (process.env.DEBUG_DATA_RESET_ENABLED ?? "false").toLowerCase() === "true"
-    if (!enabled) {
+    if (!this.dataResetEnabled) {
       throw new ForbiddenException("Debug data reset is disabled")
     }
   }

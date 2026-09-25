@@ -32,6 +32,9 @@ const configModule = ConfigModule.forRoot({
 // as an unhandled rejection. Nest still awaits the original promise and fails.
 configModule.catch(() => undefined)
 
+// The throttler options and the debug gate are evaluated at decorator time,
+// before ConfigService exists: both read NODE_ENV through currentNodeEnv()
+// (src/config), never process.env directly (D-01).
 @Module({
   imports: [
     configModule,

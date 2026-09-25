@@ -1,8 +1,11 @@
-import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
+import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import * as jwt from "jsonwebtoken"
 import { AuthGuard } from "../src/auth/auth.guard"
+import { getTestTokenSecret } from "../src/debug/test-token-secret"
+import { buildTestConfig, buildTestConfigService } from "./config-helper"
 
-const TEST_SECRET = "test-secret-for-unit"
+const TEST_SECRET = getTestTokenSecret("test") as string
 
 const AUTH_USER = {
   id: "user-1",
@@ -15,9 +18,16 @@ const AUTH_USER = {
   profile_picture_url: null,
 }
 
-function buildGuard() {
+/** A config in production mode without running the production rules on the test env. */
+function productionConfigService(overrides: Record<string, string | undefined> = {}) {
+  return new ConfigService({
+    app: { ...buildTestConfig(overrides), nodeEnv: "production", isProduction: true },
+  })
+}
+
+function buildGuard(config: ConfigService = buildTestConfigService()) {
   const db = { query: jest.fn() }
-  const guard = new AuthGuard(db as never)
+  const guard = new AuthGuard(db as never, config)
   return { guard, db }
 }
 
@@ -35,17 +45,28 @@ function makeContext(token?: string) {
   } as never
 }
 
-describe("AuthGuard", () => {
-  let originalSecret: string | undefined
+describe("getTestTokenSecret (D-04)", () => {
+  it("returns the same non-empty secret on every call in test", () => {
+    const first = getTestTokenSecret("test")
+    expect(typeof first).toBe("string")
+    expect((first as string).length).toBeGreaterThan(0)
+    expect(getTestTokenSecret("test")).toBe(first)
+  })
 
+  it("returns null outside test", () => {
+    expect(getTestTokenSecret("production")).toBeNull()
+    expect(getTestTokenSecret("development")).toBeNull()
+  })
+})
+
+describe("AuthGuard", () => {
   beforeEach(() => {
-    originalSecret = process.env.ACCESS_TOKEN_SECRET
-    process.env.ACCESS_TOKEN_SECRET = TEST_SECRET
     jest.clearAllMocks()
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
   })
 
   afterEach(() => {
-    process.env.ACCESS_TOKEN_SECRET = originalSecret
+    jest.restoreAllMocks()
   })
 
   it("throws UnauthorizedException when Authorization header is missing", async () => {
@@ -93,33 +114,280 @@ describe("AuthGuard", () => {
     )
   })
 
-  it("throws UnauthorizedException when ACCESS_TOKEN_SECRET is not set", async () => {
-    delete process.env.ACCESS_TOKEN_SECRET
-    const { guard } = buildGuard()
+  it("rejects an HS256 token when the config is production and never queries the DB", async () => {
+    const { guard, db } = buildGuard(productionConfigService())
     const token = makeToken(AUTH_USER.id)
 
     await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
       UnauthorizedException,
     )
+    expect(db.query).not.toHaveBeenCalled()
+  })
+})
+
+describe("AuthGuard failure log (D-06)", () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it("logs one warn string with the message and code, never the token, header or stack", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined)
+    const { guard } = buildGuard(productionConfigService())
+    const failure = Object.assign(new Error("jwks unreachable"), { code: "ERR_X" })
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockRejectedValue(failure)
+    const token = "secret.raw.token-value"
+
+    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    const args = warn.mock.calls[0]
+    expect(args).toHaveLength(1)
+    const line = args[0] as string
+    expect(typeof line).toBe("string")
+    expect(line).toContain("Token validation failed")
+    expect(line).toContain("jwks unreachable")
+    expect(line).toContain("(code=ERR_X)")
+    expect(line).not.toContain(token)
+    expect(line).not.toContain("Bearer")
+    expect(line).not.toContain("    at ")
+    expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it("logs the name and message of an invalid test token without a code suffix", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const { guard } = buildGuard()
+    const token = makeToken(AUTH_USER.id, "wrong-secret")
+
+    await expect(guard.canActivate(makeContext(token))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    )
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    const line = warn.mock.calls[0][0] as string
+    expect(line).toContain("JsonWebTokenError: invalid signature")
+    expect(line).not.toContain("code=")
+    expect(line).not.toContain(token)
+  })
+
+  it("logs a placeholder for a thrown non-object and a numeric code without a message", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const { guard } = buildGuard(productionConfigService())
+    const verify = jest.spyOn(
+      guard as unknown as { verifyToken: () => Promise<unknown> },
+      "verifyToken",
+    )
+    verify.mockRejectedValueOnce("plain string failure")
+    verify.mockRejectedValueOnce({ name: "SocketError", code: 42 })
+
+    await expect(guard.canActivate(makeContext("t1"))).rejects.toBeInstanceOf(UnauthorizedException)
+    await expect(guard.canActivate(makeContext("t2"))).rejects.toBeInstanceOf(UnauthorizedException)
+
+    expect(warn.mock.calls.map((call) => call[0])).toEqual([
+      "Token validation failed: Error: unknown",
+      "Token validation failed: SocketError: unknown (code=42)",
+    ])
+  })
+
+  it("does not log a ForbiddenException from provisioning", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const { guard } = buildGuard(productionConfigService())
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockResolvedValue({ sub: "auth0|x" })
+    jest
+      .spyOn(
+        guard as unknown as { getOrProvisionUser: () => Promise<unknown> },
+        "getOrProvisionUser",
+      )
+      .mockRejectedValue(new ForbiddenException())
+
+    await expect(guard.canActivate(makeContext("rs256-token"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    )
+    expect(warn).not.toHaveBeenCalled()
+  })
+})
+
+describe("AuthGuard Auth0 configuration", () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  type GuardInternals = {
+    acceptedIssuers: string[]
+    jwksClients: unknown[]
+    fetchUserInfo: (token: string) => Promise<unknown>
+  }
+
+  it("falls back to AUTH0_DOMAIN when AUTH0_PUBLIC_DOMAIN is empty", async () => {
+    const { guard } = buildGuard(
+      buildTestConfigService({ AUTH0_DOMAIN: "tenant.example", AUTH0_PUBLIC_DOMAIN: "" }),
+    )
+    const internals = guard as unknown as GuardInternals
+    expect(internals.acceptedIssuers).toEqual(["https://tenant.example/"])
+    expect(internals.jwksClients).toHaveLength(1)
+
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ email: "a@example.com" }),
+    } as Response)
+    await expect(internals.fetchUserInfo("tok")).resolves.toEqual({ email: "a@example.com" })
+    expect(fetchSpy.mock.calls[0][0]).toBe("https://tenant.example/userinfo")
+    const init = fetchSpy.mock.calls[0][1] as RequestInit
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it("attaches the provisioned user on a valid Auth0 token", async () => {
+    const { guard } = buildGuard(productionConfigService())
+    jest
+      .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
+      .mockResolvedValue({ sub: AUTH_USER.auth0_sub })
+    jest
+      .spyOn(
+        guard as unknown as { getOrProvisionUser: () => Promise<unknown> },
+        "getOrProvisionUser",
+      )
+      .mockResolvedValue(AUTH_USER)
+    const context = makeContext("rs256-token")
+
+    await expect(guard.canActivate(context)).resolves.toBe(true)
+    expect((context as unknown as { request: { user: unknown } }).request.user).toEqual(AUTH_USER)
+  })
+
+  it("rejects a token without a kid before any JWKS lookup", async () => {
+    const { guard } = buildGuard(productionConfigService({ AUTH0_DOMAIN: "tenant.example" }))
+    const verifyToken = (guard as unknown as { verifyToken: (t: string) => Promise<unknown> })
+      .verifyToken
+    const token = jwt.sign({ sub: "x" }, "any-secret", { algorithm: "HS256" })
+
+    await expect(verifyToken.call(guard, token)).rejects.toThrow("Missing kid in token header")
+  })
+
+  it("refuses a signing-key lookup when no Auth0 domain is configured", async () => {
+    const { guard } = buildGuard(
+      productionConfigService({ AUTH0_DOMAIN: "", AUTH0_PUBLIC_DOMAIN: "" }),
+    )
+    const getSigningKey = (guard as unknown as { getSigningKey: (kid: string) => Promise<string> })
+      .getSigningKey
+
+    await expect(getSigningKey.call(guard, "kid-1")).rejects.toThrow(
+      "Auth0 JWKS domain is not configured",
+    )
+  })
+
+  it("tries every JWKS domain and rethrows the last failure", async () => {
+    const { guard } = buildGuard(
+      productionConfigService({
+        AUTH0_DOMAIN: "tenant.example",
+        AUTH0_PUBLIC_DOMAIN: "login.example",
+      }),
+    )
+    const internals = guard as unknown as {
+      jwksClients: Array<{ getSigningKey: (kid: string) => Promise<unknown> }>
+      getSigningKey: (kid: string) => Promise<string>
+    }
+    const first = jest
+      .spyOn(internals.jwksClients[0], "getSigningKey")
+      .mockRejectedValue(new Error("first down"))
+    const second = jest
+      .spyOn(internals.jwksClients[1], "getSigningKey")
+      .mockRejectedValue(new Error("second down"))
+
+    await expect(internals.getSigningKey("kid-1")).rejects.toThrow("second down")
+    expect(first).toHaveBeenCalledWith("kid-1")
+    expect(second).toHaveBeenCalledWith("kid-1")
+  })
+
+  it("verifies an RS256 token against the configured audience and issuers", async () => {
+    const { generateKeyPairSync } = await import("crypto")
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 })
+    const { guard } = buildGuard(
+      productionConfigService({ AUTH0_DOMAIN: "tenant.example", AUTH0_AUDIENCE: "aud-1" }),
+    )
+    const internals = guard as unknown as {
+      jwksClients: Array<{ getSigningKey: (kid: string) => Promise<unknown> }>
+      verifyToken: (t: string) => Promise<jwt.JwtPayload>
+    }
+    jest.spyOn(internals.jwksClients[0], "getSigningKey").mockResolvedValue({
+      getPublicKey: () => publicKey.export({ type: "spki", format: "pem" }).toString(),
+    })
+    const sign = (audience: string) =>
+      jwt.sign({ sub: "auth0|rs" }, privateKey, {
+        algorithm: "RS256",
+        keyid: "kid-1",
+        audience,
+        issuer: "https://tenant.example/",
+      })
+
+    await expect(internals.verifyToken(sign("aud-1"))).resolves.toMatchObject({
+      sub: "auth0|rs",
+    })
+    await expect(internals.verifyToken(sign("other-aud"))).rejects.toThrow(/audience/)
+  })
+
+  it("rejects a non-ok /userinfo response", async () => {
+    const { guard } = buildGuard(buildTestConfigService({ AUTH0_DOMAIN: "tenant.example" }))
+    jest.spyOn(global, "fetch").mockResolvedValue({ ok: false } as Response)
+
+    await expect((guard as unknown as GuardInternals).fetchUserInfo("tok")).rejects.toThrow(
+      "Failed to fetch Auth0 userinfo",
+    )
+  })
+
+  it("accepts both the public and the tenant domain as issuers", () => {
+    const { guard } = buildGuard(
+      buildTestConfigService({
+        AUTH0_DOMAIN: "tenant.example",
+        AUTH0_PUBLIC_DOMAIN: "login.example",
+      }),
+    )
+    const internals = guard as unknown as GuardInternals
+    expect(internals.acceptedIssuers).toEqual(["https://login.example/", "https://tenant.example/"])
+    expect(internals.jwksClients).toHaveLength(2)
+  })
+
+  it("times out a stalled /userinfo body read (D-06)", async () => {
+    const { guard } = buildGuard(
+      buildTestConfigService({ AUTH0_DOMAIN: "tenant.example", AUTH0_HTTP_TIMEOUT_MS: "50" }),
+    )
+    jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
+      const signal = (init as RequestInit).signal as AbortSignal
+      return {
+        ok: true,
+        // Headers arrived; the body never does, until the signal fires.
+        json: () =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason))
+          }),
+      } as Response
+    })
+
+    const started = Date.now()
+    const error = await (guard as unknown as GuardInternals)
+      .fetchUserInfo("tok")
+      .catch((e: unknown) => e)
+
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect((error as Error).name).toBe("TimeoutError")
   })
 })
 
 describe("canActivate with Auth0 tokens (WR-04)", () => {
-  let originalNodeEnv: string | undefined
-
   beforeEach(() => {
-    originalNodeEnv = process.env.NODE_ENV
-    process.env.NODE_ENV = "production"
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
   })
 
   afterEach(() => {
-    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
-    else process.env.NODE_ENV = originalNodeEnv
     jest.restoreAllMocks()
   })
 
   it("refusing to link an email returns 403 email_already_linked, not 401", async () => {
-    const { guard, db } = buildGuard()
+    const { guard, db } = buildGuard(productionConfigService())
     jest
       .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
       .mockResolvedValue({ sub: "auth0|attacker" })
@@ -142,7 +410,7 @@ describe("canActivate with Auth0 tokens (WR-04)", () => {
   })
 
   it("an invalid token is still a 401", async () => {
-    const { guard } = buildGuard()
+    const { guard } = buildGuard(productionConfigService())
     jest
       .spyOn(guard as unknown as { verifyToken: () => Promise<unknown> }, "verifyToken")
       .mockRejectedValue(new Error("jwt expired"))

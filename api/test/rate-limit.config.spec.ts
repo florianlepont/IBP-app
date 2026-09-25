@@ -6,14 +6,15 @@ import {
   resolveThrottleLimit,
 } from "../src/common/rate-limit.config"
 import { ipTracker } from "../src/auth/throttler.guard"
+import { currentNodeEnv } from "../src/config/app-config"
 
 describe("rate-limit.config", () => {
   describe("resolveThrottleLimit", () => {
     it("returns the production values in production", () => {
-      expect(resolveThrottleLimit("default", { NODE_ENV: "production" })).toBe(600)
-      expect(resolveThrottleLimit("ipCeiling", { NODE_ENV: "production" })).toBe(3000)
-      expect(resolveThrottleLimit("sync", { NODE_ENV: "production" })).toBe(60)
-      expect(resolveThrottleLimit("upload", { NODE_ENV: "production" })).toBe(240)
+      expect(resolveThrottleLimit("default", "production")).toBe(600)
+      expect(resolveThrottleLimit("ipCeiling", "production")).toBe(3000)
+      expect(resolveThrottleLimit("sync", "production")).toBe(60)
+      expect(resolveThrottleLimit("upload", "production")).toBe(240)
     })
 
     it("returns the non-production ceiling for every kind outside production", () => {
@@ -24,11 +25,9 @@ describe("rate-limit.config", () => {
         "upload",
       ]
       for (const kind of kinds) {
-        expect(resolveThrottleLimit(kind, { NODE_ENV: "test" })).toBe(NON_PRODUCTION_THROTTLE_LIMIT)
-        expect(resolveThrottleLimit(kind, { NODE_ENV: "development" })).toBe(
-          NON_PRODUCTION_THROTTLE_LIMIT,
-        )
-        expect(resolveThrottleLimit(kind, {})).toBe(NON_PRODUCTION_THROTTLE_LIMIT)
+        expect(resolveThrottleLimit(kind, "test")).toBe(NON_PRODUCTION_THROTTLE_LIMIT)
+        expect(resolveThrottleLimit(kind, "development")).toBe(NON_PRODUCTION_THROTTLE_LIMIT)
+        expect(resolveThrottleLimit(kind, currentNodeEnv({}))).toBe(NON_PRODUCTION_THROTTLE_LIMIT)
       }
     })
   })
