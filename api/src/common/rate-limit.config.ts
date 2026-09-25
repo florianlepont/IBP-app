@@ -1,5 +1,6 @@
 import { ThrottlerModuleOptions } from "@nestjs/throttler"
 import { ipTracker } from "../auth/throttler.guard"
+import { currentNodeEnv } from "../config/app-config"
 
 /** Shared window for every named throttler in this module (D-06). */
 export const THROTTLE_TTL_MS = 60_000
@@ -21,11 +22,16 @@ export const NON_PRODUCTION_THROTTLE_LIMIT = 10_000
 
 export type ThrottleKind = keyof typeof PRODUCTION_THROTTLE_LIMITS
 
+/**
+ * Evaluated lazily, per request, from the throttler options below (they are
+ * built at decorator time, before ConfigService exists), so the default reads
+ * NODE_ENV through `currentNodeEnv()` (D-01).
+ */
 export function resolveThrottleLimit(
   kind: ThrottleKind,
-  env: NodeJS.ProcessEnv = process.env,
+  nodeEnv: string = currentNodeEnv(),
 ): number {
-  if (env.NODE_ENV === "production") {
+  if (nodeEnv === "production") {
     return PRODUCTION_THROTTLE_LIMITS[kind]
   }
   return NON_PRODUCTION_THROTTLE_LIMIT

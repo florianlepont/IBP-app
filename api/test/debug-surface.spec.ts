@@ -4,24 +4,25 @@ import "reflect-metadata"
 import * as jwt from "jsonwebtoken"
 import { AuthGuard } from "../src/auth/auth.guard"
 import { getTestTokenSecret } from "../src/debug/test-token-secret"
-import { buildTestConfig } from "./config-helper"
+import { currentNodeEnv } from "../src/config/app-config"
 import { isDebugSurfaceEnabled } from "../src/debug/debug-gating"
+import { buildTestConfig } from "./config-helper"
 
 describe("isDebugSurfaceEnabled", () => {
   it("is false when NODE_ENV is production", () => {
-    expect(isDebugSurfaceEnabled({ NODE_ENV: "production" })).toBe(false)
+    expect(isDebugSurfaceEnabled("production")).toBe(false)
   })
 
   it("is true when NODE_ENV is test", () => {
-    expect(isDebugSurfaceEnabled({ NODE_ENV: "test" })).toBe(true)
+    expect(isDebugSurfaceEnabled("test")).toBe(true)
   })
 
   it("is true when NODE_ENV is development", () => {
-    expect(isDebugSurfaceEnabled({ NODE_ENV: "development" })).toBe(true)
+    expect(isDebugSurfaceEnabled("development")).toBe(true)
   })
 
   it("is true when NODE_ENV is unset", () => {
-    expect(isDebugSurfaceEnabled({})).toBe(true)
+    expect(isDebugSurfaceEnabled(currentNodeEnv({}))).toBe(true)
   })
 })
 

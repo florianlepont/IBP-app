@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto"
+import * as crypto from "crypto"
 
 let secret: string | null = null
 
@@ -22,7 +22,7 @@ export function getTestTokenSecret(nodeEnv: string): string | null {
     return null
   }
   if (secret === null) {
-    secret = randomBytes(32).toString("hex")
+    secret = crypto.randomBytes(32).toString("hex")
   }
   return secret
 }
