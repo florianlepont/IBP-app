@@ -18,7 +18,8 @@ import {
 } from "./attachment-files"
 
 const CURRENT_DIR = "file:///mock/documents/attachments/"
-const OLD_CONTAINER_URI = "file:///var/mobile/Containers/Data/Application/OLD-UUID/Documents/attachments/x.jpg"
+const OLD_CONTAINER_URI =
+  "file:///var/mobile/Containers/Data/Application/OLD-UUID/Documents/attachments/x.jpg"
 const CACHE_URI = "file:///mock/cache/imagepicker-123.jpg"
 
 beforeEach(() => {

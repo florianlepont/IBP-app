@@ -116,7 +116,11 @@ function defaultMakeDirectoryAsync(fileUri: string): Promise<void> {
 }
 
 function defaultDeleteAsync(fileUri: string, options?: { idempotent?: boolean }): Promise<void> {
-  if (isDirectoryUri(fileUri)) {
+  // Treat any URI-shaped-like-a-directory (trailing slash, or a directory
+  // that was explicitly created via makeDirectoryAsync) as a directory
+  // delete: the caller may purge a whole subtree, such as the attachments
+  // dir, without ever having called makeDirectoryAsync on it in this test.
+  if (isDirectoryUri(fileUri) || fileUri.endsWith("/")) {
     const prefix = normalizeDir(fileUri)
     for (const key of Array.from(files.keys())) {
       if (key.startsWith(prefix)) {
