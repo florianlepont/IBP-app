@@ -207,6 +207,99 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9000/minio/health/live
 docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env ps minio
 ```
 
+## Vérification de la configuration (avant fusion et à chaque déploiement)
+
+### Ce que l'API refuse en production
+
+Avec `NODE_ENV=production` (imposé par le fichier compose), l'API refuse de
+démarrer et nomme la variable en cause, sans jamais afficher sa valeur, si :
+
+- `POSTGRES_USER` ou `POSTGRES_DB` est vide ou absente ;
+- `POSTGRES_PASSWORD` ou `MINIO_SECRET_KEY` est vide, vaut une valeur de
+  développement (`ibp`, `minio`, `minio123`) ou commence par `CHANGE_ME` /
+  `change-me` ;
+- `OBJECT_STORAGE_ENDPOINT`, `AUTH0_DOMAIN` ou `AUTH0_AUDIENCE` est vide ;
+- `CORS_ORIGIN` est vide ou absente : mettre `none` (l'app mobile n'utilise pas
+  CORS) ou une liste d'origines `https://hôte` séparées par des virgules.
+
+`AUTH0_MGMT_CLIENT_ID` et `AUTH0_MGMT_CLIENT_SECRET` vides donnent seulement un
+avertissement (la suppression de compte côté Auth0 ne marchera pas). Les
+anciennes lignes de jetons maison (secrets et durées des jetons d'accès et de
+rafraîchissement, options `AUTH_*`) ne servent plus : `check-env.sh` les signale
+par une ligne `INFO`, et elles peuvent être supprimées.
+
+### Vérifier le fichier avant la fusion
+
+`infra/vps/check-env.sh` applique les mêmes règles à `/home/ubuntu/cortege.env`,
+sans Node ni Docker, et ne fait que lire le fichier. On le prend directement
+dans la branche à fusionner (remplacer `<branche>`) :
+
+```bash
+git -C /home/ubuntu/cortege fetch -q origin <branche> && git -C /home/ubuntu/cortege show origin/<branche>:infra/vps/check-env.sh | bash -s -- /home/ubuntu/cortege.env
+```
+
+Il affiche une ligne `ERREUR : <VARIABLE> : <raison>` par problème, puis
+`OK : …` ou `À corriger avant la fusion : N problème(s).` Corriger le fichier
+et relancer jusqu'à obtenir `OK`.
+
+### Garde au déploiement
+
+À chaque nouvelle image, `update-stack.sh` lance d'abord la vérification de la
+nouvelle image avec l'environnement réel de l'API :
+
+```bash
+docker compose -f infra/docker-compose.vps.yml --env-file /home/ubuntu/cortege.env \
+  run --rm --no-deps api node api/dist/config/check-config.js
+```
+
+- Si elle échoue, la pile n'est **pas** redémarrée : l'ancienne API continue de
+  servir. Le journal contient les lignes `ERREUR` et le message
+  `configuration check failed; the stack was NOT restarted` :
+  `journalctl -u cortege-deploy -n 50`.
+- Après correction de `/home/ubuntu/cortege.env`, le passage suivant du timer
+  (5 minutes au plus) relance la vérification puis le déploiement, car le
+  script compare l'image téléchargée à celle du conteneur en service. Pour ne
+  pas attendre : `sudo systemctl start cortege-deploy.service`.
+
+Quand la fusion modifie `update-stack.sh` lui-même, le script relance aussitôt
+sa nouvelle version (une seule fois, variable `CORTEGE_UPDATE_STACK_REEXEC`) :
+une nouvelle garde s'applique donc dès le déploiement qui l'apporte.
+
+### Premier déploiement de la phase 01.7
+
+La copie de `update-stack.sh` présente aujourd'hui sur le VPS date d'avant la
+garde et la relance automatique. Au premier passage après la fusion, c'est elle
+qui s'exécuterait : elle redémarrerait la pile sans vérifier la configuration.
+Une seule fois, il faut donc arrêter le timer avant la fusion et faire avancer
+le dépôt à la main, pour que ce soit le nouveau script qui déploie :
+
+1. Sauvegarder le volume MinIO (section « Sauvegarder le volume » ci-dessus).
+2. Mettre `CORS_ORIGIN=none` dans `/home/ubuntu/cortege.env`.
+3. Lancer `check-env.sh` (commande ci-dessus) jusqu'à obtenir `OK`.
+4. Arrêter le timer :
+
+   ```bash
+   sudo systemctl stop cortege-deploy.timer
+   ```
+
+5. Fusionner la PR sur GitHub.
+6. Attendre la fin du job d'image de la CI sur `main` (3 à 5 minutes).
+7. Faire avancer le dépôt du VPS :
+
+   ```bash
+   git -C /home/ubuntu/cortege fetch origin main && git -C /home/ubuntu/cortege merge --ff-only origin/main
+   ```
+
+8. Relancer le timer (ou `sudo systemctl start cortege-deploy.service` pour
+   déployer tout de suite) ; le nouveau script, avec la garde, fait le
+   déploiement :
+
+   ```bash
+   sudo systemctl start cortege-deploy.timer
+   ```
+
+Ensuite, chaque déploiement est protégé sans intervention.
+
 ## Sharing the machine
 
 This VPS has 2 cores and 3.7 GB of RAM, and runs other projects. The stack caps
