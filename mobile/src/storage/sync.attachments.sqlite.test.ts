@@ -45,6 +45,16 @@ function emptyChangesResponse(): MockResponse {
   })
 }
 
+// createLocalDraft also queues a survey_upsert row; tests that only exercise
+// the attachment_upload row remove it so getQueueRowCount reflects only the
+// attachment operation under test.
+async function dropSurveyUpsertQueueRow(surveyId: string): Promise<void> {
+  const db = await getDb()
+  await db.runAsync(`DELETE FROM sync_queue WHERE survey_id = ? AND op_type = 'survey_upsert'`, [
+    surveyId,
+  ])
+}
+
 async function resetNextRetry(): Promise<void> {
   const db = await getDb()
   await db.runAsync(`UPDATE sync_queue SET next_retry_at = NULL WHERE status = 'failed'`)
@@ -150,6 +160,7 @@ describe("streaming upload targets", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
 
     const row = await getQueueRow(draft.id)
     const rowId = row!.id
@@ -200,6 +211,7 @@ describe("streaming upload targets", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
     const row = await getQueueRow(draft.id)
     const rowId = row!.id
 
@@ -272,6 +284,7 @@ describe("missing local file at upload time", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
     const row = await getQueueRow(draft.id)
     const rowId = row!.id
 
@@ -315,6 +328,7 @@ describe("missing local file at upload time", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
 
     const db = await getDb()
     await db.runAsync(
@@ -370,6 +384,7 @@ describe("upload failures that never consume the retry cap", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
 
     let rowId: number | undefined
     const fetchMock = global.fetch as jest.Mock
@@ -417,6 +432,7 @@ describe("upload failures that never consume the retry cap", () => {
         mime_type: "image/jpeg",
         size_bytes: 1000,
       })
+      await dropSurveyUpsertQueueRow(draft.id)
       const row = await getQueueRow(draft.id)
       const rowId = row!.id
 
@@ -467,6 +483,7 @@ describe("upload failures that never consume the retry cap", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
 
     let rowId: number | undefined
     const fetchMock = global.fetch as jest.Mock
@@ -514,6 +531,7 @@ describe("upload failures that do consume the retry cap", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
 
     let rowId: number | undefined
     const fetchMock = global.fetch as jest.Mock
@@ -538,7 +556,7 @@ describe("upload failures that do consume the retry cap", () => {
       await resetNextRetry()
     }
 
-    let row = await getQueueRow(draft.id)
+    const row = await getQueueRow(draft.id)
     expect(row?.retry_count).toBe(7)
     rowId = row!.id
 
@@ -566,6 +584,7 @@ describe("upload failures that do consume the retry cap", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
     const row = await getQueueRow(draft.id)
     const rowId = row!.id
 
@@ -609,6 +628,7 @@ describe("photo files are cleaned up after deletions", () => {
       mime_type: "image/jpeg",
       size_bytes: 1000,
     })
+    await dropSurveyUpsertQueueRow(draft.id)
     // Mark the attachment already synced (as if uploaded earlier) so only the
     // survey_delete queue row drives this sync.
     const db = await getDb()
