@@ -24,9 +24,9 @@ this against the phase's schedule risk (see `.planning/STATE.md`'s Blockers/Conc
 
 ## Supports
 
-`docs/technical/adr-002-on-device-species-recognition-v1.md` — not yet written. This document is
-the evidence log the ADR's go/no-go cites; every figure the ADR names must trace back to a section
-below.
+`docs/technical/adr-002-on-device-species-recognition-v1.md` — the ADR is the decision; this
+document is the evidence log the ADR's go/no-go cites. Every figure the ADR names traces back to a
+section below.
 
 ## Source context
 

@@ -342,7 +342,9 @@ docs/
 │   ├── sync-conflict-resolution-v1.md     # Offline sync conflict strategy
 │   ├── ibp-validation-matrix-v1.md        # Factor scoring rules
 │   ├── publication-visibility-post-submit-v1.md
-│   └── adr-001-technical-stack-and-engineering-principles-v1.md
+│   ├── adr-001-technical-stack-and-engineering-principles-v1.md
+│   ├── adr-002-on-device-species-recognition-v1.md      # Species recognition go/no-go (Phase 1)
+│   └── species-recognition-spike-measurements-v1.md     # Spike evidence log for ADR-002
 ├── specs/
 │   ├── README.md                          # Specs index
 │   ├── user-stories.md                    # Full user story backlog
