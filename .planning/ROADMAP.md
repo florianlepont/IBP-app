@@ -303,7 +303,7 @@ Plans:
 - [x] 01.9-15-PLAN.md — Split the account screen (596 lines) under 400 lines per file, delete unused styles, move its text and alerts (wave 2)
 - [x] 01.9-16-PLAN.md — Bring the Home screen under 400 lines and move the text of Home, the cards, the splash and the UI primitives t (wave 2)
 - [x] 01.9-17-PLAN.md — Move the text of the five small screens and of the shared label modules to the catalogue, and delete their unu (wave 2)
-- [ ] 01.9-18-PLAN.md — Replace the navigation prop funnel with one memoised route component per screen that reads its own contexts, m (wave 3)
+- [x] 01.9-18-PLAN.md — Replace the navigation prop funnel with one memoised route component per screen that reads its own contexts, m (wave 3)
 - [ ] 01.9-19-PLAN.md — Do every dependency change of the phase in one plan: remove the root leftovers and the unused API packages, mo (wave 3)
 - [x] 01.9-20-PLAN.md — Move the status and dialog texts of the session, owner, network and central sync hooks to the catalogue, remov (wave 3)
 - [ ] 01.9-21-PLAN.md — Move the remaining hook status messages (editing, draft patching, GPS, app bootstrap) and the form validation (wave 4)
@@ -432,7 +432,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 18/32 | In Progress|  |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 19/32 | In Progress|  |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
