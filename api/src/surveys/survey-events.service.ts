@@ -4,12 +4,11 @@ import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService, Queryable } from "../database/database.service"
 import { decodeListCursor, ListCursor } from "./list-cursor"
 import { ListPage, SurveysRepository, toListPage } from "./surveys.repository"
+import { SURVEY_EVENT_INSERT_SQL } from "./survey-events.sql"
 import { SurveyEventRow } from "./surveys.types"
 
-// D-07: the only place in api/src that spells the survey_events insert. seq and xid are
-// column defaults (migration 014) and are never named here.
-export const SURVEY_EVENT_INSERT_SQL =
-  "INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)"
+// D-07: the single survey_events insert lives in survey-events.sql.ts (re-exported here).
+export { SURVEY_EVENT_INSERT_SQL }
 
 // D-11: seq is a bigint identity, carried as its decimal text in the cursor.
 export const EVENT_CURSOR_ID_PATTERN = /^\d{1,19}$/
