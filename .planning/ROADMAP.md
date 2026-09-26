@@ -295,7 +295,7 @@ Plans:
 - [x] 01.9-07-PLAN.md — Add the optional `bbox` filter to `GET /v1/public/map-items`, prove it with a new E2E spec and an EXPLAIN, doc (wave 1)
 - [x] 01.9-08-PLAN.md — Precompute survey completion at write time in a new SQLite column, stop parsing every payload when listing, an (wave 1)
 - [x] 01.9-09-PLAN.md — Introduce the five memoised contexts and the single assembler, make `useSurveySync` return memoised slices wit (wave 2)
-- [ ] 01.9-10-PLAN.md — Remove the unused e-mail service and every SMTP setting from the API, its configuration, examples, CI and docs (wave 2)
+- [x] 01.9-10-PLAN.md — Remove the unused e-mail service and every SMTP setting from the API, its configuration, examples, CI and docs (wave 2)
 - [x] 01.9-11-PLAN.md — Move the status and alert texts of the survey-operations and profile sync hooks to the French catalogue, drop (wave 2)
 - [x] 01.9-12-PLAN.md — Split the survey detail screen (1 344 lines + 836-line styles) into parts under 400 lines, delete its unused s (wave 2)
 - [x] 01.9-13-PLAN.md — Split the survey form screen (1 190 lines + 644-line styles + 167-line components file) into parts under 400 l (wave 2)
@@ -432,7 +432,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 16/32 | In Progress|  |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 17/32 | In Progress|  |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
