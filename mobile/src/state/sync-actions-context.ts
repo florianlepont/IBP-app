@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react"
+import type { StatusMessage } from "../i18n"
 import type { useSurveySyncNetwork } from "../hooks/survey-sync/useSurveySyncNetwork"
 import type { useAttachmentPreviews } from "../hooks/survey-sync/useAttachmentPreviews"
 
@@ -11,7 +12,7 @@ type AttachmentPreviews = ReturnType<typeof useAttachmentPreviews>
  * (useStableActions), so reading it never causes a re-render.
  */
 export type SyncActions = {
-  setStatus: (message: string) => void
+  setStatus: (message: StatusMessage) => void
   handleSync: NetworkOperations["handleSync"]
   handlePullChanges: NetworkOperations["handlePullChanges"]
   handleReportSurvey: NetworkOperations["handleReportSurvey"]

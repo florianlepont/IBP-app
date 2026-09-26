@@ -9,7 +9,7 @@ import {
   uploadMyProfilePicture,
 } from "../../api/ibp-api"
 import { AuthUser } from "../../app/types"
-import { fr, logStatusDetail } from "../../i18n"
+import { fr, logStatusDetail, type StatusMessage } from "../../i18n"
 import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
 import { guessMimeType } from "./utils"
 
@@ -27,7 +27,7 @@ type UseSurveySyncProfileParams = {
   clearSession: () => Promise<void>
   withAuthRetry: <T>(fn: (token: string) => Promise<T>) => Promise<T>
   handleLoadMyProfile: (options?: { silent?: boolean }) => Promise<AuthUser | null>
-  setStatus: (message: string) => void
+  setStatus: (message: StatusMessage) => void
 }
 
 const text = fr.status.profile

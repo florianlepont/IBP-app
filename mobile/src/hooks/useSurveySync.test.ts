@@ -111,7 +111,7 @@ jest.mock("./survey-sync/useAttachmentPreviews", () => ({
 }))
 
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
-import { fr } from "../i18n"
+import { fr, statusText } from "../i18n"
 import { useSurveySync } from "./useSurveySync"
 
 // Status texts produced by the hook, taken from the French catalogue (D-06).
@@ -398,7 +398,7 @@ describe("useSurveySync", () => {
     test("setStatus runs updateOperationStatus on the current operation status", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        result.current.syncActions.setStatus("Hello")
+        result.current.syncActions.setStatus(statusText("Hello"))
       })
 
       expect(mockUpdateOperationStatus).toHaveBeenCalledWith(
@@ -411,7 +411,7 @@ describe("useSurveySync", () => {
 
       // The internal operation status is threaded into the next update.
       await act(async () => {
-        result.current.syncActions.setStatus("Again")
+        result.current.syncActions.setStatus(statusText("Again"))
       })
       expect(mockUpdateOperationStatus).toHaveBeenLastCalledWith(
         UPDATED_OPERATION_STATUS,
@@ -441,7 +441,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
       const first = result.current
       await act(async () => {
-        first.syncActions.setStatus("x")
+        first.syncActions.setStatus(statusText("x"))
       })
       expect(result.current).not.toBe(first)
       expect(result.current.status).toBe("x")
@@ -530,7 +530,7 @@ describe("useSurveySync", () => {
     test("calling setStatus invokes reportStatus with session scope", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        result.current.syncActions.setStatus("test message")
+        result.current.syncActions.setStatus(statusText("test message"))
       })
       expect(result.current.status).toBe("test message")
     })

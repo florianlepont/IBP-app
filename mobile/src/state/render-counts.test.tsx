@@ -44,6 +44,7 @@ import fs from "fs"
 import React from "react"
 import renderer, { act } from "react-test-renderer"
 import type { LocalSurvey } from "../storage/types"
+import { fr, type StatusMessage } from "../i18n"
 
 type CountKey =
   | "home"
@@ -81,7 +82,7 @@ const COUNT_KEYS: CountKey[] = [
 
 const mockCounts: Record<string, number> = {}
 
-type ReportStatus = (scope: "session", state: "idle", message: string) => void
+type ReportStatus = (scope: "session", state: "idle", message: StatusMessage) => void
 
 const mockCaptured: {
   reportStatus: ReportStatus | null
@@ -879,7 +880,7 @@ describe("render counts (D-02)", () => {
     expect(mockCaptured.reportStatus).not.toBeNull()
     resetCounts()
     await act(async () => {
-      mockCaptured.reportStatus?.("session", "idle", "x")
+      mockCaptured.reportStatus?.("session", "idle", fr.status.sync.alreadyRunning())
     })
     const counts = record("statusUpdate")
     expect(counts).toEqual(EXPECTED.statusUpdate)

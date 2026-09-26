@@ -78,7 +78,7 @@ jest.mock("../../hooks/usePublicMapExplorer", () => ({
   },
 }))
 
-import { fr } from "../../i18n"
+import { fr, type StatusMessage } from "../../i18n"
 import { AccessTokenProvider, SessionProvider } from "../../state/session-context"
 import type { SessionContextValue } from "../../state/session-context"
 import { StatusProvider } from "../../state/status-context"
@@ -123,7 +123,7 @@ function actionsProxy<T extends object>(defaults: Record<string, unknown> = {}):
 type Fixture = {
   session: SessionContextValue
   accessToken: string | null
-  status: string
+  status: StatusMessage
   syncActions: SyncActions
   surveys: SurveysContextValue
   form: SurveyFormContextValue
@@ -165,7 +165,7 @@ function makeFixture(overrides: { startEdit?: boolean; saved?: boolean } = {}): 
       actions: actionsProxy(),
     },
     accessToken: "token-1",
-    status: "Ready",
+    status: fr.status.session.ready(),
     syncActions: actionsProxy(),
     surveys: {
       state: {
@@ -311,7 +311,7 @@ describe("SettingsRoute", () => {
       </Providers>,
     )
     const settings = props("settings")
-    expect(settings.status).toBe("Ready")
+    expect(settings.status).toBe(fr.status.session.ready())
     expect(settings.apiUrl).toBe("http://api.test/v1")
     expect(settings.onApiUrlChange).toBe(fixture.session.actions.setApiUrl)
     expect(settings.onSync).toBe(fixture.syncActions.handleSync)

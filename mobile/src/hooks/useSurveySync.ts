@@ -56,7 +56,7 @@ export function useSurveySync({
   onCloseSurveyDetail,
   onStopEditing,
 }: UseSurveySyncParams) {
-  const [statusText, setStatusText] = useState<string>(() => sessionText.ready())
+  const [statusText, setStatusText] = useState<StatusMessage>(() => sessionText.ready())
   // Internal only: no consumer reads it (RESEARCH Pattern 1).
   const [, setOperationStatus] = useState(() => createInitialOperationStatus(sessionText.ready()))
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({})
@@ -84,7 +84,7 @@ export function useSurveySync({
     (
       scope: "session" | "auth" | "profile" | "sync" | "survey" | "attachment" | "debug",
       state: "idle" | "running" | "success" | "error",
-      message: string,
+      message: StatusMessage,
     ): void => {
       setStatusText(message)
       setOperationStatus((current) => updateOperationStatus(current, scope, state, message))
@@ -93,7 +93,7 @@ export function useSurveySync({
   )
 
   const setStatus = useCallback(
-    (message: string): void => {
+    (message: StatusMessage): void => {
       reportStatus("session", "idle", message)
     },
     [reportStatus],
