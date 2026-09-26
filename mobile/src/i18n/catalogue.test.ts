@@ -1,5 +1,6 @@
 import { shouldShowDevTools } from "../app/dev-tools"
 import { fr, logStatusDetail, statusText } from "./index"
+import type { Catalog } from "./index"
 
 jest.mock("../app/dev-tools", () => ({
   shouldShowDevTools: jest.fn(() => false),
@@ -85,7 +86,18 @@ describe("French catalogue", () => {
       ].sort(),
     )
     expect(Object.keys(fr.status).sort()).toEqual(
-      ["app", "debug", "editing", "gps", "map", "owner", "profile", "session", "surveyOps", "sync"].sort(),
+      [
+        "app",
+        "debug",
+        "editing",
+        "gps",
+        "map",
+        "owner",
+        "profile",
+        "session",
+        "surveyOps",
+        "sync",
+      ].sort(),
     )
   })
 
@@ -112,6 +124,13 @@ describe("French catalogue", () => {
 
   test("common holds the untitled survey label", () => {
     expect(fr.common.untitledSurvey).toBe("Relevé sans titre")
+  })
+
+  test("the French catalogue satisfies the widened Catalog type", () => {
+    // A second language would be typed the same way; this line fails to compile
+    // if Widen stops matching the catalogue shape.
+    const widened: Catalog = fr
+    expect(widened.common.actions.cancel).toBe("Annuler")
   })
 })
 
