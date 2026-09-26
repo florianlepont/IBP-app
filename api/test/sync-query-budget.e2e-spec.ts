@@ -19,6 +19,10 @@ const BASELINE = {
 } as const
 type BudgetCase = keyof typeof BASELINE
 
+// D-09 / ROADMAP criterion 4: a 100-operation batch issues at least three times fewer
+// statements than the baseline (333 / 300 / 433 / 367).
+const budgetLimit = (budgetCase: BudgetCase): number => Math.floor(BASELINE[budgetCase] / 3)
+
 const BATCH_SIZE = 100
 
 type SyncResult = { client_ref: string; status: string }
@@ -103,24 +107,24 @@ describe("Sync query budget (e2e)", () => {
     }
   })
 
-  it("100 creates with 1 parcel each stay within the budget", async () => {
+  it("100 creates with 1 parcel each stay within a third of the baseline", async () => {
     const count = await countSyncStatements("creates1", upsertBatch(1, 1))
-    expect(count).toBeLessThanOrEqual(BASELINE.creates1)
+    expect(count).toBeLessThanOrEqual(budgetLimit("creates1"))
   })
 
-  it("100 updates with the same 1 parcel stay within the budget", async () => {
+  it("100 updates with the same 1 parcel stay within a third of the baseline", async () => {
     const count = await countSyncStatements("updates1", upsertBatch(1, 2))
-    expect(count).toBeLessThanOrEqual(BASELINE.updates1)
+    expect(count).toBeLessThanOrEqual(budgetLimit("updates1"))
   })
 
-  it("100 creates with 3 parcels each stay within the budget", async () => {
+  it("100 creates with 3 parcels each stay within a third of the baseline", async () => {
     const count = await countSyncStatements("creates3", upsertBatch(3, 1))
-    expect(count).toBeLessThanOrEqual(BASELINE.creates3)
+    expect(count).toBeLessThanOrEqual(budgetLimit("creates3"))
   })
 
-  it("100 updates with the same 3 parcels stay within the budget", async () => {
+  it("100 updates with the same 3 parcels stay within a third of the baseline", async () => {
     const count = await countSyncStatements("updates3", upsertBatch(3, 2))
-    expect(count).toBeLessThanOrEqual(BASELINE.updates3)
+    expect(count).toBeLessThanOrEqual(budgetLimit("updates3"))
   })
 
   // D-10: ensureParcelIds registers any number of parcels in one statement, so the statement
