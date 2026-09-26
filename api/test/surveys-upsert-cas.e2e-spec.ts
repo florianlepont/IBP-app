@@ -166,6 +166,47 @@ describe("Upsert fast path CAS (e2e)", () => {
     expect(events.rows.map((event) => event.event_type)).toEqual(["created", "updated"])
   })
 
+  it("the fast update diffs the parcel links and registers new parcels", async () => {
+    const accessToken = await login("relink")
+    const surveyId = `e2e-cas-relink-${runToken}`
+    const parcel = (suffix: string) => `CAS${runToken}R${suffix}`.toUpperCase()
+    const links = async () =>
+      (
+        await db.query<{ parcel_id: string }>(
+          `SELECT parcel_id FROM survey_parcels WHERE survey_id = $1 ORDER BY parcel_id`,
+          [surveyId],
+        )
+      ).rows.map((row) => row.parcel_id)
+
+    const base = { id: surveyId, site_name: "CAS Relink", factors: {}, scores: {} }
+    expect(
+      await sync(accessToken, { ...base, sync_version: 1, parcel_ids: [parcel("1"), parcel("2")] }),
+    ).toMatchObject({ status: "synced" })
+    expect(
+      await sync(accessToken, { ...base, sync_version: 2, parcel_ids: [parcel("3"), parcel("2")] }),
+    ).toMatchObject({ status: "synced" })
+    expect(await links()).toEqual([parcel("2"), parcel("3")])
+
+    const registered = await db.query(`SELECT 1 FROM parcels WHERE parcel_id = $1`, [parcel("3")])
+    expect(registered.rows).toHaveLength(1)
+    const survey = await db.query<{ parcel_id: string; sync_version: number }>(
+      `SELECT parcel_id, sync_version FROM surveys WHERE id = $1`,
+      [surveyId],
+    )
+    expect(survey.rows[0]).toEqual({ parcel_id: parcel("3"), sync_version: 2 })
+
+    expect(await sync(accessToken, { ...base, sync_version: 3, parcel_ids: [] })).toMatchObject({
+      status: "synced",
+    })
+    expect(await links()).toEqual([])
+
+    const events = await db.query<{ event_type: string }>(
+      `SELECT event_type FROM survey_events WHERE survey_id = $1 ORDER BY seq`,
+      [surveyId],
+    )
+    expect(events.rows.map((event) => event.event_type)).toEqual(["created", "updated", "updated"])
+  })
+
   it("a create on another user's id answers survey_id_conflict and registers no parcel", async () => {
     const ownerToken = await login("owner")
     const otherToken = await login("other")

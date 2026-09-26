@@ -192,18 +192,13 @@ const FAST_PATH_INPUT_PARCELS_SQL = `input_parcels AS (
            AS input(id, parcel_id, commune_code, section, number)
        )`
 
-// Gated on the survey write: a statement that writes no survey row registers no parcel.
-function ensuredParcelsSql(writeCte: "ins" | "u"): string {
-  return `ensured AS (
-         INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
+// The parcel registration of both statements, before its gate. Each statement appends
+// `WHERE EXISTS (SELECT 1 FROM <its write CTE>)`, so a statement that writes no survey row
+// registers no parcel.
+const FAST_PATH_ENSURED_PARCELS_SELECT_SQL = `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
          SELECT ip.id, ip.parcel_id, ip.commune_code, ip.section, ip.number,
                 '{}'::jsonb, '{}'::jsonb, 'manual'
-         FROM input_parcels ip
-         WHERE EXISTS (SELECT 1 FROM ${writeCte})
-         ORDER BY ip.parcel_id
-         ON CONFLICT (parcel_id) DO NOTHING
-       )`
-}
+         FROM input_parcels ip`
 
 // Bound parameters of both fast-path statements. $23 is expires_at for a create and the xmin
 // CAS token for an update.
@@ -261,7 +256,12 @@ export const CREATE_SURVEY_ATOMIC_SQL = `WITH ${FAST_PATH_INPUT_PARCELS_SQL},
          ON CONFLICT (id) DO NOTHING
          RETURNING id, updated_at::text AS updated_at
        ),
-       ${ensuredParcelsSql("ins")},
+       ensured AS (
+         ${FAST_PATH_ENSURED_PARCELS_SELECT_SQL}
+         WHERE EXISTS (SELECT 1 FROM ins)
+         ORDER BY ip.parcel_id
+         ON CONFLICT (parcel_id) DO NOTHING
+       ),
        links AS (
          INSERT INTO survey_parcels (survey_id, parcel_id)
          SELECT ins.id, ip.parcel_id
@@ -274,6 +274,63 @@ export const CREATE_SURVEY_ATOMIC_SQL = `WITH ${FAST_PATH_INPUT_PARCELS_SQL},
          FROM ins
        )
        SELECT id, updated_at FROM ins`
+
+/**
+ * D-09: one atomic statement updates a survey that was read without a lock, re-links its parcels
+ * and writes the "updated" event. It writes only when the row is still the version that was
+ * read: `xmin` catches the writes that do not bump sync_version (submit, visibility change;
+ * RESEARCH Pitfall 6), and the sync_version and status predicates are kept too. The link diff
+ * deletes only the parcels outside the new set and inserts the new set with ON CONFLICT DO
+ * NOTHING, so the two parts never touch the same key within one snapshot. No row → the caller
+ * runs the locked path. Errors propagate (C-5).
+ */
+export const UPDATE_SURVEY_IF_UNCHANGED_SQL = `WITH u AS (
+         UPDATE surveys
+         SET site_name = $3,
+             visibility = $4,
+             parcel_id = $5::text,
+             observation_year = $6::int,
+             version_number = ${FAST_PATH_VERSION_NUMBER_SQL},
+             previous_survey_id = $8,
+             region_version = $9,
+             vegetation_stage = $10,
+             factors = $11::jsonb,
+             factor_results = $12::jsonb,
+             scores = $13::jsonb,
+             location = '{}'::jsonb,
+             sync_version = $14::int,
+             updated_at = $22::timestamptz
+         WHERE id = $1::text
+           AND user_id = $2::uuid
+           AND xmin = $23::xid
+           AND sync_version < $14::int
+           AND status <> 'submitted'
+         RETURNING id, updated_at::text AS updated_at
+       ),
+       ${FAST_PATH_INPUT_PARCELS_SQL},
+       ensured AS (
+         ${FAST_PATH_ENSURED_PARCELS_SELECT_SQL}
+         WHERE EXISTS (SELECT 1 FROM u)
+         ORDER BY ip.parcel_id
+         ON CONFLICT (parcel_id) DO NOTHING
+       ),
+       d AS (
+         DELETE FROM survey_parcels
+         WHERE survey_id IN (SELECT id FROM u)
+           AND parcel_id <> ALL($16::text[])
+       ),
+       i AS (
+         INSERT INTO survey_parcels (survey_id, parcel_id)
+         SELECT u.id, ip.parcel_id
+         FROM u CROSS JOIN input_parcels ip
+         ON CONFLICT (survey_id, parcel_id) DO NOTHING
+       ),
+       ev AS (
+         ${SURVEY_EVENT_INSERT_SQL}
+         SELECT $20::text, u.id, $2::uuid, 'updated', $21::jsonb
+         FROM u
+       )
+       SELECT id, updated_at FROM u`
 
 /**
  * Survey data access shared by the surveys and reports modules (D-07). Every method takes the
@@ -352,6 +409,20 @@ export class SurveysRepository {
     const result = await db.query<SurveyWriteResult>(
       CREATE_SURVEY_ATOMIC_SQL,
       fastWriteValues(input, null),
+    )
+    return result.rows[0] ?? null
+  }
+
+  // D-09: the updated row, or null when the row changed since it was read, is submitted, or
+  // already has this sync_version (nothing was written).
+  async updateSurveyIfUnchanged(
+    db: Queryable,
+    input: SurveyFastWriteInput,
+    casToken: string,
+  ): Promise<SurveyWriteResult | null> {
+    const result = await db.query<SurveyWriteResult>(
+      UPDATE_SURVEY_IF_UNCHANGED_SQL,
+      fastWriteValues(input, casToken),
     )
     return result.rows[0] ?? null
   }

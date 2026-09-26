@@ -1,3 +1,4 @@
+import { ConflictException } from "@nestjs/common"
 import { AuthenticatedUser } from "../src/auth/auth.types"
 import { DatabaseService } from "../src/database/database.service"
 import { StorageService } from "../src/storage/storage.service"
@@ -10,6 +11,8 @@ import {
   fastWriteValues,
   SurveyFastWriteInput,
   SurveysRepository,
+  UPDATE_SURVEY_IF_UNCHANGED_SQL,
+  UpsertReadRow,
 } from "../src/surveys/surveys.repository"
 import { SurveyUpsertBody } from "../src/surveys/surveys.types"
 
@@ -24,6 +27,35 @@ describe("SurveysService upsert fast path", () => {
     updated_at: "locked",
   }
 
+  function storedRow(overrides: Partial<UpsertReadRow> = {}): UpsertReadRow {
+    return {
+      id: "survey-1",
+      user_id: "11111111-1111-4111-8111-111111111111",
+      site_name: "Stored",
+      status: "draft",
+      visibility: "public",
+      parcel_id: "01001A0001",
+      parcel_ids: ["01001A0001"],
+      observation_year: 2025,
+      version_number: 2,
+      previous_survey_id: null,
+      region_version: null,
+      vegetation_stage: null,
+      factors: {},
+      factor_results: {},
+      scores: {},
+      created_at: "2026-01-01 00:00:00+00",
+      updated_at: "2026-01-01 00:00:00+00",
+      submitted_at: null,
+      expires_at: "2026-01-08 00:00:00+00",
+      sync_version: 1,
+      last_sync_error: null,
+      deleted_at: null,
+      cas_token: "4242",
+      ...overrides,
+    }
+  }
+
   function setup() {
     const db = {
       query: jest.fn(),
@@ -32,6 +64,7 @@ describe("SurveysService upsert fast path", () => {
     const repository = {
       readForUpsert: jest.fn(),
       createSurveyAtomic: jest.fn(),
+      updateSurveyIfUnchanged: jest.fn(),
     }
     const ibpRules = {
       validateDraft: jest.fn().mockReturnValue({
@@ -113,6 +146,138 @@ describe("SurveysService upsert fast path", () => {
       expect(db.transaction).not.toHaveBeenCalled()
     })
   })
+
+  describe("update", () => {
+    it("writes with one CAS statement and no transaction", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow())
+      repository.updateSurveyIfUnchanged.mockResolvedValue({ id: "survey-1", updated_at: "t2" })
+
+      const result = await service.upsertForUser(
+        user,
+        body({ sync_version: 2, parcel_ids: undefined }),
+      )
+
+      expect(result.updated_at).toBe("t2")
+      expect(db.transaction).not.toHaveBeenCalled()
+      expect(repository.updateSurveyIfUnchanged).toHaveBeenCalledTimes(1)
+      const [, input, casToken] = repository.updateSurveyIfUnchanged.mock.calls[0] as [
+        unknown,
+        SurveyFastWriteInput,
+        string,
+      ]
+      expect(casToken).toBe("4242")
+      // Without parcel_ids in the body the stored links are kept; the stored visibility and
+      // version number are carried over, as in the locked path.
+      expect(input).toMatchObject({
+        visibility: "public",
+        parcelIds: ["01001A0001"],
+        versionNumber: 2,
+        observationYear: 2025,
+        syncVersion: 2,
+      })
+    })
+
+    it("runs the locked path once when the CAS affected 0 rows", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow())
+      repository.updateSurveyIfUnchanged.mockResolvedValue(null)
+
+      await expect(service.upsertForUser(user, body({ sync_version: 2 }))).resolves.toBe(
+        lockedResult,
+      )
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+    })
+
+    it("propagates an error without running the locked path", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow())
+      repository.updateSurveyIfUnchanged.mockRejectedValue(new Error("boom"))
+
+      await expect(service.upsertForUser(user, body({ sync_version: 2 }))).rejects.toThrow("boom")
+      expect(db.transaction).not.toHaveBeenCalled()
+    })
+
+    it("leaves a submitted survey to the locked path", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow({ status: "submitted" }))
+
+      await expect(service.upsertForUser(user, body({ sync_version: 2 }))).resolves.toBe(
+        lockedResult,
+      )
+      expect(repository.updateSurveyIfUnchanged).not.toHaveBeenCalled()
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+    })
+
+    it("rejects an older sync_version from the read alone", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow({ sync_version: 3 }))
+
+      const error = await service
+        .upsertForUser(user, body({ sync_version: 2 }))
+        .catch((caught: unknown) => caught)
+      expect(error).toBeInstanceOf(ConflictException)
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: "sync_version_conflict",
+        details: { survey_id: "survey-1", server_sync_version: 3, client_sync_version: 2 },
+      })
+      expect(db.transaction).not.toHaveBeenCalled()
+      expect(repository.updateSurveyIfUnchanged).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("same sync_version", () => {
+    const same = () =>
+      body({
+        site_name: "Stored",
+        parcel_ids: ["01001A0001"],
+        visibility: "public",
+        observation_year: 2025,
+        version_number: 2,
+      })
+
+    it("answers an identical replay from the read, with no write", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow())
+
+      const result = await service.upsertForUser(user, same())
+
+      expect(result.updated_at).toBe("2026-01-01 00:00:00+00")
+      expect(db.transaction).not.toHaveBeenCalled()
+      expect(db.query).not.toHaveBeenCalled()
+      expect(repository.updateSurveyIfUnchanged).not.toHaveBeenCalled()
+    })
+
+    it("sends a visibility-only replay to the locked path", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow({ visibility: "private" }))
+
+      await expect(service.upsertForUser(user, same())).resolves.toBe(lockedResult)
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+    })
+
+    it("answers a visibility-only replay on a deleted survey without writing", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(
+        storedRow({ visibility: "private", deleted_at: "2026-01-02 00:00:00+00" }),
+      )
+
+      const result = await service.upsertForUser(user, same())
+      expect(result.updated_at).toBe("2026-01-01 00:00:00+00")
+      expect(db.transaction).not.toHaveBeenCalled()
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+    it("rejects different content with a 409", async () => {
+      const { service, db, repository } = setup()
+      repository.readForUpsert.mockResolvedValue(storedRow())
+
+      await expect(
+        service.upsertForUser(user, { ...same(), site_name: "Changed" }),
+      ).rejects.toBeInstanceOf(ConflictException)
+      expect(db.transaction).not.toHaveBeenCalled()
+    })
+  })
 })
 
 describe("SurveysRepository fast-path statements", () => {
@@ -154,13 +319,19 @@ describe("SurveysRepository fast-path statements", () => {
     expect(CREATE_SURVEY_ATOMIC_SQL).toContain(
       "INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)",
     )
+    expect(UPDATE_SURVEY_IF_UNCHANGED_SQL).toContain("xmin = $23::xid")
+    expect(UPDATE_SURVEY_IF_UNCHANGED_SQL).toContain("sync_version < $14::int")
+    expect(UPDATE_SURVEY_IF_UNCHANGED_SQL).toContain("status <> 'submitted'")
+    expect(UPDATE_SURVEY_IF_UNCHANGED_SQL).toContain("EXISTS (SELECT 1 FROM u)")
+    expect(UPDATE_SURVEY_IF_UNCHANGED_SQL).toContain("parcel_id <> ALL($16::text[])")
   })
 
   it("returns null when the statement wrote no row", async () => {
     const repository = new SurveysRepository()
     const db = { query: jest.fn().mockResolvedValue({ rows: [] }) }
     await expect(repository.createSurveyAtomic(db, input)).resolves.toBeNull()
+    await expect(repository.updateSurveyIfUnchanged(db, input, "1")).resolves.toBeNull()
     await expect(repository.readForUpsert(db, "survey-1", input.userId)).resolves.toBeNull()
-    expect(db.query.mock.calls[1][0]).toContain("s.xmin::text AS cas_token")
+    expect(db.query.mock.calls[2][0]).toContain("s.xmin::text AS cas_token")
   })
 })

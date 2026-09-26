@@ -145,7 +145,63 @@ export class SurveysService {
       return this.upsertLocked(user, body, prepared)
     }
 
-    // An existing row: the locked path decides (the update fast path is not wired yet).
+    const { cas_token: casToken, parcel_ids: existingParcelIds, ...existing } = current
+
+    if (syncVersion < existing.sync_version) {
+      throw olderSyncVersionConflict(surveyId, existing.sync_version, syncVersion)
+    }
+
+    if (syncVersion === existing.sync_version) {
+      const content = classifySameVersionContent(body, existing, existingParcelIds)
+      if (content === "visibility_only" && !existing.deleted_at && body.visibility) {
+        // The visibility write keeps its transaction (applyVisibilityChange + event).
+        return this.upsertLocked(user, body, prepared)
+      }
+      // Identical, conflict, or visibility-only on a deleted row: nothing is written.
+      return this.syncedResult(
+        prepared,
+        existing.id,
+        await this.resolveSameVersionUpsert(this.db, user.id, existing, body, syncVersion, content),
+      )
+    }
+
+    if (existing.status === "submitted") {
+      // The read-only rule and the restricted update keep the locked transaction.
+      return this.upsertLocked(user, body, prepared)
+    }
+
+    const selectedParcelIds = this.selectParcelIds(body, existing, existingParcelIds)
+    const parcelId = selectedParcelIds[0] ?? null
+    const version = this.versionDefaults(body, existing, parcelId, prepared.now)
+    const updated = await this.repository.updateSurveyIfUnchanged(
+      this.db,
+      {
+        surveyId,
+        userId: user.id,
+        siteName: prepared.siteName,
+        visibility: body.visibility ?? existing.visibility,
+        parcelId,
+        parcelIds: selectedParcelIds,
+        observationYear: version.observationYear,
+        versionNumber: version.versionNumber,
+        previousSurveyId: version.previousSurveyId,
+        regionVersion: body.region_version ?? existing.region_version,
+        vegetationStage: body.vegetation_stage ?? existing.vegetation_stage,
+        factors: body.factors ?? existing.factors ?? {},
+        factorResults: draftValidation.factor_results ?? existing.factor_results ?? {},
+        scores: prepared.computedScores,
+        syncVersion,
+        now: prepared.now.toISOString(),
+        expiresAt: prepared.expiresAt,
+        eventPayload: this.upsertEventPayload(prepared),
+      },
+      casToken,
+    )
+    if (updated) {
+      return this.syncedResult(prepared, updated.id, updated.updated_at)
+    }
+    // 0 rows: the row changed since statement A (xmin), or was submitted, or another request
+    // already stored this sync_version. The locked path decides on the fresh row.
     return this.upsertLocked(user, body, prepared)
   }
 
