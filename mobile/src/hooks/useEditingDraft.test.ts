@@ -19,6 +19,7 @@ jest.mock("../storage/surveys", () => ({
 }))
 
 import { cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr } from "../i18n"
 import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from "../storage"
 import { useEditingDraft } from "./useEditingDraft"
 
@@ -167,7 +168,7 @@ describe("useEditingDraft", () => {
       handleOpenCreateSurvey()
       await new Promise((resolve) => setImmediate(resolve))
 
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("DB full"))
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.draftInitFailed())
     })
   })
 
@@ -215,7 +216,7 @@ describe("useEditingDraft", () => {
       const result = await handleCreateDraft()
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("Write failed"))
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.draftSaveFailed())
     })
   })
 
@@ -230,7 +231,7 @@ describe("useEditingDraft", () => {
 
       expect(result).toBe(false)
       expect(onStatusChange).toHaveBeenCalledWith(
-        expect.stringContaining("submitted and read-only"),
+        fr.status.editing.readOnly({ name: fr.common.untitledSurvey }),
       )
       expect(mockGetLocalSurveyDraft).not.toHaveBeenCalled()
     })
@@ -243,7 +244,7 @@ describe("useEditingDraft", () => {
       const result = await handleStartEditSurvey(TEST_SURVEY_ID)
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("not found locally"))
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.notFound())
     })
 
     test("applies draft to form and enters edit mode on success", async () => {
@@ -268,7 +269,7 @@ describe("useEditingDraft", () => {
       const result = await handleStartEditSurvey(TEST_SURVEY_ID)
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("Read error"))
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.editLoadFailed())
     })
   })
 
@@ -281,7 +282,7 @@ describe("useEditingDraft", () => {
       const result = await handleSaveSurveyEdits()
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith("No survey selected for editing")
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.noSurveySelected())
     })
 
     test("calls updateLocalDraft and resets editing state", async () => {
@@ -316,7 +317,7 @@ describe("useEditingDraft", () => {
       const result = await handleSaveSurveyEdits()
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("Save failed"))
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.editSaveFailed())
     })
   })
 })

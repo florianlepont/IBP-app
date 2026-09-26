@@ -46,7 +46,10 @@ jest.mock("../app/number-utils", () => ({
 }))
 
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr } from "../i18n"
 import { useSurveyForm } from "./useSurveyForm"
+
+const { fields, rules } = fr.validation
 
 async function renderForm() {
   const { result } = await renderHook(() => useSurveyForm())
@@ -113,17 +116,17 @@ describe("useSurveyForm", () => {
     test("factorSections A has one field with required error when empty", async () => {
       const hook = await buildHook()
       expect(hook.factorSections.A).toHaveLength(1)
-      expect(hook.factorSections.A[0].error).toContain("required")
+      expect(hook.factorSections.A[0].error).toBe(rules.required(fields.native_genus_count))
     })
 
     test("factorSections H uses oneOfError (shows required error when empty)", async () => {
       const hook = await buildHook()
-      expect(hook.factorSections.H[0].error).toContain("required")
+      expect(hook.factorSections.H[0].error).toBe(rules.required(fields.class_score))
     })
 
     test("formErrors.siteName is set when siteName is empty", async () => {
       const hook = await buildHook()
-      expect(hook.formErrors.siteName).toContain("required")
+      expect(hook.formErrors.siteName).toBe(rules.required(fields.siteName))
     })
 
     test("draftInput has expected shape", async () => {
@@ -499,7 +502,7 @@ describe("useSurveyForm", () => {
       }
       const hook = await buildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
-      expect(hook.factorSections.A[0].error).toContain("must be a number")
+      expect(hook.factorSections.A[0].error).toBe(rules.number(fields.native_genus_count))
     })
 
     test("non-integer value produces 'must be an integer' error", async () => {
@@ -511,7 +514,7 @@ describe("useSurveyForm", () => {
       }
       const hook = await buildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
-      expect(hook.factorSections.A[0].error).toContain("must be an integer")
+      expect(hook.factorSections.A[0].error).toBe(rules.integer(fields.native_genus_count))
     })
 
     test("value below min produces '>= min' error", async () => {
@@ -523,7 +526,7 @@ describe("useSurveyForm", () => {
       }
       const hook = await buildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
-      expect(hook.factorSections.A[0].error).toContain(">= 0")
+      expect(hook.factorSections.A[0].error).toBe(rules.min(fields.native_genus_count, 0))
     })
 
     test("value above max produces '<= max' error (factorG, max=100)", async () => {
@@ -535,7 +538,7 @@ describe("useSurveyForm", () => {
       }
       const hook = await buildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
-      expect(hook.factorSections.G[0].error).toContain("<= 100")
+      expect(hook.factorSections.G[0].error).toBe(rules.max(fields.open_flowering_percent, 100))
     })
 
     test("valid value produces null error for factorA", async () => {
@@ -571,7 +574,7 @@ describe("useSurveyForm", () => {
       }
       const hook = await buildHook()
       mockConstants.DEFAULT_SURVEY_FORM = saved
-      expect(hook.factorSections.H[0].error).toContain("must be one of")
+      expect(hook.factorSections.H[0].error).toBe(rules.oneOf(fields.class_score, "0, 2, 5"))
     })
 
     test("formErrors.siteName is null when siteName is non-empty", async () => {

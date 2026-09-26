@@ -22,7 +22,10 @@ jest.mock("expo-location", () => ({
   Accuracy: { Balanced: 3 },
 }))
 
+import { fr } from "../i18n"
 import { useGpsCapture } from "./useGpsCapture"
+
+const text = fr.status.gps
 
 const TEST_POSITION = {
   coords: { latitude: 48.643, longitude: 1.829 },
@@ -59,8 +62,8 @@ describe("useGpsCapture", () => {
     const result = await handleCaptureGpsLocation()
 
     expect(result).toBeNull()
-    expect(onStatusChange).toHaveBeenCalledWith("Location services disabled")
-    expect(onAlert).toHaveBeenCalledWith("Location disabled", expect.any(String))
+    expect(onStatusChange).toHaveBeenCalledWith(text.servicesDisabled())
+    expect(onAlert).toHaveBeenCalledWith(text.alerts.servicesDisabled.title, expect.any(String))
   })
 
   test("returns false and alerts when permission is denied", async () => {
@@ -71,7 +74,7 @@ describe("useGpsCapture", () => {
     const result = await handleCaptureGpsLocation()
 
     expect(result).toBeNull()
-    expect(onAlert).toHaveBeenCalledWith("Location disabled", expect.any(String))
+    expect(onAlert).toHaveBeenCalledWith(text.alerts.permissionDenied.title, expect.any(String))
   })
 
   test("uses existing permission without requesting again", async () => {
@@ -109,7 +112,7 @@ describe("useGpsCapture", () => {
       lng: 1.829,
       collected_at: expect.any(String),
     })
-    expect(onStatusChange).toHaveBeenCalledWith("GPS location captured")
+    expect(onStatusChange).toHaveBeenCalledWith(text.captured())
   })
 
   test("returns true using fallback when getCurrentPositionAsync fails", async () => {
@@ -125,7 +128,7 @@ describe("useGpsCapture", () => {
       lng: 2.0,
       collected_at: expect.any(String),
     })
-    expect(onStatusChange).toHaveBeenCalledWith("Approximate location captured")
+    expect(onStatusChange).toHaveBeenCalledWith(text.approximateCaptured())
     expect(surveyForm.applyGpsLocation).toHaveBeenCalledTimes(1)
   })
 
@@ -138,7 +141,7 @@ describe("useGpsCapture", () => {
     const result = await handleCaptureGpsLocation()
 
     expect(result).toBeNull()
-    expect(onAlert).toHaveBeenCalledWith("GPS unavailable", expect.any(String))
+    expect(onAlert).toHaveBeenCalledWith(text.alerts.unavailable.title, expect.any(String))
   })
 
   test("returns true and applies position when no last known position", async () => {
@@ -160,6 +163,6 @@ describe("useGpsCapture", () => {
       lng: 1.829,
       collected_at: expect.any(String),
     })
-    expect(onStatusChange).toHaveBeenCalledWith("GPS location captured")
+    expect(onStatusChange).toHaveBeenCalledWith(text.captured())
   })
 })

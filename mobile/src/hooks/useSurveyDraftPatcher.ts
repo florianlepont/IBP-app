@@ -1,6 +1,7 @@
 import { getLocalSurveyDraft, updateLocalDraft } from "../storage/surveys"
 import { DEFAULT_SURVEY_FORM, normalizeVegetationStageForRegion } from "../app/constants"
 import { RegionVersion, VegetationStage } from "../app/types"
+import { fr, logStatusDetail, type StatusMessage } from "../i18n"
 import { useSurveyList } from "./useSurveyList"
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -18,25 +19,30 @@ type DirectDraftPatchInput = {
 
 type UseSurveyDraftPatcherParams = {
   surveyList: ReturnType<typeof useSurveyList>
-  onStatusChange: (msg: string) => void
+  onStatusChange: (message: StatusMessage) => void
 }
+
+const text = fr.status.editing
+
+const surveyName = (survey: { site_name?: string | null } | undefined): string =>
+  survey?.site_name?.trim() || fr.common.untitledSurvey
 
 export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyDraftPatcherParams) {
   const patchSurveyDraftDirectly = async (
     surveyId: string,
     mutator: (draft: DirectDraftPatchInput) => DirectDraftPatchInput,
-    successMessage: string,
+    successMessage: StatusMessage,
   ): Promise<boolean> => {
     const current = surveyList.surveys.find((survey) => survey.id === surveyId)
     if (current?.status === "submitted") {
-      onStatusChange(`Survey ${surveyId} is submitted and read-only`)
+      onStatusChange(text.readOnly({ name: surveyName(current) }))
       return false
     }
 
     try {
       const draft = await getLocalSurveyDraft(surveyId)
       if (!draft) {
-        onStatusChange(`Survey not found locally: ${surveyId}`)
+        onStatusChange(text.notFound())
         return false
       }
 
@@ -51,7 +57,7 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
         site_name:
           typeof draft.site_name === "string" && draft.site_name.trim().length > 0
             ? draft.site_name
-            : "Unnamed site",
+            : fr.common.untitledSurvey,
         region_version: baseRegion,
         vegetation_stage: baseStage,
         parcel_ids: Array.isArray(draft.parcel_ids)
@@ -76,16 +82,21 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
       onStatusChange(successMessage)
       return true
     } catch (error) {
-      onStatusChange(`Direct update error: ${(error as Error).message}`)
+      logStatusDetail("editing.directUpdate", error)
+      onStatusChange(text.updateFailed())
       return false
     }
   }
 
+  const currentName = (surveyId: string): string =>
+    surveyName(surveyList.surveys.find((survey) => survey.id === surveyId))
+
   const handleRenameSurvey = async (surveyId: string, nextSiteName: string): Promise<void> => {
+    const siteName = nextSiteName.trim() || fr.common.untitledSurvey
     await patchSurveyDraftDirectly(
       surveyId,
-      (draft) => ({ ...draft, site_name: nextSiteName.trim() || "Unnamed site" }),
-      `Survey name updated for ${surveyId}`,
+      (draft) => ({ ...draft, site_name: siteName }),
+      text.renamed({ name: siteName }),
     )
   }
 
@@ -100,7 +111,7 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
         region_version: region,
         vegetation_stage: normalizeVegetationStageForRegion(region, draft.vegetation_stage),
       }),
-      `Region updated for ${surveyId}`,
+      text.regionUpdated({ name: currentName(surveyId) }),
     )
   }
 
@@ -114,7 +125,7 @@ export function useSurveyDraftPatcher({ surveyList, onStatusChange }: UseSurveyD
         ...draft,
         vegetation_stage: normalizeVegetationStageForRegion(draft.region_version, stage),
       }),
-      `Vegetation stage updated for ${surveyId}`,
+      text.vegetationStageUpdated({ name: currentName(surveyId) }),
     )
   }
 
