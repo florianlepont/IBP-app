@@ -1,9 +1,12 @@
 /**
  * Tests for useParcelStatuses.
  *
- * Strategy: spy on React.useState / useRef / useMemo and capture the useEffect
- * callback to run it manually with fake timers.
+ * Strategy: render the real hook with renderHook (phase 01.9 D-01) under fake
+ * timers, advance the debounce inside act and assert the fetch call and the
+ * rendered items/loading state.
  */
+
+jest.mock("react-native", () => ({ Platform: { OS: "ios" } }))
 
 const mockFetchPublicParcelStatuses = jest.fn()
 const mockComputeRegionBbox = jest.fn()
@@ -20,97 +23,104 @@ jest.mock("../app/map-viewport", () => ({
 
 jest.mock("react-native-maps", () => ({}))
 
-import React from "react"
+import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
 import { useParcelStatuses } from "./useParcelStatuses"
 
 const MOCK_REGION = { latitude: 48, longitude: 2, latitudeDelta: 0.1, longitudeDelta: 0.1 }
 
-function useBuildHook(overrides: Record<string, unknown> = {}) {
-  return useParcelStatuses({
+type Props = Parameters<typeof useParcelStatuses>[0]
+
+function buildProps(overrides: Partial<Props> = {}): Props {
+  return {
     apiUrl: "http://localhost:3000",
     region: MOCK_REGION as never,
     ...overrides,
+  }
+}
+
+async function renderStatuses(overrides: Partial<Props> = {}) {
+  return renderHook((props: Props) => useParcelStatuses(props), {
+    initialProps: buildProps(overrides),
   })
 }
 
-describe("useParcelStatuses", () => {
-  let useStateSpy: jest.SpyInstance
-  let useRefSpy: jest.SpyInstance
-  let useMemoSpy: jest.SpyInstance
-  let useEffectSpy: jest.SpyInstance
-  let capturedEffect: React.EffectCallback | null
+async function advance(ms: number): Promise<void> {
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(ms)
+  })
+}
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+afterEach(async () => {
+  await cleanup()
+})
+
+describe("useParcelStatuses", () => {
   beforeEach(() => {
     jest.useFakeTimers()
-    jest.clearAllTimers()
-    capturedEffect = null
+    jest.clearAllMocks()
 
     mockComputeRegionBbox.mockReturnValue("0,0,1,1")
     mockComputeRegionZoom.mockReturnValue(14)
-
-    useStateSpy = jest
-      .spyOn(React, "useState")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useRefSpy = jest
-      .spyOn(React, "useRef")
-      .mockImplementation((initial: unknown) => ({ current: initial }) as never)
-    useMemoSpy = jest
-      .spyOn(React, "useMemo")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation((fn) => fn() as any)
-    useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation((fn) => {
-      capturedEffect = fn
-    })
+    mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
   })
 
   afterEach(() => {
     jest.useRealTimers()
-    useStateSpy.mockRestore()
-    useRefSpy.mockRestore()
-    useMemoSpy.mockRestore()
-    useEffectSpy.mockRestore()
   })
 
   // ─── Initialization ───────────────────────────────────────────────────────
 
   describe("hook initialization", () => {
-    test("returns items and loading", () => {
-      const hook = useBuildHook()
-      expect(hook).toHaveProperty("items")
-      expect(hook).toHaveProperty("loading")
+    test("returns items and loading", async () => {
+      const { result } = await renderStatuses()
+      expect(result.current.items).toEqual([])
+      expect(result.current.loading).toBe(false)
     })
 
-    test("computes bbox and zoom from region via useMemo", () => {
-      useBuildHook()
+    test("computes bbox and zoom from region via useMemo", async () => {
+      await renderStatuses()
       expect(mockComputeRegionBbox).toHaveBeenCalledWith(MOCK_REGION)
       expect(mockComputeRegionZoom).toHaveBeenCalledWith(MOCK_REGION)
     })
 
-    test("captures an effect for side effects", () => {
-      useBuildHook()
-      expect(capturedEffect).not.toBeNull()
+    test("defers the first fetch to the debounce timer on mount", async () => {
+      await renderStatuses()
+      expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
+      await advance(400)
+      expect(mockFetchPublicParcelStatuses).toHaveBeenCalledTimes(1)
     })
   })
 
   // ─── enabled = false ──────────────────────────────────────────────────────
 
   describe("when disabled", () => {
-    test("effect does not schedule a fetch", () => {
-      useBuildHook({ enabled: false })
-      capturedEffect?.()
-      jest.runAllTimers()
+    test("effect does not schedule a fetch", async () => {
+      await renderStatuses({ enabled: false })
+      await advance(1000)
       expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
     })
 
-    test("effect calls setItems([]) and setLoading(false)", () => {
-      const hook = useBuildHook({ enabled: false })
-      const _setItems = hook.items // items from useState spy
-      // we can verify through the effect that state setters are called
-      // (they are jest.fn() from useStateSpy, captured in order of useState calls)
-      capturedEffect?.()
-      // No timer should have been created
-      expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
+    test("effect clears items and loading when the hook becomes disabled", async () => {
+      mockFetchPublicParcelStatuses.mockResolvedValue({ items: [{ id: "p1" }] })
+      const { result, rerender } = await renderStatuses()
+      await advance(400)
+      expect(result.current.items).toEqual([{ id: "p1" }])
+
+      await rerender(buildProps({ enabled: false }))
+
+      expect(result.current.items).toEqual([])
+      expect(result.current.loading).toBe(false)
+      expect(mockFetchPublicParcelStatuses).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -118,18 +128,14 @@ describe("useParcelStatuses", () => {
 
   describe("when enabled", () => {
     test("effect schedules fetch after debounce (default 400ms)", async () => {
-      mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      useBuildHook()
-      capturedEffect?.()
+      await renderStatuses()
 
       // Before debounce: not yet called
-      jest.advanceTimersByTime(399)
+      await advance(399)
       expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
 
       // After debounce: called
-      jest.advanceTimersByTime(1)
-      await Promise.resolve()
-      await Promise.resolve()
+      await advance(1)
 
       expect(mockFetchPublicParcelStatuses).toHaveBeenCalledWith(
         "http://localhost:3000",
@@ -138,24 +144,18 @@ describe("useParcelStatuses", () => {
     })
 
     test("effect respects custom debounceMs", async () => {
-      mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      useBuildHook({ debounceMs: 200 })
-      capturedEffect?.()
+      await renderStatuses({ debounceMs: 200 })
 
-      jest.runAllTimers()
-      await Promise.resolve()
-      await Promise.resolve()
+      await advance(199)
+      expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
+      await advance(1)
 
       expect(mockFetchPublicParcelStatuses).toHaveBeenCalled()
     })
 
     test("passes year to fetchPublicParcelStatuses when provided", async () => {
-      mockFetchPublicParcelStatuses.mockResolvedValue({ items: [] })
-      useBuildHook({ year: 2023 })
-      capturedEffect?.()
-      jest.advanceTimersByTime(400)
-      await Promise.resolve()
-      await Promise.resolve()
+      await renderStatuses({ year: 2023 })
+      await advance(400)
 
       expect(mockFetchPublicParcelStatuses).toHaveBeenCalledWith(
         expect.anything(),
@@ -163,53 +163,88 @@ describe("useParcelStatuses", () => {
       )
     })
 
+    test("sets loading while the request is in flight", async () => {
+      const pending = deferred<{ items: unknown[] }>()
+      mockFetchPublicParcelStatuses.mockReturnValue(pending.promise)
+      const { result } = await renderStatuses()
+
+      await advance(400)
+      expect(result.current.loading).toBe(true)
+
+      await act(async () => {
+        pending.resolve({ items: [] })
+        await pending.promise
+      })
+      expect(result.current.loading).toBe(false)
+    })
+
     test("handles successful fetch with valid items array", async () => {
       const items = [{ id: "p1" }, { id: "p2" }]
       mockFetchPublicParcelStatuses.mockResolvedValue({ items })
-      useBuildHook()
-      capturedEffect?.()
-      jest.advanceTimersByTime(400)
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
+      const { result } = await renderStatuses()
+      await advance(400)
 
       expect(mockFetchPublicParcelStatuses).toHaveBeenCalled()
+      expect(result.current.items).toEqual(items)
+      expect(result.current.loading).toBe(false)
     })
 
     test("handles successful fetch with non-array items (defaults to [])", async () => {
       mockFetchPublicParcelStatuses.mockResolvedValue({ items: null })
-      useBuildHook()
-      capturedEffect?.()
-      jest.advanceTimersByTime(400)
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
+      const { result } = await renderStatuses()
+      await advance(400)
 
       expect(mockFetchPublicParcelStatuses).toHaveBeenCalled()
+      expect(result.current.items).toEqual([])
+      expect(result.current.loading).toBe(false)
     })
 
     test("handles fetch error gracefully", async () => {
       mockFetchPublicParcelStatuses.mockRejectedValue(new Error("fetch failed"))
-      useBuildHook()
-      capturedEffect?.()
-      jest.advanceTimersByTime(400)
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
+      const { result } = await renderStatuses()
+      await advance(400)
 
       expect(mockFetchPublicParcelStatuses).toHaveBeenCalled()
+      expect(result.current.items).toEqual([])
+      expect(result.current.loading).toBe(false)
+    })
+
+    test("ignores a stale response once a newer request has started", async () => {
+      const first = deferred<{ items: unknown[] }>()
+      const second = deferred<{ items: unknown[] }>()
+      mockFetchPublicParcelStatuses
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise)
+        .mockResolvedValueOnce({ items: [{ id: "fresh" }] })
+      const { result, rerender } = await renderStatuses({ year: 2021 })
+      await advance(400)
+      await rerender(buildProps({ year: 2022 }))
+      await advance(400)
+      await rerender(buildProps({ year: 2023 }))
+      await advance(400)
+      expect(result.current.items).toEqual([{ id: "fresh" }])
+
+      await act(async () => {
+        first.resolve({ items: [{ id: "stale" }] })
+        second.reject(new Error("late"))
+        await first.promise
+        await second.promise.catch(() => undefined)
+      })
+      expect(result.current.items).toEqual([{ id: "fresh" }])
+      expect(result.current.loading).toBe(false)
     })
   })
 
   // ─── cleanup ──────────────────────────────────────────────────────────────
 
   describe("cleanup", () => {
-    test("effect returns a cleanup function (covers cleanup code path)", () => {
-      useBuildHook()
-      const cleanup = capturedEffect?.() as (() => void) | undefined
-      expect(typeof cleanup).toBe("function")
-      // Calling cleanup should not throw (clearTimeout on the scheduled timer)
-      expect(() => cleanup?.()).not.toThrow()
+    test("unmounting before the debounce clears the scheduled timer", async () => {
+      const { unmount } = await renderStatuses()
+      await advance(399)
+
+      await unmount()
+      await advance(1000)
+      expect(mockFetchPublicParcelStatuses).not.toHaveBeenCalled()
     })
   })
 })
