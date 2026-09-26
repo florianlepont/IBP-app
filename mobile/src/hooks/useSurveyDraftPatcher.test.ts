@@ -146,7 +146,11 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, fr.status.editing.draftCreated())
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(true)
     })
