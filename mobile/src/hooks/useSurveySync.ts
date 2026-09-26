@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Alert } from "react-native"
 import { SurveyDetailResponse, SurveyDetailTab, SurveyEventItem } from "../app/types"
 import { formatUnsyncedWorkSummary, hasUnsyncedWork } from "../app/local-data-owner"
@@ -24,6 +24,7 @@ import { useAttachmentPreviews } from "./survey-sync/useAttachmentPreviews"
 import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
 import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
 import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
+import { useStableActions } from "../state/useLatestCallback"
 
 type UseSurveySyncParams = {
   apiUrl: string
@@ -49,7 +50,8 @@ export function useSurveySync({
   onStopEditing,
 }: UseSurveySyncParams) {
   const [statusText, setStatusText] = useState<string>("Ready")
-  const [operationStatus, setOperationStatus] = useState(createInitialOperationStatus("Ready"))
+  // Internal only: no consumer reads it (RESEARCH Pattern 1).
+  const [, setOperationStatus] = useState(createInitialOperationStatus("Ready"))
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({})
   const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null)
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({})
@@ -333,7 +335,7 @@ export function useSurveySync({
     [clearSession, setStatus],
   )
 
-  const handleDebugResetIbpData = async (): Promise<void> => {
+  const handleDebugResetIbpData = useCallback(async (): Promise<void> => {
     runDebugReset({
       title: "Debug reset IBP data",
       message:
@@ -345,9 +347,9 @@ export function useSurveySync({
         return `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`
       },
     })
-  }
+  }, [apiUrl, resetLocalSurveyState, runDebugReset, withAuthRetry])
 
-  const handleDebugResetUserData = async (): Promise<void> => {
+  const handleDebugResetUserData = useCallback(async (): Promise<void> => {
     runDebugReset({
       title: "Debug reset user data",
       message: "This will delete all users on server and clear your local session and IBP data.",
@@ -359,7 +361,7 @@ export function useSurveySync({
         return `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`
       },
     })
-  }
+  }, [apiUrl, clearSession, resetLocalSurveyState, runDebugReset, withAuthRetry])
   const handleLoadCanonicalDetails = useCallback(
     async (surveyId: string, options?: { silent?: boolean }): Promise<void> => {
       const silent = options?.silent ?? false
@@ -518,25 +520,36 @@ export function useSurveySync({
     handleLoadSurveyEvents,
   ])
 
-  return {
-    accessToken,
-    sessionRestoring,
-    isAuthenticated,
-    currentUser,
-    profile,
-    profileUpdating,
-    status: statusText,
-    operationStatus,
-    setStatus,
-    surveyDetails,
-    detailsLoadingSurveyId,
-    surveyEvents,
-    eventsLoadingSurveyId,
-    localDataOwnerStatus: localDataOwner.status,
-    foreignWork: localDataOwner.foreignWork,
-    foreignOwnerEmail: localDataOwner.foreignOwnerEmail,
-    handleSwitchToOwnerAccount,
-    handleDiscardForeignData,
+  // D-01 / criterion 1: memoised slices instead of a new literal every render.
+  // Each action slice is created once (useStableActions) and forwards to the
+  // latest handler, so its identity never changes.
+  const localDataOwnerStatus = localDataOwner.status
+  const foreignWork = localDataOwner.foreignWork
+  const foreignOwnerEmail = localDataOwner.foreignOwnerEmail
+  const sessionState = useMemo(
+    () => ({
+      sessionRestoring,
+      isAuthenticated,
+      currentUser,
+      profile,
+      profileUpdating,
+      localDataOwnerStatus,
+      foreignWork,
+      foreignOwnerEmail,
+    }),
+    [
+      sessionRestoring,
+      isAuthenticated,
+      currentUser,
+      profile,
+      profileUpdating,
+      localDataOwnerStatus,
+      foreignWork,
+      foreignOwnerEmail,
+    ],
+  )
+
+  const sessionActions = useStableActions({
     handleLogin,
     handleRegister,
     handleForgotPassword,
@@ -549,11 +562,22 @@ export function useSurveySync({
     handlePickProfilePictureFromLibrary,
     handleTakeProfilePictureFromCamera,
     handleRemoveProfilePicture,
+    handleSwitchToOwnerAccount,
+    handleDiscardForeignData,
+  })
+
+  const syncActions = useStableActions({
+    setStatus,
     handleSync,
     handlePullChanges,
     handleReportSurvey,
     handleDebugResetIbpData,
     handleDebugResetUserData,
+    handleEnsureAttachmentPreviews,
+    handleSimulateMissingAttachmentFile,
+  })
+
+  const surveyOperations = useStableActions({
     handleSubmitSurvey,
     handleRetrySurvey,
     handleDiscardSurvey,
@@ -564,7 +588,37 @@ export function useSurveySync({
     handleDeleteAttachment,
     handleLoadCanonicalDetails,
     handleLoadSurveyEvents,
-    handleEnsureAttachmentPreviews,
-    handleSimulateMissingAttachmentFile,
-  }
+  })
+
+  const surveyDetailsState = useMemo(
+    () => ({ surveyDetails, detailsLoadingSurveyId, surveyEvents, eventsLoadingSurveyId }),
+    [surveyDetails, detailsLoadingSurveyId, surveyEvents, eventsLoadingSurveyId],
+  )
+
+  return useMemo(
+    () => ({
+      // Flat view of the stable session and sync actions, kept for the 01.5
+      // invariant suites (useSurveySync.logout-purge.test.ts reads
+      // handleLogout/handleSync at the top level and must stay unchanged).
+      // New code reads the slices.
+      ...sessionActions,
+      ...syncActions,
+      sessionState,
+      sessionActions,
+      accessToken,
+      status: statusText,
+      syncActions,
+      surveyOperations,
+      surveyDetailsState,
+    }),
+    [
+      sessionState,
+      sessionActions,
+      accessToken,
+      statusText,
+      syncActions,
+      surveyOperations,
+      surveyDetailsState,
+    ],
+  )
 }
