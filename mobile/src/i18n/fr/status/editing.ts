@@ -11,8 +11,7 @@ export const editingStatusFr = {
   createOpened: () => statusText("Nouveau relevé : préparation du brouillon…"),
   draftInitialized: () => statusText("Brouillon prêt"),
   draftInitFailed: () => statusText(`Impossible de préparer le brouillon. ${RETRY}`),
-  draftSaved: ({ name }: { name: string }) =>
-    statusText(`« ${name} » enregistré sur cet appareil`),
+  draftSaved: ({ name }: { name: string }) => statusText(`« ${name} » enregistré sur cet appareil`),
   draftCreated: () => statusText("Brouillon enregistré sur cet appareil"),
   draftSaveFailed: () => statusText(`Impossible d'enregistrer le brouillon. ${RETRY}`),
   editing: ({ name }: { name: string }) => statusText(`Modification de « ${name} »`),
@@ -31,8 +30,7 @@ export const editingStatusFr = {
 
   // Direct changes from the survey detail (useSurveyDraftPatcher)
   renamed: ({ name }: { name: string }) => statusText(`Relevé renommé en « ${name} »`),
-  regionUpdated: ({ name }: { name: string }) =>
-    statusText(`Région mise à jour pour « ${name} »`),
+  regionUpdated: ({ name }: { name: string }) => statusText(`Région mise à jour pour « ${name} »`),
   vegetationStageUpdated: ({ name }: { name: string }) =>
     statusText(`Stade de végétation mis à jour pour « ${name} »`),
   updateFailed: () => statusText(`Impossible d'enregistrer la modification. ${RETRY}`),

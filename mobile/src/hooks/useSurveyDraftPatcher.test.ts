@@ -65,7 +65,11 @@ describe("useSurveyDraftPatcher", () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "submitted", visibility: "private" }]
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, fr.status.editing.draftCreated())
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(false)
       expect(onStatusChange).toHaveBeenCalledWith(
@@ -79,7 +83,11 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockResolvedValue(null)
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, fr.status.editing.draftCreated())
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(false)
       expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.notFound())
@@ -123,7 +131,11 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockRejectedValue(new Error("DB crash"))
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, fr.status.editing.draftCreated())
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(false)
       expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.updateFailed())
@@ -134,7 +146,7 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "ok")
+      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, fr.status.editing.draftCreated())
 
       expect(result).toBe(true)
     })
