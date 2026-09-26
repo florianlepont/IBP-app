@@ -20,15 +20,6 @@ const report = require("../../scripts/structure-report") as StructureReport
 
 const MOBILE_ROOT = path.resolve(__dirname, "../..")
 
-// Measured 01.9-04 on the pre-phase tree. Counts may only go down. Plan 01.9-29 sets every
-// ratchet to 0 (D-04: the unused-key script must report 0).
-const BASELINE = {
-  unusedStyleKeys: 301,
-  longFiles: 10,
-  literals: 635,
-  statusIdLeaks: 66,
-}
-
 let fixtureRoot = ""
 
 function writeFixture(relativePath: string, content: string): string {
@@ -218,21 +209,25 @@ describe("findStatusIdLeaks", () => {
   })
 })
 
-describe("structure ratchet on mobile/src and App.tsx", () => {
+// Phase 01.9 gates (D-04, D-06), locked at exact zero by plan 01.9-29 after the 01.9-04
+// baseline (301 unused style keys, 10 long files, 635 literals, 66 status id leaks) was
+// migrated. Each finder must return nothing; a finding names the file to fix.
+describe("structure gates on mobile/src and App.tsx", () => {
   const files = report.collectFiles(report.DEFAULT_PATHS, MOBILE_ROOT)
 
-  it("never exceeds the 01.9-04 baseline", () => {
-    const counts = {
-      unusedStyleKeys: report.findUnusedStyleKeys(files).length,
-      longFiles: report.findLongFiles(files).length,
-      literals: report.findUserFacingLiterals(files).length,
-      statusIdLeaks: report.findStatusIdLeaks(files).length,
-    }
-    console.info(`structure counts: ${JSON.stringify(counts)}`)
+  it("has no unused style key (D-04)", () => {
+    expect(report.findUnusedStyleKeys(files)).toEqual([])
+  })
 
-    expect(counts.unusedStyleKeys).toBeLessThanOrEqual(BASELINE.unusedStyleKeys)
-    expect(counts.longFiles).toBeLessThanOrEqual(BASELINE.longFiles)
-    expect(counts.literals).toBeLessThanOrEqual(BASELINE.literals)
-    expect(counts.statusIdLeaks).toBeLessThanOrEqual(BASELINE.statusIdLeaks)
+  it("has no file over 400 lines under screens/ and navigation/ (D-04)", () => {
+    expect(report.findLongFiles(files)).toEqual([])
+  })
+
+  it("has no user-facing literal outside src/i18n (D-06)", () => {
+    expect(report.findUserFacingLiterals(files)).toEqual([])
+  })
+
+  it("has no id or raw error text in a status message (D-06)", () => {
+    expect(report.findStatusIdLeaks(files)).toEqual([])
   })
 })

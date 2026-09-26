@@ -11,14 +11,13 @@ import {
   buildAuth0UnauthorizedMessage,
 } from "../app/auth0-config"
 import { extractIdTokenClaims, IdTokenClaims } from "../app/id-token"
-import { fr, logStatusDetail } from "../i18n"
+import { fr, logStatusDetail, type StatusMessage } from "../i18n"
 import { AuthUser } from "../app/types"
 import { clearCachedProfile, loadCachedProfile, saveCachedProfile } from "../storage/profile-cache"
 import {
   AUTH_REQUIRED_ERROR,
   AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
   classifyCredentialsError,
-  EMAIL_ALREADY_LINKED_MESSAGE,
   isEmailAlreadyLinkedError,
 } from "./auth-errors"
 import { OperationScope, OperationState } from "./operation-status"
@@ -78,7 +77,7 @@ function extractLoginErrorMessage(error: unknown): string {
 
 type UseAuth0SessionParams = {
   apiUrl: string
-  reportStatus: (scope: OperationScope, state: OperationState, message: string) => void
+  reportStatus: (scope: OperationScope, state: OperationState, message: StatusMessage) => void
   onSessionCleared?: () => void | Promise<void>
 }
 
@@ -122,13 +121,14 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   // WR-04: the API refused to provision this identity (its email belongs to
   // another account). Drop the stored credentials so no heartbeat keeps
   // calling the API with them, and tell the user why.
-  const endRefusedSession = useCallback(async (): Promise<string> => {
+  const endRefusedSession = useCallback(async (): Promise<StatusMessage> => {
     await getAuth0()
       .credentialsManager.clearCredentials()
       .catch(() => undefined)
     await clearSession()
-    reportStatus("auth", "error", EMAIL_ALREADY_LINKED_MESSAGE)
-    return EMAIL_ALREADY_LINKED_MESSAGE
+    const message = text.emailAlreadyLinked()
+    reportStatus("auth", "error", message)
+    return message
   }, [clearSession, getAuth0, reportStatus])
 
   // Never returns null and never calls clearSession: a network/timeout/unknown
@@ -300,7 +300,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     }
   }, [clearSession, getAuth0, reportStatus, setProfileFromUser])
 
-  const handleLogin = useCallback(async (): Promise<string | null> => {
+  const handleLogin = useCallback(async (): Promise<StatusMessage | null> => {
     try {
       reportStatus("auth", "running", text.loggingIn())
       const auth0 = getAuth0()
@@ -338,7 +338,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       const message = extractLoginErrorMessage(error)
       // User cancelled the login flow
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
-        reportStatus("auth", "idle", "")
+        reportStatus("auth", "idle", text.ready())
         return null
       }
       if (/unauthorized/i.test(message)) {
@@ -353,7 +353,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     }
   }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
-  const handleRegister = useCallback(async (): Promise<string | null> => {
+  const handleRegister = useCallback(async (): Promise<StatusMessage | null> => {
     try {
       reportStatus("auth", "running", text.loggingIn())
       const auth0 = getAuth0()
@@ -391,7 +391,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     } catch (error) {
       const message = extractLoginErrorMessage(error)
       if (message.includes("a0.session.user_cancelled") || message.includes("USER_CANCELLED")) {
-        reportStatus("auth", "idle", "")
+        reportStatus("auth", "idle", text.ready())
         return null
       }
       if (/unauthorized/i.test(message)) {
@@ -435,7 +435,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
     } catch {
       // Cancellation and errors are silent: the user just wanted to reset their password
-      reportStatus("auth", "idle", "")
+      reportStatus("auth", "idle", text.ready())
     }
   }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 

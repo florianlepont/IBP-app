@@ -29,6 +29,16 @@ export const sessionStatusFr = {
   loggingIn: () => statusText("Connexion…"),
   loggedIn: () => statusText("Connecté"),
   loginFailed: () => statusText("La connexion a échoué. Réessayez."),
+  // Auth0 refused the login (the configuration detail goes to logStatusDetail).
+  loginRefused: () =>
+    statusText("La connexion a échoué. Vérifiez votre connexion internet et réessayez."),
+  // Auth0 accepted the login but the API refused its token.
+  loginInterrupted: () => statusText("Connexion interrompue. Veuillez réessayer."),
+  // The API refuses to attach this identity: its email belongs to another account (WR-04).
+  emailAlreadyLinked: () =>
+    statusText(
+      "Cette adresse e-mail est déjà associée à un autre compte. Connectez-vous avec la méthode utilisée lors de la création de ce compte.",
+    ),
   loggedOut: () => statusText("Déconnecté"),
   logoutFailed: () => statusText("La déconnexion a échoué. Réessayez."),
 

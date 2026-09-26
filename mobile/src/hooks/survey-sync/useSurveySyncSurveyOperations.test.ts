@@ -219,7 +219,7 @@ describe("useSurveySyncSurveyOperations", () => {
         missing_factors: [],
         missing_fields: [],
       })
-      mockSubmitSurvey.mockResolvedValue({ ok: true, message: "Submitted" })
+      mockSubmitSurvey.mockResolvedValue({ ok: true })
       const { handleSubmitSurvey, setStatus, refreshLocalSurveys } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(text.submitted({ name }))
@@ -425,7 +425,6 @@ describe("useSurveySyncSurveyOperations", () => {
   describe("handleToggleVisibility", () => {
     const QUEUED = {
       ok: true,
-      message: "Visibility queued locally (public). Login and sync to push changes.",
       visibility: "public",
       queued: true,
       synced: false,

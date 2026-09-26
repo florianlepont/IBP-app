@@ -30,7 +30,7 @@ type UseSurveySyncNetworkParams = {
   withAuthRetry: <T>(fn: (token: string, tokenSub: string | null) => Promise<T>) => Promise<T>
   refreshLocalSurveys: () => Promise<void>
   refreshLocalAttachments: () => Promise<void>
-  setStatus: (message: string) => void
+  setStatus: (message: StatusMessage) => void
   syncAllowed: boolean
   ensureSyncOwner: EnsureSyncOwner
   ownerStatus: LocalDataOwnerStatus

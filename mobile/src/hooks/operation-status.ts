@@ -1,3 +1,5 @@
+import type { StatusMessage } from "../i18n"
+
 export type OperationScope =
   | "session"
   | "auth"
@@ -8,6 +10,8 @@ export type OperationScope =
   | "debug"
 export type OperationState = "idle" | "running" | "success" | "error"
 
+// The entry stores the message as plain text; every entry point accepts only
+// catalogue StatusMessages (D-06).
 export type OperationStatusEntry = {
   state: OperationState
   message: string
@@ -24,7 +28,7 @@ function initialEntry(message: string): OperationStatusEntry {
   }
 }
 
-export function createInitialOperationStatus(initialMessage = "Ready"): OperationStatusMap {
+export function createInitialOperationStatus(initialMessage: StatusMessage): OperationStatusMap {
   return {
     session: initialEntry(initialMessage),
     auth: initialEntry(initialMessage),
@@ -40,7 +44,7 @@ export function updateOperationStatus(
   current: OperationStatusMap,
   scope: OperationScope,
   state: OperationState,
-  message: string,
+  message: StatusMessage,
 ): OperationStatusMap {
   return {
     ...current,

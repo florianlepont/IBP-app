@@ -3,7 +3,7 @@ import { Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { evaluateSubmitReadinessFromDraft } from "../../app/ibp-scoring"
 import { getSubmitBlockReason } from "../../app/survey-logic"
-import { fr, logStatusDetail } from "../../i18n"
+import { fr, logStatusDetail, type StatusMessage } from "../../i18n"
 import {
   discardSurveyLocalChanges,
   getLocalSurveyDraft,
@@ -67,7 +67,7 @@ type UseSurveySyncSurveyOperationsParams = {
   refreshLocalAttachments: () => Promise<void>
   onCloseSurveyDetail: () => void
   onStopEditing: () => void
-  setStatus: (message: string) => void
+  setStatus: (message: StatusMessage) => void
   maybeAutoSync: (trigger: string) => Promise<void>
   handleLoadCanonicalDetails: (surveyId: string, options?: { silent?: boolean }) => Promise<void>
   syncAllowed: boolean

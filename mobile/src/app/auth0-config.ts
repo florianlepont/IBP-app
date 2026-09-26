@@ -1,3 +1,5 @@
+import { fr, logStatusDetail, type StatusMessage } from "../i18n"
+
 const DEFAULT_AUTH0_DOMAIN = "cortege-auth.algernon.ovh"
 const DEFAULT_AUTH0_CLIENT_ID = "qaOBdPPo7eIMadCmIq5qDhmEGOqZF6py"
 const DEFAULT_AUTH0_AUDIENCE = "https://api.ibp-app"
@@ -34,26 +36,19 @@ export const AUTH0_IOS_CALLBACK_URL = `${IOS_BUNDLE_IDENTIFIER}.auth0://${AUTH0_
 export const LEGAL_TERMS_URL = "https://etats-sauvages.fr/cgu"
 export const LEGAL_PRIVACY_URL = "https://etats-sauvages.fr/confidentialite"
 
-export function buildAuth0UnauthorizedMessage(apiUrl: string): string {
-  if (__DEV__) {
-    return [
-      "[DEV] Auth0 a refusé la connexion.",
-      `Client: ${AUTH0_CLIENT_ID}`,
-      `Audience: ${AUTH0_AUDIENCE}`,
-      `Callback iOS: ${AUTH0_IOS_CALLBACK_URL}`,
-      `API: ${apiUrl}`,
-    ].join("\n")
-  }
-  return "La connexion a échoué. Vérifiez votre connexion internet et réessayez."
+// The configuration detail goes to the debug console in dev builds only; the
+// status line gets catalogue text (phase 01.9 D-06).
+export function buildAuth0UnauthorizedMessage(apiUrl: string): StatusMessage {
+  logStatusDetail("session.auth0Refused", {
+    clientId: AUTH0_CLIENT_ID,
+    audience: AUTH0_AUDIENCE,
+    iosCallback: AUTH0_IOS_CALLBACK_URL,
+    api: apiUrl,
+  })
+  return fr.status.session.loginRefused()
 }
 
-export function buildApiTokenRejectedMessage(apiUrl: string): string {
-  if (__DEV__) {
-    return [
-      "[DEV] Auth0 OK, mais l'API a refusé le token.",
-      `Audience attendue: ${AUTH0_AUDIENCE}`,
-      `API cible: ${apiUrl}`,
-    ].join("\n")
-  }
-  return "Connexion interrompue. Veuillez réessayer."
+export function buildApiTokenRejectedMessage(apiUrl: string): StatusMessage {
+  logStatusDetail("session.apiTokenRejected", { audience: AUTH0_AUDIENCE, api: apiUrl })
+  return fr.status.session.loginInterrupted()
 }
