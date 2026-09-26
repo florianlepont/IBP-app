@@ -20,6 +20,76 @@
   },
   "overrides": [
     {
+      "files": [
+        "src/screens/**/*.tsx",
+        "src/components/**/*.tsx",
+        "src/ui/**/*.tsx",
+        "src/navigation/**/*.tsx",
+        "src/app/AuthenticatedAppNavigation.tsx"
+      ],
+      "excludedFiles": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "rules": {
+        "react/jsx-no-literals": [
+          "warn",
+          {
+            "noStrings": true,
+            "ignoreProps": true
+          }
+        ],
+        "no-restricted-syntax": [
+          "warn",
+          {
+            "selector": "JSXAttribute[name.name=/^(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|message)$/] > Literal",
+            "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          },
+          {
+            "selector": "JSXAttribute[name.name=/^(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|message)$/] > JSXExpressionContainer > TemplateLiteral",
+            "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          },
+          {
+            "selector": "CallExpression[callee.object.name='Alert'][callee.property.name='alert'] > :matches(Literal, TemplateLiteral)",
+            "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/screens/SurveyDetailScreen*.tsx",
+        "src/screens/survey-detail/**/*.tsx",
+        "src/screens/SurveyFormScreen*.tsx",
+        "src/screens/survey-form/**/*.tsx",
+        "src/screens/PublicMapScreen*.tsx",
+        "src/screens/public-map/**/*.tsx"
+      ],
+      "excludedFiles": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "rules": {
+        "no-restricted-syntax": [
+          "warn",
+          {
+            "selector": "JSXAttribute[name.name=/^(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|message)$/] > Literal",
+            "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          },
+          {
+            "selector": "JSXAttribute[name.name=/^(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|message)$/] > JSXExpressionContainer > TemplateLiteral",
+            "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          },
+          {
+            "selector": "CallExpression[callee.object.name='Alert'][callee.property.name='alert'] > :matches(Literal, TemplateLiteral)",
+            "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          },
+          {
+            "selector": "JSXOpeningElement[name.name='Pressable']:not(:has(JSXAttribute[name.name='accessibilityRole']))",
+            "message": "Pressable needs accessibilityRole (phase 01.9 D-07)"
+          },
+          {
+            "selector": "JSXOpeningElement[name.name='Pressable']:not(:has(JSXAttribute[name.name='accessibilityLabel']))",
+            "message": "Pressable needs accessibilityLabel from the catalogue (phase 01.9 D-07)"
+          }
+        ]
+      }
+    },
+    {
       "files": ["src/**/*.test.ts", "src/**/*.test.tsx"],
       "rules": {
         "@typescript-eslint/no-require-imports": "off",
