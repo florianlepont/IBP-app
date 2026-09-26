@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons"
 import * as Haptics from "expo-haptics"
 import { brandColors } from "../app/brand-tokens"
+import { fr } from "../i18n"
 import { AppField } from "../ui/AppField"
 import { TypewriterSplash } from "../components/TypewriterSplash"
 import { AuthPanel } from "./auth-gate/AuthPanel"
@@ -199,28 +200,26 @@ export function AuthGateScreen({
         >
           <View style={[devModalStyles.container, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={devModalStyles.header}>
-              <Text style={devModalStyles.title}>Configuration dev</Text>
+              <Text style={devModalStyles.title}>{fr.authGate.devConfig.title}</Text>
               <Pressable
                 onPress={() => setShowDevModal(false)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
-                accessibilityLabel="Fermer"
+                accessibilityLabel={fr.common.actions.close}
               >
                 <Ionicons name="close-circle" size={26} color={brandColors.textSecondary} />
               </Pressable>
             </View>
             <AppField
-              label="URL de l'API"
+              label={fr.authGate.devConfig.apiUrlLabel}
               value={apiUrl}
               onChangeText={onApiUrlChange}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="http://192.168.x.x:3000/v1"
+              placeholder={fr.authGate.devConfig.apiUrlPlaceholder}
               testID="auth-api-url-input"
             />
-            <Text style={devModalStyles.hint}>
-              Simulateur iOS : localhost · Appareil physique : IP locale du Mac sur le même Wi-Fi
-            </Text>
+            <Text style={devModalStyles.hint}>{fr.authGate.devConfig.hint}</Text>
           </View>
         </Modal>
       ) : null}

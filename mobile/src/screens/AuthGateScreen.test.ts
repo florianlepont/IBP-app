@@ -104,30 +104,115 @@ jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }))
 
+import { fr } from "../i18n"
 import { AuthGateScreen } from "./AuthGateScreen"
+
+type Handlers = {
+  onLogin: jest.Mock<Promise<string | null>, []>
+  onRegister: jest.Mock<Promise<string | null>, []>
+  onForgotPassword: jest.Mock<Promise<void>, []>
+}
+
+const makeHandlers = (): Handlers => ({
+  onLogin: jest.fn(async (): Promise<string | null> => null),
+  onRegister: jest.fn(async (): Promise<string | null> => null),
+  onForgotPassword: jest.fn(async (): Promise<void> => undefined),
+})
+
+const renderScreen = async (handlers: Handlers): Promise<renderer.ReactTestRenderer> => {
+  let component: renderer.ReactTestRenderer | undefined
+  await act(async () => {
+    component = renderer.create(
+      React.createElement(AuthGateScreen, {
+        apiUrl: "http://localhost:3000/v1",
+        onApiUrlChange: jest.fn(),
+        ...handlers,
+      }),
+    )
+  })
+  return component!
+}
+
+const collectText = (node: renderer.ReactTestRendererJSON | string | null): string[] => {
+  if (node === null) return []
+  if (typeof node === "string") return [node]
+  return (node.children ?? []).flatMap((child) => collectText(child))
+}
+
+const renderedTexts = (component: renderer.ReactTestRenderer): string[] => {
+  const json = component.toJSON()
+  const roots = Array.isArray(json) ? json : [json]
+  return roots.flatMap((root) => collectText(root))
+}
 
 describe("AuthGateScreen", () => {
   it("calls login handler when pressing the login button", async () => {
-    const onLogin = jest.fn(async () => null)
+    const handlers = makeHandlers()
+    const component = await renderScreen(handlers)
 
-    let component: renderer.ReactTestRenderer
-    await act(async () => {
-      component = renderer.create(
-        React.createElement(AuthGateScreen, {
-          apiUrl: "http://localhost:3000/v1",
-          onApiUrlChange: jest.fn(),
-          onLogin,
-          onRegister: jest.fn(async () => null),
-          onForgotPassword: jest.fn(async () => undefined),
-        }),
-      )
-    })
-
-    const submitButton = component!.root.findByProps({ testID: "auth-submit" })
+    const submitButton = component.root.findByProps({ testID: "auth-submit" })
     await act(async () => {
       submitButton.props.onPress()
     })
 
-    expect(onLogin).toHaveBeenCalledTimes(1)
+    expect(handlers.onLogin).toHaveBeenCalledTimes(1)
+    expect(handlers.onRegister).not.toHaveBeenCalled()
+  })
+
+  it("binds the register and forgot-password actions to their own handlers", async () => {
+    const handlers = makeHandlers()
+    const component = await renderScreen(handlers)
+
+    await act(async () => {
+      component.root.findByProps({ testID: "auth-register" }).props.onPress()
+    })
+    expect(handlers.onRegister).toHaveBeenCalledTimes(1)
+    expect(handlers.onLogin).not.toHaveBeenCalled()
+
+    await act(async () => {
+      component.root.findByProps({ testID: "auth-forgot-password" }).props.onPress()
+    })
+    expect(handlers.onForgotPassword).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the sign-in texts from the French catalogue", async () => {
+    const component = await renderScreen(makeHandlers())
+    const texts = fr.authGate
+
+    expect(component.root.findByProps({ testID: "auth-submit" }).props.label).toBe(
+      texts.panel.login,
+    )
+    expect(component.root.findByProps({ testID: "auth-register" }).props.label).toBe(
+      texts.panel.register,
+    )
+    expect(
+      component.root.findByProps({ testID: "auth-forgot-password" }).props.accessibilityLabel,
+    ).toBe(texts.panel.forgotPassword)
+
+    const shown = renderedTexts(component)
+    expect(shown).toEqual(
+      expect.arrayContaining([
+        texts.hero.title,
+        texts.hero.subtitle,
+        texts.panel.title,
+        texts.panel.subtitle,
+        texts.panel.forgotPassword,
+        texts.legal.terms,
+        texts.legal.privacy,
+        texts.legal.website,
+      ]),
+    )
+  })
+
+  it("shows the error returned by the login handler", async () => {
+    const handlers = makeHandlers()
+    handlers.onLogin.mockResolvedValueOnce("Identifiants invalides")
+    const component = await renderScreen(handlers)
+
+    await act(async () => {
+      component.root.findByProps({ testID: "auth-submit" }).props.onPress()
+    })
+
+    expect(renderedTexts(component)).toContain("Identifiants invalides")
   })
 })

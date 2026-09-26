@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native"
 import { brandSpacing } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { authStyles, PANEL_OVERLAP } from "./styles"
 
 const BLOB_CYCLE_MS = 10000
@@ -179,7 +180,12 @@ export function HeroSection({
               ]}
             />
             {onLogoPress ? (
-              <Pressable onPress={onLogoPress} accessible={false}>
+              <Pressable
+                onPress={onLogoPress}
+                accessible={false}
+                accessibilityRole="button"
+                accessibilityLabel={fr.authGate.hero.devConfigA11yLabel}
+              >
                 {logoImage}
               </Pressable>
             ) : (
@@ -191,10 +197,10 @@ export function HeroSection({
             style={[authStyles.heroContent, { maxWidth: heroContentMaxWidth }]}
             accessible={true}
             accessibilityRole="header"
-            accessibilityLabel="Indice de Biodiversité Potentielle, un service proposé par Etats Sauvages."
+            accessibilityLabel={fr.authGate.hero.a11yLabel}
           >
-            <Text style={authStyles.heroTitle}>Indice de{"\n"}Biodiversité Potentielle</Text>
-            <Text style={authStyles.heroBody}>un service proposé par{"\n"}Etats Sauvages</Text>
+            <Text style={authStyles.heroTitle}>{fr.authGate.hero.title}</Text>
+            <Text style={authStyles.heroBody}>{fr.authGate.hero.subtitle}</Text>
           </View>
         </View>
       </View>

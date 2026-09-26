@@ -10,8 +10,17 @@ import {
 import * as Haptics from "expo-haptics"
 import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "../../app/auth0-config"
 import { brandSpacing } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { AppButton } from "../../ui/AppButton"
 import { authStyles } from "./styles"
+
+const WEBSITE_URL = "https://etatssauvages.org"
+const texts = fr.authGate
+
+const openLink = (url: string): void => {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+  void Linking.openURL(url)
+}
 
 export type AuthPanelProps = {
   submitting: boolean
@@ -50,11 +59,9 @@ export function AuthPanel({
         <View pointerEvents={submitting ? "none" : "auto"} style={authStyles.panelMain}>
           <View style={authStyles.panelHeader}>
             <Text style={authStyles.panelTitle} accessibilityRole="header">
-              Bienvenue
+              {texts.panel.title}
             </Text>
-            <Text style={authStyles.panelSubtitle}>
-              Connectez-vous ou créez un compte.{"\n"}Vos relevés restent disponibles hors-ligne.
-            </Text>
+            <Text style={authStyles.panelSubtitle}>{texts.panel.subtitle}</Text>
           </View>
 
           {authError !== null && (
@@ -65,7 +72,7 @@ export function AuthPanel({
 
           <View style={authStyles.actionsGroup}>
             <AppButton
-              label={submitting ? "Connexion en cours…" : "Se connecter"}
+              label={submitting ? texts.panel.loginInProgress : texts.panel.login}
               onPress={onLoginPress}
               loading={submitting}
               style={authStyles.primaryButton}
@@ -77,13 +84,14 @@ export function AuthPanel({
               style={authStyles.forgotPasswordLink}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="link"
+              accessibilityLabel={texts.panel.forgotPassword}
               testID="auth-forgot-password"
             >
-              <Text style={authStyles.forgotPasswordText}>Mot de passe oublié ?</Text>
+              <Text style={authStyles.forgotPasswordText}>{texts.panel.forgotPassword}</Text>
             </Pressable>
 
             <AppButton
-              label="Créer un compte"
+              label={texts.panel.register}
               variant="secondary"
               onPress={onRegisterPress}
               disabled={submitting}
@@ -96,40 +104,31 @@ export function AuthPanel({
         <View style={authStyles.panelFooterGroup}>
           <View style={authStyles.legalContainer}>
             <Text style={authStyles.legalText}>
-              En continuant, vous acceptez nos{" "}
+              {texts.legal.prefix}{" "}
               <Text
                 style={authStyles.legalLink}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                  void Linking.openURL(LEGAL_TERMS_URL)
-                }}
+                onPress={() => openLink(LEGAL_TERMS_URL)}
                 accessibilityRole="link"
               >
-                Conditions d&apos;utilisation
+                {texts.legal.terms}
               </Text>{" "}
-              et notre{" "}
+              {texts.legal.and}{" "}
               <Text
                 style={authStyles.legalLink}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                  void Linking.openURL(LEGAL_PRIVACY_URL)
-                }}
+                onPress={() => openLink(LEGAL_PRIVACY_URL)}
                 accessibilityRole="link"
               >
-                Politique de confidentialité
+                {texts.legal.privacy}
               </Text>
-              .
+              {texts.legal.suffix}
             </Text>
             <Text style={authStyles.legalText}>
               <Text
                 style={authStyles.legalLink}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                  void Linking.openURL("https://etatssauvages.org")
-                }}
+                onPress={() => openLink(WEBSITE_URL)}
                 accessibilityRole="link"
               >
-                etatssauvages.org
+                {texts.legal.website}
               </Text>
             </Text>
           </View>
