@@ -39,6 +39,8 @@ module.exports = {
     './App.tsx': { statements: 100, branches: 100, functions: 100, lines: 100 },
     // Contexts and assembler (01.9-09) and the French catalogue (01.9-05), at the measured floor (C-8).
     './src/state/': { statements: 95, branches: 75, functions: 87, lines: 97 },
+    // Route components and navigation helpers (01.9-18), at the measured floor (C-8).
+    './src/navigation/': { statements: 100, branches: 96, functions: 100, lines: 100 },
     // Branches measured after merging the wave-2 catalogue sections (plural and optional-name
     // ternaries such as `n === 1 ? ... : ...` are not all exercised yet).
     './src/i18n/': { statements: 100, branches: 58, functions: 100, lines: 100 },
