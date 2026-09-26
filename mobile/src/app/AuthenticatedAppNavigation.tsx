@@ -46,6 +46,7 @@ import {
   type SessionActions,
   type SessionState,
 } from "../state/session-context"
+import { useNearbyParcelsState } from "../state/nearby-parcels-context"
 import { useStatus } from "../state/status-context"
 import {
   useSurveyFormState,
@@ -559,7 +560,6 @@ function SurveysTabNavigator({
                 const created = await onCreateDraft()
                 if (created) navigation.goBack()
               }}
-              status={surveySync.status}
             />
           )}
         </SurveysStack.Screen>
@@ -995,6 +995,7 @@ export function AuthenticatedAppNavigation() {
   const syncActions = useSyncActions()
   const surveys = useSurveys()
   const form = useSurveyFormState()
+  const nearby = useNearbyParcelsState()
 
   // Map state stays local to the map tab (not in the assembler); plan 01.9-18
   // moves this call into the map route.
@@ -1036,8 +1037,8 @@ export function AuthenticatedAppNavigation() {
     formMode: surveys.state.formMode,
     editingSurveyId: surveys.state.editingSurveyId,
     surveyStats: surveys.state.surveyStats,
-    nearbyParcels: form.state.nearbyParcels,
-    onLoadNearbyParcels: form.actions.loadNearbyParcels,
+    nearbyParcels: nearby.state,
+    onLoadNearbyParcels: nearby.load,
     surveyDetailTab: surveys.state.surveyDetailTab,
     setSurveyDetailTab: surveys.actions.setSurveyDetailTab,
     surveyForm,

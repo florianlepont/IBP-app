@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { Alert } from "react-native"
 import { loadStoredApiUrl, saveStoredApiUrl } from "../app/api-url-storage"
-import type { FormMode } from "../app/AuthenticatedAppNavigation"
+import type { FormMode } from "../navigation/types"
 import { DEFAULT_API_URL } from "../app/constants"
 import { shouldShowDevTools } from "../app/dev-tools"
 import type { SurveyDetailTab, SurveyStats } from "../app/types"
@@ -21,10 +21,16 @@ import {
   type SessionContextValue,
 } from "./session-context"
 import { StatusProvider, type StatusContextValue } from "./status-context"
+import { NearbyParcelsProvider, type NearbyParcelsContextValue } from "./nearby-parcels-context"
 import { SurveyFormProvider, type SurveyFormContextValue } from "./survey-form-context"
-import { SurveysProvider, type SurveysContextValue } from "./surveys-context"
+import {
+  SurveyActionsProvider,
+  SurveysProvider,
+  type SurveyActions,
+  type SurveysContextValue,
+} from "./surveys-context"
 import { SyncActionsProvider } from "./sync-actions-context"
-import { useStableActions } from "./useLatestCallback"
+import { useLatestCallback, useStableActions } from "./useLatestCallback"
 
 /**
  * The single assembler (phase 01.9, D-01). It holds what App.tsx held before:
@@ -188,7 +194,7 @@ function useAppController() {
   // ─── Surveys ───────────────────────────────────────────────────────────────
 
   const ops = surveySync.surveyOperations
-  const surveyActions = useStableActions({
+  const surveyActions: SurveyActions = useStableActions({
     setSurveyQuery: surveyList.setSurveyQuery,
     setSurveyFromDate: surveyList.setSurveyFromDate,
     setSurveyToDate: surveyList.setSurveyToDate,
@@ -302,7 +308,6 @@ function useAppController() {
     applyDraftToForm: surveyForm.applyDraftToForm,
     resetSurveyForm: surveyForm.resetSurveyForm,
     buildDraftInput: surveyForm.buildDraftInput,
-    loadNearbyParcels: nearbyParcels.load,
     saveSurveyEdits: editing.handleSaveSurveyEdits,
     createDraft: editing.handleCreateDraft,
     captureGpsLocation: gpsCapture.handleCaptureGpsLocation,
@@ -319,11 +324,6 @@ function useAppController() {
     formErrors,
     draftInput,
   } = surveyForm
-  const { parcels, sectorAvgScore, loading, locationDenied, error } = nearbyParcels
-  const nearbyParcelsState = useMemo(
-    () => ({ parcels, sectorAvgScore, loading, locationDenied, error }),
-    [parcels, sectorAvgScore, loading, locationDenied, error],
-  )
   const form = useMemo<SurveyFormContextValue>(
     () => ({
       state: {
@@ -336,7 +336,8 @@ function useAppController() {
         factorRetainedScores,
         formErrors,
         draftInput,
-        nearbyParcels: nearbyParcelsState,
+        formMode,
+        editingSurveyId,
       },
       actions: formActions,
     }),
@@ -350,16 +351,39 @@ function useAppController() {
       factorRetainedScores,
       formErrors,
       draftInput,
-      nearbyParcelsState,
+      formMode,
+      editingSurveyId,
       formActions,
     ],
   )
 
-  return { session, accessToken, status, syncActions, surveys: surveysValue, form }
+  // ─── Nearby parcels (home screen) ──────────────────────────────────────────
+
+  const { parcels, sectorAvgScore, loading, locationDenied, error } = nearbyParcels
+  const loadNearbyParcels = useLatestCallback(nearbyParcels.load)
+  const nearby = useMemo<NearbyParcelsContextValue>(
+    () => ({
+      state: { parcels, sectorAvgScore, loading, locationDenied, error },
+      load: loadNearbyParcels,
+    }),
+    [parcels, sectorAvgScore, loading, locationDenied, error, loadNearbyParcels],
+  )
+
+  return {
+    session,
+    accessToken,
+    status,
+    syncActions,
+    surveys: surveysValue,
+    surveyActions,
+    form,
+    nearby,
+  }
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const { session, accessToken, status, syncActions, surveys, form } = useAppController()
+  const { session, accessToken, status, syncActions, surveys, surveyActions, form, nearby } =
+    useAppController()
 
   return (
     <SessionProvider value={session}>
@@ -367,7 +391,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         <StatusProvider value={status}>
           <SyncActionsProvider value={syncActions}>
             <SurveysProvider value={surveys}>
-              <SurveyFormProvider value={form}>{children}</SurveyFormProvider>
+              <SurveyActionsProvider value={surveyActions}>
+                <SurveyFormProvider value={form}>
+                  <NearbyParcelsProvider value={nearby}>{children}</NearbyParcelsProvider>
+                </SurveyFormProvider>
+              </SurveyActionsProvider>
             </SurveysProvider>
           </SyncActionsProvider>
         </StatusProvider>

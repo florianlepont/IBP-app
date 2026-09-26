@@ -49,7 +49,6 @@ type SurveyFormScreenProps = {
   onOpenParcelFullscreen: () => void
   onSaveSurveyEdits: () => Promise<void>
   onCreateDraft: () => Promise<void>
-  status: string
 }
 
 export function SurveyFormScreen({
@@ -73,7 +72,6 @@ export function SurveyFormScreen({
   onOpenParcelFullscreen,
   onSaveSurveyEdits,
   onCreateDraft,
-  status: _status,
 }: SurveyFormScreenProps) {
   const [activeStep, setActiveStep] = useState<WizardStep>("identity")
   const map = useParcelMap({

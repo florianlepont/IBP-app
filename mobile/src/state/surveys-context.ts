@@ -1,5 +1,4 @@
 import { createContext, useContext } from "react"
-import type { FormMode } from "../app/AuthenticatedAppNavigation"
 import type {
   RegionVersion,
   SurveyDetailResponse,
@@ -9,6 +8,7 @@ import type {
   VegetationStage,
 } from "../app/types"
 import type { useSurveyList } from "../hooks/useSurveyList"
+import type { FormMode } from "../navigation/types"
 import type { useSurveySyncSurveyOperations } from "../hooks/survey-sync/useSurveySyncSurveyOperations"
 
 type SurveyList = ReturnType<typeof useSurveyList>
@@ -87,10 +87,28 @@ export const SurveysContext = createContext<SurveysContextValue | null>(null)
 
 export const SurveysProvider = SurveysContext.Provider
 
+/**
+ * Actions-only view of the surveys context (phase 01.9-18). The value is the
+ * same stable object as `useSurveys().actions`, so components that only act on
+ * surveys (the navigation listeners, the form routes) never re-render when the
+ * list, a filter or the selection changes.
+ */
+export const SurveyActionsContext = createContext<SurveyActions | null>(null)
+
+export const SurveyActionsProvider = SurveyActionsContext.Provider
+
 export function useSurveys(): SurveysContextValue {
   const value = useContext(SurveysContext)
   if (value === null) {
     throw new Error("useSurveys must be used inside AppStateProvider")
+  }
+  return value
+}
+
+export function useSurveyActions(): SurveyActions {
+  const value = useContext(SurveyActionsContext)
+  if (value === null) {
+    throw new Error("useSurveyActions must be used inside AppStateProvider")
   }
   return value
 }
