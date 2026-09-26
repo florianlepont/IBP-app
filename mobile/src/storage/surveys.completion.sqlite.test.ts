@@ -119,7 +119,6 @@ describe("write sites store payload_completion (01.9 D-03)", () => {
     const inserted = await storedCompletion("remote-1")
     expect(inserted).toBe(computePayloadCompletion(await storedPayload("remote-1")))
     expect(inserted).toBe(7)
-
     ;(global.fetch as jest.Mock).mockResolvedValueOnce(
       changesResponse([
         {
@@ -149,10 +148,11 @@ describe("listLocalSurveys reads completion from SQL (01.9 D-03)", () => {
     for (let index = 0; index < count; index += 1) {
       const id = `survey-${String(index).padStart(3, "0")}`
       const status = index % 5 === 0 ? "submitted" : "draft"
+      const siteName = `Parcelle ${index}`
       const payload: SurveyQueuePayload = {
         id,
         sync_version: 1,
-        site_name: `Parcelle ${index}`,
+        site_name: siteName,
         region_version: index % 2 === 0 ? "ACA" : undefined,
         vegetation_stage: index % 3 === 0 ? "mature" : undefined,
         parcel_ids: index % 4 === 0 ? ["gh4"] : [],
@@ -161,7 +161,15 @@ describe("listLocalSurveys reads completion from SQL (01.9 D-03)", () => {
       await db.runAsync(
         `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, sync_blocked, payload_json, payload_completion, created_at, updated_at)
          VALUES (?, ?, ?, 'private', 1, 'synced', 0, ?, ?, ?, ?)`,
-        [id, payload.site_name, status, JSON.stringify(payload), computePayloadCompletion(payload), NOW, NOW],
+        [
+          id,
+          siteName,
+          status,
+          JSON.stringify(payload),
+          computePayloadCompletion(payload),
+          NOW,
+          NOW,
+        ],
       )
       // The pre-change list result for the same row.
       expected.set(id, computeCompletionRate(status, payload))

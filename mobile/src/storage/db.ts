@@ -1,6 +1,11 @@
 import * as SQLite from "expo-sqlite"
 import { runInTransaction, TxHandle } from "./transaction"
-import { deriveQueueOpType, safeParseJson } from "./utils"
+import {
+  computePayloadCompletion,
+  deriveQueueOpType,
+  safeParseJson,
+  toSurveyQueuePayload,
+} from "./utils"
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null
 
@@ -17,7 +22,7 @@ export const SYNC_BATCH_SIZE = 100
 // PRAGMA user_version target. Bump this and push a new entry onto MIGRATIONS
 // (below) whenever the schema changes; initLocalDb() migrates any existing
 // install from its current version up to this one, one migration at a time.
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export const FACTOR_KEYS: Array<"A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"> = [
   "A",
@@ -130,9 +135,35 @@ async function migration1(tx: TxHandle): Promise<void> {
   await tx.execAsync(`CREATE INDEX IF NOT EXISTS idx_sync_queue_survey ON sync_queue(survey_id);`)
 }
 
+/**
+ * Migration 2 (version 1 -> 2). Additive only, 01.9 D-03: adds
+ * local_surveys.payload_completion (the payload-only completion, 0-100) and
+ * backfills it from payload_json, so listing surveys never parses a payload.
+ * payload_json itself is only read, never rewritten. An unparsable or
+ * malformed payload yields 0 instead of aborting the startup migration.
+ */
+async function migration2(tx: TxHandle): Promise<void> {
+  await ensureColumn(
+    tx,
+    "local_surveys",
+    "payload_completion",
+    "payload_completion INTEGER NOT NULL DEFAULT 0",
+  )
+  const rows = await tx.getAllAsync<{ id: string; payload_json: string | null }>(
+    `SELECT id, payload_json FROM local_surveys`,
+  )
+  for (const row of rows) {
+    const payload = row.payload_json ? toSurveyQueuePayload(safeParseJson(row.payload_json)) : null
+    await tx.runAsync(`UPDATE local_surveys SET payload_completion = ? WHERE id = ?`, [
+      computePayloadCompletion(payload),
+      row.id,
+    ])
+  }
+}
+
 // Migration N lives at index N-1; MIGRATIONS[currentVersion] is the next one
 // to run on the way up to SCHEMA_VERSION.
-const MIGRATIONS: Array<(tx: TxHandle) => Promise<void>> = [migration1]
+const MIGRATIONS: Array<(tx: TxHandle) => Promise<void>> = [migration1, migration2]
 
 export async function initLocalDb(): Promise<void> {
   const db = await getDb()
