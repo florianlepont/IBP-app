@@ -25,7 +25,7 @@ Other top-level directories:
 
 | Concern | Technology |
 |---------|-----------|
-| Mobile framework | React Native 0.81.5 + Expo 54 |
+| Mobile framework | React Native 0.86.3 + Expo 57 |
 | Mobile language | TypeScript 5.x (strict) |
 | Mobile navigation | React Navigation (native-stack + bottom-tabs) |
 | Mobile local DB | Expo SQLite (`cortege-local.db`) |
@@ -35,7 +35,7 @@ Other top-level directories:
 | Database | PostgreSQL 16 (raw SQL via `pg`, no ORM) |
 | Auth | Auth0 — RS256 JWT validated against JWKS; native Auth0 SDK on mobile |
 | Object storage | S3-compatible: MinIO (local dev), configurable for AWS S3 (prod) |
-| Maps | React Native Maps 1.20 |
+| Maps | React Native Maps 1.27 |
 | Testing | Jest 29 + ts-jest; Supertest for API E2E |
 | Linting | ESLint 8 + `@typescript-eslint` |
 | Formatting | Prettier 3.8 |
@@ -346,7 +346,9 @@ docs/
 │   ├── sync-conflict-resolution-v1.md     # Offline sync conflict strategy
 │   ├── ibp-validation-matrix-v1.md        # Factor scoring rules
 │   ├── publication-visibility-post-submit-v1.md
-│   └── adr-001-technical-stack-and-engineering-principles-v1.md
+│   ├── adr-001-technical-stack-and-engineering-principles-v1.md
+│   ├── adr-002-on-device-species-recognition-v1.md      # Species recognition go/no-go (Phase 1)
+│   └── species-recognition-spike-measurements-v1.md     # Spike evidence log for ADR-002
 ├── specs/
 │   ├── README.md                          # Specs index
 │   ├── user-stories.md                    # Full user story backlog
