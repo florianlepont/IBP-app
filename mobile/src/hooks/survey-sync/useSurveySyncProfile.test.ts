@@ -1,8 +1,9 @@
 /**
  * Tests for useSurveySyncProfile.
  *
- * Strategy: spy on React.useState / useCallback so the hook can be called
- * directly in Node without a renderer.
+ * Strategy: render the real hook with renderHook from
+ * @testing-library/react-native/pure (see render-hook-smoke.test.ts); each
+ * callback runs inside act().
  */
 
 const mockPatchMyProfile = jest.fn()
@@ -34,7 +35,7 @@ jest.mock("expo-image-picker", () => ({
   launchCameraAsync: jest.fn(),
 }))
 
-import React from "react"
+import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
 import { Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { useSurveySyncProfile } from "./useSurveySyncProfile"
@@ -50,7 +51,22 @@ const AUTH_USER = {
   profile_picture_url: null,
 }
 
-function useBuildHook(overrides: Record<string, unknown> = {}) {
+/**
+ * Wraps each callback of the rendered hook in act() so the state updates it
+ * makes (profileUpdating) flush before the assertions run.
+ */
+function withAct<T extends object>(hook: T): T {
+  const wrapped: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(hook)) {
+    wrapped[key] =
+      typeof value === "function"
+        ? (...args: unknown[]) => act(() => (value as (...a: unknown[]) => unknown)(...args))
+        : value
+  }
+  return wrapped as T
+}
+
+async function buildHook(overrides: Record<string, unknown> = {}) {
   const params = {
     apiUrl: "http://localhost:3000",
     currentUser: AUTH_USER,
@@ -61,26 +77,17 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     setStatus: jest.fn(),
     ...overrides,
   }
-  const hook = useSurveySyncProfile(params as never)
-  return { ...hook, ...params }
+  const { result } = await renderHook(() => useSurveySyncProfile(params as never))
+  return { ...withAct(result.current), ...params }
 }
 
 describe("useSurveySyncProfile", () => {
-  let useStateSpy: jest.SpyInstance
-  let useCallbackSpy: jest.SpyInstance
-
   beforeEach(() => {
     jest.clearAllMocks()
-    useStateSpy = jest
-      .spyOn(React, "useState")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
   })
 
-  afterEach(() => {
-    useStateSpy.mockRestore()
-    useCallbackSpy.mockRestore()
+  afterEach(async () => {
+    await cleanup()
   })
 
   // ─── handleUpdateProfile ───────────────────────────────────────────────────
@@ -88,7 +95,7 @@ describe("useSurveySyncProfile", () => {
   describe("handleUpdateProfile", () => {
     test("calls patchMyProfile and updates status on success", async () => {
       mockPatchMyProfile.mockResolvedValue({ ...AUTH_USER, display_name: "New Name" })
-      const { handleUpdateProfile, setStatus, setProfileFromUser } = useBuildHook()
+      const { handleUpdateProfile, setStatus, setProfileFromUser } = await buildHook()
 
       await handleUpdateProfile({
         first_name: "User",
@@ -103,7 +110,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("rejects blank display_name without calling API", async () => {
-      const { handleUpdateProfile, setStatus } = useBuildHook()
+      const { handleUpdateProfile, setStatus } = await buildHook()
 
       await handleUpdateProfile({ first_name: "User", last_name: "Example", display_name: "   " })
 
@@ -112,7 +119,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("calls clearSession on AUTH_REQUIRED error", async () => {
-      const { handleUpdateProfile, clearSession } = useBuildHook({
+      const { handleUpdateProfile, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -122,7 +129,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("sets error status on generic error", async () => {
-      const { handleUpdateProfile, setStatus } = useBuildHook({
+      const { handleUpdateProfile, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Server error")),
       })
 
@@ -133,7 +140,7 @@ describe("useSurveySyncProfile", () => {
 
     test("trims whitespace from profile fields", async () => {
       mockPatchMyProfile.mockResolvedValue(AUTH_USER)
-      const { handleUpdateProfile } = useBuildHook()
+      const { handleUpdateProfile } = await buildHook()
 
       await handleUpdateProfile({
         first_name: "  User  ",
@@ -154,7 +161,7 @@ describe("useSurveySyncProfile", () => {
   describe("handleChangeEmail", () => {
     test("calls changeMyEmail and updates profile + status", async () => {
       mockChangeMyEmail.mockResolvedValue(undefined)
-      const { handleChangeEmail, setStatus, setProfileFromUser } = useBuildHook()
+      const { handleChangeEmail, setStatus, setProfileFromUser } = await buildHook()
 
       await handleChangeEmail("new@example.com")
 
@@ -165,7 +172,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("calls clearSession on AUTH_REQUIRED", async () => {
-      const { handleChangeEmail, clearSession } = useBuildHook({
+      const { handleChangeEmail, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -175,7 +182,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("sets error status and shows alert on failure", async () => {
-      const { handleChangeEmail, setStatus } = useBuildHook({
+      const { handleChangeEmail, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Email already taken")),
       })
 
@@ -191,7 +198,7 @@ describe("useSurveySyncProfile", () => {
   describe("handlePasswordReset", () => {
     test("calls requestPasswordReset, sets status and shows success alert", async () => {
       mockRequestPasswordReset.mockResolvedValue(undefined)
-      const { handlePasswordReset, setStatus } = useBuildHook()
+      const { handlePasswordReset, setStatus } = await buildHook()
 
       await handlePasswordReset()
 
@@ -204,7 +211,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("calls clearSession on AUTH_REQUIRED", async () => {
-      const { handlePasswordReset, clearSession } = useBuildHook({
+      const { handlePasswordReset, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -214,7 +221,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("shows error alert on generic failure", async () => {
-      const { handlePasswordReset } = useBuildHook({
+      const { handlePasswordReset } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("SMTP error")),
       })
 
@@ -235,7 +242,7 @@ describe("useSurveySyncProfile", () => {
       ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
         granted: false,
       })
-      const { handlePickProfilePictureFromLibrary, setStatus } = useBuildHook()
+      const { handlePickProfilePictureFromLibrary, setStatus } = await buildHook()
 
       await handlePickProfilePictureFromLibrary()
 
@@ -247,7 +254,7 @@ describe("useSurveySyncProfile", () => {
         granted: true,
       })
       ;(ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({ canceled: true })
-      const { handlePickProfilePictureFromLibrary, setStatus } = useBuildHook()
+      const { handlePickProfilePictureFromLibrary, setStatus } = await buildHook()
 
       await handlePickProfilePictureFromLibrary()
 
@@ -262,7 +269,7 @@ describe("useSurveySyncProfile", () => {
       ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({
         granted: false,
       })
-      const { handleTakeProfilePictureFromCamera, setStatus } = useBuildHook()
+      const { handleTakeProfilePictureFromCamera, setStatus } = await buildHook()
 
       await handleTakeProfilePictureFromCamera()
 
@@ -272,7 +279,7 @@ describe("useSurveySyncProfile", () => {
     test("sets status when camera is cancelled", async () => {
       ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true })
       ;(ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({ canceled: true })
-      const { handleTakeProfilePictureFromCamera, setStatus } = useBuildHook()
+      const { handleTakeProfilePictureFromCamera, setStatus } = await buildHook()
 
       await handleTakeProfilePictureFromCamera()
 
@@ -286,7 +293,7 @@ describe("useSurveySyncProfile", () => {
     test("calls deleteMyProfilePicture and patchMyProfile on success", async () => {
       mockDeleteMyProfilePicture.mockResolvedValue(undefined)
       mockPatchMyProfile.mockResolvedValue({ ...AUTH_USER, profile_picture_url: null })
-      const { handleRemoveProfilePicture, setStatus } = useBuildHook()
+      const { handleRemoveProfilePicture, setStatus } = await buildHook()
 
       await handleRemoveProfilePicture()
 
@@ -300,7 +307,7 @@ describe("useSurveySyncProfile", () => {
     })
 
     test("calls clearSession on AUTH_REQUIRED", async () => {
-      const { handleRemoveProfilePicture, clearSession } = useBuildHook({
+      const { handleRemoveProfilePicture, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -313,7 +320,7 @@ describe("useSurveySyncProfile", () => {
       mockDeleteMyProfilePicture.mockResolvedValue(undefined)
       mockPatchMyProfile.mockResolvedValue({ ...AUTH_USER, profile_picture_url: null })
       const handleLoadMyProfile = jest.fn().mockResolvedValue(AUTH_USER)
-      const { handleRemoveProfilePicture } = useBuildHook({
+      const { handleRemoveProfilePicture } = await buildHook({
         currentUser: null,
         handleLoadMyProfile,
       })
