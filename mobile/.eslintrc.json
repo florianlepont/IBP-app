@@ -20,6 +20,19 @@
   },
   "overrides": [
     {
+      "files": ["src/**/*.ts", "src/**/*.tsx"],
+      "excludedFiles": ["src/i18n/**", "src/**/*.test.ts", "src/**/*.test.tsx"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "ImportSpecifier[imported.name='statusText']",
+            "message": "Build status messages in src/i18n only (phase 01.9 D-06)"
+          }
+        ]
+      }
+    },
+    {
       "files": [
         "src/screens/**/*.tsx",
         "src/components/**/*.tsx",
@@ -29,14 +42,14 @@
       "excludedFiles": ["src/**/*.test.ts", "src/**/*.test.tsx"],
       "rules": {
         "react/jsx-no-literals": [
-          "warn",
+          "error",
           {
             "noStrings": true,
             "ignoreProps": true
           }
         ],
         "no-restricted-syntax": [
-          "warn",
+          "error",
           {
             "selector": "JSXAttribute[name.name=/^(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|message)$/] > Literal",
             "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
@@ -48,6 +61,10 @@
           {
             "selector": "CallExpression[callee.object.name='Alert'][callee.property.name='alert'] > :matches(Literal, TemplateLiteral)",
             "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
+          },
+          {
+            "selector": "ImportSpecifier[imported.name='statusText']",
+            "message": "Build status messages in src/i18n only (phase 01.9 D-06)"
           }
         ]
       }
@@ -64,7 +81,7 @@
       "excludedFiles": ["src/**/*.test.ts", "src/**/*.test.tsx"],
       "rules": {
         "no-restricted-syntax": [
-          "warn",
+          "error",
           {
             "selector": "JSXAttribute[name.name=/^(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|message)$/] > Literal",
             "message": "Use the French catalogue in src/i18n (phase 01.9 D-06)"
@@ -84,6 +101,10 @@
           {
             "selector": "JSXOpeningElement[name.name='Pressable']:not(:has(JSXAttribute[name.name='accessibilityLabel']))",
             "message": "Pressable needs accessibilityLabel from the catalogue (phase 01.9 D-07)"
+          },
+          {
+            "selector": "ImportSpecifier[imported.name='statusText']",
+            "message": "Build status messages in src/i18n only (phase 01.9 D-06)"
           }
         ]
       }

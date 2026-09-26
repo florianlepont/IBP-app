@@ -1213,11 +1213,15 @@ export function pullRemoteChanges(
   return syncFlight.run("pull", () => pullChanges(apiUrl, accessToken, options))
 }
 
+// Storage stays text-free (phase 01.9 D-06): a refusal carries the server's
+// detail for the debug log only; callers map the outcome to catalogue messages.
+export type SubmitSurveyResult = { ok: true } | { ok: false; message: string }
+
 export async function submitSurvey(
   apiUrl: string,
   accessToken: string,
   surveyId: string,
-): Promise<{ ok: boolean; message: string }> {
+): Promise<SubmitSurveyResult> {
   const db = await getDb()
 
   try {
@@ -1299,9 +1303,11 @@ export async function submitSurvey(
     [new Date().toISOString(), surveyId],
   )
 
-  return { ok: true, message: "Survey submitted" }
+  return { ok: true }
 }
 
+// Returns flags only, no text (phase 01.9 D-06): the caller maps queued/synced
+// to fr.status.surveyOps messages.
 export async function updateSurveyVisibility(
   apiUrl: string,
   accessToken: string,
@@ -1309,7 +1315,6 @@ export async function updateSurveyVisibility(
   visibility: "private" | "public",
 ): Promise<{
   ok: boolean
-  message: string
   visibility?: "private" | "public"
   queued: boolean
   synced: boolean
@@ -1318,7 +1323,6 @@ export async function updateSurveyVisibility(
   if (!queued.changed) {
     return {
       ok: true,
-      message: `Visibility already ${visibility}`,
       visibility,
       queued: false,
       synced: false,
@@ -1328,7 +1332,6 @@ export async function updateSurveyVisibility(
   if (!accessToken || accessToken.trim().length === 0) {
     return {
       ok: true,
-      message: `Visibility queued locally (${visibility}). Login and sync to push changes.`,
       visibility,
       queued: true,
       synced: false,
@@ -1342,7 +1345,6 @@ export async function updateSurveyVisibility(
     if (result.failed > 0) {
       return {
         ok: false,
-        message: `Visibility queued locally, but sync reported ${result.failed} failed operation(s)`,
         visibility,
         queued: true,
         synced: false,
@@ -1351,15 +1353,13 @@ export async function updateSurveyVisibility(
 
     return {
       ok: true,
-      message: `Visibility set to ${visibility} and synced`,
       visibility,
       queued: true,
       synced: true,
     }
-  } catch (error) {
+  } catch {
     return {
       ok: true,
-      message: `Visibility queued locally (${visibility}); sync pending (${(error as Error).message})`,
       visibility,
       queued: true,
       synced: false,
