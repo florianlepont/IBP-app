@@ -316,7 +316,7 @@ Plans:
 - [x] 01.9-28-PLAN.md — Rebuild the public map screen on the 01.9-23 data layer: viewport loading with debounce and no auto-refit loop (wave 7)
 - [x] 01.9-29-PLAN.md — Lock the phase's text, accessibility and structure rules: narrow status setters to the catalogue type, turn th (wave 8)
 - [x] 01.9-30-PLAN.md — Record this phase's facts in CLAUDE.md, in the same PR as the code (RESEARCH "two passes"; split out of the st (wave 7)
-- [ ] 01.9-31-PLAN.md — Prove the phase: run and record the full local gate and every measurement, record PR #158's CI evidence suppli (wave 9)
+- [x] 01.9-31-PLAN.md — Prove the phase: run and record the full local gate and every measurement, record PR #158's CI evidence suppli (wave 9)
 - [ ] 01.9-32-PLAN.md — Close phase 01.9 after phase 01.8: final documentation sweep, complete audit status links, and the French vali (wave 10)
 
 ### Phase 2: Factor A Genus List & Data-Contract Corrections
@@ -436,7 +436,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 30/32 | In Progress|  |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 31/32 | In Progress|  |
 | 2. Factor A Genus List & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Genus Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |

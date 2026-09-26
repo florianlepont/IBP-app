@@ -5,7 +5,7 @@ milestone_name: milestone
 current_phase: 01.9
 current_phase_name: audit-remediation track
 status: executing
-stopped_at: "01.9-31 checkpoint: waiting for final PR #159 CI, merge, deploy and owner device check"
+stopped_at: "01.9-31 complete (owner device check approved 2026-09-26); 01.9-32 blocked until 01.8"
 last_updated: "2026-09-26T13:23:15.713Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 1 closed (ADR-002 Accepted; verification passed with one accepted Android deviation), branch merged with origin/main
