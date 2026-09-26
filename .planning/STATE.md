@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: Completed 01-04-PLAN.md iteration 3 (export, evaluation, three-way comparison, promotion)
-last_updated: "2026-09-25T06:42:03.774Z"
-last_activity: 2026-09-25
-last_activity_desc: Phase 1 plan 04 iteration 3 complete -- 1/34 genera clear the D-02 bar
+stopped_at: 01-05 Task A (calibration) complete; blocked at Task 2 checkpoint awaiting physical iPhone connection
+last_updated: "2026-09-26T12:04:33.951Z"
+last_activity: 2026-09-26
+last_activity_desc: 01-05 Task A (calibration) complete; Task B/C blocked on device connection
 progress:
   total_phases: 8
   completed_phases: 0
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
 Plan: 5 of 6
-Status: Ready to execute
-Last activity: 2026-09-25 — 01-04 iteration 3 complete (1/34 genera clear the D-02 bar, model promoted)
+Status: Blocked — awaiting physical device checkpoint (see Blockers/Concerns)
+Last activity: 2026-09-26 — 01-05 Task A (calibration) complete; Task B/C blocked on device connection
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04 | 50min | 2 tasks | 8 files |
 | Phase 01 P04b | ~5.5h | 1 tasks | 5 files |
 | Phase 01 P04-iter3 | ~9-10h (2 sessions, corpus expansion+2 bug fixes) | 2 tasks | 1 files |
+| Phase 01-species-recognition-approach-decision P05 (partial: Task A) | ~2h | - tasks | - files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Decisions table. Decisions affecting current work:
 - [Phase 01-04-iter4]: User asked for a rebalance targeted at weak Ile-de-France temperate genera (spring specifically); reconnaissance-only per "report back before a long download" — found Section 11.5's "real property of GBIF's holdings" conclusion for Acer/Pinus/Prunus autumn scarcity is wrong: GBIF's own `month` filter (never used by the fetch) returns 40,603/23,517/34,016 autumn-dated permissive-licence records for those three genera against the 66/30/60 the corpus actually captured, traced to an unsound early-exit + non-season-aware fetch in prepare_dataset.py, not a real GBIF scarcity — every weak temperate genus checked has 2.3x-83.5x headroom against GBIF's true pool vs. what the flat 6,000/class cap captured. Four alternative sources checked: Pl@ntNet-300K rejected (CC-BY-4.0 but zero of the 34 CNPF genera in its 1,081-species list, confirmed directly); Tela Botanica blocked on SSO-gated API access (licence would clear the gate; flagged for a human decision, not routed around); iNaturalist-direct usable but redundant with GBIF's existing iNat-sourced records; Wikimedia Commons usable, licence-verifiable per-file, recommended as a supplement only if a gap remains. Recommendation: fix+rescale the existing GBIF pipeline first (no new licence risk, order-of-magnitude headroom already confirmed) before any new-source integration — full findings in measurement doc Section 13, awaiting user go-ahead before corpus expansion/retrain proceeds.
 - [Phase 01-04-iter4-exec]: Coordinator approved pipeline-fix-first plan (Tela Botanica parked, not pursued). Fixed prepare_dataset.py's early-exit (widened 2->8 pages' zero-progress threshold) and added GBIF month= season-scoped fetching; raised target to 10,000/class for the 20 weak temperate genera only, routed Pinus through the same season fetch at its unchanged 6,000 target for its autumn gap specifically. Corpus grew 194,653->265,546 selected (269,341 raw on disk), 1.36x — deliberately moderate. Acer/Prunus/Pinus autumn counts: 66/30/60 -> 2,500/2,500/1,500, directly reopening Section 12.6's "cannot tell" verdict. verify_corpus_complete() PASSED. Found and fixed a genuine memory bug before training: make_dataset()'s shuffle(8192) ran post-decode (~4.9GB of float32 image tensors) rather than pre-decode on lightweight path/label pairs. Training launched (EfficientNetB0, --finetune-epochs 20 vs iteration 3's fixed 8, EarlyStopping confirmed monitor=val_top3/restore_best_weights=True unchanged) — PID 19098, 2026-09-25 13:29 CEST, expected 5-12h wall-clock. Machine-wide load/swap during the run traced to pre-existing shared-machine contention (confirmed present before this iteration's work began), not a new pipeline leak — training process RSS itself 1.04GB.
 - [Phase 01-04-iter4-complete]: Training finished (23.47h wall-clock: 5.80h head + 17.66h finetune, 20/20 epochs run). EarlyStopping on val_top3 did NOT fire despite genuine overfitting onset from epoch 15 (val_loss bottomed then rose while train loss kept falling) — a coarse, ceiling-bounded monitor metric missed what val_loss would have caught; flagged for a future iteration's EarlyStopping config, not re-run (D-19). This flips iteration 3's schedule-limited finding: the backbone/corpus combination is now saturated. Exported genus_classifier_v4.tflite (8.24MB, up from 6.13MB — plan 01-05 must re-time on device), 100% export parity. Evaluated on 26,557 test images: pooled top3 85.24%->88.25%, 32/34 genera improved. Decisive split: Île-de-France temperate genera (21, targeted) +4.93pp mean top-3 (21/21 positive) vs +1.65pp for untouched Mediterranean/other (11/13) — the targeted rebalance worked ~3x better where it was aimed. All 136 genus×season cells now clear n≥30 (previously 5 thin); Acer/Pinus/Prunus autumn resolved (82.40%/81.60%/95.35%, Pinus clearing D-02 in isolation). Still only Tamarix (96.88%) clears D-02 overall — no new partial-go. Promoted to canonical path after explicitly verifying the beat is on the targeted genera, not just the mean. Session survived a subscription rate-limit interruption mid-training with zero work lost — raw numbers were committed at each stage per explicit instruction.
+- [Phase 01-05]: Per-genus confidence calibration (D-04/D-12 amended) fit on validation split, reported on test split -- collapses old single-global-threshold per-genus accuracy spread (79.49%-97.23%) to 85.91%-91.92% around the 90% target, at a 0.59pp pooled coverage cost. Ulmus/Prunus/Populus/Fraxinus flagged as genera where 'strong' will rarely fire even after calibration.
 
 ### Pending Todos
 
@@ -103,6 +105,7 @@ None yet.
 - **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): string-interpolated SQL in `users.service.ts`, 9 of 12 screens untested, missing indexes — all scheduled in Phases 6 and 7.
 - **Next-milestone prerequisite:** Epics E and G need a back-office / CMS surface that no spec or architecture doc defines.
 - 01-03: plan 05 still needs a lower-spec real iOS device (iPhone SE/11-class, not a flagship) and a first real Android device -- the iPhone 15 Pro figures from 01-03 are a flagship ceiling, not the D-18 representative floor. D-06 (offline) also still needs an airplane-mode confirmation on real hardware.
+- Plan 01-05 blocked at Task 2 checkpoint: physical iPhone 15 Pro measurement required (device shows available-paired, not connected, via xcrun devicectl). Task A (per-genus confidence calibration) complete; Task B (device latency) software-prepared, GATE-MEASURE: READY; Task C not started.
 
 ### Roadmap Evolution
 
@@ -119,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-26T13:35:00.000Z
+Last session: 2026-09-26T12:03:29.823Z
 Stopped at: 01-04-PLAN.md iteration 4 — COMPLETE. genus_classifier_v4.tflite (EfficientNetB0, 8.24MB) promoted to the canonical path after beating iteration 3 on the Île-de-France temperate genera specifically (+4.93pp mean top-3, 21/21 positive). Measurement doc Sections 14.1-14.6 all written and committed. eval/GATE: GATE-MODEL PASS. Next: plan 01-05 (device latency, must re-time the larger 8.24MB model) and plan 01-06 (ADR) can proceed against this promoted model.
 Resume file: none — iteration 4 closed out; next work is plan 01-05/01-06
