@@ -2,12 +2,25 @@
 
 ## Status
 
-In progress
+**Status:** Complete
 
 ## Spike window
 
 Timeboxed to two to three days (D-19). The published schedule is already at its September 2026
 deadline, with field tests due to start in October.
+
+**Actual duration, against the timebox (recorded here per D-19, plan 05 Task C).** Summed from
+every plan/iteration's own recorded duration: 01-01 (~25min) + 01-02 (~4h) + 01-03 (~3h) + 01-04
+iteration 1 (~50min) + iteration 2 (~6h) + iteration 3 (~9–10h) + iteration 4 (source
+reconnaissance ~1.5h, corpus expansion ~3.2h, training 23.47h, export/eval/write-up ~1h) + 01-05
+(calibration ~2h, device measurement + write-up ~1.5h) ≈ **56–57 hours wall-clock**, against a
+nominal 2–3 working-day (~16–24 working-hour) timebox. This overruns the timebox by roughly 2–3x
+on a naive hour count — but the great majority of that time (iteration 3's ~9–10h and iteration
+4's 23.47h in particular) was unattended background corpus-download and training time, not active
+working hours, spread across a subscription session-limit interruption and several separate
+sessions. Reported plainly per D-19's own instruction ("if the timebox runs out, record exactly
+what was and was not measured") rather than silently absorbed — the ADR (plan 06) should weigh
+this against the phase's schedule risk (see `.planning/STATE.md`'s Blockers/Concerns).
 
 ## Supports
 
@@ -869,6 +882,13 @@ nothing in the preprocess→inference path depends on network connectivity, clos
 after following the README run sheet — the explicit "Recognition unavailable" message rendered
 before the model was seeded, and the app stayed usable throughout. Not itself a timed figure.
 
+**Android: still not measured, plainly stated here rather than left a silent blank.** No real
+Android device was connected at any point in this phase (plan 03 or plan 05), by the user's
+explicit decision. The Android build itself succeeded in plan 03 (`./gradlew assembleDebug`,
+`BUILD SUCCESSFUL`), so the runtime question is answered, but no Android latency figure — for the
+stock model or the promoted genus classifier — exists anywhere in this document. See Section 9
+gap 4 for the full statement.
+
 **Model load time: NOT CAPTURED.** `App.tsx`'s `runBenchmark()` calls `loadTensorflowModel(...)`
 once per button press but this harness version does not time that call separately from the
 benchmark loop — an honest gap in this run, not a number to estimate from indirect evidence (e.g.
@@ -887,6 +907,21 @@ crash, error or missing row accompanied it. Inference time on airplane also show
 of these change the D-05 verdict; they are recorded because the plan's own instruction is to
 report median AND worst case rather than a single lucky run, and a worst-case figure that hid this
 variability would understate what a real field session might occasionally show.
+
+**Comparison against the only prior on-device figure.** Before this measurement, the sole latency
+figure on record anywhere in this phase was ~83ms median total (preprocess 77.9 + inference 4.8,
+`01-03-SUMMARY.md`) — **but that figure is from the STOCK ImageNet pipeline-proof classifier**
+(`mobilenet_v1_1.0_224_quant.tflite`, 2.0MB uint8-quantised MobileNetV1), not a trained CNPF genus
+classifier of any iteration; no genus-classifier iteration was ever timed on real hardware before
+this plan. With that distinction stated plainly (the two are not measuring the same model), the
+promoted iteration-4 model's ~90ms median total (90.41 online / 90.49 airplane) is **roughly +7.7
+to +7.8ms** over the stock model's ~82.7ms — a small, practically irrelevant increase given the
+promoted model raised pooled top-3
+accuracy from a meaningless ImageNet classification task to **88.25%** genus recognition (Section
+14.4) at over 4x the file size (8.24MB vs 2.0MB). The headroom against D-05's 3,000ms budget moved
+from ~36x (stock model) to **~33x** (promoted model) — still enormous. **Model size, not latency,
+is where the promoted model's cost actually shows up** (Section 4/9's D-07/D-08 finding already
+covers this bundling-vs-download tradeoff).
 
 ---
 
@@ -1012,24 +1047,28 @@ worsen an already-failing picture, not rescue it — there is nothing lab-passin
 validation to validate. This is a provisional gap in form; in substance, plan 04's result makes it
 largely moot for this milestone.
 
-**3. The benchmark-device pair is unconfirmed.** See Section 1. Latency figures in Section 7 are
-measured against a documented floor, not against the observers' real phones. This caps confidence
-in the latency evidence until the association confirms a device pair.
+**3. The benchmark-device pair is unconfirmed, and both plan 03's and plan 05's measurements are on
+the same flagship.** See Section 1. Section 7's latency figures (promoted iteration-4 model,
+median total ~90ms both network states) are real, on-device numbers — but still from the iPhone 15
+Pro, not the documented D-18 floor (iPhone SE 2nd/3rd gen or iPhone 11 class) or an
+association-confirmed device. This caps confidence in the latency evidence's representativeness,
+not its validity: the number is real, but a slower device could still miss the 3s budget even with
+~33x headroom on this one. **Android remains entirely unmeasured** — see gap 4.
 
-**4. The device-harness native-integration proof (Section 8) ran on a flagship, not the documented
-floor, and covers iOS only.** The iPhone 15 Pro used was the only real device reachable during plan
-01-03's session; no real Android device was connected, by the user's explicit decision for this
-milestone. The Android build succeeded (`./gradlew assembleDebug`), so the runtime question is
-answered for Android, but no real Android latency number exists anywhere in this document. Plan 05
-owes both a lower-spec iOS reading and a first real Android reading.
+**4. No real Android device has been used at any point in this phase (plan 03 or plan 05).** The
+iPhone 15 Pro was the only real device reachable during both plan 03's and plan 05's sessions; no
+Android device was connected, by the user's explicit decision for this milestone. The Android
+build succeeded in plan 03 (`./gradlew assembleDebug`), so the runtime question (does
+`react-native-fast-tflite` build and link on Android) is answered, but no real Android latency
+number exists anywhere in this document, for either the stock model or the promoted genus
+classifier. This is a genuine, unresolved gap for the ADR — not something plan 05 could close
+without a second physical device.
 
-**5. D-06 (on-device, no network in the inference path) is an architectural guarantee by code
-inspection, not an observed airplane-mode result.** `spike/species-recognition/device-harness/src/`
-makes no network call anywhere in its load/preprocess/inference path — verifiable by reading the
-source — but the harness's real-device session did not repeat the airplane-mode test this plan's
-own instructions call for once real hardware finally became reachable (device access was
-intermittent and prioritised toward capturing any real benchmark numbers at all). Plan 05 should
-close this explicitly with the device physically in airplane mode during a run.
+**5. RESOLVED by plan 05 — D-06 (on-device, no network in the inference path) is now a checked
+proof, not a code-inspection argument.** See Section 7. The promoted genus classifier completed 30
+timed runs online and 30 timed runs with the device physically in airplane mode, with median
+totals differing by 0.08ms (90.41 vs 90.49) — no crash, no stall, no behavioural difference. This
+closes the gap plan 03 and this document both previously flagged as still-open.
 
 **6. The corpus is not composition-filtered before evaluation — resolved by plan 01-04, not left
 open.** See Section 3a and Section 5's "Composition-filtering decision." A 30-image-per-class
