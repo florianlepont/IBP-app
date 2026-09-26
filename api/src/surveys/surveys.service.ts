@@ -11,8 +11,12 @@ import { StorageService } from "../storage/storage.service"
 import { IbpRulesService } from "./ibp-rules.service"
 import { ParcelsService } from "./parcels.service"
 import { SurveyEventsService } from "./survey-events.service"
-import { SurveysRepository } from "./surveys.repository"
-import { normalizeDateInput } from "./public-map.utils"
+import {
+  ListPage,
+  SurveyListFilters,
+  SurveyListItem,
+  SurveysRepository,
+} from "./surveys.repository"
 import {
   AttachmentRow,
   SurveyPatchBody,
@@ -28,7 +32,6 @@ import {
   normalizeParcelId,
   normalizeParcelIds,
   normalizePreviousSurveyId,
-  normalizeSurveyStatusFilter,
   normalizeVersionNumber,
   SameVersionContent,
 } from "./surveys-normalize.utils"
@@ -46,74 +49,13 @@ export class SurveysService {
     private readonly parcels: ParcelsService,
   ) {}
 
+  // D-11: GET /surveys, keyset-paginated when page.limit is set; unpaginated otherwise.
   async listForUser(
     user: AuthenticatedUser,
-    input?: { status?: string; from?: string; to?: string; q?: string },
-  ): Promise<
-    Array<
-      Pick<
-        SurveyRow,
-        | "id"
-        | "site_name"
-        | "status"
-        | "visibility"
-        | "parcel_id"
-        | "observation_year"
-        | "version_number"
-        | "updated_at"
-        | "sync_version"
-      >
-    >
-  > {
-    const filters: string[] = ["user_id = $1", "deleted_at IS NULL"]
-    const values: unknown[] = [user.id]
-
-    const normalizedStatus = normalizeSurveyStatusFilter(input?.status)
-    if (normalizedStatus) {
-      values.push(normalizedStatus)
-      filters.push(`status = $${values.length}`)
-    }
-
-    const fromDate = normalizeDateInput(input?.from)
-    if (fromDate) {
-      values.push(fromDate)
-      filters.push(`updated_at::date >= $${values.length}::date`)
-    }
-
-    const toDate = normalizeDateInput(input?.to)
-    if (toDate) {
-      values.push(toDate)
-      filters.push(`updated_at::date <= $${values.length}::date`)
-    }
-
-    const query = input?.q?.trim()
-    if (query) {
-      values.push(`%${query}%`)
-      filters.push(`(site_name ILIKE $${values.length} OR parcel_id ILIKE $${values.length})`)
-    }
-
-    const result = await this.db.query<
-      Pick<
-        SurveyRow,
-        | "id"
-        | "site_name"
-        | "status"
-        | "visibility"
-        | "parcel_id"
-        | "observation_year"
-        | "version_number"
-        | "updated_at"
-        | "sync_version"
-      >
-    >(
-      `SELECT id, site_name, status, visibility, parcel_id, observation_year, version_number, updated_at::text, sync_version
-       FROM surveys
-       WHERE ${filters.join(" AND ")}
-       ORDER BY updated_at DESC`,
-      values,
-    )
-
-    return result.rows
+    input: SurveyListFilters | undefined,
+    page: ListPage = { limit: null, after: null },
+  ): Promise<{ items: SurveyListItem[]; next_cursor: string | null }> {
+    return this.repository.listForUser(this.db, user.id, input, page)
   }
 
   async upsertForUser(

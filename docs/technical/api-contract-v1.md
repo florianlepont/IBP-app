@@ -305,9 +305,38 @@ Response `200`:
 }
 ```
 
-### GET /surveys?status=&from=&to=&q=
+### List pagination (`limit`, `cursor`)
 
-List current user surveys with filters.
+`GET /surveys`, `GET /surveys/{id}/events` and `GET /reports` accept two optional query
+parameters:
+
+- `limit`: an integer from 1 to 100. Without it the list is not paginated: every row comes back,
+  in the documented order, with `next_cursor: null`, exactly as before pagination existed.
+- `cursor`: the opaque `next_cursor` of the previous page (`v1:` followed by base64url). Clients
+  must send it back verbatim, never parse or build it. It is only valid for the same list and
+  the same filters.
+
+With `limit`, the response holds at most `limit` items. `next_cursor` is set when more rows
+follow, and `null` on the last page. Walking the pages returns every row exactly once, in the
+unpaginated order. Pages use keyset pagination: rows written after the first page with a newer
+timestamp are not added to later pages.
+
+A cursor never widens the caller's scope: a cursor replayed by another user still lists only that
+user's rows (or answers `404` / `403`, as the route does without a cursor).
+
+Errors (the rejected value is never echoed):
+
+- `400 Invalid limit`: `limit` is not an integer from 1 to 100 (for example `0`, `101`, `abc`).
+- `400 Invalid cursor`: `cursor` is malformed or was not issued by this list.
+
+Unknown query parameters are ignored, as before.
+
+### GET /surveys?status=&from=&to=&q=&limit=&cursor=
+
+List current user surveys with filters, most recently updated first (`updated_at` descending,
+then `id` descending). `limit` and `cursor` are optional; see
+[List pagination](#list-pagination-limit-cursor). Without `limit`, `next_cursor` is always
+`null`.
 
 Response `200`:
 
@@ -475,9 +504,14 @@ Notes:
 
 - Idempotent in V1: returns `204` even if survey was already deleted or not found.
 
-### GET /surveys/{id}/events
+### GET /surveys/{id}/events?limit=&cursor=
 
-Get survey audit trail events.
+Get survey audit trail events, newest first (`created_at` descending, then the event's insertion
+order). `limit` and `cursor` are optional; see [List pagination](#list-pagination-limit-cursor).
+Without them every event is returned, as before.
+
+The response now also carries `next_cursor` (`null` without `limit` and on the last page). The
+item fields are unchanged.
 
 Response `200`:
 
@@ -489,7 +523,8 @@ Response `200`:
       "event_type": "submitted",
       "created_at": "2026-03-08T12:20:00Z"
     }
-  ]
+  ],
+  "next_cursor": null
 }
 ```
 
@@ -841,9 +876,33 @@ Response `201`:
 `GET /surveys/{id}/events` feed shows a `reported` event without the reporter's identity or reason;
 that data is kept only in the `reports` table, visible to moderators/admins.
 
-### GET /reports?status=open
+### GET /reports?status=open&limit=&cursor=
 
-List reports (moderator/admin).
+List reports (moderator/admin), newest first (`created_at` descending, then `id` descending).
+`status` (`open` or `reviewed`) is optional. `limit` and `cursor` are optional; see
+[List pagination](#list-pagination-limit-cursor). Without `limit` every matching report is
+returned with `next_cursor: null`, as before. The role check applies to every page (`403`
+otherwise).
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "e81fbbab-06a8-49a0-87f8-e9b7f0c8dca5",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "reporter_user_id": "0b1f7f0e-9d9c-4d2a-9a36-3b3a4c1f2e10",
+      "reason": "Inappropriate photo",
+      "status": "open",
+      "created_at": "2026-03-08 12:30:00.123456+00",
+      "reviewed_at": null,
+      "reviewed_by": null
+    }
+  ],
+  "next_cursor": "v1:eyJ0IjoiMjAyNi0wMy0wOCAxMjozMDowMC4xMjM0NTYrMDAiLCJpIjoiZTgxZmJiYWItMDZhOC00OWEwLTg3ZjgtZTliN2YwYzhkY2E1In0"
+}
+```
 
 ### PATCH /reports/{id}
 

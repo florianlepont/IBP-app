@@ -2,7 +2,8 @@ import { Body, Controller, Get, Patch, Post, Query, Param, UseGuards } from "@ne
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { ReportsService } from "./reports.service"
+import { decodeListCursor, parseListLimit } from "../surveys/list-cursor"
+import { REPORT_CURSOR_ID_PATTERN, ReportsService } from "./reports.service"
 import { CreateReportDto } from "./dtos/create-report.dto"
 import { PatchReportDto } from "./dtos/patch-report.dto"
 
@@ -17,8 +18,18 @@ export class ReportsController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthenticatedUser, @Query("status") status?: string) {
-    return this.reportsService.listReports(user, status)
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("status") status?: string,
+    // D-11 / D-18 (C-4): individual query strings, not a class DTO.
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
+  ) {
+    const page = {
+      limit: parseListLimit(limit),
+      after: decodeListCursor(cursor, { idPattern: REPORT_CURSOR_ID_PATTERN }),
+    }
+    return this.reportsService.listReports(user, status, page)
   }
 
   @Patch(":id")

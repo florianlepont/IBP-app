@@ -6,11 +6,26 @@ import { AppModule } from "../src/app.module"
 import { configureApp } from "../src/app.setup"
 import { DatabaseService } from "../src/database/database.service"
 import * as publicMapQueries from "../src/surveys/public-map.queries"
+import { buildListForUserQuery } from "../src/surveys/surveys.repository"
+import { buildEventListQuery } from "../src/surveys/survey-events.service"
+import { buildReportListQuery } from "../src/reports/reports.service"
 
 // D-13 / D-15: on 10 000 seeded surveys the public queries never scan surveys, parcels or
 // survey_parcels sequentially, and they return the same rows as the pre-01.7 queries.
 // Everything runs in one transaction that is rolled back (RESEARCH Pitfall 11), so the 2 000
 // seeded public surveys never reach the other specs' LIMIT 500 assertions.
+// D-11 / D-15: the three paginated lists (first page and a middle page) are index-driven on
+// the same seed, plus 30 000 survey events and 20 000 reports.
+
+// The API's query builders, as the script loads them from dist.
+const apiQueries = {
+  ...publicMapQueries,
+  buildListForUserQuery,
+  buildEventListQuery,
+  buildReportListQuery,
+}
+type ApiQueries = typeof apiQueries
+type ListCase = { query: string; variant: string; text: string; values: unknown[] }
 
 type Bbox = { minLng: number; maxLng: number; minLat: number; maxLat: number }
 type ExplainResult = {
@@ -23,6 +38,12 @@ type ExplainResult = {
 type ExplainModule = {
   EXPLAIN_BBOX: Bbox
   SEEDED_SURVEYS: number
+  SEEDED_EVENTS: number
+  SEEDED_REPORTS: number
+  LIST_PAGE_LIMIT: number
+  LIST_MIDDLE_ROW: number
+  BUSY_USER_EMAIL: string
+  BUSY_SURVEY_ID: string
   WATCHED_RELATIONS: string[]
   buildLegacyMapItemsQuery: (input?: { from?: string; to?: string; region?: string }) => {
     text: string
@@ -30,7 +51,8 @@ type ExplainModule = {
   }
   buildLegacyParcelStatusesSql: (withBbox: boolean) => string
   seed: (client: PoolClient) => Promise<void>
-  runExplain: (client: PoolClient, queries: typeof publicMapQueries) => Promise<ExplainResult[]>
+  buildListCases: (client: PoolClient, queries: ApiQueries) => Promise<ListCase[]>
+  runExplain: (client: PoolClient, queries: ApiQueries) => Promise<ExplainResult[]>
 }
 
 const explain = jest.requireActual<ExplainModule>("../scripts/explain-public-routes")
@@ -117,7 +139,9 @@ describe("public routes on 10 000 surveys: EXPLAIN and legacy parity (e2e)", () 
         `SELECT (SELECT count(*) FROM users)::int AS users,
                 (SELECT count(*) FROM parcels)::int AS parcels,
                 (SELECT count(*) FROM surveys)::int AS surveys,
-                (SELECT count(*) FROM survey_parcels)::int AS links`,
+                (SELECT count(*) FROM survey_parcels)::int AS links,
+                (SELECT count(*) FROM survey_events)::int AS events,
+                (SELECT count(*) FROM reports)::int AS reports`,
       )
     ).rows[0]
 
@@ -141,6 +165,14 @@ describe("public routes on 10 000 surveys: EXPLAIN and legacy parity (e2e)", () 
       ) {
         found.push(node["Relation Name"])
       }
+    })
+    return found
+  }
+
+  const nodeTypes = (plan: PlanNode): string[] => {
+    const found: string[] = []
+    walk(plan, (node) => {
+      found.push(node["Node Type"])
     })
     return found
   }
@@ -349,20 +381,114 @@ describe("public routes on 10 000 surveys: EXPLAIN and legacy parity (e2e)", () 
   )
 
   it(
+    "seeds 30 000 events (1 000+ on the busy survey) and 20 000 reports",
+    async () => {
+      const result = await client.query<{
+        events: number
+        busy_events: number
+        reports: number
+        open_reports: number
+        busy_surveys: number
+      }>(
+        `SELECT (SELECT count(*) FROM survey_events WHERE id LIKE 'explain-e%')::int AS events,
+                (SELECT count(*) FROM survey_events WHERE survey_id = $1)::int AS busy_events,
+                (SELECT count(*) FROM reports WHERE reason LIKE 'Explain reason %')::int AS reports,
+                (SELECT count(*) FROM reports WHERE reason LIKE 'Explain reason %' AND status = 'open')::int AS open_reports,
+                (SELECT count(*) FROM surveys s JOIN users u ON u.id = s.user_id
+                  WHERE u.email = $2 AND s.deleted_at IS NULL)::int AS busy_surveys`,
+        [explain.BUSY_SURVEY_ID, explain.BUSY_USER_EMAIL],
+      )
+      const row = result.rows[0]
+      expect(row.events).toBe(explain.SEEDED_EVENTS)
+      expect(row.reports).toBe(explain.SEEDED_REPORTS)
+      expect(row.busy_events).toBeGreaterThan(explain.LIST_MIDDLE_ROW + explain.LIST_PAGE_LIMIT)
+      expect(row.busy_surveys).toBeGreaterThan(explain.LIST_MIDDLE_ROW + explain.LIST_PAGE_LIMIT)
+      expect(row.open_reports).toBeGreaterThan(explain.LIST_MIDDLE_ROW + explain.LIST_PAGE_LIMIT)
+    },
+    SLOW_TIMEOUT_MS,
+  )
+
+  it(
+    "paginated lists: first and middle pages are index scans, no seq scan and no full sort",
+    async () => {
+      const cases = await explain.buildListCases(client, apiQueries)
+      expect(cases).toHaveLength(8)
+      const expectedIndex: Record<string, string> = {
+        "GET /surveys (busy user)": "idx_surveys_user_updated",
+        "GET /surveys/:id/events (busy survey)": "idx_survey_events_survey",
+        "GET /reports": "idx_reports_created_id",
+        "GET /reports?status=open": "idx_reports_status_created",
+      }
+      for (const listCase of cases) {
+        const plan = await explainJson(listCase.text, listCase.values)
+        const label = `${listCase.query} ${listCase.variant}`
+        expect({ label, seqScans: seqScansOn(plan) }).toEqual({ label, seqScans: [] })
+        expect({ label, indexes: indexesUsed(plan) }).toEqual({
+          label,
+          indexes: [expectedIndex[listCase.query]],
+        })
+        // A plain Sort would mean the whole scope is read and sorted; an Incremental Sort only
+        // orders the rows that share a timestamp.
+        expect({ label, sort: nodeTypes(plan).includes("Sort") }).toEqual({ label, sort: false })
+        expect(nodeTypes(plan)[0]).toBe("Limit")
+      }
+    },
+    SLOW_TIMEOUT_MS,
+  )
+
+  it(
+    "paginated lists: the first and middle pages are slices of the unpaginated order",
+    async () => {
+      const cases = await explain.buildListCases(client, apiQueries)
+      const busyUser = await client.query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [
+        explain.BUSY_USER_EMAIL,
+      ])
+      const unpaginated = { limit: null, after: null }
+      const full: Record<string, { text: string; values: unknown[] }> = {
+        "GET /surveys (busy user)": buildListForUserQuery(busyUser.rows[0].id, {}, unpaginated),
+        "GET /surveys/:id/events (busy survey)": buildEventListQuery(
+          explain.BUSY_SURVEY_ID,
+          unpaginated,
+        ),
+        "GET /reports": buildReportListQuery(null, unpaginated),
+        "GET /reports?status=open": buildReportListQuery("open", unpaginated),
+      }
+      const limit = explain.LIST_PAGE_LIMIT
+      for (const listCase of cases) {
+        const all = (await client.query(full[listCase.query].text, full[listCase.query].values))
+          .rows
+        const page = (await client.query(listCase.text, listCase.values)).rows
+        // Each page fetches limit + 1 rows (the extra one only tells that more exist).
+        const start = listCase.variant.startsWith("first") ? 0 : explain.LIST_MIDDLE_ROW
+        expect(page).toEqual(all.slice(start, start + limit + 1))
+      }
+    },
+    SLOW_TIMEOUT_MS,
+  )
+
+  it(
     "the EXPLAIN script reports no seq scan after the rewrite and leaves no row behind",
     async () => {
       await rollback()
       expect(await counts()).toEqual(countsBefore)
 
-      const results = await explain.runExplain(client, publicMapQueries)
+      const results = await explain.runExplain(client, apiQueries)
 
       expect(results.map((result) => `${result.query} ${result.variant}`)).toEqual([
         "/public/map-items before (pre-01.7)",
         "/public/map-items after",
         "/public/parcels/status?bbox before (pre-01.7)",
         "/public/parcels/status?bbox after",
+        "GET /surveys (busy user) first page (limit 50)",
+        "GET /surveys (busy user) middle page (after row 500)",
+        "GET /surveys/:id/events (busy survey) first page (limit 50)",
+        "GET /surveys/:id/events (busy survey) middle page (after row 500)",
+        "GET /reports first page (limit 50)",
+        "GET /reports middle page (after row 500)",
+        "GET /reports?status=open first page (limit 50)",
+        "GET /reports?status=open middle page (after row 500)",
       ])
-      for (const result of results.filter((entry) => entry.variant === "after")) {
+      for (const result of results.filter((entry) => !entry.variant.startsWith("before"))) {
         expect(result.seqScans).toEqual([])
         expect(Number.isFinite(result.executionMs)).toBe(true)
       }
