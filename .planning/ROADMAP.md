@@ -104,7 +104,7 @@ Plans:
 **Goal**: A surveyor fills Factor A faster by photographing a tree than by naming its genus from memory.
 **Depends on**: Phase 2
 **Requirements**: REQ-C-species-recognition
-**Inputs from Phase 1**: the promoted model `genus_classifier.tflite` (EfficientNet-B0, float16, 8.24 MB) and the per-genus confidence calibration table — both measured artefacts ADR-002 rests on. They must be preserved outside the throwaway `spike/` tree before it is deleted.
+**Inputs from Phase 1**: the promoted model `genus_classifier.tflite` (EfficientNet-B0, float16, 8.24 MB) and the per-genus confidence calibration table — both measured artefacts ADR-002 rests on. Both are preserved outside the repository at `~/Projects/cortege-ml-artifacts/genus-classifier-iteration4/` (model, labels, Keras source, training and export reports, calibration table and re-cut scale — 42 MB, MD5-verified against the originals on 2026-09-26). They are deliberately not committed: 42 MB of binaries would stay in git history forever. The calibrated thresholds are also versioned in `docs/technical/species-recognition-spike-measurements-v1.md` §15.2.
 **Success Criteria** (what must be TRUE):
 
   1. From the Factor A section, the surveyor photographs a single subject — one tree, a leaf or bark (D-10) — and sees the most likely genus first with its alternatives underneath (D-11), each carrying a plain-words confidence indicator (D-12).
