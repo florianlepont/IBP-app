@@ -20,6 +20,12 @@ import {
 import { LocalAttachment, LocalSurvey } from "../storage"
 import { SurveyListFilters } from "./types"
 
+// constants.ts reads Platform for the default API URL; the unit Jest setup does
+// not load react-native itself.
+jest.mock("react-native", () => ({
+  Platform: { select: (options: { default?: unknown }) => options.default },
+}))
+
 const makeSurvey = (overrides: Partial<LocalSurvey>): LocalSurvey => ({
   id: "survey-default",
   site_name: "Default site",

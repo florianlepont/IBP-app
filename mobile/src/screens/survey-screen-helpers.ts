@@ -1,4 +1,5 @@
 import { FactorKey } from "../app/types"
+import { fr } from "../i18n"
 import { resolveAttachmentUri } from "../storage/attachment-files"
 import type { LocalAttachment } from "../storage/types"
 
@@ -35,10 +36,9 @@ export const resolveDisplayCoordinates = (
 // preview states a screen should render, from `file_state` alone. Screens
 // are not rendered in Jest, so all of this logic lives here where it is
 // unit-tested, instead of inline in SurveyDetailScreen/SurveyListScreen.
-export const MISSING_PHOTO_MESSAGE =
-  "Photo introuvable sur cet appareil. Supprimez-la ou reprenez la photo."
-export const LOADING_PHOTO_MESSAGE = "Photo en cours de chargement…"
-export const UNAVAILABLE_PHOTO_MESSAGE = "Photo non disponible pour le moment."
+export const MISSING_PHOTO_MESSAGE: string = fr.labels.attachmentPreview.missing
+export const LOADING_PHOTO_MESSAGE: string = fr.labels.attachmentPreview.loading
+export const UNAVAILABLE_PHOTO_MESSAGE: string = fr.labels.attachmentPreview.unavailable
 
 export type AttachmentPreview =
   | { kind: "image"; uri: string }
