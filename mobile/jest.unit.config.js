@@ -35,7 +35,11 @@ module.exports = {
   coverageThreshold: {
     global: { statements: 100, lines: 100 },
     // Mounted by src/state/render-counts.test.tsx (phase 01.9-01); raised at the 01.9-31 gate.
-    './App.tsx': { statements: 79, branches: 65, functions: 56, lines: 83 },
+    // Raised in 01.9-09: App.tsx is a thin shell, fully rendered by src/state/contexts.test.tsx.
+    './App.tsx': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    // Contexts and assembler (01.9-09) and the French catalogue (01.9-05), at the measured floor (C-8).
+    './src/state/': { statements: 95, branches: 75, functions: 87, lines: 97 },
+    './src/i18n/': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/api/': { statements: 95, branches: 97, functions: 91, lines: 95 },
     './src/app/': { statements: 61, branches: 55, functions: 45, lines: 63 },
     './src/components/': { statements: 6, branches: 0, functions: 0, lines: 6 },

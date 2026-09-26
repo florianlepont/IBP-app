@@ -232,23 +232,91 @@ describe("useSurveySync", () => {
   // ─── Initialization ───────────────────────────────────────────────────────
 
   describe("hook initialization", () => {
-    test("returns all expected properties", async () => {
+    test("returns the memoised slices (D-01)", async () => {
       const { result } = await renderSync()
       const hook = result.current
-      expect(hook).toHaveProperty("accessToken")
-      expect(hook).toHaveProperty("isAuthenticated")
-      expect(hook).toHaveProperty("status")
-      expect(hook).toHaveProperty("operationStatus")
-      expect(hook).toHaveProperty("surveyDetails")
-      expect(hook).toHaveProperty("handleLoadCanonicalDetails")
-      expect(hook).toHaveProperty("handleLoadSurveyEvents")
-      expect(hook).toHaveProperty("handleDebugResetIbpData")
-      expect(hook).toHaveProperty("handleDebugResetUserData")
-      expect(hook).toHaveProperty("setStatus")
-      expect(hook).toHaveProperty("handleEnsureAttachmentPreviews")
-      expect(hook).toHaveProperty("handleSimulateMissingAttachmentFile")
+      expect(hook.accessToken).toBe("token-abc")
       expect(hook.status).toBe(STATUS.initial)
-      expect(hook.operationStatus).toBe(INITIAL_OPERATION_STATUS)
+      expect(hook.sessionState).toEqual({
+        sessionRestoring: false,
+        isAuthenticated: true,
+        currentUser: null,
+        profile: null,
+        profileUpdating: false,
+        localDataOwnerStatus: "ok",
+        foreignWork: { surveys: 0, attachments: 0 },
+        foreignOwnerEmail: null,
+      })
+      expect(hook.surveyDetailsState).toEqual({
+        surveyDetails: {},
+        detailsLoadingSurveyId: null,
+        surveyEvents: {},
+        eventsLoadingSurveyId: null,
+      })
+      expect(Object.keys(hook.syncActions).sort()).toEqual(
+        [
+          "handleDebugResetIbpData",
+          "handleDebugResetUserData",
+          "handleEnsureAttachmentPreviews",
+          "handlePullChanges",
+          "handleReportSurvey",
+          "handleSimulateMissingAttachmentFile",
+          "handleSync",
+          "setStatus",
+        ].sort(),
+      )
+      expect(Object.keys(hook.sessionActions).sort()).toEqual(
+        [
+          "handleChangeEmail",
+          "handleDeleteAccount",
+          "handleDiscardForeignData",
+          "handleForgotPassword",
+          "handleLoadMyProfile",
+          "handleLogin",
+          "handleLogout",
+          "handlePasswordReset",
+          "handlePickProfilePictureFromLibrary",
+          "handleRegister",
+          "handleRemoveProfilePicture",
+          "handleSwitchToOwnerAccount",
+          "handleTakeProfilePictureFromCamera",
+          "handleUpdateProfile",
+        ].sort(),
+      )
+      expect(Object.keys(hook.surveyOperations).sort()).toEqual(
+        [
+          "confirmDeleteSurvey",
+          "handleDeleteAttachment",
+          "handleDiscardSurvey",
+          "handleLoadCanonicalDetails",
+          "handleLoadSurveyEvents",
+          "handleQueueAttachmentFromCamera",
+          "handleQueueAttachmentFromLibrary",
+          "handleRetrySurvey",
+          "handleSubmitSurvey",
+          "handleToggleVisibility",
+        ].sort(),
+      )
+    })
+
+    test("keeps operationStatus internal and the token out of the session slice", async () => {
+      const { result } = await renderSync()
+      expect(result.current).not.toHaveProperty("operationStatus")
+      expect(result.current.sessionState).not.toHaveProperty("accessToken")
+    })
+
+    test("the action slices forward to the sub-hook handlers", async () => {
+      const { result } = await renderSync()
+      const network = mockUseSurveySyncNetwork.mock.results[0].value
+      const operations = mockUseSurveySyncSurveyOperations.mock.results[0].value
+      await act(async () => {
+        await result.current.syncActions.handleSync()
+        await result.current.surveyOperations.handleSubmitSurvey("s1")
+        await result.current.sessionActions.handleLogin()
+      })
+      expect(network.handleSync).toHaveBeenCalledTimes(1)
+      expect(operations.handleSubmitSurvey).toHaveBeenCalledWith("s1")
+      expect(mockAuth0Session.handleLogin).toHaveBeenCalledTimes(1)
     })
 
     test("does not return the removed pre-Auth0 stubs (D-02/ROADMAP criterion 7)", async () => {
@@ -294,9 +362,9 @@ describe("useSurveySync", () => {
       mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
       })
-      expect(result.current.surveyDetails).toHaveProperty("s1")
+      expect(result.current.surveyDetailsState.surveyDetails).toHaveProperty("s1")
 
       const { onSessionCleared } = mockUseAuth0Session.mock.calls[0][0]
       let outcome: unknown = "pending"
@@ -304,7 +372,7 @@ describe("useSurveySync", () => {
         outcome = await onSessionCleared()
       })
       expect(outcome).toBeUndefined()
-      expect(result.current.surveyDetails).toEqual({})
+      expect(result.current.surveyDetailsState.surveyDetails).toEqual({})
       expect(mockClearLocalIbpData).not.toHaveBeenCalled()
     })
   })
@@ -315,7 +383,7 @@ describe("useSurveySync", () => {
     test("setStatus runs updateOperationStatus on the current operation status", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        result.current.setStatus("Hello")
+        result.current.syncActions.setStatus("Hello")
       })
 
       expect(mockUpdateOperationStatus).toHaveBeenCalledWith(
@@ -324,7 +392,83 @@ describe("useSurveySync", () => {
         "idle",
         "Hello",
       )
-      expect(result.current.operationStatus).toBe(UPDATED_OPERATION_STATUS)
+      expect(result.current.status).toBe("Hello")
+
+      // The internal operation status is threaded into the next update.
+      await act(async () => {
+        result.current.syncActions.setStatus("Again")
+      })
+      expect(mockUpdateOperationStatus).toHaveBeenLastCalledWith(
+        UPDATED_OPERATION_STATUS,
+        "session",
+        "idle",
+        "Again",
+      )
+    })
+  })
+
+  // ─── Identity of the returned slices (D-01, criterion 1) ──────────────────
+
+  describe("slice identity", () => {
+    test("a rerender with identical params returns the same object and slices", async () => {
+      const { result, rerender } = await renderSync()
+      const first = result.current
+      await rerender(undefined)
+      expect(result.current).toBe(first)
+      expect(result.current.sessionState).toBe(first.sessionState)
+      expect(result.current.sessionActions).toBe(first.sessionActions)
+      expect(result.current.syncActions).toBe(first.syncActions)
+      expect(result.current.surveyOperations).toBe(first.surveyOperations)
+      expect(result.current.surveyDetailsState).toBe(first.surveyDetailsState)
+    })
+
+    test("setStatus changes only the status", async () => {
+      const { result } = await renderSync()
+      const first = result.current
+      await act(async () => {
+        first.syncActions.setStatus("x")
+      })
+      expect(result.current).not.toBe(first)
+      expect(result.current.status).toBe("x")
+      expect(result.current.sessionState).toBe(first.sessionState)
+      expect(result.current.sessionActions).toBe(first.sessionActions)
+      expect(result.current.syncActions).toBe(first.syncActions)
+      expect(result.current.surveyOperations).toBe(first.surveyOperations)
+      expect(result.current.surveyDetailsState).toBe(first.surveyDetailsState)
+    })
+
+    test("the debug resets keep their identity when the surveys change", async () => {
+      let params = { ...DEFAULT_PARAMS }
+      const { result, rerender } = await renderHook(() => useSurveySync(params as never))
+      const first = result.current.syncActions
+      const ibpReset = first.handleDebugResetIbpData
+      const userReset = first.handleDebugResetUserData
+
+      params = { ...params, surveys: [{ id: "s1" }] as unknown[] }
+      await rerender(undefined)
+
+      expect(result.current.syncActions).toBe(first)
+      expect(result.current.syncActions.handleDebugResetIbpData).toBe(ibpReset)
+      expect(result.current.syncActions.handleDebugResetUserData).toBe(userReset)
+    })
+
+    test("the stable debug reset runs the latest implementation", async () => {
+      mockResetIbpData.mockResolvedValue({ surveys_deleted: 1 })
+      let params = { ...DEFAULT_PARAMS, apiUrl: "http://first" }
+      const { result, rerender } = await renderHook(() => useSurveySync(params as never))
+      const reset = result.current.syncActions.handleDebugResetIbpData
+
+      params = { ...params, apiUrl: "http://second" }
+      await rerender(undefined)
+
+      await act(async () => {
+        await reset()
+      })
+      await act(async () => {
+        alertButton((button) => button.style === "destructive").onPress?.()
+      })
+      await flushAsyncWork()
+      expect(mockResetIbpData).toHaveBeenCalledWith("http://second", "token-abc")
     })
   })
 
@@ -352,7 +496,7 @@ describe("useSurveySync", () => {
       await flushAsyncWork()
 
       expect(mockLoadSurveyDetail).toHaveBeenCalledTimes(1)
-      expect(result.current.surveyDetails).toEqual({ s1: { id: "s1" } })
+      expect(result.current.surveyDetailsState.surveyDetails).toEqual({ s1: { id: "s1" } })
       expect(result.current.status).toBe(STATUS.initial)
     })
 
@@ -362,7 +506,7 @@ describe("useSurveySync", () => {
       await flushAsyncWork()
 
       expect(mockLoadSurveyEvents).toHaveBeenCalledTimes(1)
-      expect(result.current.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
+      expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
       expect(result.current.status).toBe(STATUS.initial)
     })
   })
@@ -371,7 +515,7 @@ describe("useSurveySync", () => {
     test("calling setStatus invokes reportStatus with session scope", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        result.current.setStatus("test message")
+        result.current.syncActions.setStatus("test message")
       })
       expect(result.current.status).toBe("test message")
     })
@@ -386,12 +530,12 @@ describe("useSurveySync", () => {
 
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1")
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
       })
 
       expect(mockLoadSurveyDetail).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
-      expect(result.current.surveyDetails).toEqual({ s1: detail })
-      expect(result.current.detailsLoadingSurveyId).toBeNull()
+      expect(result.current.surveyDetailsState.surveyDetails).toEqual({ s1: detail })
+      expect(result.current.surveyDetailsState.detailsLoadingSurveyId).toBeNull()
     })
 
     test("silent mode skips status updates", async () => {
@@ -399,7 +543,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
       })
       expect(result.current.status).toBe(STATUS.initial)
     })
@@ -409,7 +553,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1")
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
       })
       expect(result.current.status).toBe(STATUS.detailLoaded("s1"))
     })
@@ -419,7 +563,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1")
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
       })
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
@@ -431,10 +575,10 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1")
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
       })
       expect(result.current.status).toBe(STATUS.detailError("Network error"))
-      expect(result.current.detailsLoadingSurveyId).toBeNull()
+      expect(result.current.surveyDetailsState.detailsLoadingSurveyId).toBeNull()
     })
 
     test("silent mode on AUTH_REQUIRED skips status", async () => {
@@ -442,7 +586,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
       })
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
       expect(result.current.status).toBe(STATUS.initial)
@@ -453,7 +597,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadCanonicalDetails("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
       })
       expect(result.current.status).toBe(STATUS.initial)
     })
@@ -467,13 +611,13 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadSurveyEvents("s1")
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1")
       })
 
       expect(mockLoadSurveyEvents).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
-      expect(result.current.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
+      expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
       expect(result.current.status).toBe(STATUS.eventsLoaded("s1"))
-      expect(result.current.eventsLoadingSurveyId).toBeNull()
+      expect(result.current.surveyDetailsState.eventsLoadingSurveyId).toBeNull()
     })
 
     test("silent mode on success skips status updates", async () => {
@@ -481,9 +625,9 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadSurveyEvents("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1", { silent: true })
       })
-      expect(result.current.surveyEvents).toEqual({ s1: [] })
+      expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [] })
       expect(result.current.status).toBe(STATUS.initial)
     })
 
@@ -492,7 +636,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadSurveyEvents("s1")
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1")
       })
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
@@ -504,7 +648,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadSurveyEvents("s1")
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1")
       })
       expect(result.current.status).toBe(STATUS.eventsError("Connection lost"))
     })
@@ -514,7 +658,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadSurveyEvents("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1", { silent: true })
       })
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
       expect(result.current.status).toBe(STATUS.initial)
@@ -525,7 +669,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLoadSurveyEvents("s1", { silent: true })
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1", { silent: true })
       })
       expect(result.current.status).toBe(STATUS.initial)
     })
@@ -537,7 +681,7 @@ describe("useSurveySync", () => {
     test("calls Alert.alert with correct title", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetIbpData()
+        await result.current.syncActions.handleDebugResetIbpData()
       })
       expect(mockAlert).toHaveBeenCalledWith(
         STATUS.debugIbpTitle,
@@ -549,7 +693,7 @@ describe("useSurveySync", () => {
     test("Alert buttons include Cancel and Reset", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetIbpData()
+        await result.current.syncActions.handleDebugResetIbpData()
       })
       const buttons = mockAlert.mock.calls[0][2] as AlertButton[]
       const texts = buttons.map((b) => b.text)
@@ -565,7 +709,7 @@ describe("useSurveySync", () => {
       })
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetIbpData()
+        await result.current.syncActions.handleDebugResetIbpData()
       })
 
       alertButton((b) => b.text === "Reset").onPress?.()
@@ -580,7 +724,7 @@ describe("useSurveySync", () => {
       mockResetIbpData.mockRejectedValue(new Error("AUTH_REQUIRED"))
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetIbpData()
+        await result.current.syncActions.handleDebugResetIbpData()
       })
 
       alertButton((b) => b.text === "Reset").onPress?.()
@@ -594,7 +738,7 @@ describe("useSurveySync", () => {
       mockResetIbpData.mockRejectedValue(new Error("Server error"))
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetIbpData()
+        await result.current.syncActions.handleDebugResetIbpData()
       })
 
       const resetButton = alertButton((b) => b.text === "Reset")
@@ -612,7 +756,7 @@ describe("useSurveySync", () => {
       const onStopEditing = jest.fn()
       const { result } = await renderSync({ editingSurveyId: "survey-1", onStopEditing })
       await act(async () => {
-        await result.current.handleDebugResetIbpData()
+        await result.current.syncActions.handleDebugResetIbpData()
       })
 
       alertButton((b) => b.text === "Reset").onPress?.()
@@ -628,7 +772,7 @@ describe("useSurveySync", () => {
     test("calls Alert.alert with correct title", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetUserData()
+        await result.current.syncActions.handleDebugResetUserData()
       })
       expect(mockAlert).toHaveBeenCalledWith(
         STATUS.debugUserTitle,
@@ -645,7 +789,7 @@ describe("useSurveySync", () => {
       })
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetUserData()
+        await result.current.syncActions.handleDebugResetUserData()
       })
 
       alertButton((b) => b.text === "Reset").onPress?.()
@@ -660,7 +804,7 @@ describe("useSurveySync", () => {
       mockResetUserData.mockRejectedValue(new Error("AUTH_REQUIRED"))
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetUserData()
+        await result.current.syncActions.handleDebugResetUserData()
       })
 
       alertButton((b) => b.text === "Reset").onPress?.()
@@ -674,7 +818,7 @@ describe("useSurveySync", () => {
       mockResetUserData.mockRejectedValue(new Error("Timeout"))
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDebugResetUserData()
+        await result.current.syncActions.handleDebugResetUserData()
       })
 
       const resetButton = alertButton((b) => b.text === "Reset")
@@ -692,7 +836,7 @@ describe("useSurveySync", () => {
       const onStopEditing = jest.fn()
       const { result } = await renderSync({ editingSurveyId: "survey-x", onStopEditing })
       await act(async () => {
-        await result.current.handleDebugResetUserData()
+        await result.current.syncActions.handleDebugResetUserData()
       })
 
       alertButton((b) => b.text === "Reset").onPress?.()
@@ -710,7 +854,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLogout()
+        await result.current.sessionActions.handleLogout()
       })
 
       expect(mockAlert).toHaveBeenCalledTimes(1)
@@ -734,7 +878,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLogout()
+        await result.current.sessionActions.handleLogout()
       })
 
       alertButton((b) => b.style === "cancel").onPress?.()
@@ -749,7 +893,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleLogout()
+        await result.current.sessionActions.handleLogout()
       })
 
       expect(mockAlert).not.toHaveBeenCalled()
@@ -764,7 +908,7 @@ describe("useSurveySync", () => {
     test("success path purges local data without the unsynced-work alert", async () => {
       const { result } = await renderSync()
       await act(async () => {
-        await result.current.handleDeleteAccount()
+        await result.current.sessionActions.handleDeleteAccount()
       })
 
       alertButton((b) => b.text === STATUS.deleteAccountButton).onPress?.()
@@ -800,7 +944,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        result.current.handleDiscardForeignData()
+        result.current.sessionActions.handleDiscardForeignData()
       })
 
       expect(mockAlert).toHaveBeenCalledTimes(1)
@@ -827,7 +971,7 @@ describe("useSurveySync", () => {
       const { result } = await renderSync()
 
       await act(async () => {
-        await result.current.handleSwitchToOwnerAccount()
+        await result.current.sessionActions.handleSwitchToOwnerAccount()
       })
 
       expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)

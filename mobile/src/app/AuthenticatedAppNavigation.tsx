@@ -38,11 +38,22 @@ import { SettingsScreen } from "../screens/SettingsScreen"
 import { FactorDetailScreen } from "../screens/FactorDetailScreen"
 import { SurveyParcelSelectionScreen } from "../screens/SurveyParcelSelectionScreen"
 import { HomeScreen } from "../screens/HomeScreen"
-import { useSurveyForm } from "../hooks/useSurveyForm"
-import { useSurveyList } from "../hooks/useSurveyList"
-import { useSurveySync } from "../hooks/useSurveySync"
 import { usePublicMapExplorer } from "../hooks/usePublicMapExplorer"
 import type { NearbyParcelsState } from "../hooks/useNearbyParcels"
+import {
+  useAccessToken,
+  useSession,
+  type SessionActions,
+  type SessionState,
+} from "../state/session-context"
+import { useStatus } from "../state/status-context"
+import {
+  useSurveyFormState,
+  type SurveyFormActions,
+  type SurveyFormState,
+} from "../state/survey-form-context"
+import { useSurveys, type SurveyActions, type SurveysState } from "../state/surveys-context"
+import { useSyncActions, type SyncActions } from "../state/sync-actions-context"
 import type { SurveyStats } from "./types"
 
 type HomeStackParamList = {
@@ -76,12 +87,37 @@ export type RootTabParamList = {
 
 export type FormMode = "create" | "edit"
 
-type SurveyFormController = ReturnType<typeof useSurveyForm>
-type SurveyListController = ReturnType<typeof useSurveyList>
-type SurveySyncController = ReturnType<typeof useSurveySync>
+// Phase 01.9-09: the internal navigators still take the pre-context shapes;
+// AuthenticatedAppNavigation rebuilds them from the five contexts at its top.
+// Plan 01.9-18 replaces these with per-screen route components.
+type SurveyFormController = SurveyFormState & SurveyFormActions
+type SurveyListController = SurveysState &
+  SurveyActions & {
+    refreshLocalSurveys: () => Promise<void>
+    refreshLocalAttachments: () => Promise<void>
+  }
+type SurveySyncController = SessionState &
+  SessionActions &
+  SyncActions & {
+    accessToken: string | null
+    status: string
+    surveyDetails: SurveysState["surveyDetails"]
+    detailsLoadingSurveyId: SurveysState["detailsLoadingSurveyId"]
+    surveyEvents: SurveysState["surveyEvents"]
+    eventsLoadingSurveyId: SurveysState["eventsLoadingSurveyId"]
+    handleLoadSurveyEvents: SurveyActions["loadSurveyEvents"]
+    handleQueueAttachmentFromCamera: SurveyActions["queueAttachmentFromCamera"]
+    handleQueueAttachmentFromLibrary: SurveyActions["queueAttachmentFromLibrary"]
+    handleDeleteAttachment: SurveyActions["deleteAttachment"]
+    confirmDeleteSurvey: SurveyActions["confirmDeleteSurvey"]
+    handleSubmitSurvey: SurveyActions["submitSurvey"]
+    handleRetrySurvey: SurveyActions["retrySurvey"]
+    handleDiscardSurvey: SurveyActions["discardSurvey"]
+    handleToggleVisibility: SurveyActions["toggleVisibility"]
+  }
 type PublicMapExplorerController = ReturnType<typeof usePublicMapExplorer>
 
-type AuthenticatedAppNavigationProps = {
+type NavigationData = {
   apiUrl: string
   formMode: FormMode
   editingSurveyId: string | null
@@ -290,7 +326,7 @@ function makeAccountTabListeners(
 // ─── Surveys stack ────────────────────────────────────────────────────────────
 
 type SurveysTabNavigatorProps = Omit<
-  AuthenticatedAppNavigationProps,
+  NavigationData,
   "publicMapExplorer" | "ownSurveyIds" | "onApiUrlChange"
 > & { useNativeNav?: boolean; searchEntry?: boolean }
 
@@ -751,7 +787,7 @@ function AccountTabNavigator({
               style={styles.accountScreenWrap}
             >
               <AccountScreen
-                accessToken={surveySync.accessToken}
+                accessToken={surveySync.accessToken ?? ""}
                 currentUser={surveySync.currentUser}
                 profile={surveySync.profile}
                 profileUpdating={surveySync.profileUpdating}
@@ -795,7 +831,7 @@ function NativeRootTabs({
   ownSurveyIds,
   onApiUrlChange,
   ...surveysProps
-}: AuthenticatedAppNavigationProps) {
+}: NavigationData) {
   const { surveySync, onCloseSurveyDetailSelection } = surveysProps
   const nativeTabRef = useRef<TabNavigatorLike | null>(null)
 
@@ -867,7 +903,7 @@ function JsRootTabs({
   ownSurveyIds,
   onApiUrlChange,
   ...surveysProps
-}: AuthenticatedAppNavigationProps) {
+}: NavigationData) {
   const { surveySync, onCloseSurveyDetailSelection } = surveysProps
 
   return (
@@ -933,7 +969,7 @@ function JsRootTabs({
 
 // ─── Root (single NavigationContainer) ───────────────────────────────────────
 
-function AppTabs(props: AuthenticatedAppNavigationProps) {
+function AppTabs(props: NavigationData) {
   const nativeBottomTabsAvailable = isNativeBottomTabViewAvailable()
 
   useEffect(() => {
@@ -952,10 +988,79 @@ function AppTabs(props: AuthenticatedAppNavigationProps) {
   )
 }
 
-export function AuthenticatedAppNavigation(props: AuthenticatedAppNavigationProps) {
+export function AuthenticatedAppNavigation() {
+  const session = useSession()
+  const accessToken = useAccessToken()
+  const { status } = useStatus()
+  const syncActions = useSyncActions()
+  const surveys = useSurveys()
+  const form = useSurveyFormState()
+
+  // Map state stays local to the map tab (not in the assembler); plan 01.9-18
+  // moves this call into the map route.
+  const publicMapExplorer = usePublicMapExplorer({
+    apiUrl: session.state.apiUrl,
+    onStatusChange: syncActions.setStatus,
+  })
+
+  const surveyForm: SurveyFormController = { ...form.state, ...form.actions }
+  const surveyList: SurveyListController = {
+    ...surveys.state,
+    ...surveys.actions,
+    refreshLocalSurveys: syncActions.refreshLocalSurveys,
+    refreshLocalAttachments: syncActions.refreshLocalAttachments,
+  }
+  const surveySync: SurveySyncController = {
+    ...session.state,
+    ...session.actions,
+    ...syncActions,
+    accessToken,
+    status,
+    surveyDetails: surveys.state.surveyDetails,
+    detailsLoadingSurveyId: surveys.state.detailsLoadingSurveyId,
+    surveyEvents: surveys.state.surveyEvents,
+    eventsLoadingSurveyId: surveys.state.eventsLoadingSurveyId,
+    handleLoadSurveyEvents: surveys.actions.loadSurveyEvents,
+    handleQueueAttachmentFromCamera: surveys.actions.queueAttachmentFromCamera,
+    handleQueueAttachmentFromLibrary: surveys.actions.queueAttachmentFromLibrary,
+    handleDeleteAttachment: surveys.actions.deleteAttachment,
+    confirmDeleteSurvey: surveys.actions.confirmDeleteSurvey,
+    handleSubmitSurvey: surveys.actions.submitSurvey,
+    handleRetrySurvey: surveys.actions.retrySurvey,
+    handleDiscardSurvey: surveys.actions.discardSurvey,
+    handleToggleVisibility: surveys.actions.toggleVisibility,
+  }
+
+  const data: NavigationData = {
+    apiUrl: session.state.apiUrl,
+    formMode: surveys.state.formMode,
+    editingSurveyId: surveys.state.editingSurveyId,
+    surveyStats: surveys.state.surveyStats,
+    nearbyParcels: form.state.nearbyParcels,
+    onLoadNearbyParcels: form.actions.loadNearbyParcels,
+    surveyDetailTab: surveys.state.surveyDetailTab,
+    setSurveyDetailTab: surveys.actions.setSurveyDetailTab,
+    surveyForm,
+    surveyList,
+    surveySync,
+    publicMapExplorer,
+    ownSurveyIds: surveys.state.ownSurveyIds,
+    onOpenCreateSurvey: surveys.actions.openCreateSurvey,
+    onOpenSurvey: surveys.actions.openSurvey,
+    onStartEditSurvey: surveys.actions.startEditSurvey,
+    onRenameSurvey: surveys.actions.renameSurvey,
+    onUpdateRegionVersion: surveys.actions.updateRegionVersion,
+    onUpdateVegetationStage: surveys.actions.updateVegetationStage,
+    onSaveSurveyEdits: form.actions.saveSurveyEdits,
+    onCreateDraft: form.actions.createDraft,
+    onCaptureGpsLocation: form.actions.captureGpsLocation,
+    onApiUrlChange: session.actions.setApiUrl,
+    onCloseSurveyDetailSelection: surveys.actions.closeSurveyDetailSelection,
+  }
+
   return (
     <NavigationContainer>
-      <AppTabs {...props} />
+      <AppTabs {...data} />
     </NavigationContainer>
   )
 }
