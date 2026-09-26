@@ -24,8 +24,7 @@
         "src/screens/**/*.tsx",
         "src/components/**/*.tsx",
         "src/ui/**/*.tsx",
-        "src/navigation/**/*.tsx",
-        "src/app/AuthenticatedAppNavigation.tsx"
+        "src/navigation/**/*.tsx"
       ],
       "excludedFiles": ["src/**/*.test.ts", "src/**/*.test.tsx"],
       "rules": {

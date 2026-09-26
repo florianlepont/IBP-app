@@ -4,8 +4,9 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack"
 import type { FactorKey } from "../app/types"
 
 /**
- * Navigation param lists (phase 01.9-18, moved out of AuthenticatedAppNavigation
- * so the route components can type `navigation` and `route`).
+ * Navigation param lists (phase 01.9-18) and the global RootParamList
+ * (phase 01.9-24, D-04), so `useNavigation()` and `navigation.navigate(...)`
+ * are checked against the root tabs without a cast.
  */
 export type HomeStackParamList = {
   homeRoot: undefined
@@ -34,6 +35,13 @@ export type RootTabParamList = {
   search: NavigatorScreenParams<SurveysStackParamList> | undefined
   publicMap: NavigatorScreenParams<PublicMapStackParamList> | undefined
   account: NavigatorScreenParams<AccountStackParamList> | undefined
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- the React Navigation augmentation point
+  namespace ReactNavigation {
+    interface RootParamList extends RootTabParamList {}
+  }
 }
 
 export type FormMode = "create" | "edit"

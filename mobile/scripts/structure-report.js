@@ -3,8 +3,7 @@
 //
 // Four scanners built on the installed TypeScript compiler API:
 // - findUnusedStyleKeys: StyleSheet.create keys that no file reads.
-// - findLongFiles: files over 400 lines under src/screens/ and src/navigation/
-//   (plus src/app/AuthenticatedAppNavigation.tsx until it moves to navigation/).
+// - findLongFiles: files over 400 lines under src/screens/ and src/navigation/.
 // - findUserFacingLiterals: hard-coded user-facing strings outside src/i18n/.
 // - findStatusIdLeaks: status messages built from ids or raw error text.
 //
@@ -247,11 +246,7 @@ function findUnusedStyleKeys(files) {
 
 function isLineLimited(filePath) {
   const posix = `/${toPosix(path.resolve(filePath))}`
-  return (
-    posix.includes("/src/screens/") ||
-    posix.includes("/src/navigation/") ||
-    posix.endsWith("/src/app/AuthenticatedAppNavigation.tsx")
-  )
+  return posix.includes("/src/screens/") || posix.includes("/src/navigation/")
 }
 
 function countLines(text) {

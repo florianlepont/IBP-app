@@ -2,7 +2,7 @@ import { useState } from "react"
 import { StyleSheet, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
-import { AuthenticatedAppNavigation } from "./src/app/AuthenticatedAppNavigation"
+import { AppNavigation } from "./src/navigation/AppNavigation"
 import { brandColors } from "./src/app/brand-tokens"
 import { formatUnsyncedWorkSummary } from "./src/app/local-data-owner"
 import { AuthGateScreen } from "./src/screens/AuthGateScreen"
@@ -36,7 +36,7 @@ function AppShell() {
     <View style={styles.container}>
       <SafeAreaView style={styles.container} edges={["left", "right"]}>
         <View style={styles.appLayout}>
-          <AuthenticatedAppNavigation />
+          <AppNavigation />
         </View>
       </SafeAreaView>
 
