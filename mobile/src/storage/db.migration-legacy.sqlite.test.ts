@@ -112,9 +112,9 @@ describe("db migration on the oldest schema shape", () => {
     expect(row?.local_uri).toBe("file:///legacy.jpg")
   })
 
-  test("PRAGMA user_version is 1", async () => {
+  test("PRAGMA user_version is 2", async () => {
     const version = await mockDb.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
-    expect(version?.user_version).toBe(1)
+    expect(version?.user_version).toBe(2)
   })
 
   test("every column added since the oldest schema now exists on every table", async () => {

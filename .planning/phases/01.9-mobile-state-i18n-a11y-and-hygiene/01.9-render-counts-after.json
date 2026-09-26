@@ -1,0 +1,66 @@
+{
+  "generatedAt": "2026-09-26T13:45:33.729Z",
+  "gitHead": "83c538f",
+  "scenarios": {
+    "initialMount": {
+      "home": 2,
+      "surveyList": 2,
+      "surveyDetail": 0,
+      "surveyForm": 1,
+      "factorDetail": 1,
+      "parcelSelection": 1,
+      "publicMap": 2,
+      "account": 1,
+      "settings": 1,
+      "rows": 10
+    },
+    "statusUpdate": {
+      "home": 0,
+      "surveyList": 0,
+      "surveyDetail": 0,
+      "surveyForm": 0,
+      "factorDetail": 0,
+      "parcelSelection": 0,
+      "publicMap": 0,
+      "account": 0,
+      "settings": 1,
+      "rows": 0
+    },
+    "formKeystroke": {
+      "home": 0,
+      "surveyList": 0,
+      "surveyDetail": 0,
+      "surveyForm": 1,
+      "factorDetail": 1,
+      "parcelSelection": 1,
+      "publicMap": 0,
+      "account": 0,
+      "settings": 0,
+      "rows": 0
+    },
+    "formKeystrokeAutosave": {
+      "home": 1,
+      "surveyList": 1,
+      "surveyDetail": 1,
+      "surveyForm": 1,
+      "factorDetail": 1,
+      "parcelSelection": 1,
+      "publicMap": 1,
+      "account": 0,
+      "settings": 0,
+      "rows": 1
+    },
+    "oneSurveyRefresh": {
+      "home": 1,
+      "surveyList": 1,
+      "surveyDetail": 1,
+      "surveyForm": 0,
+      "factorDetail": 0,
+      "parcelSelection": 0,
+      "publicMap": 1,
+      "account": 0,
+      "settings": 0,
+      "rows": 1
+    }
+  }
+}

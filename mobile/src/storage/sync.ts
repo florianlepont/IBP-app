@@ -31,6 +31,7 @@ import {
   computeNextRetryAt,
   safeParseJson,
   buildSyncChangesPath,
+  computePayloadCompletion,
   normalizeParcelIds,
   hasPendingQueueForSurvey,
   classifyRequestError,
@@ -290,8 +291,8 @@ async function applyRemoteChanges(
       const payload = buildSurveyPayloadFromRemote(survey)
       const createdAt = survey.created_at ?? now
       await db.runAsync(
-        `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?, ?, ?)`,
+        `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, payload_completion, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'synced', NULL, NULL, NULL, 0, ?, ?, ?, ?)`,
         [
           survey.id,
           survey.site_name ?? "Remote survey",
@@ -299,6 +300,8 @@ async function applyRemoteChanges(
           (survey.visibility as "private" | "public" | undefined) ?? "private",
           survey.sync_version ?? 1,
           JSON.stringify(payload),
+          // Precomputed so the list never parses payloads (01.9 D-03).
+          computePayloadCompletion(payload),
           createdAt,
           now,
         ],
@@ -323,6 +326,7 @@ async function applyRemoteChanges(
              last_sync_error_at = NULL,
              sync_blocked = 0,
              payload_json = ?,
+             payload_completion = ?,
              updated_at = ?
          WHERE id = ?`,
         [
@@ -331,6 +335,8 @@ async function applyRemoteChanges(
           (survey.visibility as "private" | "public" | undefined) ?? "private",
           survey.sync_version ?? 1,
           JSON.stringify(payload),
+          // Precomputed so the list never parses payloads (01.9 D-03).
+          computePayloadCompletion(payload),
           now,
           survey.id,
         ],
@@ -743,6 +749,8 @@ async function queueSurveyVisibilityChange(
       )
     }
 
+    // Only the payload's visibility changes here, which computePayloadCompletion
+    // does not read, so payload_completion stays valid (01.9 D-03).
     let payloadJson: string | null = survey.payload_json ?? null
     if (payloadJson) {
       const parsedPayload = safeParseJson(payloadJson)
@@ -1205,11 +1213,15 @@ export function pullRemoteChanges(
   return syncFlight.run("pull", () => pullChanges(apiUrl, accessToken, options))
 }
 
+// Storage stays text-free (phase 01.9 D-06): a refusal carries the server's
+// detail for the debug log only; callers map the outcome to catalogue messages.
+export type SubmitSurveyResult = { ok: true } | { ok: false; message: string }
+
 export async function submitSurvey(
   apiUrl: string,
   accessToken: string,
   surveyId: string,
-): Promise<{ ok: boolean; message: string }> {
+): Promise<SubmitSurveyResult> {
   const db = await getDb()
 
   try {
@@ -1291,9 +1303,11 @@ export async function submitSurvey(
     [new Date().toISOString(), surveyId],
   )
 
-  return { ok: true, message: "Survey submitted" }
+  return { ok: true }
 }
 
+// Returns flags only, no text (phase 01.9 D-06): the caller maps queued/synced
+// to fr.status.surveyOps messages.
 export async function updateSurveyVisibility(
   apiUrl: string,
   accessToken: string,
@@ -1301,7 +1315,6 @@ export async function updateSurveyVisibility(
   visibility: "private" | "public",
 ): Promise<{
   ok: boolean
-  message: string
   visibility?: "private" | "public"
   queued: boolean
   synced: boolean
@@ -1310,7 +1323,6 @@ export async function updateSurveyVisibility(
   if (!queued.changed) {
     return {
       ok: true,
-      message: `Visibility already ${visibility}`,
       visibility,
       queued: false,
       synced: false,
@@ -1320,7 +1332,6 @@ export async function updateSurveyVisibility(
   if (!accessToken || accessToken.trim().length === 0) {
     return {
       ok: true,
-      message: `Visibility queued locally (${visibility}). Login and sync to push changes.`,
       visibility,
       queued: true,
       synced: false,
@@ -1334,7 +1345,6 @@ export async function updateSurveyVisibility(
     if (result.failed > 0) {
       return {
         ok: false,
-        message: `Visibility queued locally, but sync reported ${result.failed} failed operation(s)`,
         visibility,
         queued: true,
         synced: false,
@@ -1343,15 +1353,13 @@ export async function updateSurveyVisibility(
 
     return {
       ok: true,
-      message: `Visibility set to ${visibility} and synced`,
       visibility,
       queued: true,
       synced: true,
     }
-  } catch (error) {
+  } catch {
     return {
       ok: true,
-      message: `Visibility queued locally (${visibility}); sync pending (${(error as Error).message})`,
       visibility,
       queued: true,
       synced: false,

@@ -2,9 +2,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Never add --include-workspace-root: the root package.json's dependencies
-# are Expo/React Native for the mobile app and would grow node_modules from
-# about 133 MB to 529 MB.
+# The root package.json only declares the workspaces and the shared
+# overrides (no runtime dependencies since 01.9-19). --workspace api installs
+# the API tree alone; the mobile workspace (Expo/React Native) never enters it.
 COPY package.json package-lock.json ./
 COPY api/package.json ./api/
 RUN npm ci --workspace api --ignore-scripts
@@ -19,9 +19,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Never add --include-workspace-root: the root package.json's dependencies
-# are Expo/React Native for the mobile app and would grow node_modules from
-# about 133 MB to 529 MB.
+# The root package.json only declares the workspaces and the shared
+# overrides (no runtime dependencies since 01.9-19). --workspace api installs
+# the API tree alone; the mobile workspace (Expo/React Native) never enters it.
 COPY package.json package-lock.json ./
 COPY api/package.json ./api/
 RUN npm ci --workspace api --omit=dev --ignore-scripts && npm cache clean --force

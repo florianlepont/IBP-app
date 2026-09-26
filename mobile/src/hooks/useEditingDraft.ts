@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react"
 import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from "../storage/surveys"
 import { DEFAULT_SURVEY_FORM } from "../app/constants"
-import { FormMode } from "../app/AuthenticatedAppNavigation"
+import { fr, logStatusDetail, type StatusMessage } from "../i18n"
+import type { FormMode } from "../navigation/types"
 import { useSurveyForm } from "./useSurveyForm"
 import { useSurveyList } from "./useSurveyList"
 
@@ -12,9 +13,14 @@ type UseEditingDraftParams = {
   setFormMode: (mode: FormMode) => void
   surveyForm: ReturnType<typeof useSurveyForm>
   surveyList: ReturnType<typeof useSurveyList>
-  onStatusChange: (msg: string) => void
+  onStatusChange: (message: StatusMessage) => void
   onCloseSurveyDetail: () => void
 }
+
+const text = fr.status.editing
+
+const surveyName = (survey: { site_name?: string | null } | null | undefined): string =>
+  survey?.site_name?.trim() || fr.common.untitledSurvey
 
 type PendingAutosaveRequest = {
   surveyId: string
@@ -68,7 +74,8 @@ export function useEditingDraft({
       await refreshLocalSurveys()
       autosaveSignatureRef.current = request.signature
     } catch (error) {
-      onStatusChange(`Autosave error: ${(error as Error).message}`)
+      logStatusDetail("editing.autosave", error)
+      onStatusChange(text.autosaveFailed())
     } finally {
       autosaveInFlightRef.current = false
       const pending = pendingAutosaveRef.current
@@ -131,7 +138,7 @@ export function useEditingDraft({
     setFormMode("create")
     onCloseSurveyDetail()
     surveyForm.resetSurveyForm()
-    onStatusChange("Create survey view opened. Initializing local draft...")
+    onStatusChange(text.createOpened())
 
     if (createDraftBootstrappingRef.current) {
       return
@@ -154,9 +161,10 @@ export function useEditingDraft({
         autosaveSignatureRef.current = JSON.stringify(initialDraftInput)
         setEditingSurveyId(created.id)
         setSelectedSurveyId(created.id)
-        onStatusChange(`Draft ${created.id} initialized.`)
+        onStatusChange(text.draftInitialized())
       } catch (error) {
-        onStatusChange(`Draft bootstrap error: ${(error as Error).message}`)
+        logStatusDetail("editing.draftInit", error)
+        onStatusChange(text.draftInitFailed())
       } finally {
         createDraftBootstrappingRef.current = false
       }
@@ -181,7 +189,7 @@ export function useEditingDraft({
         setEditingSurveyId(null)
         setFormMode("create")
         setSelectedSurveyId(editingSurveyId)
-        onStatusChange(`Local IBP draft ${editingSurveyId} saved`)
+        onStatusChange(text.draftSaved({ name: surveyName(draftInput) }))
         return true
       }
 
@@ -191,10 +199,11 @@ export function useEditingDraft({
       setEditingSurveyId(null)
       setFormMode("create")
       setSelectedSurveyId(created.id)
-      onStatusChange("Local IBP draft created with raw observations")
+      onStatusChange(text.draftCreated())
       return true
     } catch (error) {
-      onStatusChange(`Draft error: ${(error as Error).message}`)
+      logStatusDetail("editing.draftSave", error)
+      onStatusChange(text.draftSaveFailed())
       return false
     }
   }
@@ -202,14 +211,14 @@ export function useEditingDraft({
   const handleStartEditSurvey = async (surveyId: string): Promise<boolean> => {
     const current = surveys.find((survey) => survey.id === surveyId)
     if (current?.status === "submitted") {
-      onStatusChange(`Survey ${surveyId} is submitted and read-only`)
+      onStatusChange(text.readOnly({ name: surveyName(current) }))
       return false
     }
 
     try {
       const draft = await getLocalSurveyDraft(surveyId)
       if (!draft) {
-        onStatusChange(`Survey not found locally: ${surveyId}`)
+        onStatusChange(text.notFound())
         return false
       }
       autosaveSignatureRef.current = JSON.stringify({
@@ -223,17 +232,18 @@ export function useEditingDraft({
       setEditingSurveyId(surveyId)
       setFormMode("edit")
       setSelectedSurveyId(surveyId)
-      onStatusChange(`Editing survey ${surveyId}`)
+      onStatusChange(text.editing({ name: surveyName(draft) }))
       return true
     } catch (error) {
-      onStatusChange(`Edit load error: ${(error as Error).message}`)
+      logStatusDetail("editing.editLoad", error)
+      onStatusChange(text.editLoadFailed())
       return false
     }
   }
 
   const handleSaveSurveyEdits = async (): Promise<boolean> => {
     if (!editingSurveyId) {
-      onStatusChange("No survey selected for editing")
+      onStatusChange(text.noSurveySelected())
       return false
     }
 
@@ -252,10 +262,11 @@ export function useEditingDraft({
       autosaveSignatureRef.current = ""
       setEditingSurveyId(null)
       setFormMode("create")
-      onStatusChange(`Local survey ${editingSurveyId} updated and queued for sync`)
+      onStatusChange(text.editsSaved({ name: surveyName(draftInput) }))
       return true
     } catch (error) {
-      onStatusChange(`Edit save error: ${(error as Error).message}`)
+      logStatusDetail("editing.editSave", error)
+      onStatusChange(text.editSaveFailed())
       return false
     }
   }

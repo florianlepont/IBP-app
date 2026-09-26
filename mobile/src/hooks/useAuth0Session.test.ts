@@ -84,9 +84,17 @@ jest.mock("../storage/profile-cache", () => ({
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react-native/pure"
 import { ApiError } from "../api/client"
+import { fr } from "../i18n"
 import { useAuth0Session } from "./useAuth0Session"
 
+// logStatusDetail writes raw error detail to console.debug in dev builds.
+let consoleDebug: jest.SpyInstance
+beforeEach(() => {
+  consoleDebug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
+})
+
 afterEach(async () => {
+  consoleDebug.mockRestore()
   await cleanup()
 })
 
@@ -615,5 +623,98 @@ describe("D-13 offline cold start: cached profile", () => {
 
     expect(mockClearCachedProfile).not.toHaveBeenCalled()
     expect(result.current.currentUser).toBeNull()
+  })
+})
+
+describe("status texts from the French catalogue (D-06)", () => {
+  const text = fr.status.session
+
+  test("a launch without stored credentials reports the ready text", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(REPORT_STATUS).toHaveBeenCalledWith("session", "idle", text.ready())
+  })
+
+  test("a restore classified session-ended reports the expired-session text", async () => {
+    mockHasValidCredentials.mockResolvedValue(true)
+    mockGetCredentials.mockRejectedValue(credErr("NO_CREDENTIALS"))
+
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    expect(REPORT_STATUS).toHaveBeenCalledWith("session", "error", text.restoreExpired())
+  })
+
+  test("a login failure shows the catalogue text, never the raw error", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockAuthorize.mockRejectedValue(new Error("a0.browser_terminated code 42"))
+
+    let message: string | null = null
+    await act(async () => {
+      message = await result.current.handleLogin()
+    })
+
+    expect(message).toBe(text.loginFailed())
+    expect(REPORT_STATUS).toHaveBeenCalledWith("auth", "error", text.loginFailed())
+    for (const [, , reported] of REPORT_STATUS.mock.calls) {
+      expect(reported).not.toContain("a0.browser_terminated")
+    }
+  })
+
+  test("a login success reports the logged-in text", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockAuthorize.mockResolvedValue({ accessToken: "token-ok", idToken: buildIdToken("auth0|ok") })
+    mockSaveCredentials.mockResolvedValue(undefined)
+    mockGetMyProfile.mockResolvedValue({ id: "user-1", email: "ok@example.fr", display_name: "Ok" })
+
+    await act(async () => {
+      await result.current.handleLogin()
+    })
+
+    expect(REPORT_STATUS).toHaveBeenCalledWith("auth", "running", text.loggingIn())
+    expect(REPORT_STATUS).toHaveBeenCalledWith("auth", "success", text.loggedIn())
+  })
+
+  test("a profile load failure reports the catalogue text without the error", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockGetCredentials.mockResolvedValue({ accessToken: "token-1" })
+    mockGetMyProfile.mockRejectedValue(new Error("HTTP 500 internal_error"))
+
+    await act(async () => {
+      await result.current.handleLoadMyProfile()
+    })
+
+    expect(REPORT_STATUS).toHaveBeenCalledWith("profile", "error", text.profileLoadFailed())
+    expect(REPORT_STATUS).not.toHaveBeenCalledWith(
+      "profile",
+      "error",
+      expect.stringContaining("internal_error"),
+    )
+  })
+
+  test("logout reports the logged-out text", async () => {
+    mockHasValidCredentials.mockResolvedValue(false)
+    const { result } = await setup()
+    await waitFor(() => expect(result.current.sessionRestoring).toBe(false))
+
+    mockWebAuthClearSession.mockResolvedValue(undefined)
+    mockClearCredentials.mockResolvedValue(undefined)
+
+    await act(async () => {
+      await result.current.handleLogout()
+    })
+
+    expect(REPORT_STATUS).toHaveBeenCalledWith("auth", "success", text.loggedOut())
   })
 })

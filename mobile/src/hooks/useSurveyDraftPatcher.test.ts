@@ -14,6 +14,7 @@ jest.mock("../storage/surveys", () => ({
   updateLocalDraft: jest.fn(),
 }))
 
+import { fr } from "../i18n"
 import { getLocalSurveyDraft, updateLocalDraft } from "../storage/surveys"
 import { useSurveyDraftPatcher } from "./useSurveyDraftPatcher"
 
@@ -64,11 +65,15 @@ describe("useSurveyDraftPatcher", () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "submitted", visibility: "private" }]
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "should not reach")
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(false)
       expect(onStatusChange).toHaveBeenCalledWith(
-        `Survey ${TEST_SURVEY_ID} is submitted and read-only`,
+        fr.status.editing.readOnly({ name: fr.common.untitledSurvey }),
       )
       expect(mockUpdateLocalDraft).not.toHaveBeenCalled()
     })
@@ -78,10 +83,14 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockResolvedValue(null)
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "success")
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(`Survey not found locally: ${TEST_SURVEY_ID}`)
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.notFound())
     })
 
     test("calls updateLocalDraft with mutated data and returns true", async () => {
@@ -92,7 +101,7 @@ describe("useSurveyDraftPatcher", () => {
       const result = await patchSurveyDraftDirectly(
         TEST_SURVEY_ID,
         (draft) => ({ ...draft, site_name: "New name" }),
-        "Update done!",
+        fr.status.editing.renamed({ name: "New name" }),
       )
 
       expect(result).toBe(true)
@@ -103,7 +112,7 @@ describe("useSurveyDraftPatcher", () => {
           visibility: "public",
         }),
       )
-      expect(onStatusChange).toHaveBeenCalledWith("Update done!")
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.renamed({ name: "New name" }))
     })
 
     test("refreshes surveys and attachments on success", async () => {
@@ -111,7 +120,7 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "done")
+      await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, fr.status.editing.draftCreated())
 
       expect(surveyList.refreshLocalSurveys).toHaveBeenCalled()
       expect(surveyList.refreshLocalAttachments).toHaveBeenCalled()
@@ -122,10 +131,14 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockRejectedValue(new Error("DB crash"))
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "success")
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(false)
-      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining("DB crash"))
+      expect(onStatusChange).toHaveBeenCalledWith(fr.status.editing.updateFailed())
     })
 
     test("treats survey as non-submitted when not found in surveys list", async () => {
@@ -133,7 +146,11 @@ describe("useSurveyDraftPatcher", () => {
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { patchSurveyDraftDirectly } = useBuildHook()
 
-      const result = await patchSurveyDraftDirectly(TEST_SURVEY_ID, (d) => d, "ok")
+      const result = await patchSurveyDraftDirectly(
+        TEST_SURVEY_ID,
+        (d) => d,
+        fr.status.editing.draftCreated(),
+      )
 
       expect(result).toBe(true)
     })
@@ -154,7 +171,7 @@ describe("useSurveyDraftPatcher", () => {
       )
     })
 
-    test('falls back to "Unnamed site" for blank name', async () => {
+    test("falls back to the untitled survey name for blank name", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftRow())
       const { handleRenameSurvey } = useBuildHook()
@@ -162,7 +179,7 @@ describe("useSurveyDraftPatcher", () => {
       await handleRenameSurvey(TEST_SURVEY_ID, "   ")
 
       expect(mockUpdateLocalDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ site_name: "Unnamed site" }),
+        expect.objectContaining({ site_name: fr.common.untitledSurvey }),
       )
     })
   })

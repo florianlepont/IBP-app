@@ -18,6 +18,9 @@ import { useParcelStatuses } from "../hooks/useParcelStatuses"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppNotice } from "../ui/AppNotice"
+import { fr } from "../i18n"
+
+const t = fr.parcelSelection
 
 type SurveyParcelSelectionScreenProps = {
   apiUrl: string
@@ -103,13 +106,13 @@ export function SurveyParcelSelectionScreen({
   }
 
   const hasParcelSelection = selectedParcelIds.length > 0
-  const parcelSelectionLabel = `${selectedParcelIds.length} parcel${selectedParcelIds.length > 1 ? "s" : ""} selected`
+  const parcelSelectionLabel = t.selectedCount({ count: selectedParcelIds.length })
   const parcelHelperText =
     mapZoom >= 15
       ? parcelsLoading
-        ? "Loading parcel overlay..."
-        : `${parcelStatuses.length} visible parcel(s)`
-      : "Zoom in to unlock parcel selection"
+        ? t.loadingOverlay
+        : t.visibleCount({ count: parcelStatuses.length })
+      : t.zoomToSelect
 
   return (
     <View
@@ -157,7 +160,7 @@ export function SurveyParcelSelectionScreen({
         <View style={screenStyles.bottomArea}>
           <View style={screenStyles.floatingActions}>
             <AppButton
-              label="Current position"
+              label={t.currentPosition}
               leadingIcon="locate-outline"
               size="sm"
               style={screenStyles.locateButton}
@@ -178,22 +181,16 @@ export function SurveyParcelSelectionScreen({
 
           <AppCard variant="panelElevated" style={screenStyles.bottomSheet}>
             <Text style={screenStyles.bottomTitle}>
-              {hasParcelSelection ? parcelSelectionLabel : "No parcel selected yet"}
+              {hasParcelSelection ? parcelSelectionLabel : t.noSelection}
             </Text>
             <Text style={screenStyles.bottomMeta}>{parcelHelperText}</Text>
             {!hasParcelSelection ? (
-              <AppNotice
-                tone="danger"
-                icon="alert-circle-outline"
-                message="Select at least one parcel to continue."
-              />
+              <AppNotice tone="danger" icon="alert-circle-outline" message={t.selectionRequired} />
             ) : null}
-            <Text style={screenStyles.bottomHint}>
-              Tap polygons to add or remove parcels from this survey.
-            </Text>
+            <Text style={screenStyles.bottomHint}>{t.tapHint}</Text>
             {!hideDoneAction ? (
               <AppButton
-                label={saving ? "Saving..." : "Done"}
+                label={saving ? t.saving : t.done}
                 leadingIcon={saving ? "hourglass-outline" : "checkmark"}
                 size="lg"
                 style={screenStyles.doneButton}

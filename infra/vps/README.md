@@ -240,7 +240,9 @@ git -C /home/ubuntu/cortege fetch -q origin <branche> && git -C /home/ubuntu/cor
 
 Il affiche une ligne `ERREUR : <VARIABLE> : <raison>` par problème, puis
 `OK : …` ou `À corriger avant la fusion : N problème(s).` Corriger le fichier
-et relancer jusqu'à obtenir `OK`.
+et relancer jusqu'à obtenir `OK`. L'API n'envoie plus d'e-mails depuis la phase
+01.9 : les anciennes lignes SMTP et `EMAIL_CHANGE_CONFIRM_URL_TEMPLATE` sont
+signalées par une ligne `INFO` (sans leur valeur) et peuvent être supprimées.
 
 ### Garde au déploiement
 

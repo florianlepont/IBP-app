@@ -17,21 +17,9 @@ import {
   brandSpacing,
   brandTypography,
 } from "../app/brand-tokens"
+import { fr } from "../i18n"
 
-const SPECIES_NAMES = [
-  "Fagus sylvatica",
-  "Dryocopus martius",
-  "Quercus robur",
-  "Salamandra salamandra",
-  "Betula pendula",
-  "Sitta europaea",
-  "Tilia cordata",
-  "Martes martes",
-  "Pinus sylvestris",
-  "Parus major",
-  "Carpinus betulus",
-  "Rosalia alpina",
-]
+const SPECIES_NAMES = fr.components.splash.species
 
 const TYPE_CHAR_MS = 68
 const HOLD_MS = 900
@@ -112,7 +100,7 @@ export function TypewriterSplash({ logoSource }: { logoSource?: ImageSourcePropT
           <ActivityIndicator size="small" color={brandColors.white} style={{ opacity: 0.6 }} />
           <View
             accessible={true}
-            accessibilityLabel="Chargement en cours"
+            accessibilityLabel={fr.components.splash.loadingLabel}
             accessibilityLiveRegion="none"
           >
             <Animated.View style={{ opacity: textOpacity }} accessibilityElementsHidden={true}>
@@ -120,7 +108,7 @@ export function TypewriterSplash({ logoSource }: { logoSource?: ImageSourcePropT
                 <Text style={styles.twGenus}>{genusTyped}</Text>
                 {cursorOnGenus ? (
                   <Animated.Text style={[styles.twCursor, { opacity: cursorOpacity }]}>
-                    |
+                    {fr.components.splash.cursor}
                   </Animated.Text>
                 ) : (
                   <Text style={styles.twGenus}>{genus.slice(genusTyped.length)}</Text>
@@ -130,7 +118,7 @@ export function TypewriterSplash({ logoSource }: { logoSource?: ImageSourcePropT
                 <Text style={styles.twEpithet}>{epithetTyped}</Text>
                 {!cursorOnGenus && !holding && !reducedMotion ? (
                   <Animated.Text style={[styles.twCursor, { opacity: cursorOpacity }]}>
-                    |
+                    {fr.components.splash.cursor}
                   </Animated.Text>
                 ) : null}
               </View>
@@ -139,7 +127,7 @@ export function TypewriterSplash({ logoSource }: { logoSource?: ImageSourcePropT
         </View>
       </View>
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, brandSpacing.lg) }]}>
-        <Text style={styles.tagline}>Chargement…</Text>
+        <Text style={styles.tagline}>{fr.components.splash.loading}</Text>
       </View>
     </View>
   )

@@ -86,8 +86,6 @@ pod install
 | `OBJECT_STORAGE_MODE` | `local` or `minio` |
 | `OBJECT_STORAGE_BUCKET/ENDPOINT/REGION/ACCESS_KEY/SECRET_KEY` | S3-compatible storage config |
 | `ATTACHMENTS_UPLOAD_DIR` | Local upload path (when mode = local) |
-| `SMTP_ENABLED`, `SMTP_HOST/PORT/USER/PASSWORD/FROM` | Email confirmation |
-| `EMAIL_CHANGE_CONFIRM_URL_TEMPLATE` | Email confirmation URL template |
 | `AUTH0_DOMAIN`, `AUTH0_PUBLIC_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 backend validation settings |
 | `CADASTRE_PROVIDER` | `synthetic` (offline) or `ign` (real parcels) |
 | `CORS_ORIGIN` | Required in production: `none` (no browser origin) or a comma-separated origin list; startup refuses otherwise |

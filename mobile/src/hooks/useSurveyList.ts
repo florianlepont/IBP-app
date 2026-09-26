@@ -16,6 +16,39 @@ import {
 import { listLocalAttachments, listLocalSurveys } from "../storage/surveys"
 import type { LocalAttachment, LocalSurvey } from "../storage/types"
 
+function shallowEqualRow<T extends object>(left: T, right: T): boolean {
+  if (left === right) return true
+  const leftKeys = Object.keys(left) as Array<keyof T>
+  if (leftKeys.length !== Object.keys(right).length) return false
+  for (const key of leftKeys) {
+    if (!Object.prototype.hasOwnProperty.call(right, key)) return false
+    if (!Object.is(left[key], right[key])) return false
+  }
+  return true
+}
+
+/**
+ * Structural sharing for list refreshes (phase 01.9-22, B6). SQLite reads return
+ * fresh objects, which would defeat the memoised list rows on every refresh.
+ * For each next row, keep the previous object with the same id when all its own
+ * fields are shallow-equal (Object.is). Returns `prev` itself when nothing
+ * changed (same length, same order, every object kept).
+ */
+export function shareUnchanged<T extends { id: string }>(prev: readonly T[], next: T[]): T[] {
+  if (prev.length === 0) return next
+  const previousById = new Map<string, T>()
+  for (const item of prev) previousById.set(item.id, item)
+
+  let unchanged = prev.length === next.length
+  const shared = next.map((item, index) => {
+    const previous = previousById.get(item.id)
+    const kept = previous !== undefined && shallowEqualRow(previous, item) ? previous : item
+    if (kept !== prev[index]) unchanged = false
+    return kept
+  })
+  return unchanged ? (prev as T[]) : shared
+}
+
 export function useSurveyList() {
   const [surveys, setSurveys] = useState<LocalSurvey[]>([])
   const [attachments, setAttachments] = useState<LocalAttachment[]>([])
@@ -32,7 +65,7 @@ export function useSurveyList() {
 
   const refreshLocalSurveys = useCallback(async (): Promise<void> => {
     const rows = await listLocalSurveys()
-    setSurveys(rows)
+    setSurveys((previous) => shareUnchanged(previous, rows))
   }, [])
 
   const refreshLocalAttachments = useCallback(async (): Promise<void> => {

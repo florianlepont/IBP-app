@@ -285,36 +285,37 @@ Plans:
 **Plans**: 32 plans
 
 Plans:
-- [ ] 01.9-01-PLAN.md — Build the render-count harness that stands in for the React DevTools before/after profile (D-02), run it on th (wave 1)
-- [ ] 01.9-02-PLAN.md — Rewrite four of the ten React-spying hook tests, starting with `useSurveySync.test.ts`, onto the `renderHook` (wave 1)
-- [ ] 01.9-03-PLAN.md — Move the six remaining React-spying hook tests onto `renderHook`, with their assertions unchanged, before any (wave 1)
-- [ ] 01.9-04-PLAN.md — Create the measuring tools the rest of the phase is checked against: the unused-style-key script D-04 asks for (wave 1)
-- [ ] 01.9-05-PLAN.md — Create the French catalogue skeleton, the status message type and the sync-error texts, and translate the iOS (wave 1)
-- [ ] 01.9-06-PLAN.md — Add native Android and iOS build jobs to CI, prove them green on a PR before any dependency change, document t (wave 1)
-- [ ] 01.9-07-PLAN.md — Add the optional `bbox` filter to `GET /v1/public/map-items`, prove it with a new E2E spec and an EXPLAIN, doc (wave 1)
-- [ ] 01.9-08-PLAN.md — Precompute survey completion at write time in a new SQLite column, stop parsing every payload when listing, an (wave 1)
-- [ ] 01.9-09-PLAN.md — Introduce the five memoised contexts and the single assembler, make `useSurveySync` return memoised slices wit (wave 2)
-- [ ] 01.9-10-PLAN.md — Remove the unused e-mail service and every SMTP setting from the API, its configuration, examples, CI and docs (wave 2)
-- [ ] 01.9-11-PLAN.md — Move the status and alert texts of the survey-operations and profile sync hooks to the French catalogue, drop (wave 2)
-- [ ] 01.9-12-PLAN.md — Split the survey detail screen (1 344 lines + 836-line styles) into parts under 400 lines, delete its unused s (wave 2)
-- [ ] 01.9-13-PLAN.md — Split the survey form screen (1 190 lines + 644-line styles + 167-line components file) into parts under 400 l (wave 2)
-- [ ] 01.9-14-PLAN.md — Split the sign-in screen (752 lines) under 400 lines per file, delete unused styles, and move its text to the (wave 2)
-- [ ] 01.9-15-PLAN.md — Split the account screen (596 lines) under 400 lines per file, delete unused styles, move its text and alerts (wave 2)
-- [ ] 01.9-16-PLAN.md — Bring the Home screen under 400 lines and move the text of Home, the cards, the splash and the UI primitives t (wave 2)
-- [ ] 01.9-17-PLAN.md — Move the text of the five small screens and of the shared label modules to the catalogue, and delete their unu (wave 2)
-- [ ] 01.9-18-PLAN.md — Replace the navigation prop funnel with one memoised route component per screen that reads its own contexts, m (wave 3)
-- [ ] 01.9-19-PLAN.md — Do every dependency change of the phase in one plan: remove the root leftovers and the unused API packages, mo (wave 3)
-- [ ] 01.9-20-PLAN.md — Move the status and dialog texts of the session, owner, network and central sync hooks to the catalogue, remov (wave 3)
-- [ ] 01.9-21-PLAN.md — Move the remaining hook status messages (editing, draft patching, GPS, app bootstrap) and the form validation (wave 4)
-- [ ] 01.9-22-PLAN.md — Turn the survey list into a virtualised `Animated.FlatList` with memoised rows, prove it stays fluid with 500 (wave 4)
-- [ ] 01.9-23-PLAN.md — Build the map's data layer: bbox-aware API client and explorer hook with stale-response and duplicate-request (wave 4)
-- [ ] 01.9-24-PLAN.md — Split the 961-line navigation file into `mobile/src/navigation/`, type navigation globally, mount screens with (wave 5)
-- [ ] 01.9-25-PLAN.md — Apply the owner's tab decisions: remove the Recherche tab in favour of the native header search in Mes Relevés (wave 6)
-- [ ] 01.9-26-PLAN.md — Document the tab changes of 01.9-25 in the native README and the search user story (wave 7)
-- [ ] 01.9-27-PLAN.md — Split the rest of the survey list screen (hero, stat tiles, filters, attention and continue sections) under 40 (wave 7)
-- [ ] 01.9-28-PLAN.md — Rebuild the public map screen on the 01.9-23 data layer: viewport loading with debounce and no auto-refit loop (wave 7)
-- [ ] 01.9-29-PLAN.md — Lock the phase's text, accessibility and structure rules: narrow status setters to the catalogue type, turn th (wave 8)
-- [ ] 01.9-30-PLAN.md — Record this phase's facts in CLAUDE.md, in the same PR as the code (RESEARCH "two passes"; split out of the st (wave 7)
+
+- [x] 01.9-01-PLAN.md — Build the render-count harness that stands in for the React DevTools before/after profile (D-02), run it on th (wave 1)
+- [x] 01.9-02-PLAN.md — Rewrite four of the ten React-spying hook tests, starting with `useSurveySync.test.ts`, onto the `renderHook` (wave 1)
+- [x] 01.9-03-PLAN.md — Move the six remaining React-spying hook tests onto `renderHook`, with their assertions unchanged, before any (wave 1)
+- [x] 01.9-04-PLAN.md — Create the measuring tools the rest of the phase is checked against: the unused-style-key script D-04 asks for (wave 1)
+- [x] 01.9-05-PLAN.md — Create the French catalogue skeleton, the status message type and the sync-error texts, and translate the iOS (wave 1)
+- [x] 01.9-06-PLAN.md — Add native Android and iOS build jobs to CI, prove them green on a PR before any dependency change, document t (wave 1)
+- [x] 01.9-07-PLAN.md — Add the optional `bbox` filter to `GET /v1/public/map-items`, prove it with a new E2E spec and an EXPLAIN, doc (wave 1)
+- [x] 01.9-08-PLAN.md — Precompute survey completion at write time in a new SQLite column, stop parsing every payload when listing, an (wave 1)
+- [x] 01.9-09-PLAN.md — Introduce the five memoised contexts and the single assembler, make `useSurveySync` return memoised slices wit (wave 2)
+- [x] 01.9-10-PLAN.md — Remove the unused e-mail service and every SMTP setting from the API, its configuration, examples, CI and docs (wave 2)
+- [x] 01.9-11-PLAN.md — Move the status and alert texts of the survey-operations and profile sync hooks to the French catalogue, drop (wave 2)
+- [x] 01.9-12-PLAN.md — Split the survey detail screen (1 344 lines + 836-line styles) into parts under 400 lines, delete its unused s (wave 2)
+- [x] 01.9-13-PLAN.md — Split the survey form screen (1 190 lines + 644-line styles + 167-line components file) into parts under 400 l (wave 2)
+- [x] 01.9-14-PLAN.md — Split the sign-in screen (752 lines) under 400 lines per file, delete unused styles, and move its text to the (wave 2)
+- [x] 01.9-15-PLAN.md — Split the account screen (596 lines) under 400 lines per file, delete unused styles, move its text and alerts (wave 2)
+- [x] 01.9-16-PLAN.md — Bring the Home screen under 400 lines and move the text of Home, the cards, the splash and the UI primitives t (wave 2)
+- [x] 01.9-17-PLAN.md — Move the text of the five small screens and of the shared label modules to the catalogue, and delete their unu (wave 2)
+- [x] 01.9-18-PLAN.md — Replace the navigation prop funnel with one memoised route component per screen that reads its own contexts, m (wave 3)
+- [x] 01.9-19-PLAN.md — Do every dependency change of the phase in one plan: remove the root leftovers and the unused API packages, mo (wave 3)
+- [x] 01.9-20-PLAN.md — Move the status and dialog texts of the session, owner, network and central sync hooks to the catalogue, remov (wave 3)
+- [x] 01.9-21-PLAN.md — Move the remaining hook status messages (editing, draft patching, GPS, app bootstrap) and the form validation (wave 4)
+- [x] 01.9-22-PLAN.md — Turn the survey list into a virtualised `Animated.FlatList` with memoised rows, prove it stays fluid with 500 (wave 4)
+- [x] 01.9-23-PLAN.md — Build the map's data layer: bbox-aware API client and explorer hook with stale-response and duplicate-request (wave 4)
+- [x] 01.9-24-PLAN.md — Split the 961-line navigation file into `mobile/src/navigation/`, type navigation globally, mount screens with (wave 5)
+- [x] 01.9-25-PLAN.md — Apply the owner's tab decisions: remove the Recherche tab in favour of the native header search in Mes Relevés (wave 6)
+- [x] 01.9-26-PLAN.md — Document the tab changes of 01.9-25 in the native README and the search user story (wave 7)
+- [x] 01.9-27-PLAN.md — Split the rest of the survey list screen (hero, stat tiles, filters, attention and continue sections) under 40 (wave 7)
+- [x] 01.9-28-PLAN.md — Rebuild the public map screen on the 01.9-23 data layer: viewport loading with debounce and no auto-refit loop (wave 7)
+- [x] 01.9-29-PLAN.md — Lock the phase's text, accessibility and structure rules: narrow status setters to the catalogue type, turn th (wave 8)
+- [x] 01.9-30-PLAN.md — Record this phase's facts in CLAUDE.md, in the same PR as the code (RESEARCH "two passes"; split out of the st (wave 7)
 - [ ] 01.9-31-PLAN.md — Prove the phase: run and record the full local gate and every measurement, record PR #158's CI evidence suppli (wave 9)
 - [ ] 01.9-32-PLAN.md — Close phase 01.9 after phase 01.8: final documentation sweep, complete audit status links, and the French vali (wave 10)
 
@@ -435,7 +436,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 0/32 | Planned | - |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 30/32 | In Progress|  |
 | 2. Factor A Genus List & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Genus Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |

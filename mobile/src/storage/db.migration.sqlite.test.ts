@@ -10,12 +10,17 @@
 import { createNodeSqliteDb } from "../../test/node-sqlite-db"
 
 const mockDb = createNodeSqliteDb()
+// The database openDatabaseAsync hands out. The v1 -> v2 suite below swaps it
+// for its own fixture and loads a fresh db module, whose getDb() cache is
+// empty, so each suite migrates its own database.
+let mockActiveDb = mockDb
 
 jest.mock("expo-sqlite", () => ({
-  openDatabaseAsync: jest.fn(async () => mockDb),
+  openDatabaseAsync: jest.fn(async () => mockActiveDb),
 }))
 
 import { initLocalDb } from "./db"
+import { computePayloadCompletion, safeParseJson, toSurveyQueuePayload } from "./utils"
 
 const NOW = "2026-01-01T00:00:00.000Z"
 const NEXT_RETRY_AT = "2026-01-01T00:05:00.000Z"
@@ -183,10 +188,22 @@ beforeAll(async () => {
   await initLocalDb()
 })
 
-describe("db migration v0 -> v1 (data preservation, D-08)", () => {
-  test("PRAGMA user_version is 1 after migration", async () => {
+describe("db migration v0 -> v2 (data preservation, D-08)", () => {
+  test("PRAGMA user_version is 2 after migrating through 1 and 2 in one call", async () => {
     const version = await mockDb.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
-    expect(version?.user_version).toBe(1)
+    expect(version?.user_version).toBe(2)
+  })
+
+  test("migration 2 backfills payload_completion on a v0 install (01.9 D-03)", async () => {
+    const rows = await mockDb.getAllAsync<{ id: string; payload_completion: number }>(
+      `SELECT id, payload_completion FROM local_surveys ORDER BY id`,
+    )
+    // survey-draft has only a site name (1 of 14 items); the other two have no payload.
+    expect(rows).toEqual([
+      { id: "survey-blocked", payload_completion: 0 },
+      { id: "survey-draft", payload_completion: 7 },
+      { id: "survey-synced", payload_completion: 0 },
+    ])
   })
 
   test("all three seeded surveys survive with their values unchanged", async () => {
@@ -276,7 +293,7 @@ describe("db migration v0 -> v1 (data preservation, D-08)", () => {
     await initLocalDb()
 
     const version = await mockDb.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
-    expect(version?.user_version).toBe(1)
+    expect(version?.user_version).toBe(2)
 
     const row = await mockDb.getFirstAsync<{ retry_count: number }>(
       `SELECT retry_count FROM sync_queue WHERE id = (SELECT MIN(id) FROM sync_queue)`,
@@ -287,5 +304,126 @@ describe("db migration v0 -> v1 (data preservation, D-08)", () => {
       `SELECT COUNT(*) as count FROM sync_queue`,
     )
     expect(rowCount?.count).toBe(6)
+  })
+})
+
+// Schema exactly as migration 1 leaves it (the 01.5 v1 install), without the
+// migration 2 column.
+const V1_SCHEMA = `
+  ${PRE_PHASE_SCHEMA}
+  ALTER TABLE sync_queue ADD COLUMN op_type TEXT;
+  ALTER TABLE local_attachments ADD COLUMN file_state TEXT NOT NULL DEFAULT 'local';
+  CREATE INDEX IF NOT EXISTS idx_sync_queue_status_next_retry ON sync_queue(status, next_retry_at, id);
+  CREATE INDEX IF NOT EXISTS idx_sync_queue_survey ON sync_queue(survey_id);
+  PRAGMA user_version = 1;
+`
+
+const V1_PAYLOADS: Record<string, string> = {
+  "v1-light": JSON.stringify({
+    id: "v1-light",
+    sync_version: 1,
+    site_name: "Parcelle legere",
+    region_version: "ACA",
+  }),
+  "v1-full": JSON.stringify({
+    id: "v1-full",
+    sync_version: 3,
+    site_name: "Parcelle remplie",
+    region_version: "M",
+    vegetation_stage: "mature",
+    parcel_ids: ["ab12"],
+    factors: {
+      A: { native_genus_count: 5 },
+      B: { strata_count: 3, covered_autochthonous_percent: 40 },
+      // Legacy default values do not count as filled.
+      F: { trees_per_ha: 2 },
+    },
+  }),
+  "v1-submitted": JSON.stringify({
+    id: "v1-submitted",
+    sync_version: 2,
+    site_name: "Parcelle soumise",
+  }),
+  "v1-corrupt": "{not json",
+}
+
+describe("db migration v1 -> v2 (payload_completion, 01.9 D-03)", () => {
+  const v1Db = createNodeSqliteDb()
+  let initV1: () => Promise<void>
+
+  beforeAll(async () => {
+    await v1Db.execAsync(V1_SCHEMA)
+    for (const [id, payloadJson] of Object.entries(V1_PAYLOADS)) {
+      await v1Db.runAsync(
+        `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, sync_blocked, payload_json, created_at, updated_at)
+         VALUES (?, ?, ?, 'private', 1, 'synced', 0, ?, ?, ?)`,
+        [id, id, id === "v1-submitted" ? "submitted" : "draft", payloadJson, NOW, NOW],
+      )
+    }
+
+    mockActiveDb = v1Db
+    await jest.isolateModulesAsync(async () => {
+      const dbModule = await import("./db")
+      initV1 = dbModule.initLocalDb
+    })
+    await initV1()
+  })
+
+  afterAll(() => {
+    mockActiveDb = mockDb
+  })
+
+  async function completionById(): Promise<Record<string, number>> {
+    const rows = await v1Db.getAllAsync<{ id: string; payload_completion: number }>(
+      `SELECT id, payload_completion FROM local_surveys`,
+    )
+    return Object.fromEntries(rows.map((row) => [row.id, row.payload_completion]))
+  }
+
+  test("user_version is 2", async () => {
+    const version = await v1Db.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
+    expect(version?.user_version).toBe(2)
+  })
+
+  test("payload_completion equals computePayloadCompletion of each stored payload", async () => {
+    const completion = await completionById()
+    for (const id of ["v1-light", "v1-full", "v1-submitted"]) {
+      expect(completion[id]).toBe(
+        computePayloadCompletion(toSurveyQueuePayload(safeParseJson(V1_PAYLOADS[id]))),
+      )
+    }
+    // 2 of 14, 6 of 14 and 1 of 14 items, rounded.
+    expect(completion["v1-light"]).toBe(14)
+    expect(completion["v1-full"]).toBe(43)
+    // Stored payload-only; "submitted = 100" is applied when listing.
+    expect(completion["v1-submitted"]).toBe(7)
+  })
+
+  test("a row whose payload_json is not valid JSON gets 0 and the migration completes", async () => {
+    const completion = await completionById()
+    expect(completion["v1-corrupt"]).toBe(0)
+  })
+
+  test("payload_json is never rewritten", async () => {
+    const rows = await v1Db.getAllAsync<{ id: string; payload_json: string }>(
+      `SELECT id, payload_json FROM local_surveys`,
+    )
+    for (const row of rows) {
+      expect(row.payload_json).toBe(V1_PAYLOADS[row.id])
+    }
+  })
+
+  test("running initLocalDb again changes nothing", async () => {
+    const before = await completionById()
+    await v1Db.runAsync(`UPDATE local_surveys SET payload_completion = 55 WHERE id = 'v1-light'`)
+
+    await initV1()
+
+    const version = await v1Db.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
+    expect(version?.user_version).toBe(2)
+    // No backfill re-ran: the value written after migration is kept.
+    expect(await completionById()).toEqual({ ...before, "v1-light": 55 })
+    const columns = await v1Db.getAllAsync<{ name: string }>(`PRAGMA table_info(local_surveys)`)
+    expect(columns.filter((column) => column.name === "payload_completion")).toHaveLength(1)
   })
 })

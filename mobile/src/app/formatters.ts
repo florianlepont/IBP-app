@@ -1,3 +1,5 @@
+import { fr } from "../i18n"
+
 export const formatPoints = (value: number): string => `${value} point${value > 1 ? "s" : ""}`
 
 export const formatEventPayload = (payload?: Record<string, unknown> | null): string => {
@@ -29,27 +31,33 @@ export const formatShortDateTime = (value?: string | null): string => {
   })
 }
 
-const SYNC_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
-  { pattern: /site_name.*required|required.*site_name/i, message: "Le nom du site est manquant" },
-  { pattern: /region.*required|required.*region/i, message: "La région est manquante" },
-  {
-    pattern: /vegetation.*required|required.*vegetation/i,
-    message: "Le stade de végétation est manquant",
-  },
-  { pattern: /HTTP 4\d\d/i, message: "Données invalides — ouvrez le relevé pour corriger" },
-  {
-    pattern: /HTTP 5\d\d|network|timeout|ECONNREFUSED/i,
-    message: "Erreur réseau — réessayez plus tard",
-  },
-  { pattern: /unauthorized|401|forbidden|403/i, message: "Session expirée — reconnectez-vous" },
+type SyncErrorPatternKey = keyof typeof fr.syncErrors.patterns
+
+// Fallback for rows stored before last_sync_error_code existed. The texts live
+// in the catalogue; the raw error is only matched, never shown.
+const SYNC_ERROR_PATTERNS: Array<{ pattern: RegExp; key: SyncErrorPatternKey }> = [
+  { pattern: /site_name.*required|required.*site_name/i, key: "siteNameMissing" },
+  { pattern: /region.*required|required.*region/i, key: "regionMissing" },
+  { pattern: /vegetation.*required|required.*vegetation/i, key: "vegetationMissing" },
+  { pattern: /HTTP 4\d\d/i, key: "invalidData" },
+  { pattern: /HTTP 5\d\d|network|timeout|ECONNREFUSED/i, key: "network" },
+  { pattern: /unauthorized|401|forbidden|403/i, key: "session" },
 ]
 
-export const formatSyncErrorForUser = (rawError?: string | null): string | null => {
+const SYNC_ERROR_BY_CODE: Readonly<Record<string, string>> = fr.syncErrors.byCode
+
+export const formatSyncErrorForUser = (
+  rawError?: string | null,
+  code?: string | null,
+): string | null => {
   if (!rawError?.trim()) return null
-  for (const { pattern, message } of SYNC_ERROR_PATTERNS) {
-    if (pattern.test(rawError)) return message
+  if (code && Object.prototype.hasOwnProperty.call(SYNC_ERROR_BY_CODE, code)) {
+    return SYNC_ERROR_BY_CODE[code]
   }
-  return "Erreur de synchronisation — ouvrez le relevé pour corriger"
+  for (const { pattern, key } of SYNC_ERROR_PATTERNS) {
+    if (pattern.test(rawError)) return fr.syncErrors.patterns[key]
+  }
+  return fr.syncErrors.generic
 }
 
 export const resolveSubmissionDeadline = (

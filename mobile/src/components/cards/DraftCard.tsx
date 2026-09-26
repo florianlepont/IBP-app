@@ -7,6 +7,7 @@ import {
   brandShadow,
   brandTypography,
 } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import type { LocalSurvey } from "../../storage/types"
 
 type DraftCardProps = {
@@ -14,38 +15,46 @@ type DraftCardProps = {
   onPress: () => void
 }
 
-function getAccentColor(survey: LocalSurvey): string {
+// completion_rate is an integer percentage, 0-100 (01.9 D-03).
+function clampRate(rate: number): number {
+  return Math.max(0, Math.min(100, Math.round(rate)))
+}
+
+function getAccentColor(survey: LocalSurvey, rate: number): string {
   if (survey.sync_blocked) return brandColors.terracotta
-  if (survey.completion_rate >= 1) return brandColors.moss
+  if (rate >= 100) return brandColors.moss
   return brandColors.ochre
 }
 
 function formatRelativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const hours = Math.floor(diff / 3600000)
-  if (hours < 1) return "À l'instant"
-  if (hours < 24) return `il y a ${hours}h`
+  if (hours < 1) return fr.common.justNow
+  if (hours < 24) return fr.components.draftCard.hoursAgo({ count: hours })
   const days = Math.floor(hours / 24)
-  if (days === 1) return "Hier"
-  return `il y a ${days}j`
+  if (days === 1) return fr.components.draftCard.yesterday
+  return fr.components.draftCard.daysAgo({ count: days })
 }
 
 export function DraftCard({ survey, onPress }: DraftCardProps) {
-  const accent = getAccentColor(survey)
-  const completedFactors = Math.round(survey.completion_rate * 10)
-  const progressWidth = `${Math.round(survey.completion_rate * 100)}%` as const
+  const rate = clampRate(survey.completion_rate)
+  const accent = getAccentColor(survey, rate)
+  const completedFactors = Math.round(rate / 10)
+  const progressWidth = `${rate}%` as const
 
   return (
     <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
       <View style={[styles.accent, { backgroundColor: accent }]} />
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>
-          {survey.site_name || "Relevé sans titre"}
+          {survey.site_name || fr.common.untitledSurvey}
         </Text>
 
         <View style={styles.progressRow}>
-          <Text style={styles.progressLabel}>AVANCEMENT</Text>
-          <Text style={styles.progressCount}>{completedFactors}/10</Text>
+          <Text style={styles.progressLabel}>{fr.components.draftCard.progressLabel}</Text>
+          <Text style={styles.progressCount}>
+            {fr.components.draftCard.factorCount({ count: completedFactors })}
+          </Text>
         </View>
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: progressWidth, backgroundColor: accent }]} />
@@ -58,7 +67,7 @@ export function DraftCard({ survey, onPress }: DraftCardProps) {
           {survey.sync_blocked ? (
             <View style={styles.syncWarning}>
               <Ionicons name="warning-outline" size={12} color={brandColors.terracotta} />
-              <Text style={styles.syncWarningText}>Sync bloquée</Text>
+              <Text style={styles.syncWarningText}>{fr.components.draftCard.syncBlocked}</Text>
             </View>
           ) : survey.sync_state === "pending" ? (
             <View style={styles.syncPending}>

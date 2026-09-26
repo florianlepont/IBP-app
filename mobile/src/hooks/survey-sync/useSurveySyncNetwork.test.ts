@@ -1,14 +1,18 @@
 /**
  * Tests for useSurveySyncNetwork.
  *
- * Strategy: spy on React.useRef / useEffect / useCallback so the hook can be
- * called directly in Node without a renderer (same pattern as useEditingDraft).
+ * Strategy: render the real hook with renderHook from
+ * @testing-library/react-native/pure (see render-hook-smoke.test.ts). The
+ * network probe stays pending by default so the connectivity-driven effects
+ * never auto-sync: lastOnlineStateRef keeps its initial null, as the cases
+ * below expect.
  */
 
 const mockSyncPending = jest.fn()
 const mockHasPendingSyncWork = jest.fn()
 const mockPullRemoteChanges = jest.fn()
 const mockCreateSurveyReport = jest.fn()
+const mockGetNetworkStateAsync = jest.fn()
 
 jest.mock("../../storage", () => ({
   syncPending: mockSyncPending,
@@ -27,19 +31,23 @@ jest.mock("react-native-auth0", () => ({
   CredentialsManagerErrorCodes: {},
 }))
 
+jest.mock("react-native", () => ({}))
+
 jest.mock("expo-network", () => ({
-  getNetworkStateAsync: jest
-    .fn()
-    .mockResolvedValue({ isConnected: true, isInternetReachable: true }),
+  getNetworkStateAsync: (...args: unknown[]) => mockGetNetworkStateAsync(...args),
   addNetworkStateListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
   NetworkStateType: { WIFI: "WIFI", NONE: "NONE", CELLULAR: "CELLULAR" },
 }))
 
-import React from "react"
+import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr } from "../../i18n"
 import { useSurveySyncNetwork } from "./useSurveySyncNetwork"
+
+const text = fr.status.sync
+const ownerText = fr.status.owner
 import { createSyncActivity } from "./sync-activity"
 
-function useBuildHook(overrides: Record<string, unknown> = {}) {
+async function buildHook(overrides: Record<string, unknown> = {}) {
   const params = {
     apiUrl: "http://localhost:3000",
     accessToken: "access-token",
@@ -58,28 +66,28 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     syncActivity: createSyncActivity(),
     ...overrides,
   }
-  const hook = useSurveySyncNetwork(params as never)
-  return { ...hook, ...params }
+  const { result } = await renderHook(() => useSurveySyncNetwork(params as never))
+  return { ...result.current, ...params }
 }
 
 describe("useSurveySyncNetwork", () => {
-  let useRefSpy: jest.SpyInstance
-  let useEffectSpy: jest.SpyInstance
-  let useCallbackSpy: jest.SpyInstance
-
   beforeEach(() => {
     jest.clearAllMocks()
-    useRefSpy = jest
-      .spyOn(React, "useRef")
-      .mockImplementation((initial: unknown) => ({ current: initial }))
-    useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation(() => undefined)
-    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
+    // Pending network probe: the hook never learns it is online.
+    mockGetNetworkStateAsync.mockReturnValue(new Promise(() => undefined))
   })
 
+  afterEach(async () => {
+    await cleanup()
+  })
+
+  // logStatusDetail writes raw error detail to console.debug in dev builds.
+  let consoleDebug: jest.SpyInstance
+  beforeEach(() => {
+    consoleDebug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
+  })
   afterEach(() => {
-    useRefSpy.mockRestore()
-    useEffectSpy.mockRestore()
-    useCallbackSpy.mockRestore()
+    consoleDebug.mockRestore()
   })
 
   describe("handleSync", () => {
@@ -90,46 +98,59 @@ describe("useSurveySyncNetwork", () => {
         pulled_surveys: 1,
         pulled_attachments: 0,
       })
-      const { handleSync, setStatus, refreshLocalSurveys, refreshLocalAttachments } = useBuildHook()
+      const { handleSync, setStatus, refreshLocalSurveys, refreshLocalAttachments } =
+        await buildHook()
 
       await handleSync()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Sync complete"))
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("2 synced"))
+      expect(setStatus).toHaveBeenCalledWith(text.done({ synced: 2, failed: 0, receivedCount: 1 }))
       expect(refreshLocalSurveys).toHaveBeenCalled()
       expect(refreshLocalAttachments).toHaveBeenCalled()
     })
 
     test("calls clearSession on AUTH_REQUIRED error", async () => {
-      const { handleSync, clearSession, setStatus } = useBuildHook({
+      const { handleSync, clearSession, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
       await handleSync()
 
       expect(clearSession).toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Login required"))
+      expect(setStatus).toHaveBeenCalledWith(text.loginRequired())
     })
 
     test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and reports retry-later", async () => {
-      const { handleSync, clearSession, setStatus } = useBuildHook({
+      const { handleSync, clearSession, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_TEMPORARILY_UNAVAILABLE")),
       })
 
       await handleSync()
 
       expect(clearSession).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Synchronisation reportée"))
+      expect(setStatus).toHaveBeenCalledWith(text.retryLater())
     })
 
     test("sets error status on generic error", async () => {
-      const { handleSync, setStatus } = useBuildHook({
+      const { handleSync, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Network timeout")),
       })
 
       await handleSync()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Network timeout"))
+      expect(setStatus).toHaveBeenCalledWith(text.failed())
+    })
+
+    test("a generic error never reaches the status text", async () => {
+      const { handleSync, setStatus } = await buildHook({
+        withAuthRetry: jest.fn().mockRejectedValue(new Error("HTTP 500 survey 1f2e3d4c")),
+      })
+
+      await handleSync()
+
+      for (const [message] of setStatus.mock.calls) {
+        expect(message).not.toContain("1f2e3d4c")
+        expect(message).not.toContain("HTTP 500")
+      }
     })
   })
 
@@ -137,17 +158,17 @@ describe("useSurveySyncNetwork", () => {
     test("pulls changes and sets status on success", async () => {
       mockPullRemoteChanges.mockResolvedValue({ surveys: 3, attachments: 1, pages: 2 })
       const { handlePullChanges, setStatus, refreshLocalSurveys, refreshLocalAttachments } =
-        useBuildHook()
+        await buildHook()
 
       await handlePullChanges()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Pull complete"))
+      expect(setStatus).toHaveBeenCalledWith(text.pulled({ surveyCount: 3, attachmentCount: 1 }))
       expect(refreshLocalSurveys).toHaveBeenCalled()
       expect(refreshLocalAttachments).toHaveBeenCalled()
     })
 
     test("calls clearSession on AUTH_REQUIRED", async () => {
-      const { handlePullChanges, clearSession } = useBuildHook({
+      const { handlePullChanges, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -157,59 +178,59 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and reports retry-later", async () => {
-      const { handlePullChanges, clearSession, setStatus } = useBuildHook({
+      const { handlePullChanges, clearSession, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_TEMPORARILY_UNAVAILABLE")),
       })
 
       await handlePullChanges()
 
       expect(clearSession).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Synchronisation reportée"))
+      expect(setStatus).toHaveBeenCalledWith(text.retryLater())
     })
 
     test("sets error status on generic error", async () => {
-      const { handlePullChanges, setStatus } = useBuildHook({
+      const { handlePullChanges, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Connection refused")),
       })
 
       await handlePullChanges()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Connection refused"))
+      expect(setStatus).toHaveBeenCalledWith(text.pullFailed())
     })
   })
 
   describe("handleReportSurvey", () => {
     test("returns error and sets status when surveyId is empty", async () => {
-      const { handleReportSurvey, setStatus } = useBuildHook()
+      const { handleReportSurvey, setStatus } = await buildHook()
 
       const result = await handleReportSurvey("", "spam")
 
       expect(result.ok).toBe(false)
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("required"))
+      expect(setStatus).toHaveBeenCalledWith(text.reportSurveyMissing())
     })
 
     test("returns error when reason is empty", async () => {
-      const { handleReportSurvey, setStatus } = useBuildHook()
+      const { handleReportSurvey, setStatus } = await buildHook()
 
       const result = await handleReportSurvey("survey-1", "")
 
       expect(result.ok).toBe(false)
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("required"))
+      expect(setStatus).toHaveBeenCalledWith(text.reportReasonRequired())
     })
 
     test("returns ok:true and sets status on successful report", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey, setStatus } = useBuildHook()
+      const { handleReportSurvey, setStatus } = await buildHook()
 
       const result = await handleReportSurvey("survey-1", "This is spam content")
 
       expect(result.ok).toBe(true)
-      expect(result.message).toContain("moderation")
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("moderation"))
+      expect(result.message).toBe(text.reportSent())
+      expect(setStatus).toHaveBeenCalledWith(text.reportSent())
     })
 
     test("calls clearSession and returns ok:false on AUTH_REQUIRED", async () => {
-      const { handleReportSurvey, clearSession } = useBuildHook({
+      const { handleReportSurvey, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
 
@@ -220,7 +241,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and returns ok:false", async () => {
-      const { handleReportSurvey, clearSession } = useBuildHook({
+      const { handleReportSurvey, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_TEMPORARILY_UNAVAILABLE")),
       })
 
@@ -228,23 +249,23 @@ describe("useSurveySyncNetwork", () => {
 
       expect(clearSession).not.toHaveBeenCalled()
       expect(result.ok).toBe(false)
-      expect(result.message).toContain("Signalement non envoyé")
+      expect(result.message).toBe(text.reportRetryLater())
     })
 
     test("returns ok:false and sets error status on generic failure", async () => {
-      const { handleReportSurvey, setStatus } = useBuildHook({
+      const { handleReportSurvey, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Report failed")),
       })
 
       const result = await handleReportSurvey("survey-1", "some reason")
 
       expect(result.ok).toBe(false)
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Report failed"))
+      expect(setStatus).toHaveBeenCalledWith(text.reportFailed())
     })
 
     test("trims surveyId and reason before sending", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey } = useBuildHook()
+      const { handleReportSurvey } = await buildHook()
 
       const result = await handleReportSurvey("  survey-1  ", "  spam  ")
 
@@ -254,8 +275,8 @@ describe("useSurveySyncNetwork", () => {
 
   describe("maybeAutoSync", () => {
     test("does nothing when lastOnlineState is not true", async () => {
-      const { maybeAutoSync, withAuthRetry } = useBuildHook()
-      // lastOnlineStateRef starts as null (from useRef spy)
+      const { maybeAutoSync, withAuthRetry } = await buildHook()
+      // lastOnlineStateRef stays null (the network probe never resolves)
       await maybeAutoSync("startup")
       expect(withAuthRetry).not.toHaveBeenCalled()
     })
@@ -265,7 +286,7 @@ describe("useSurveySyncNetwork", () => {
 
   describe("syncAllowed gate (D-04)", () => {
     test("handleSync does not call withAuthRetry and sets the suspension status when syncAllowed is false", async () => {
-      const { handleSync, setStatus, withAuthRetry } = useBuildHook({
+      const { handleSync, setStatus, withAuthRetry } = await buildHook({
         syncAllowed: false,
         ownerStatus: "conflict",
       })
@@ -273,27 +294,19 @@ describe("useSurveySyncNetwork", () => {
       await handleSync()
 
       expect(withAuthRetry).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(
-        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
-      )
+      expect(setStatus).toHaveBeenCalledWith(ownerText.syncSuspended())
     })
 
     test("maybeAutoSync does not call syncPending or pullRemoteChanges when syncAllowed is false, even online with pending work", async () => {
-      // Force lastOnlineStateRef (3rd useRef call) to start "online" so the
-      // syncAllowed gate — not the online gate — is what's under test.
-      let refCallIndex = 0
-      useRefSpy.mockRestore()
-      useRefSpy = jest.spyOn(React, "useRef").mockImplementation(((initial: unknown) => {
-        refCallIndex += 1
-        if (refCallIndex === 3) {
-          return { current: true }
-        }
-        return { current: initial }
-      }) as never)
+      // Let the network probe report "online" so lastOnlineStateRef is true and
+      // the syncAllowed gate — not the online gate — is what's under test.
+      mockGetNetworkStateAsync.mockResolvedValue({ isConnected: true, isInternetReachable: true })
       mockHasPendingSyncWork.mockResolvedValue(true)
 
-      const { maybeAutoSync } = useBuildHook({ syncAllowed: false, ownerStatus: "conflict" })
-      await maybeAutoSync("auth-ready")
+      const { maybeAutoSync } = await buildHook({ syncAllowed: false, ownerStatus: "conflict" })
+      await act(async () => {
+        await maybeAutoSync("auth-ready")
+      })
 
       expect(mockHasPendingSyncWork).not.toHaveBeenCalled()
       expect(mockSyncPending).not.toHaveBeenCalled()
@@ -301,7 +314,7 @@ describe("useSurveySyncNetwork", () => {
     })
 
     test("handlePullChanges does not call pullRemoteChanges when syncAllowed is false", async () => {
-      const { handlePullChanges, setStatus, withAuthRetry } = useBuildHook({
+      const { handlePullChanges, setStatus, withAuthRetry } = await buildHook({
         syncAllowed: false,
         ownerStatus: "conflict",
       })
@@ -310,13 +323,11 @@ describe("useSurveySyncNetwork", () => {
 
       expect(withAuthRetry).not.toHaveBeenCalled()
       expect(mockPullRemoteChanges).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(
-        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
-      )
+      expect(setStatus).toHaveBeenCalledWith(ownerText.syncSuspended())
     })
 
     test("WR-07: a failed owner check retries it on manual sync and does not blame another account", async () => {
-      const { handleSync, setStatus, withAuthRetry, recheckOwner } = useBuildHook({
+      const { handleSync, setStatus, withAuthRetry, recheckOwner } = await buildHook({
         syncAllowed: false,
         ownerStatus: "error",
       })
@@ -325,14 +336,12 @@ describe("useSurveySyncNetwork", () => {
 
       expect(withAuthRetry).not.toHaveBeenCalled()
       expect(recheckOwner).toHaveBeenCalled()
-      expect(setStatus).not.toHaveBeenCalledWith(
-        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
-      )
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+      expect(setStatus).not.toHaveBeenCalledWith(ownerText.syncSuspended())
+      expect(setStatus).toHaveBeenCalledWith(ownerText.checkPending())
     })
 
     test("WR-07: a manual pull during the owner check reports the check, not a conflict", async () => {
-      const { handlePullChanges, setStatus, recheckOwner } = useBuildHook({
+      const { handlePullChanges, setStatus, recheckOwner } = await buildHook({
         syncAllowed: false,
         ownerStatus: "checking",
       })
@@ -340,12 +349,15 @@ describe("useSurveySyncNetwork", () => {
       await handlePullChanges()
 
       expect(recheckOwner).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+      expect(setStatus).toHaveBeenCalledWith(ownerText.checkPending())
     })
 
     test("handleReportSurvey is not gated by syncAllowed", async () => {
       mockCreateSurveyReport.mockResolvedValue({})
-      const { handleReportSurvey } = useBuildHook({ syncAllowed: false, ownerStatus: "conflict" })
+      const { handleReportSurvey } = await buildHook({
+        syncAllowed: false,
+        ownerStatus: "conflict",
+      })
 
       const result = await handleReportSurvey("survey-1", "reason text")
 
@@ -355,18 +367,18 @@ describe("useSurveySyncNetwork", () => {
 
     test("handleSync re-checks the owner with the token's sub right before syncPending (CR-01)", async () => {
       const ensureSyncOwner = jest.fn().mockResolvedValue(false)
-      const { handleSync, setStatus } = useBuildHook({ ensureSyncOwner })
+      const { handleSync, setStatus } = await buildHook({ ensureSyncOwner })
 
       await handleSync()
 
       expect(ensureSyncOwner).toHaveBeenCalledWith("auth0|owner")
       expect(mockSyncPending).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("vérification du compte"))
+      expect(setStatus).toHaveBeenCalledWith(ownerText.recheckPending())
     })
 
     test("handlePullChanges re-checks the owner right before pullRemoteChanges (CR-01)", async () => {
       const ensureSyncOwner = jest.fn().mockResolvedValue(false)
-      const { handlePullChanges } = useBuildHook({ ensureSyncOwner })
+      const { handlePullChanges } = await buildHook({ ensureSyncOwner })
 
       await handlePullChanges()
 
@@ -376,7 +388,7 @@ describe("useSurveySyncNetwork", () => {
 
     test("a token without a sub never reaches syncPending (CR-01)", async () => {
       const ensureSyncOwner = jest.fn(async (tokenSub: string | null) => tokenSub !== null)
-      const { handleSync } = useBuildHook({
+      const { handleSync } = await buildHook({
         ensureSyncOwner,
         withAuthRetry: jest.fn((fn: (token: string, tokenSub: string | null) => unknown) =>
           fn("token", null),
@@ -396,11 +408,11 @@ describe("useSurveySyncNetwork", () => {
         pulled_surveys: 0,
         pulled_attachments: 0,
       })
-      const { handleSync, setStatus } = useBuildHook({ syncAllowed: true })
+      const { handleSync, setStatus } = await buildHook({ syncAllowed: true })
 
       await handleSync()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Sync complete"))
+      expect(setStatus).toHaveBeenCalledWith(text.done({ synced: 1, failed: 0 }))
     })
   })
 })

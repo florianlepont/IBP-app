@@ -7,6 +7,7 @@ import {
   brandShadow,
   brandTypography,
 } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { IbpScoreBadge } from "../../ui/IbpScoreBadge"
 import type { PublicParcelStatusItem } from "../../app/types"
 
@@ -24,8 +25,8 @@ function formatDistance(km: number): string {
 
 function formatParcelId(parcelId: string): string {
   const parts = parcelId.split("-")
-  if (parts.length >= 3) return `Parcelle ${parts.slice(-2).join("-")}`
-  return `Parcelle ${parcelId}`
+  const name = parts.length >= 3 ? parts.slice(-2).join("-") : parcelId
+  return fr.components.parcelNearbyCard.title({ name })
 }
 
 export function ParcelNearbyCard({
@@ -46,15 +47,15 @@ export function ParcelNearbyCard({
           <Text style={styles.metaText}>{formatDistance(distanceKm)}</Text>
           {surveyCount > 0 ? (
             <>
-              <Text style={styles.metaSeparator}>·</Text>
+              <Text style={styles.metaSeparator}>{fr.components.separator}</Text>
               <Text style={styles.metaText}>
-                {surveyCount} relevé{surveyCount > 1 ? "s" : ""}
+                {fr.components.parcelNearbyCard.surveyCount({ count: surveyCount })}
               </Text>
             </>
           ) : null}
           {parcel.latest_observation_year ? (
             <>
-              <Text style={styles.metaSeparator}>·</Text>
+              <Text style={styles.metaSeparator}>{fr.components.separator}</Text>
               <Text style={styles.metaText}>{parcel.latest_observation_year}</Text>
             </>
           ) : null}

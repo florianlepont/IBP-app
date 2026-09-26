@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 01.8
+current_phase: 01.9
 current_phase_name: audit-remediation track
 status: executing
-stopped_at: Phase 1 closed (ADR-002 Accepted); branch merged with the audit-remediation track
+stopped_at: "01.9-31 checkpoint: waiting for final PR #159 CI, merge, deploy and owner device check"
 last_updated: "2026-09-26T13:23:15.713Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 1 closed (ADR-002 Accepted; verification passed with one accepted Android deviation), branch merged with origin/main
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 ## Current Position
 
-Phase: 01.8 (audit-remediation track) — Phase 1 closed on the species-recognition track
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-26 — Phase 1 closed (ADR-002 Accepted; verification passed with one accepted Android deviation), branch merged with origin/main
+Phase: 01.9 (audit-remediation track) — 30/32 plans done; 01.9-31 gate at its CI/merge checkpoint, 01.9-32 waits for 01.8
+Plan: 01.9-31 (gate)
+Status: Executing Phase 01.9
+Last activity: 2026-09-26 — Phase 01.9 plans 01–30 merged on PR #159; origin/main (Phase 1 closed, ADR-002 Accepted) merged into the branch
 
 Progress: [█░░░░░░░░░] 13%
 

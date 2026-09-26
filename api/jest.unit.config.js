@@ -13,7 +13,7 @@ module.exports = {
   ],
   coverageDirectory: '<rootDir>/coverage/unit',
   coverageReporters: ['text', 'text-summary', 'json-summary', 'lcov'],
-  // Ratchet (phase 01.3, D-09; raised in phases 01.4, 01.5, 01.6 and 01.7): floor of values measured on 2026-09-26. Raise these when
+  // Ratchet (phase 01.3, D-09; raised in phases 01.4, 01.5, 01.6, 01.7 and 01.9): floor of values measured on 2026-09-26. Raise these when
   // coverage improves; never lower them. Regenerate with node scripts/coverage-by-directory.js api.
   coverageThreshold: {
     global: { statements: 70, branches: 66, functions: 50, lines: 66 },
@@ -25,6 +25,6 @@ module.exports = {
     './src/reports/': { statements: 64, branches: 52, functions: 35, lines: 62 },
     './src/storage/': { statements: 99, branches: 97, functions: 100, lines: 100 },
     './src/surveys/': { statements: 81, branches: 67, functions: 79, lines: 82 },
-    './src/users/': { statements: 74, branches: 67, functions: 51, lines: 74 },
+    './src/users/': { statements: 92, branches: 91, functions: 58, lines: 92 },
   },
 };

@@ -21,6 +21,7 @@ jest.mock("../storage/surveys", () => ({
 }))
 
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr } from "../i18n"
 import { useEditingDraft } from "./useEditingDraft"
 
 afterEach(async () => {
@@ -271,8 +272,6 @@ describe("useEditingDraft autosave reschedule", () => {
       2,
       expect.objectContaining({ site_name: "B" }),
     )
-    expect(initialProps.onStatusChange).toHaveBeenCalledWith(
-      expect.stringContaining("Autosave error: disk full"),
-    )
+    expect(initialProps.onStatusChange).toHaveBeenCalledWith(fr.status.editing.autosaveFailed())
   })
 })

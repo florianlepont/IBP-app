@@ -63,11 +63,13 @@ export const isLegacyDefaultFactorValue = (factorKey: string, rawValue: unknown)
   return expectedKeys.every((key) => typeof value[key] === "number" && value[key] === expected[key])
 }
 
-export const computeCompletionRate = (
-  status: string,
-  payload: SurveyQueuePayload | null,
-): number => {
-  if (status === "submitted") return 100
+/**
+ * Payload-only completion, an integer 0-100. Stored at write time in
+ * local_surveys.payload_completion so listing surveys never parses a payload
+ * (01.9 D-03). The "submitted = 100" rule is status-based and is applied at
+ * read time instead (computeCompletionRate below, and the list SQL).
+ */
+export const computePayloadCompletion = (payload: SurveyQueuePayload | null): number => {
   if (!payload) return 0
 
   let completed = 0
@@ -96,6 +98,11 @@ export const computeCompletionRate = (
 
   return Math.max(0, Math.min(100, Math.round((completed / total) * 100)))
 }
+
+export const computeCompletionRate = (
+  status: string,
+  payload: SurveyQueuePayload | null,
+): number => (status === "submitted" ? 100 : computePayloadCompletion(payload))
 
 export const toSurveyQueuePayload = (value: unknown): SurveyQueuePayload | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null

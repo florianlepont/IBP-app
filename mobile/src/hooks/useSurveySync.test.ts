@@ -1,8 +1,11 @@
 /**
  * Tests for useSurveySync.
  *
- * Strategy: mock all sub-hooks and external modules, then spy on React
- * hooks to call useSurveySync directly in Node without a renderer.
+ * Strategy: render the real hook with renderHook (phase 01.9 D-01). The
+ * sub-hooks and external modules are mocked with STABLE objects, so the
+ * hook's useCallback identities and effects behave as they do in the app.
+ * Assertions read the rendered result (status, details, events) and the
+ * collaborator mocks instead of intercepting React's own hooks.
  */
 
 const mockAlert = jest.fn()
@@ -16,9 +19,10 @@ const mockCreateInitialOperationStatus = jest.fn()
 const mockUpdateOperationStatus = jest.fn()
 const mockCountUnsyncedLocalWork = jest.fn()
 
-// useAuth0Session mock return value (shared, mutated per test via mockReturnValue)
+// useAuth0Session mock return value (one stable object, as the real hook's
+// callbacks are stable).
 const mockAuth0Session = {
-  accessToken: "token-abc",
+  accessToken: "token-abc" as string | null,
   sessionRestoring: false,
   currentUser: null,
   profile: null,
@@ -31,10 +35,11 @@ const mockAuth0Session = {
   handleLoadMyProfile: jest.fn(),
   handleLogin: jest.fn(),
   handleRegister: jest.fn(),
+  handleForgotPassword: jest.fn(),
   handleLogout: jest.fn(),
 }
 
-// useLocalDataOwner mock return value (shared, mutated per test via mockReturnValue)
+// useLocalDataOwner mock return value (one stable object, mutated per test).
 const mockLocalDataOwner = {
   status: "ok" as const,
   syncAllowed: true,
@@ -97,51 +102,107 @@ jest.mock("./survey-sync/useSurveySyncSurveyOperations", () => ({
   useSurveySyncSurveyOperations: (...args: unknown[]) => mockUseSurveySyncSurveyOperations(...args),
 }))
 
+const mockAttachmentPreviews = {
+  handleEnsureAttachmentPreviews: jest.fn(),
+  handleSimulateMissingAttachmentFile: jest.fn(),
+}
 jest.mock("./survey-sync/useAttachmentPreviews", () => ({
-  useAttachmentPreviews: () => ({
-    handleEnsureAttachmentPreviews: jest.fn(),
-    handleSimulateMissingAttachmentFile: jest.fn(),
-  }),
+  useAttachmentPreviews: () => mockAttachmentPreviews,
 }))
 
-import React from "react"
+import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr, statusText } from "../i18n"
 import { useSurveySync } from "./useSurveySync"
 
-const DEFAULT_PARAMS = {
-  apiUrl: "http://localhost:3000",
-  surveys: [],
-  selectedSurveyId: null,
-  surveyDetailTab: "details" as const,
-  editingSurveyId: null,
-  refreshLocalSurveys: jest.fn(),
-  refreshLocalAttachments: jest.fn(),
-  onCloseSurveyDetail: jest.fn(),
-  onStopEditing: jest.fn(),
+// Status texts produced by the hook, taken from the French catalogue (D-06).
+// Kept in one place so the tests below only reference these names.
+const STATUS = {
+  initial: fr.status.session.ready(),
+  detailLoaded: fr.status.sync.detailLoaded(),
+  detailError: fr.status.sync.detailFailed(),
+  detailAuthRequired: fr.status.sync.detailLoginRequired(),
+  eventsLoaded: fr.status.sync.eventsLoaded(),
+  eventsError: fr.status.sync.eventsFailed(),
+  eventsAuthRequired: fr.status.sync.eventsLoginRequired(),
+  debugAuthRequired: fr.status.debug.loginRequired(),
+  debugIbpTitle: fr.status.debug.alerts.resetIbp.title,
+  debugUserTitle: fr.status.debug.alerts.resetUser.title,
+  debugIbpError: fr.status.debug.resetIbpFailed(),
+  debugUserError: fr.status.debug.resetUserFailed(),
+  ibpResetDone: fr.status.debug.resetIbpDone({ surveyCount: 1, attachmentCount: 0, eventCount: 0 }),
+  userResetDone: fr.status.debug.resetUserDone({
+    userCount: 1,
+    surveyCount: 0,
+    attachmentCount: 0,
+  }),
+  unsyncedTitle: fr.status.session.alerts.unsyncedLogout.title,
+  deleteAccountButton: fr.status.session.alerts.deleteAccount.confirm,
+  cancelButton: fr.common.actions.cancel,
+  resetButton: fr.status.debug.alerts.confirm,
 }
 
-function useBuildHook(overrides: Record<string, unknown> = {}) {
-  return useSurveySync({ ...DEFAULT_PARAMS, ...overrides } as never)
+const noopAsync = async (): Promise<void> => undefined
+const noop = (): void => undefined
+const SURVEYS: never[] = []
+
+const DEFAULT_PARAMS = Object.freeze({
+  apiUrl: "http://localhost:3000",
+  surveys: SURVEYS as unknown[],
+  selectedSurveyId: null as string | null,
+  surveyDetailTab: "details" as "details" | "events",
+  editingSurveyId: null as string | null,
+  refreshLocalSurveys: noopAsync,
+  refreshLocalAttachments: noopAsync,
+  onCloseSurveyDetail: noop,
+  onStopEditing: noop,
+})
+
+async function renderSync(overrides: Partial<typeof DEFAULT_PARAMS> = {}) {
+  // One params object per render so its identities stay stable across rerenders.
+  const params = { ...DEFAULT_PARAMS, ...overrides }
+  return renderHook(() => useSurveySync(params as never))
 }
 
 // The debug-reset and logout purges run behind the sync-activity tracker
 // (WR-08), which adds a few microtask hops before clearLocalIbpData.
 async function flushAsyncWork(turns = 20): Promise<void> {
-  for (let index = 0; index < turns; index += 1) {
-    await Promise.resolve()
-  }
+  await act(async () => {
+    for (let index = 0; index < turns; index += 1) {
+      await Promise.resolve()
+    }
+  })
 }
 
-describe("useSurveySync", () => {
-  let useStateSpy: jest.SpyInstance
-  let useCallbackSpy: jest.SpyInstance
-  let useRefSpy: jest.SpyInstance
-  let useEffectSpy: jest.SpyInstance
+type AlertButton = { text?: string; style?: string; onPress?: () => void }
 
+function alertButton(predicate: (button: AlertButton) => boolean, call = 0): AlertButton {
+  const buttons = mockAlert.mock.calls[call][2] as AlertButton[]
+  const button = buttons.find(predicate)
+  if (!button) throw new Error("alert button not found")
+  return button
+}
+
+const INITIAL_OPERATION_STATUS = { session: { state: "idle", message: "" } }
+const UPDATED_OPERATION_STATUS = { session: { state: "running" } }
+
+// logStatusDetail writes raw error detail to console.debug in dev builds.
+let consoleDebug: jest.SpyInstance
+beforeEach(() => {
+  consoleDebug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
+})
+
+afterEach(async () => {
+  consoleDebug.mockRestore()
+  await cleanup()
+})
+
+describe("useSurveySync", () => {
   beforeEach(() => {
     jest.clearAllMocks()
 
-    mockCreateInitialOperationStatus.mockReturnValue({ session: { state: "idle" } })
-    mockUpdateOperationStatus.mockReturnValue({ session: { state: "running" } })
+    mockCreateInitialOperationStatus.mockReturnValue(INITIAL_OPERATION_STATUS)
+    mockUpdateOperationStatus.mockReturnValue(UPDATED_OPERATION_STATUS)
+    mockAuth0Session.accessToken = "token-abc"
     mockUseAuth0Session.mockReturnValue(mockAuth0Session)
     mockLocalDataOwner.status = "ok"
     mockLocalDataOwner.syncAllowed = true
@@ -150,6 +211,9 @@ describe("useSurveySync", () => {
     mockUseLocalDataOwner.mockReturnValue(mockLocalDataOwner)
     mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 0, attachments: 0 })
     mockDeleteMyAccount.mockResolvedValue(undefined)
+    mockClearLocalIbpData.mockResolvedValue(undefined)
+    mockAuth0Session.clearSession.mockResolvedValue(undefined)
+    mockAuth0Session.handleLogout.mockResolvedValue(undefined)
     mockUseSurveySyncProfile.mockReturnValue({
       profileUpdating: false,
       handleUpdateProfile: jest.fn(),
@@ -178,46 +242,101 @@ describe("useSurveySync", () => {
     mockAuth0Session.withAuthRetry.mockImplementation((fn: (token: string) => unknown) =>
       fn("token-abc"),
     )
-
-    useStateSpy = jest
-      .spyOn(React, "useState")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((initial: unknown) => [initial, jest.fn()]) as any)
-    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
-    useRefSpy = jest
-      .spyOn(React, "useRef")
-      .mockImplementation((initial: unknown) => ({ current: initial }) as never)
-    useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation(() => undefined)
-  })
-
-  afterEach(() => {
-    useStateSpy.mockRestore()
-    useCallbackSpy.mockRestore()
-    useRefSpy.mockRestore()
-    useEffectSpy.mockRestore()
   })
 
   // ─── Initialization ───────────────────────────────────────────────────────
 
   describe("hook initialization", () => {
-    test("returns all expected properties", () => {
-      const hook = useBuildHook()
-      expect(hook).toHaveProperty("accessToken")
-      expect(hook).toHaveProperty("isAuthenticated")
-      expect(hook).toHaveProperty("status")
-      expect(hook).toHaveProperty("operationStatus")
-      expect(hook).toHaveProperty("surveyDetails")
-      expect(hook).toHaveProperty("handleLoadCanonicalDetails")
-      expect(hook).toHaveProperty("handleLoadSurveyEvents")
-      expect(hook).toHaveProperty("handleDebugResetIbpData")
-      expect(hook).toHaveProperty("handleDebugResetUserData")
-      expect(hook).toHaveProperty("setStatus")
-      expect(hook).toHaveProperty("handleEnsureAttachmentPreviews")
-      expect(hook).toHaveProperty("handleSimulateMissingAttachmentFile")
+    test("returns the memoised slices (D-01)", async () => {
+      const { result } = await renderSync()
+      const hook = result.current
+      expect(hook.accessToken).toBe("token-abc")
+      expect(hook.status).toBe(STATUS.initial)
+      expect(hook.sessionState).toEqual({
+        sessionRestoring: false,
+        isAuthenticated: true,
+        currentUser: null,
+        profile: null,
+        profileUpdating: false,
+        localDataOwnerStatus: "ok",
+        foreignWork: { surveys: 0, attachments: 0 },
+        foreignOwnerEmail: null,
+      })
+      expect(hook.surveyDetailsState).toEqual({
+        surveyDetails: {},
+        detailsLoadingSurveyId: null,
+        surveyEvents: {},
+        eventsLoadingSurveyId: null,
+      })
+      expect(Object.keys(hook.syncActions).sort()).toEqual(
+        [
+          "handleDebugResetIbpData",
+          "handleDebugResetUserData",
+          "handleEnsureAttachmentPreviews",
+          "handlePullChanges",
+          "handleReportSurvey",
+          "handleSimulateMissingAttachmentFile",
+          "handleSync",
+          "setStatus",
+        ].sort(),
+      )
+      expect(Object.keys(hook.sessionActions).sort()).toEqual(
+        [
+          "handleChangeEmail",
+          "handleDeleteAccount",
+          "handleDiscardForeignData",
+          "handleForgotPassword",
+          "handleLoadMyProfile",
+          "handleLogin",
+          "handleLogout",
+          "handlePasswordReset",
+          "handlePickProfilePictureFromLibrary",
+          "handleRegister",
+          "handleRemoveProfilePicture",
+          "handleSwitchToOwnerAccount",
+          "handleTakeProfilePictureFromCamera",
+          "handleUpdateProfile",
+        ].sort(),
+      )
+      expect(Object.keys(hook.surveyOperations).sort()).toEqual(
+        [
+          "confirmDeleteSurvey",
+          "handleDeleteAttachment",
+          "handleDiscardSurvey",
+          "handleLoadCanonicalDetails",
+          "handleLoadSurveyEvents",
+          "handleQueueAttachmentFromCamera",
+          "handleQueueAttachmentFromLibrary",
+          "handleRetrySurvey",
+          "handleSubmitSurvey",
+          "handleToggleVisibility",
+        ].sort(),
+      )
     })
 
-    test("does not return the removed pre-Auth0 stubs (D-02/ROADMAP criterion 7)", () => {
-      const hook = useBuildHook()
+    test("keeps operationStatus internal and the token out of the session slice", async () => {
+      const { result } = await renderSync()
+      expect(result.current).not.toHaveProperty("operationStatus")
+      expect(result.current.sessionState).not.toHaveProperty("accessToken")
+    })
+
+    test("the action slices forward to the sub-hook handlers", async () => {
+      const { result } = await renderSync()
+      const network = mockUseSurveySyncNetwork.mock.results[0].value
+      const operations = mockUseSurveySyncSurveyOperations.mock.results[0].value
+      await act(async () => {
+        await result.current.syncActions.handleSync()
+        await result.current.surveyOperations.handleSubmitSurvey("s1")
+        await result.current.sessionActions.handleLogin()
+      })
+      expect(network.handleSync).toHaveBeenCalledTimes(1)
+      expect(operations.handleSubmitSurvey).toHaveBeenCalledWith("s1")
+      expect(mockAuth0Session.handleLogin).toHaveBeenCalledTimes(1)
+    })
+
+    test("does not return the removed pre-Auth0 stubs (D-02/ROADMAP criterion 7)", async () => {
+      const { result } = await renderSync()
+      const hook = result.current
       expect(hook).not.toHaveProperty("pendingEmailVerification")
       expect(hook).not.toHaveProperty("devVerificationToken")
       expect(hook).not.toHaveProperty("handleVerifyEmail")
@@ -225,15 +344,15 @@ describe("useSurveySync", () => {
       expect(hook).not.toHaveProperty("handleCancelEmailVerification")
     })
 
-    test("calls useAuth0Session with correct params", () => {
-      useBuildHook()
+    test("calls useAuth0Session with correct params", async () => {
+      await renderSync()
       expect(mockUseAuth0Session).toHaveBeenCalledWith(
         expect.objectContaining({ apiUrl: "http://localhost:3000" }),
       )
     })
 
-    test("calls sub-hooks on initialization", () => {
-      useBuildHook()
+    test("calls sub-hooks on initialization", async () => {
+      await renderSync()
       expect(mockUseSurveySyncProfile).toHaveBeenCalled()
       expect(mockUseSurveySyncNetwork).toHaveBeenCalled()
       expect(mockUseSurveySyncSurveyOperations).toHaveBeenCalled()
@@ -244,20 +363,31 @@ describe("useSurveySync", () => {
 
   describe("clearSurveySessionState (via onSessionCleared callback)", () => {
     test("never calls clearLocalIbpData (D-02): a session end must not purge local data", async () => {
-      mockClearLocalIbpData.mockResolvedValue(undefined)
-      useBuildHook()
+      await renderSync()
       const { onSessionCleared } = mockUseAuth0Session.mock.calls[0][0]
-      await onSessionCleared()
+      await act(async () => {
+        await onSessionCleared()
+      })
       expect(mockClearLocalIbpData).not.toHaveBeenCalled()
     })
 
     test("still resolves without purging when the session ends via RENEW_FAILED", async () => {
       // clearSurveySessionState has no knowledge of *why* the session ended
       // (AUTH_REQUIRED vs RENEW_FAILED) — it only resets UI state either way.
-      mockClearLocalIbpData.mockResolvedValue(undefined)
-      useBuildHook()
+      mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
+      })
+      expect(result.current.surveyDetailsState.surveyDetails).toHaveProperty("s1")
+
       const { onSessionCleared } = mockUseAuth0Session.mock.calls[0][0]
-      await expect(onSessionCleared()).resolves.toBeUndefined()
+      let outcome: unknown = "pending"
+      await act(async () => {
+        outcome = await onSessionCleared()
+      })
+      expect(outcome).toBeUndefined()
+      expect(result.current.surveyDetailsState.surveyDetails).toEqual({})
       expect(mockClearLocalIbpData).not.toHaveBeenCalled()
     })
   })
@@ -265,80 +395,144 @@ describe("useSurveySync", () => {
   // ─── reportStatus / setStatus ─────────────────────────────────────────────
 
   describe("reportStatus", () => {
-    test("setOperationStatus updater calls updateOperationStatus", () => {
-      // Capture state setters in order to find setOperationStatus (2nd useState call)
-      const setters: jest.Mock[] = []
-      useStateSpy.mockRestore()
-      useStateSpy = jest.spyOn(React, "useState").mockImplementation(((initial: unknown) => {
-        const setter = jest.fn()
-        setters.push(setter)
-        return [initial, setter]
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as any)
+    test("setStatus runs updateOperationStatus on the current operation status", async () => {
+      const { result } = await renderSync()
+      await act(async () => {
+        result.current.syncActions.setStatus(statusText("Hello"))
+      })
 
-      const hook = useBuildHook()
-      hook.setStatus("Hello")
-
-      // setters[1] = setOperationStatus (2nd useState call = operationStatus)
-      const setOperationStatus = setters[1]
-      expect(setOperationStatus).toHaveBeenCalledWith(expect.any(Function))
-
-      // Execute the updater to cover line 222 of useSurveySync.ts
-      const updater = setOperationStatus.mock.calls[0][0]
-      const currentStatus = { session: { state: "idle", message: "" } }
-      updater(currentStatus)
       expect(mockUpdateOperationStatus).toHaveBeenCalledWith(
-        currentStatus,
+        INITIAL_OPERATION_STATUS,
         "session",
         "idle",
         "Hello",
       )
+      expect(result.current.status).toBe("Hello")
+
+      // The internal operation status is threaded into the next update.
+      await act(async () => {
+        result.current.syncActions.setStatus(statusText("Again"))
+      })
+      expect(mockUpdateOperationStatus).toHaveBeenLastCalledWith(
+        UPDATED_OPERATION_STATUS,
+        "session",
+        "idle",
+        "Again",
+      )
+    })
+  })
+
+  // ─── Identity of the returned slices (D-01, criterion 1) ──────────────────
+
+  describe("slice identity", () => {
+    test("a rerender with identical params returns the same object and slices", async () => {
+      const { result, rerender } = await renderSync()
+      const first = result.current
+      await rerender(undefined)
+      expect(result.current).toBe(first)
+      expect(result.current.sessionState).toBe(first.sessionState)
+      expect(result.current.sessionActions).toBe(first.sessionActions)
+      expect(result.current.syncActions).toBe(first.syncActions)
+      expect(result.current.surveyOperations).toBe(first.surveyOperations)
+      expect(result.current.surveyDetailsState).toBe(first.surveyDetailsState)
+    })
+
+    test("setStatus changes only the status", async () => {
+      const { result } = await renderSync()
+      const first = result.current
+      await act(async () => {
+        first.syncActions.setStatus(statusText("x"))
+      })
+      expect(result.current).not.toBe(first)
+      expect(result.current.status).toBe("x")
+      expect(result.current.sessionState).toBe(first.sessionState)
+      expect(result.current.sessionActions).toBe(first.sessionActions)
+      expect(result.current.syncActions).toBe(first.syncActions)
+      expect(result.current.surveyOperations).toBe(first.surveyOperations)
+      expect(result.current.surveyDetailsState).toBe(first.surveyDetailsState)
+    })
+
+    test("the debug resets keep their identity when the surveys change", async () => {
+      let params = { ...DEFAULT_PARAMS }
+      const { result, rerender } = await renderHook(() => useSurveySync(params as never))
+      const first = result.current.syncActions
+      const ibpReset = first.handleDebugResetIbpData
+      const userReset = first.handleDebugResetUserData
+
+      params = { ...params, surveys: [{ id: "s1" }] as unknown[] }
+      await rerender(undefined)
+
+      expect(result.current.syncActions).toBe(first)
+      expect(result.current.syncActions.handleDebugResetIbpData).toBe(ibpReset)
+      expect(result.current.syncActions.handleDebugResetUserData).toBe(userReset)
+    })
+
+    test("the stable debug reset runs the latest implementation", async () => {
+      mockResetIbpData.mockResolvedValue({ surveys_deleted: 1 })
+      let params = { ...DEFAULT_PARAMS, apiUrl: "http://first" }
+      const { result, rerender } = await renderHook(() => useSurveySync(params as never))
+      const reset = result.current.syncActions.handleDebugResetIbpData
+
+      params = { ...params, apiUrl: "http://second" }
+      await rerender(undefined)
+
+      await act(async () => {
+        await reset()
+      })
+      await act(async () => {
+        alertButton((button) => button.style === "destructive").onPress?.()
+      })
+      await flushAsyncWork()
+      expect(mockResetIbpData).toHaveBeenCalledWith("http://second", "token-abc")
     })
   })
 
   // ─── auto-load useEffects ─────────────────────────────────────────────────
 
   describe("auto-load useEffects (early return paths)", () => {
-    test("both useEffects return early when selectedSurveyId is null", () => {
-      useEffectSpy.mockRestore()
-      const capturedEffects: Array<() => void> = []
-      useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation((fn) => {
-        capturedEffects.push(fn as () => void)
-      })
-
-      useBuildHook()
-
-      // Execute all captured effects — with selectedSurveyId=null, both should early-return
-      expect(() => capturedEffects.forEach((fn) => fn())).not.toThrow()
-
-      // Restore standard no-op spy for afterEach
-      useEffectSpy.mockRestore()
-      useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation(() => undefined)
+    test("both useEffects return early when selectedSurveyId is null", async () => {
+      await renderSync({ surveyDetailTab: "events" })
+      expect(mockLoadSurveyDetail).not.toHaveBeenCalled()
+      expect(mockLoadSurveyEvents).not.toHaveBeenCalled()
     })
 
-    test("auto-load detail effect proceeds past first check but returns when survey not found", () => {
-      useEffectSpy.mockRestore()
-      const capturedEffects: Array<() => void> = []
-      useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation((fn) => {
-        capturedEffects.push(fn as () => void)
+    test("auto-load detail effect proceeds past first check but returns when survey not found", async () => {
+      // selectedSurveyId="s1" and accessToken="token-abc"; surveys=[] → not found.
+      await renderSync({ selectedSurveyId: "s1" })
+      expect(mockLoadSurveyDetail).not.toHaveBeenCalled()
+    })
+
+    test("auto-load detail effect loads a submitted survey silently", async () => {
+      mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
+      const { result } = await renderSync({
+        selectedSurveyId: "s1",
+        surveys: [{ id: "s1", status: "submitted", sync_state: "synced" }],
       })
+      await flushAsyncWork()
 
-      // selectedSurveyId="s1" and accessToken="token-abc" (from mockAuth0Session)
-      // surveys=[] (default) → selectedSurvey not found → returns early at line 313
-      useBuildHook({ selectedSurveyId: "s1" })
-      expect(() => capturedEffects.forEach((fn) => fn())).not.toThrow()
+      expect(mockLoadSurveyDetail).toHaveBeenCalledTimes(1)
+      expect(result.current.surveyDetailsState.surveyDetails).toEqual({ s1: { id: "s1" } })
+      expect(result.current.status).toBe(STATUS.initial)
+    })
 
-      useEffectSpy.mockRestore()
-      useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation(() => undefined)
+    test("auto-load events effect loads events silently on the events tab", async () => {
+      mockLoadSurveyEvents.mockResolvedValue({ items: [{ id: "e1" }] })
+      const { result } = await renderSync({ selectedSurveyId: "s1", surveyDetailTab: "events" })
+      await flushAsyncWork()
+
+      expect(mockLoadSurveyEvents).toHaveBeenCalledTimes(1)
+      expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
+      expect(result.current.status).toBe(STATUS.initial)
     })
   })
 
   describe("setStatus", () => {
-    test("calling setStatus invokes reportStatus with session scope", () => {
-      const hook = useBuildHook()
-      // get the setStatusText mock (first useState call → ["Ready", setStatusText])
-      // setStatus("Foo") → reportStatus("session", "idle", "Foo") → setStatusText("Foo")
-      expect(() => hook.setStatus("test message")).not.toThrow()
+    test("calling setStatus invokes reportStatus with session scope", async () => {
+      const { result } = await renderSync()
+      await act(async () => {
+        result.current.syncActions.setStatus(statusText("test message"))
+      })
+      expect(result.current.status).toBe("test message")
     })
   })
 
@@ -349,56 +543,78 @@ describe("useSurveySync", () => {
       const detail = { id: "s1", status: "submitted" }
       mockLoadSurveyDetail.mockResolvedValue(detail)
 
-      const hook = useBuildHook()
-      await hook.handleLoadCanonicalDetails("s1")
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
+      })
 
       expect(mockLoadSurveyDetail).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
+      expect(result.current.surveyDetailsState.surveyDetails).toEqual({ s1: detail })
+      expect(result.current.surveyDetailsState.detailsLoadingSurveyId).toBeNull()
     })
 
     test("silent mode skips status updates", async () => {
       mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadCanonicalDetails("s1", { silent: true })).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
+      })
+      expect(result.current.status).toBe(STATUS.initial)
     })
 
     test("non-silent mode calls setStatus on success", async () => {
       mockLoadSurveyDetail.mockResolvedValue({ id: "s1" })
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadCanonicalDetails("s1")).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
+      })
+      expect(result.current.status).toBe(STATUS.detailLoaded)
     })
 
     test("AUTH_REQUIRED error calls clearSession", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("AUTH_REQUIRED"))
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleLoadCanonicalDetails("s1")
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
+      })
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.detailAuthRequired)
     })
 
     test("generic error sets status message", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("Network error"))
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadCanonicalDetails("s1")).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
+      })
+      expect(result.current.status).toBe(STATUS.detailError)
+      expect(result.current.surveyDetailsState.detailsLoadingSurveyId).toBeNull()
     })
 
     test("silent mode on AUTH_REQUIRED skips status", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("AUTH_REQUIRED"))
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadCanonicalDetails("s1", { silent: true })).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
+      })
+      expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.initial)
     })
 
     test("silent mode on generic error skips status", async () => {
       mockLoadSurveyDetail.mockRejectedValue(new Error("Server error"))
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadCanonicalDetails("s1", { silent: true })).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadCanonicalDetails("s1", { silent: true })
+      })
+      expect(result.current.status).toBe(STATUS.initial)
     })
   })
 
@@ -407,43 +623,70 @@ describe("useSurveySync", () => {
   describe("handleLoadSurveyEvents", () => {
     test("calls loadSurveyEvents via withAuthRetry on success", async () => {
       mockLoadSurveyEvents.mockResolvedValue({ items: [{ id: "e1" }] })
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleLoadSurveyEvents("s1")
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1")
+      })
 
       expect(mockLoadSurveyEvents).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
+      expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
+      expect(result.current.status).toBe(STATUS.eventsLoaded)
+      expect(result.current.surveyDetailsState.eventsLoadingSurveyId).toBeNull()
     })
 
     test("silent mode on success skips status updates", async () => {
-      mockLoadSurveyEvents.mockResolvedValue({ items: [] })
-      const hook = useBuildHook()
+      mockLoadSurveyEvents.mockResolvedValue({})
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadSurveyEvents("s1", { silent: true })).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1", { silent: true })
+      })
+      expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [] })
+      expect(result.current.status).toBe(STATUS.initial)
     })
 
     test("AUTH_REQUIRED error calls clearSession", async () => {
       mockLoadSurveyEvents.mockRejectedValue(new Error("AUTH_REQUIRED"))
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleLoadSurveyEvents("s1")
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1")
+      })
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.eventsAuthRequired)
     })
 
     test("generic error sets status message", async () => {
       mockLoadSurveyEvents.mockRejectedValue(new Error("Connection lost"))
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadSurveyEvents("s1")).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1")
+      })
+      expect(result.current.status).toBe(STATUS.eventsError)
     })
 
     test("silent mode on AUTH_REQUIRED skips status", async () => {
       mockLoadSurveyEvents.mockRejectedValue(new Error("AUTH_REQUIRED"))
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await expect(hook.handleLoadSurveyEvents("s1", { silent: true })).resolves.toBeUndefined()
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1", { silent: true })
+      })
+      expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.initial)
+    })
+
+    test("silent mode on generic error skips status", async () => {
+      mockLoadSurveyEvents.mockRejectedValue(new Error("Connection lost"))
+      const { result } = await renderSync()
+
+      await act(async () => {
+        await result.current.surveyOperations.handleLoadSurveyEvents("s1", { silent: true })
+      })
+      expect(result.current.status).toBe(STATUS.initial)
     })
   })
 
@@ -451,22 +694,26 @@ describe("useSurveySync", () => {
 
   describe("handleDebugResetIbpData", () => {
     test("calls Alert.alert with correct title", async () => {
-      const hook = useBuildHook()
-      await hook.handleDebugResetIbpData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetIbpData()
+      })
       expect(mockAlert).toHaveBeenCalledWith(
-        "Debug reset IBP data",
+        STATUS.debugIbpTitle,
         expect.any(String),
         expect.any(Array),
       )
     })
 
     test("Alert buttons include Cancel and Reset", async () => {
-      const hook = useBuildHook()
-      await hook.handleDebugResetIbpData()
-      const buttons = mockAlert.mock.calls[0][2]
-      const texts = buttons.map((b: Record<string, unknown>) => b.text)
-      expect(texts).toContain("Cancel")
-      expect(texts).toContain("Reset")
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetIbpData()
+      })
+      const buttons = mockAlert.mock.calls[0][2] as AlertButton[]
+      const texts = buttons.map((b) => b.text)
+      expect(texts).toContain(STATUS.cancelButton)
+      expect(texts).toContain(STATUS.resetButton)
     })
 
     test("Reset button onPress calls withAuthRetry and clearLocalIbpData", async () => {
@@ -475,45 +722,44 @@ describe("useSurveySync", () => {
         attachments_deleted: 0,
         events_deleted: 0,
       })
-      mockClearLocalIbpData.mockResolvedValue(undefined)
-      const hook = useBuildHook()
-      await hook.handleDebugResetIbpData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetIbpData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      resetButton.onPress()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockResetIbpData).toHaveBeenCalled()
       expect(mockClearLocalIbpData).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.ibpResetDone)
     })
 
     test("Reset button handles AUTH_REQUIRED error", async () => {
       mockResetIbpData.mockRejectedValue(new Error("AUTH_REQUIRED"))
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
-      await hook.handleDebugResetIbpData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetIbpData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      resetButton.onPress()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.debugAuthRequired)
     })
 
     test("Reset button handles generic error without throwing", async () => {
       mockResetIbpData.mockRejectedValue(new Error("Server error"))
-      const hook = useBuildHook()
-      await hook.handleDebugResetIbpData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetIbpData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      expect(() => resetButton.onPress()).not.toThrow()
+      const resetButton = alertButton((b) => b.text === STATUS.resetButton)
+      expect(() => resetButton.onPress?.()).not.toThrow()
       await flushAsyncWork()
+      expect(result.current.status).toBe(STATUS.debugIbpError)
     })
 
     test("Reset button calls onStopEditing when editingSurveyId is set", async () => {
@@ -522,15 +768,13 @@ describe("useSurveySync", () => {
         attachments_deleted: 0,
         events_deleted: 0,
       })
-      mockClearLocalIbpData.mockResolvedValue(undefined)
       const onStopEditing = jest.fn()
-      const hook = useBuildHook({ editingSurveyId: "survey-1", onStopEditing })
-      await hook.handleDebugResetIbpData()
+      const { result } = await renderSync({ editingSurveyId: "survey-1", onStopEditing })
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetIbpData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      resetButton.onPress()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(onStopEditing).toHaveBeenCalled()
@@ -541,10 +785,12 @@ describe("useSurveySync", () => {
 
   describe("handleDebugResetUserData", () => {
     test("calls Alert.alert with correct title", async () => {
-      const hook = useBuildHook()
-      await hook.handleDebugResetUserData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetUserData()
+      })
       expect(mockAlert).toHaveBeenCalledWith(
-        "Debug reset user data",
+        STATUS.debugUserTitle,
         expect.any(String),
         expect.any(Array),
       )
@@ -556,47 +802,44 @@ describe("useSurveySync", () => {
         surveys_deleted: 0,
         attachments_deleted: 0,
       })
-      mockClearLocalIbpData.mockResolvedValue(undefined)
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
-      await hook.handleDebugResetUserData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetUserData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      resetButton.onPress()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockResetUserData).toHaveBeenCalled()
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.userResetDone)
     })
 
     test("Reset button handles AUTH_REQUIRED error", async () => {
       mockResetUserData.mockRejectedValue(new Error("AUTH_REQUIRED"))
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
-      const hook = useBuildHook()
-      await hook.handleDebugResetUserData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetUserData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      resetButton.onPress()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
+      expect(result.current.status).toBe(STATUS.debugAuthRequired)
     })
 
     test("Reset button handles generic error without throwing", async () => {
       mockResetUserData.mockRejectedValue(new Error("Timeout"))
-      const hook = useBuildHook()
-      await hook.handleDebugResetUserData()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetUserData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      expect(() => resetButton.onPress()).not.toThrow()
+      const resetButton = alertButton((b) => b.text === STATUS.resetButton)
+      expect(() => resetButton.onPress?.()).not.toThrow()
       await flushAsyncWork()
-      await Promise.resolve()
+      expect(result.current.status).toBe(STATUS.debugUserError)
     })
 
     test("Reset button calls onStopEditing when editingSurveyId is set", async () => {
@@ -605,16 +848,13 @@ describe("useSurveySync", () => {
         surveys_deleted: 0,
         attachments_deleted: 0,
       })
-      mockClearLocalIbpData.mockResolvedValue(undefined)
-      mockAuth0Session.clearSession.mockResolvedValue(undefined)
       const onStopEditing = jest.fn()
-      const hook = useBuildHook({ editingSurveyId: "survey-x", onStopEditing })
-      await hook.handleDebugResetUserData()
+      const { result } = await renderSync({ editingSurveyId: "survey-x", onStopEditing })
+      await act(async () => {
+        await result.current.syncActions.handleDebugResetUserData()
+      })
 
-      const resetButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Reset",
-      )
-      resetButton.onPress()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(onStopEditing).toHaveBeenCalled()
@@ -626,24 +866,22 @@ describe("useSurveySync", () => {
   describe("handleLogout", () => {
     test("with unsynced work: shows a counted Alert and does not log out or purge until confirmed", async () => {
       mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 2, attachments: 5 })
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleLogout()
+      await act(async () => {
+        await result.current.sessionActions.handleLogout()
+      })
 
       expect(mockAlert).toHaveBeenCalledTimes(1)
       expect(mockAlert).toHaveBeenCalledWith(
-        "Données non synchronisées",
+        STATUS.unsyncedTitle,
         expect.stringContaining("2 relevés et 5 photos"),
         expect.any(Array),
       )
       expect(mockAuth0Session.handleLogout).not.toHaveBeenCalled()
       expect(mockClearLocalIbpData).not.toHaveBeenCalled()
 
-      const buttons = mockAlert.mock.calls[0][2]
-      const destructiveButton = buttons.find(
-        (b: Record<string, unknown>) => b.style === "destructive",
-      )
-      destructiveButton.onPress()
+      alertButton((b) => b.style === "destructive").onPress?.()
       await flushAsyncWork()
 
       expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
@@ -652,15 +890,13 @@ describe("useSurveySync", () => {
 
     test("with unsynced work: pressing cancel calls neither auth logout nor purge", async () => {
       mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 1, attachments: 0 })
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleLogout()
+      await act(async () => {
+        await result.current.sessionActions.handleLogout()
+      })
 
-      const buttons = mockAlert.mock.calls[0][2]
-      const cancelButton = buttons.find((b: Record<string, unknown>) => b.style === "cancel")
-      if (cancelButton.onPress) {
-        cancelButton.onPress()
-      }
+      alertButton((b) => b.style === "cancel").onPress?.()
       await flushAsyncWork()
 
       expect(mockAuth0Session.handleLogout).not.toHaveBeenCalled()
@@ -669,9 +905,11 @@ describe("useSurveySync", () => {
 
     test("with nothing unsynced: no Alert, logs out and purges directly", async () => {
       mockCountUnsyncedLocalWork.mockResolvedValue({ surveys: 0, attachments: 0 })
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleLogout()
+      await act(async () => {
+        await result.current.sessionActions.handleLogout()
+      })
 
       expect(mockAlert).not.toHaveBeenCalled()
       expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
@@ -683,13 +921,12 @@ describe("useSurveySync", () => {
 
   describe("performDeleteAccount (via handleDeleteAccount)", () => {
     test("success path purges local data without the unsynced-work alert", async () => {
-      const hook = useBuildHook()
-      await hook.handleDeleteAccount()
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.sessionActions.handleDeleteAccount()
+      })
 
-      const deleteButton = mockAlert.mock.calls[0][2].find(
-        (b: Record<string, unknown>) => b.text === "Delete my account",
-      )
-      deleteButton.onPress()
+      alertButton((b) => b.text === STATUS.deleteAccountButton).onPress?.()
       await flushAsyncWork()
 
       // Only the "Delete account" confirmation Alert fired — never the
@@ -699,14 +936,32 @@ describe("useSurveySync", () => {
       expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
       expect(mockClearLocalIbpData).toHaveBeenCalledTimes(1)
     })
+
+    test("a failure shows catalogue texts, never the raw error", async () => {
+      mockDeleteMyAccount.mockRejectedValue(new Error("HTTP 500 user 9a8b7c6d"))
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.sessionActions.handleDeleteAccount()
+      })
+
+      alertButton((b) => b.text === STATUS.deleteAccountButton).onPress?.()
+      await flushAsyncWork()
+
+      const failedAlert = fr.status.session.alerts.deleteAccountFailed
+      expect(result.current.status).toBe(fr.status.session.deleteAccountFailed())
+      expect(mockAlert).toHaveBeenLastCalledWith(failedAlert.title, failedAlert.message, [
+        { text: fr.common.actions.ok },
+      ])
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
+    })
   })
 
   // ─── syncAllowed wiring ────────────────────────────────────────────────────
 
   describe("syncAllowed wiring to useSurveySyncNetwork", () => {
-    test("passes localDataOwner.syncAllowed through", () => {
+    test("passes localDataOwner.syncAllowed through", async () => {
       mockLocalDataOwner.syncAllowed = false
-      useBuildHook()
+      await renderSync()
 
       expect(mockUseSurveySyncNetwork).toHaveBeenCalledWith(
         expect.objectContaining({ syncAllowed: false }),
@@ -717,11 +972,13 @@ describe("useSurveySync", () => {
   // ─── handleDiscardForeignData (D-04 conflict: delete the other account's data) ───
 
   describe("handleDiscardForeignData", () => {
-    test("shows an Alert with the foreign work summary; only destructive onPress calls discardForeignData", () => {
+    test("shows an Alert with the foreign work summary; only destructive onPress calls discardForeignData", async () => {
       mockLocalDataOwner.foreignWork = { surveys: 3, attachments: 1 }
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      hook.handleDiscardForeignData()
+      await act(async () => {
+        result.current.sessionActions.handleDiscardForeignData()
+      })
 
       expect(mockAlert).toHaveBeenCalledTimes(1)
       expect(mockAlert).toHaveBeenCalledWith(
@@ -731,15 +988,10 @@ describe("useSurveySync", () => {
       )
       expect(mockLocalDataOwner.discardForeignData).not.toHaveBeenCalled()
 
-      const buttons = mockAlert.mock.calls[0][2]
-      const cancelButton = buttons.find((b: Record<string, unknown>) => b.style === "cancel")
-      if (cancelButton.onPress) cancelButton.onPress()
+      alertButton((b) => b.style === "cancel").onPress?.()
       expect(mockLocalDataOwner.discardForeignData).not.toHaveBeenCalled()
 
-      const destructiveButton = buttons.find(
-        (b: Record<string, unknown>) => b.style === "destructive",
-      )
-      destructiveButton.onPress()
+      alertButton((b) => b.style === "destructive").onPress?.()
 
       expect(mockLocalDataOwner.discardForeignData).toHaveBeenCalledTimes(1)
     })
@@ -749,9 +1001,11 @@ describe("useSurveySync", () => {
 
   describe("handleSwitchToOwnerAccount", () => {
     test("calls auth handleLogout and never clearLocalIbpData", async () => {
-      const hook = useBuildHook()
+      const { result } = await renderSync()
 
-      await hook.handleSwitchToOwnerAccount()
+      await act(async () => {
+        await result.current.sessionActions.handleSwitchToOwnerAccount()
+      })
 
       expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
       expect(mockClearLocalIbpData).not.toHaveBeenCalled()

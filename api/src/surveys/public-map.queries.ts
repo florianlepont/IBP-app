@@ -23,6 +23,8 @@ export type PublicMapItemsFilters = {
   to?: string | null
   /** Trimmed, non-empty region code. */
   region?: string | null
+  /** WGS84 degrees, already validated by parseBbox (finite, min < max). */
+  bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number } | null
 }
 
 /**
@@ -41,6 +43,11 @@ export type PublicMapItemsFilters = {
  *
  * Optional filters are appended in the same order as before (from, to, region), so the
  * parameter list is unchanged.
+ *
+ * 01.9 D-05: optional bbox, index idx_parcels_centroid_lat_lng. It is appended last (its four
+ * parameters follow from/to/region) as an EXISTS on the survey's linked parcels, inside the
+ * limit-first subquery, so a bbox only narrows the public surveys and the 500 cap still
+ * applies. Without a bbox the text and values are exactly the pre-01.9 ones.
  */
 export function buildPublicMapItemsQuery(filters: PublicMapItemsFilters = {}): {
   text: string
@@ -60,6 +67,20 @@ export function buildPublicMapItemsQuery(filters: PublicMapItemsFilters = {}): {
   if (filters.region) {
     values.push(filters.region)
     conditions.push(`s.region_version = $${values.length}`)
+  }
+  if (filters.bbox) {
+    const { minLng, maxLng, minLat, maxLat } = filters.bbox
+    values.push(minLng, maxLng, minLat, maxLat)
+    const first = values.length - 3
+    conditions.push(`EXISTS (
+       SELECT 1
+       FROM survey_parcels sp
+       JOIN parcels p
+         ON p.parcel_id = sp.parcel_id
+       WHERE sp.survey_id = s.id
+         AND p.centroid_lng BETWEEN $${first}::double precision AND $${first + 1}::double precision
+         AND p.centroid_lat BETWEEN $${first + 2}::double precision AND $${first + 3}::double precision
+     )`)
   }
 
   const text = `SELECT

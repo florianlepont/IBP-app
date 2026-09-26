@@ -1,8 +1,12 @@
+import { fr } from "../i18n"
 import { RegionVersion, VegetationStage } from "./types"
 
+const regions = fr.labels.regions
+const stages = fr.labels.vegetationStages
+
 export const REGION_OPTIONS: Array<{ value: RegionVersion; label: string }> = [
-  { value: "ACA", label: "Régions atlantique, continentale et alpine" },
-  { value: "M", label: "Méditerranéenne" },
+  { value: "ACA", label: regions.ACA },
+  { value: "M", label: regions.M },
 ]
 
 export const VEGETATION_STAGE_OPTIONS_BY_REGION: Record<
@@ -10,15 +14,15 @@ export const VEGETATION_STAGE_OPTIONS_BY_REGION: Record<
   Array<{ value: VegetationStage; label: string }>
 > = {
   ACA: [
-    { value: "planitiaire", label: "Planitiaire" },
-    { value: "collineen", label: "Collinéen" },
-    { value: "montagnard", label: "Montagnard" },
-    { value: "subalpin", label: "Subalpin" },
+    { value: "planitiaire", label: stages.planitiaire },
+    { value: "collineen", label: stages.collineen },
+    { value: "montagnard", label: stages.montagnard },
+    { value: "subalpin", label: stages.subalpin },
   ],
   M: [
-    { value: "thermo_mediterraneen", label: "Thermo-méditerranéen" },
-    { value: "meso_mediterraneen", label: "Méso-méditerranéen" },
-    { value: "supra_mediterraneen", label: "Supra-méditerranéen" },
+    { value: "thermo_mediterraneen", label: stages.thermo_mediterraneen },
+    { value: "meso_mediterraneen", label: stages.meso_mediterraneen },
+    { value: "supra_mediterraneen", label: stages.supra_mediterraneen },
   ],
 }
 

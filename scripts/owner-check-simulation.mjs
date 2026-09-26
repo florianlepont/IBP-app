@@ -34,7 +34,8 @@
 //   production      Read-only, for after the deploy:
 //                   SIM_BASE=https://cortege.algernon.ovh/v1 node scripts/owner-check-simulation.mjs production
 //                   /health 200, /debug/test-token 404, /surveys without a token 401,
-//                   /public/map-items 200 with items, no CORS headers for a foreign origin, and
+//                   /public/map-items 200 with items (also with a mainland-France bbox, and 400
+//                   for a malformed bbox), no CORS headers for a foreign origin, and
 //                   the MinIO health URL 200. It never writes anything. Behind an HTTP proxy,
 //                   run it with NODE_USE_ENV_PROXY=1.
 //
@@ -936,6 +937,20 @@ async function phaseProduction() {
     "GET /public/map-items 200 with an items array",
     r.status === 200 && Array.isArray(r.json?.items),
     `${r.status}, ${Array.isArray(r.json?.items) ? r.json.items.length + " items" : "no items"}`,
+  )
+  // 01.9 D-05: the viewport filter. A box around mainland France answers 200 with items; a
+  // malformed box answers 400 without echoing it.
+  r = await api(null, "GET", `/public/map-items?bbox=${encodeURIComponent("-5.2,41.3,9.6,51.1")}`)
+  check(
+    "GET /public/map-items?bbox=<mainland France> 200 with an items array",
+    r.status === 200 && Array.isArray(r.json?.items),
+    `${r.status}, ${Array.isArray(r.json?.items) ? r.json.items.length + " items" : "no items"}`,
+  )
+  r = await api(null, "GET", "/public/map-items?bbox=not-a-bbox")
+  check(
+    "GET /public/map-items?bbox=not-a-bbox 400 without echo",
+    r.status === 400 && !r.text.includes("not-a-bbox"),
+    String(r.status),
   )
   const cors = await preflight(BASE, "/health")
   check(

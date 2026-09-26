@@ -1,4 +1,10 @@
-import { normalizeVegetationStageForRegion } from "./vegetation"
+import { fr } from "../i18n"
+import { FACTOR_INPUT_HINTS_BY_FACTOR, FACTOR_TITLES, HELP_BY_FACTOR } from "./constants"
+import {
+  REGION_OPTIONS,
+  VEGETATION_STAGE_OPTIONS_BY_REGION,
+  normalizeVegetationStageForRegion,
+} from "./vegetation"
 import {
   buildAttachmentCountBySurvey,
   filterAndSortSurveys,
@@ -13,6 +19,12 @@ import {
 } from "./survey-logic"
 import { LocalAttachment, LocalSurvey } from "../storage"
 import { SurveyListFilters } from "./types"
+
+// constants.ts reads Platform for the default API URL; the unit Jest setup does
+// not load react-native itself.
+jest.mock("react-native", () => ({
+  Platform: { select: (options: { default?: unknown }) => options.default },
+}))
 
 const makeSurvey = (overrides: Partial<LocalSurvey>): LocalSurvey => ({
   id: "survey-default",
@@ -339,5 +351,61 @@ describe("normalizeVegetationStageForRegion (vegetation.ts)", () => {
   test("returns default stage for unknown stage string", () => {
     const result = normalizeVegetationStageForRegion("ACA", "unknown_stage")
     expect(typeof result).toBe("string")
+  })
+})
+
+describe("labels read from the catalogue (D-06)", () => {
+  const FACTORS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"] as const
+
+  test("region options keep their values and read their labels from fr.labels", () => {
+    expect(REGION_OPTIONS).toEqual([
+      { value: "ACA", label: fr.labels.regions.ACA },
+      { value: "M", label: fr.labels.regions.M },
+    ])
+    expect(REGION_OPTIONS.map((option) => option.label)).toEqual([
+      "Régions atlantique, continentale et alpine",
+      "Méditerranéenne",
+    ])
+  })
+
+  test("vegetation stage options keep their values and read their labels from fr.labels", () => {
+    const stages = fr.labels.vegetationStages
+    expect(VEGETATION_STAGE_OPTIONS_BY_REGION.ACA).toEqual([
+      { value: "planitiaire", label: stages.planitiaire },
+      { value: "collineen", label: stages.collineen },
+      { value: "montagnard", label: stages.montagnard },
+      { value: "subalpin", label: stages.subalpin },
+    ])
+    expect(VEGETATION_STAGE_OPTIONS_BY_REGION.M).toEqual([
+      { value: "thermo_mediterraneen", label: stages.thermo_mediterraneen },
+      { value: "meso_mediterraneen", label: stages.meso_mediterraneen },
+      { value: "supra_mediterraneen", label: stages.supra_mediterraneen },
+    ])
+    expect(stages.collineen).toBe("Collinéen")
+    expect(stages.supra_mediterraneen).toBe("Supra-méditerranéen")
+  })
+
+  test("factor titles, help and input hints come from fr.labels", () => {
+    for (const factor of FACTORS) {
+      expect(FACTOR_TITLES[factor]).toBe(fr.labels.factorTitles[factor])
+      expect(HELP_BY_FACTOR[factor]).toBe(fr.labels.factorHelp[factor])
+      expect(FACTOR_INPUT_HINTS_BY_FACTOR[factor]).toEqual(fr.labels.factorInputHints[factor])
+      expect(FACTOR_INPUT_HINTS_BY_FACTOR[factor]).toHaveLength(3)
+    }
+    expect(FACTOR_TITLES.A).toBe("Essences autochtones")
+    expect(FACTOR_TITLES.J).toBe("Milieux rocheux")
+  })
+
+  test("survey status labels come from the catalogue", () => {
+    const status = fr.common.surveyStatus
+    expect(formatSurveyUiStatusLabel("submitted")).toBe(status.submitted)
+    expect(formatSurveyUiStatusLabel("expired")).toBe(status.expired)
+    expect(formatSurveyUiStatusLabel("sync_pending")).toBe(status.syncPending)
+    expect(formatSurveyUiStatusLabel("sync_error")).toBe(status.syncError)
+    expect(formatSurveyUiStatusLabel("sync_blocked")).toBe(status.syncBlocked)
+    expect(formatSurveyUiStatusLabel("draft")).toBe(status.draft)
+    expect(formatSurveyWorkflowStatusLabel("pending")).toBe(status.pending)
+    expect(formatSurveySyncDisplayLabel("sync")).toBe(status.synced)
+    expect(formatSurveySyncDisplayLabel("local")).toBe(status.local)
   })
 })

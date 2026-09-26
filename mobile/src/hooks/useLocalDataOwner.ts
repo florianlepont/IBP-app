@@ -35,7 +35,8 @@ export function useLocalDataOwner(params: {
   syncActivity?: SyncActivity
 }) {
   const { sessionOwner, onLocalDataPurged, syncActivity } = params
-  const [status, setStatus] = useState<LocalDataOwnerStatus>("idle")
+  // Named setOwnerStatus: this is the owner-check state, not a status line text.
+  const [status, setOwnerStatus] = useState<LocalDataOwnerStatus>("idle")
   const [foreignWork, setForeignWork] = useState<UnsyncedLocalWork>(EMPTY_WORK)
   const [foreignOwnerEmail, setForeignOwnerEmail] = useState<string | null>(null)
   // The Auth0 sub the owner check approved. State drives the render-time
@@ -73,12 +74,12 @@ export function useLocalDataOwner(params: {
     const currentOwner = sessionOwnerRef.current
     approve(null)
     if (!currentOwner) {
-      setStatus("idle")
+      setOwnerStatus("idle")
       return
     }
 
     const expectedSub = currentOwner.sub
-    setStatus("checking")
+    setOwnerStatus("checking")
 
     try {
       const [storedOwner, unsynced] = await Promise.all([
@@ -106,7 +107,7 @@ export function useLocalDataOwner(params: {
         }
         retryAttemptRef.current = 0
         approve(expectedSub)
-        setStatus("ok")
+        setOwnerStatus("ok")
       }
 
       switch (decision) {
@@ -132,17 +133,17 @@ export function useLocalDataOwner(params: {
           retryAttemptRef.current = 0
           setForeignWork(unsynced)
           setForeignOwnerEmail(storedOwner?.email ?? null)
-          setStatus("conflict")
+          setOwnerStatus("conflict")
           break
         }
         case "unknown-session": {
-          setStatus("idle")
+          setOwnerStatus("idle")
           break
         }
       }
     } catch {
       if (sessionOwnerRef.current?.sub === expectedSub) {
-        setStatus("error")
+        setOwnerStatus("error")
       }
     }
   }, [approve, onLocalDataPurged, purgeAndAdopt])
@@ -160,7 +161,7 @@ export function useLocalDataOwner(params: {
     await onLocalDataPurged()
     setForeignWork(EMPTY_WORK)
     approve(currentOwner.sub)
-    setStatus("ok")
+    setOwnerStatus("ok")
   }, [approve, onLocalDataPurged, purgeAndAdopt])
 
   const ensureSyncOwner = useCallback(async (tokenSub: string | null): Promise<boolean> => {
@@ -188,7 +189,7 @@ export function useLocalDataOwner(params: {
     retryAttemptRef.current = 0
     if (!sessionOwner) {
       approve(null)
-      setStatus("idle")
+      setOwnerStatus("idle")
       return
     }
     void recheck()

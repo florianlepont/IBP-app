@@ -18,30 +18,43 @@ describe("auth0-config", () => {
     )
   })
 
-  test("builds a detailed Auth0 unauthorized message in dev mode", async () => {
+  test("returns catalogue text for an Auth0 refusal and logs the configuration in dev", async () => {
+    const debug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
     const {
       AUTH0_AUDIENCE,
       AUTH0_CLIENT_ID,
       AUTH0_IOS_CALLBACK_URL,
       buildAuth0UnauthorizedMessage,
     } = await import("./auth0-config")
+    const { fr } = await import("../i18n")
     const message = buildAuth0UnauthorizedMessage("https://cortege.algernon.ovh/v1")
 
-    expect(message).toContain("[DEV]")
-    expect(message).toContain(AUTH0_CLIENT_ID)
-    expect(message).toContain(AUTH0_AUDIENCE)
-    expect(message).toContain(AUTH0_IOS_CALLBACK_URL)
-    expect(message).toContain("https://cortege.algernon.ovh/v1")
+    expect(message).toBe(fr.status.session.loginRefused())
+    expect(message).not.toContain(AUTH0_CLIENT_ID)
+    expect(debug).toHaveBeenCalledWith("[status] session.auth0Refused", {
+      clientId: AUTH0_CLIENT_ID,
+      audience: AUTH0_AUDIENCE,
+      iosCallback: AUTH0_IOS_CALLBACK_URL,
+      api: "https://cortege.algernon.ovh/v1",
+    })
+    debug.mockRestore()
   })
 
-  test("builds a detailed API token rejection message in dev mode", async () => {
+  test("returns catalogue text for an API token refusal and logs the target in dev", async () => {
+    const debug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
     const { AUTH0_AUDIENCE, buildApiTokenRejectedMessage } = await import("./auth0-config")
+    const { fr } = await import("../i18n")
     const message = buildApiTokenRejectedMessage("https://cortege.algernon.ovh/v1")
 
-    expect(message).toContain("[DEV]")
-    expect(message).toContain(AUTH0_AUDIENCE)
-    expect(message).toContain("https://cortege.algernon.ovh/v1")
+    expect(message).toBe(fr.status.session.loginInterrupted())
+    expect(message).not.toContain(AUTH0_AUDIENCE)
+    expect(debug).toHaveBeenCalledWith("[status] session.apiTokenRejected", {
+      audience: AUTH0_AUDIENCE,
+      api: "https://cortege.algernon.ovh/v1",
+    })
+    debug.mockRestore()
   })
+
   test("uses EXPO public values when provided", async () => {
     process.env = {
       ...originalEnv,
