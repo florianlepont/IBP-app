@@ -825,49 +825,68 @@ supplied as of 2026-09-23.)_
 
 ## 7. On-device inference latency
 
-**Status: HARNESS READY, MEASUREMENT NOT YET RUN (`GATE-MEASURE: READY`, plan 05 Task B).**
+**Status: MEASURED (2026-09-26, plan 05 Task B), real hardware, promoted iteration-4 model.**
 
-The only latency figures currently on record anywhere in this document (Section 8, iPhone 15 Pro,
-preprocess ms median 77.9 / worst 93.2, inference ms median 4.8 / worst 13.7) are from
-`device-harness`'s ORIGINAL pipeline-proof pass — a stock ImageNet classifier
-(`mobilenet_v1_1.0_224_quant.tflite`, 2.0 MB, uint8 quantised), not the fine-tuned, PROMOTED
-genus classifier this phase's go/no-go actually needs timed. **They must not be cited as this
-model's latency.** The promoted model (`genus_classifier.tflite`, plan 04's iteration 4,
-EfficientNet-B0, float16, 8,238,676 bytes — over 4x the stock model's size, a different backbone
-entirely) has never been timed on any device.
+**Device.** iPhone de Florian, model **iPhone 15 Pro** (`iPhone16,1`), **iOS 27.0**, read from the
+device itself (`Device.modelName`/`Device.osVersion`, not typed in) via `xcrun devicectl device
+copy from` pulling `Documents/results/results.csv` off the sandboxed app container. **This is a
+FLAGSHIP device, not the D-18 low-spec floor** (iPhone SE 2nd/3rd gen or iPhone 11 class) — every
+figure below is optimistic relative to what the association's observers likely carry in the field
+(RESEARCH.md Pitfall 4; Section 1's confidence cap applies in full).
 
-**What plan 05 completed this session (Task B, software side):** the harness is re-wired to load
-and time the promoted genus model instead of the stock one --
-`spike/species-recognition/device-harness/assets/models/genus_classifier.tflite` and
-`assets/genus_labels.txt` are byte-identical copies of the canonical `train/` files;
-`src/inference.ts` gained a float32-in/float32-out (`runGenusSample`) path matching the genus
-model's actual input/output dtypes (the stock model's uint8 path is unchanged, kept only as a
-regression check); `App.tsx` now runs a 1-discarded-warm-up-plus-10-timed-run protocol with
-separate ONLINE and AIRPLANE MODE buttons (D-06), reports median/p95/worst for preprocess,
-inference and their sum, and states a live pass/fail verdict against D-05's 3s budget on the
-total; `resultsLog.ts`'s CSV gained `network_state`, `run_index` and `total_ms` columns and
-reports top-3 as genus label names, not indices. `npx tsc --noEmit` passes cleanly on the harness.
-Full detail: `spike/species-recognition/device-harness/README.md`'s "Run sheet for measurement
-day" section.
+**Model.** `genus_classifier.tflite`, `model_bytes=8238676` on every row (confirmed — this is the
+promoted iteration-4 model, EfficientNet-B0, float16, matching `train/genus_classifier.tflite`'s
+on-disk size exactly), Release build (`npx expo run:ios --device 00008130-001829D822F2001C
+--configuration Release`, JS bundle embedded, no Metro/network dependency at runtime).
 
-**What did not happen, and why this section is not filled with numbers.** The measurement itself
-requires the phone physically connected, unlocked and Auto-Lock disabled — this is a blocking
-human checkpoint (RESEARCH.md Pitfall 4: a simulator or an idle-paired device reports nothing
-representative). At the time this section was written, `xcrun devicectl list devices` showed the
-only real device on hand (iPhone 15 Pro, UDID `00008130-001829D822F2001C`) in state
-`available (paired)`, not `connected` — the exact state the plan's own checkpoint instruction
-flags as "the link was idle" and unusable for a build. No benchmark run was attempted against
-this state; substituting a Simulator run would measure this laptop's own silicon, not the
-observers' hardware, and was explicitly not done (Pitfall 4 applies to the harness author as much
-as to a future reader). This section stays a "not yet run" statement rather than a number obtained
-under conditions the plan itself rules out.
+**Raw data.** The operator ran the ONLINE and AIRPLANE MODE benchmark buttons multiple times each
+during the session (each press independently runs its own 1-discarded-warm-up + 10-timed-run
+protocol); all valid timed rows are pooled per network state below rather than taking a single
+press in isolation, for a larger and more representative sample. `results.csv` (pulled off the
+device) contains **30 online rows and 30 airplane rows** on the new schema, plus 10 older rows
+from plan 03's stock-model pipeline-proof pass (different `model_bytes=4276352`, excluded from the
+statistics below; preserved in the file for traceability).
 
-**Once the device is connected and the run sheet is followed, this section should be filled with:**
-per network state (online, airplane), median/p95/worst preprocess/inference/total ms, the device
-model and OS version read from the device itself, a per-device D-05 verdict on the total, and the
-flagship-vs-D-18-floor caveat Section 1/8 already establish for this same iPhone 15 Pro. Android
-remains unmeasured by user decision (Section 1/9); this section should record that plainly if no
-Android run happens either, rather than leaving a silent blank.
+| network_state | n | preprocess median / p95 / worst (ms) | inference median / p95 / worst (ms) | total median / p95 / worst (ms) |
+|---|---:|---|---|---|
+| online | 30 | 75.37 / 100.09 / 127.25 | 15.07 / 16.74 / 19.29 | **90.41** / 115.30 / 142.94 |
+| airplane | 30 | 75.41 / 76.86 / 78.45 | 15.05 / 16.20 / 32.99 | **90.49** / 93.61 / 108.34 |
+
+**D-05 verdict (3s budget, judged on the total): MET, for both network states, by a wide margin.**
+Median total is ~90ms in both cases — roughly **33x** headroom under the 3,000ms budget. Even the
+single worst observed row (142.94ms, one online run) is still over 20x under budget. No re-run was
+performed to chase a better number; these are all valid rows as pulled, including the higher-
+variance ones (see below).
+
+**D-06 (offline, on-device-only) — now a checked proof, not a code-inspection argument.** Online
+and airplane median totals differ by 0.08ms (90.41 vs 90.49) — statistically indistinguishable at
+this sample size. The airplane-mode pass completed all 30 timed runs with no crash, no stall and
+no different behaviour from the online pass, which is the direct, observed confirmation that
+nothing in the preprocess→inference path depends on network connectivity, closing the gap Section
+9 (gap 5) and `01-03-SUMMARY.md` both flagged as still-open.
+
+**Missing-model pass (D-08) and model seeding: confirmed working**, per the operator's report
+after following the README run sheet — the explicit "Recognition unavailable" message rendered
+before the model was seeded, and the app stayed usable throughout. Not itself a timed figure.
+
+**Model load time: NOT CAPTURED.** `App.tsx`'s `runBenchmark()` calls `loadTensorflowModel(...)`
+once per button press but this harness version does not time that call separately from the
+benchmark loop — an honest gap in this run, not a number to estimate from indirect evidence (e.g.
+CSV timestamp gaps are not a reliable proxy, since they also include UI/JS-thread time between the
+button tap and the first logged row). A future harness revision should add an explicit
+`modelLoadMs` field if this figure is needed with confidence.
+
+**Observed variability, reported rather than smoothed over.** The online pass shows a noticeably
+wider spread than airplane (p95 100.09ms / worst 127.25ms vs p95 76.86ms / worst 78.45ms) — most of
+this comes from one batch of 10 runs (2026-09-26T12:23:06–07Z) where the first five preprocess
+times ran 76–127ms before settling back to the ~75ms baseline for the remaining five, a pattern
+consistent with transient OS/thermal scheduling contention (this MacBook Air's Metro/Xcode process
+was still attached) rather than a property of the model or the online network state itself — no
+crash, error or missing row accompanied it. Inference time on airplane also shows one outlier
+(32.99ms on a single run, run 7 of the 12:22:24 batch) against an otherwise tight ~15ms band. None
+of these change the D-05 verdict; they are recorded because the plan's own instruction is to
+report median AND worst case rather than a single lucky run, and a worst-case figure that hid this
+variability would understate what a real field session might occasionally show.
 
 ---
 
