@@ -13,17 +13,26 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Cortege to access your photos for survey attachments.",
-          "cameraPermission": "Allow Cortege to use your camera to capture survey photos."
+          "photosPermission": "Cortege accède à vos photos pour joindre des photos de la parcelle à vos relevés.",
+          "cameraPermission": "Cortege utilise l'appareil photo pour photographier la parcelle pendant le relevé.",
+          "microphonePermission": "Cortege n'utilise le micro que pour le son des vidéos prises avec l'appareil photo."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Cortege to access your location to center the map and help parcel selection."
+          "locationWhenInUsePermission": "Cortege utilise votre position GPS pour centrer la carte, choisir la parcelle et situer le relevé.",
+          "locationAlwaysAndWhenInUsePermission": "Cortege utilise votre position GPS pour centrer la carte, choisir la parcelle et situer le relevé.",
+          "locationAlwaysPermission": "Cortege utilise votre position GPS pour centrer la carte, choisir la parcelle et situer le relevé.",
+          "motionUsagePermission": "Cortege utilise les capteurs de mouvement avec le GPS pour situer le relevé."
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Cortege utilise Face ID pour protéger l'accès à votre compte."
+        }
+      ],
       "react-native-bottom-tabs",
       [
         "react-native-auth0",
