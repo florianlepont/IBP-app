@@ -24,7 +24,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.3.5",
-    "@types/nodemailer": "^7.0.11",
     "@types/pg": "^8.18.0",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
@@ -45,9 +44,7 @@
     "@nestjs/config": "4.0.4",
     "@nestjs/core": "^11.1.16",
     "@nestjs/platform-express": "^11.1.16",
-    "@nestjs/schedule": "^6.1.1",
     "@nestjs/throttler": "^6.5.0",
-    "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^17.3.1",
@@ -55,7 +52,6 @@
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.1",
     "lru-cache": "^11.5.3",
-    "nodemailer": "^9.1.1",
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2"
   }

@@ -9,7 +9,6 @@ docs
 infra
 mobile
 scripts
-App.tsx
 **/node_modules
 **/dist
 **/coverage

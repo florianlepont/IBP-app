@@ -29,11 +29,6 @@
     "android": "npm --prefix mobile run android",
     "ios": "npm --prefix mobile run ios"
   },
-  "dependencies": {
-    "expo": "57.0.24",
-    "react": "19.2.3",
-    "react-native": "0.86.3"
-  },
   "devDependencies": {
     "react-test-renderer": "19.2.3"
   },
