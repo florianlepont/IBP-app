@@ -710,8 +710,74 @@ import App from "../../App"
  * Pre-phase baseline (01.9-01, D-02). Plans 01.9-09, 01.9-18 and 01.9-22 may
  * change these numbers; every change must be a decrease for
  * statusUpdate/formKeystroke/formKeystrokeAutosave/oneSurveyRefresh.
+ *
+ * `rows` is 19 per list render for 20 seeded drafts: the list lifts the most
+ * recently updated draft into the "continue draft" card, which is not a
+ * Swipeable row. `surveyDetail` is 0 until a survey is selected (the edit
+ * set-up in formKeystrokeAutosave selects survey s-01).
  */
-const EXPECTED: Partial<Record<ScenarioName, Counts>> = {}
+const EXPECTED: Record<ScenarioName, Counts> = {
+  initialMount: {
+    home: 2,
+    surveyList: 2,
+    surveyDetail: 0,
+    surveyForm: 2,
+    factorDetail: 2,
+    parcelSelection: 2,
+    publicMap: 2,
+    account: 2,
+    settings: 2,
+    rows: 19,
+  },
+  statusUpdate: {
+    home: 1,
+    surveyList: 1,
+    surveyDetail: 0,
+    surveyForm: 1,
+    factorDetail: 1,
+    parcelSelection: 1,
+    publicMap: 1,
+    account: 1,
+    settings: 1,
+    rows: 19,
+  },
+  formKeystroke: {
+    home: 1,
+    surveyList: 1,
+    surveyDetail: 0,
+    surveyForm: 1,
+    factorDetail: 1,
+    parcelSelection: 1,
+    publicMap: 1,
+    account: 1,
+    settings: 1,
+    rows: 19,
+  },
+  formKeystrokeAutosave: {
+    home: 2,
+    surveyList: 2,
+    surveyDetail: 2,
+    surveyForm: 2,
+    factorDetail: 2,
+    parcelSelection: 2,
+    publicMap: 2,
+    account: 2,
+    settings: 2,
+    rows: 38,
+  },
+  oneSurveyRefresh: {
+    home: 1,
+    surveyList: 1,
+    surveyDetail: 1,
+    surveyForm: 1,
+    factorDetail: 1,
+    parcelSelection: 1,
+    publicMap: 1,
+    account: 1,
+    settings: 1,
+    rows: 19,
+  },
+}
 
 const AUTOSAVE_DELAY_MS = 900
 
@@ -781,7 +847,6 @@ describe("render counts (D-02)", () => {
   function record(name: ScenarioName): Counts {
     const counts = snapshotCounts()
     measured[name] = counts
-    console.log(name, JSON.stringify(counts))
     return counts
   }
 
@@ -792,8 +857,9 @@ describe("render counts (D-02)", () => {
     })
     await settle()
     const counts = record("initialMount")
-    expect(counts.rows).toBeGreaterThan(0)
-    if (EXPECTED.initialMount) expect(counts).toEqual(EXPECTED.initialMount)
+    expect(counts.surveyList).toBeGreaterThanOrEqual(1)
+    expect(counts.settings).toBeGreaterThanOrEqual(1)
+    expect(counts).toEqual(EXPECTED.initialMount)
   })
 
   it("statusUpdate", async () => {
@@ -803,7 +869,7 @@ describe("render counts (D-02)", () => {
       mockCaptured.reportStatus?.("session", "idle", "x")
     })
     const counts = record("statusUpdate")
-    if (EXPECTED.statusUpdate) expect(counts).toEqual(EXPECTED.statusUpdate)
+    expect(counts).toEqual(EXPECTED.statusUpdate)
   })
 
   it("formKeystroke", async () => {
@@ -813,7 +879,7 @@ describe("render counts (D-02)", () => {
       mockCaptured.setSiteName?.("a")
     })
     const counts = record("formKeystroke")
-    if (EXPECTED.formKeystroke) expect(counts).toEqual(EXPECTED.formKeystroke)
+    expect(counts).toEqual(EXPECTED.formKeystroke)
   })
 
   it("formKeystrokeAutosave", async () => {
@@ -836,7 +902,7 @@ describe("render counts (D-02)", () => {
     jest.useRealTimers()
 
     const counts = record("formKeystrokeAutosave")
-    if (EXPECTED.formKeystrokeAutosave) expect(counts).toEqual(EXPECTED.formKeystrokeAutosave)
+    expect(counts).toEqual(EXPECTED.formKeystrokeAutosave)
   })
 
   it("oneSurveyRefresh", async () => {
@@ -847,6 +913,6 @@ describe("render counts (D-02)", () => {
       await mockCaptured.refreshLocalSurveys?.()
     })
     const counts = record("oneSurveyRefresh")
-    if (EXPECTED.oneSurveyRefresh) expect(counts).toEqual(EXPECTED.oneSurveyRefresh)
+    expect(counts).toEqual(EXPECTED.oneSurveyRefresh)
   })
 })
