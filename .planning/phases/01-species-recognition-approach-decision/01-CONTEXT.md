@@ -36,9 +36,20 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
   measure across the whole CNPF regional list (D-17); without a per-genus breakdown, rare genera
   drag the average down and hide the fact that frequent genera work. The partial-go rule (D-04)
   is unusable without this breakdown.
-- **D-04:** If results are mixed, the decision rule is a **partial go**: enable suggestions only
-  for genera that clear the bar, keep manual entry for the rest. The ecologist gains time where
-  it is reliable and is never misled where it is not.
+- **D-04 (AMENDED 2026-09-26, after iteration 4):** **Full go with per-genus calibrated
+  confidence.** All 34 genera are suggested; none is withheld. The original rule — enable only the
+  genera that clear the D-02 bar — would have enabled a single genus (Tamarix) after four
+  iterations, which is unusable. The user chose instead to show every suggestion with an honest
+  confidence indicator and let the ecologist judge.
+  *Why calibration is mandatory, not optional:* iteration 4's confidence bands show the model's
+  own confidence is informative (top-1 correct 90.0% in the "strong" band vs 39.8% in "medium",
+  pooled) but **not uniform across genera**: a "strong" prediction is right 96% of the time on
+  Quercus deciduous but only 79% on Ulmus, 80% on Populus, 82% on Prunus, 83% on Fraxinus. A single
+  global threshold would therefore promise a reliability the model does not deliver on exactly the
+  hardest genera. The "strong" threshold must be calibrated **per genus** so that "strong" carries
+  the same meaning — roughly 90% correct — whichever genus is shown. See D-12.
+  *Original wording (superseded):* partial go — enable suggestions only for genera that clear the
+  bar, keep manual entry for the rest.
 - **D-05:** Inference must complete in **under 3 seconds** on the measured devices. The ecologist
   is standing at the tree waiting for the answer; 3 s leaves headroom for older phones.
 
@@ -75,10 +86,17 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
   proposed displaying three genera; that conflated the top-3 evaluation bar (D-02) with the screen
   design. Showing the most likely first is what makes the feature worth having — otherwise the
   ecologist is asked to choose between three options, which is what the plain list already does.
-- **D-12:** Confidence is shown **in plain words — strong / medium / weak**, not as a percentage.
-  Readable without knowing how a model works. US-C9 asks for a "confidence score" literally, but a
-  percentage reads poorly and implies false exactness. The partial-go rule needs the ecologist to
-  be able to tell a confident suggestion from a hesitant one.
+- **D-12:** Confidence is shown **in plain words**, not as a percentage. Readable without knowing
+  how a model works. US-C9 asks for a "confidence score" literally, but a percentage reads poorly
+  and implies false exactness.
+  *Amended 2026-09-26:* two corrections from iteration 4's measured confidence bands. (1) The
+  three-level scale as first thresholded does not work: the "weak" band received **zero** of 26,557
+  test predictions, because with 34 classes the top-1 probability never falls below the weak
+  threshold. The scale collapsed to two levels in practice. The bands must be re-cut — the current
+  "medium" band spans cases right ~30% of the time and cases right ~50%, which the ecologist should
+  be able to tell apart. (2) Thresholds are **per genus** (D-04), so a given label means the same
+  reliability across all 34 genera. The exact wording and number of levels is a Phase 3 UI decision;
+  the calibrated per-genus thresholds are a Phase 1 deliverable feeding it.
 - **D-13:** The recognition photo is **transient and not kept**. It does not consume the 10-photo
   survey attachment quota (`REQ-C-photos`), costs no storage or sync, and requires no
   data-contract extension.
