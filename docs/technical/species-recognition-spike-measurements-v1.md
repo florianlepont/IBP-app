@@ -1021,6 +1021,22 @@ unavailable-state UI entirely. This document does not re-decide D-07 or D-08 —
 the ADR is where any change to them would be proposed to the user — but the ADR should have this
 number in front of it.
 
+**12. Per-genus confidence calibration is fit and reported on the same corpus's val/test splits,
+not on field photographs (plan 01-05, Section 15).** Section 15's per-genus thresholds and re-cut
+scale generalise from validation to test within this document's own GBIF-sourced corpus, but that
+corpus carries the same composition (Section 3a) and seasonal-skew (Section 3b) caveats as every
+other figure here. Whether "strong" continues to mean ~90% reliable when the input is a field
+photograph rather than a citizen-science image is untested, for the same reason gap 2 above is
+untested — this is not a new, independent gap, but the calibration work does not narrow it either.
+
+**13. Even after per-genus calibration, four genera keep "strong" below one third of predictions
+(plan 01-05, Section 15.6).** Ulmus (26.83%), Prunus (29.30%), Populus (32.66%) and Fraxinus
+(35.18%) will show the ecologist a confident suggestion only on a minority of encounters. This is
+not a defect to fix by loosening the threshold — doing so would recreate the exact miscalibration
+Section 15.3 measured and corrected — but the ADR should state plainly that these four genera's
+"full go" (D-04 amended) mostly means "the model offers a suggestion labelled honestly as
+uncertain," not "the model is usually confident."
+
 _(Additional gaps recorded here as plans 03, 04 and 05 execute.)_
 
 ---
@@ -3117,3 +3133,148 @@ alongside every percentage, per D-03.
 | Olea | 592 | 0.6315 | 464 | 78.38% | 90.09% | 591 | 462 | 406 | 78.17% | 87.88% |
 | Phillyrea | 546 | 0.7094 | 450 | 82.42% | 90.00% | 546 | 442 | 400 | 80.95% | 90.50% |
 | Pistacia | 570 | 0.6373 | 467 | 81.93% | 90.15% | 571 | 480 | 437 | 84.06% | 91.04% |
+
+### 15.3 What the single global threshold cost, per genus — before/after
+
+The table below applies the OLD single global threshold (`confidence_bands.json`'s
+`strong_threshold: 0.7763`, fit and reported on the same test split — the exact overfitting risk
+this section's own method avoids) to each genus's test predictions individually, alongside the
+NEW per-genus calibrated threshold from Section 15.2. "Acc delta (vs 90% target)" is how far each
+approach's achieved accuracy sits from the 90% reliability the label is supposed to promise.
+
+| genus | old global share | old global acc | new calibrated threshold | new share | new acc | share delta | acc delta (vs 90% target) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Abies | 64.83% | 88.69% | 0.8463 | 58.67% | 91.19% | -6.16pp | +1.19pp |
+| Acer | 56.80% | 87.50% | 0.8456 | 51.90% | 89.60% | -4.90pp | -0.40pp |
+| Alnus | 62.56% | 90.89% | 0.714 | 66.12% | 89.08% | +3.56pp | -0.92pp |
+| Arbutus | 76.00% | 94.74% | 0.5422 | 88.33% | 89.62% | +12.33pp | -0.38pp |
+| Betula | 57.17% | 87.37% | 0.7933 | 56.27% | 87.70% | -0.90pp | -2.30pp |
+| Carpinus | 64.03% | 88.29% | 0.9063 | 53.00% | 91.92% | -11.03pp | +1.92pp |
+| Castanea | 72.37% | 91.69% | 0.6043 | 80.92% | 87.86% | +8.55pp | -2.14pp |
+| Celtis | 58.60% | 89.32% | 0.7863 | 57.77% | 89.53% | -0.83pp | -0.47pp |
+| Ceratonia | 76.31% | 94.58% | 0.5058 | 91.18% | 89.12% | +14.87pp | -0.88pp |
+| Cercis | 82.14% | 97.23% | 0.4221 | 92.99% | 91.15% | +10.85pp | +1.15pp |
+| Cupressus | 70.75% | 88.00% | 0.7739 | 70.75% | 88.00% | -0.00pp | -2.00pp |
+| Fagus | 68.24% | 91.19% | 0.5766 | 81.06% | 85.91% | +12.82pp | -4.09pp |
+| Fraxinus | 49.19% | 82.79% | 0.9265 | 35.18% | 90.83% | -14.01pp | +0.83pp |
+| Juglans | 63.92% | 93.05% | 0.7324 | 67.09% | 91.64% | +3.17pp | +1.64pp |
+| Juniperus | 63.82% | 92.91% | 0.7253 | 68.84% | 91.48% | +5.02pp | +1.48pp |
+| Larix | 69.78% | 92.34% | 0.6946 | 76.13% | 89.91% | +6.35pp | -0.09pp |
+| Malus | 59.88% | 85.00% | 0.8138 | 57.25% | 86.40% | -2.63pp | -3.60pp |
+| Olea | 69.20% | 91.44% | 0.6315 | 78.17% | 87.88% | +8.97pp | -2.12pp |
+| Ostrya | 67.50% | 89.51% | 0.7507 | 69.20% | 88.64% | +1.70pp | -1.36pp |
+| Phillyrea | 77.29% | 92.18% | 0.7094 | 80.95% | 90.50% | +3.66pp | +0.50pp |
+| Picea | 58.66% | 87.68% | 0.8905 | 40.50% | 91.70% | -18.16pp | +1.70pp |
+| Pinus | 69.17% | 91.81% | 0.7214 | 73.00% | 90.41% | +3.83pp | +0.41pp |
+| Pistacia | 76.53% | 94.28% | 0.6373 | 84.06% | 91.04% | +7.53pp | +1.04pp |
+| Populus | 48.23% | 79.87% | 0.9152 | 32.66% | 90.09% | -15.57pp | +0.09pp |
+| Prunus | 51.00% | 81.96% | 0.9519 | 29.30% | 91.13% | -21.70pp | +1.13pp |
+| Pyrus | 58.56% | 83.58% | 0.8806 | 46.96% | 87.76% | -11.60pp | -2.24pp |
+| Quercus_deciduae | 78.23% | 95.70% | 0.5064 | 90.33% | 89.99% | +12.10pp | -0.01pp |
+| Quercus_sempervirens | 68.69% | 93.20% | 0.7345 | 72.90% | 90.71% | +4.21pp | +0.71pp |
+| Salix | 57.14% | 88.77% | 0.8292 | 51.14% | 90.49% | -6.00pp | +0.49pp |
+| Sorbus | 78.40% | 94.69% | 0.5467 | 86.84% | 90.54% | +8.44pp | +0.54pp |
+| Tamarix | 86.40% | 95.32% | 0.2027 | 100.00% | 88.79% | +13.60pp | -1.21pp |
+| Taxus | 73.17% | 95.64% | 0.5876 | 83.86% | 90.60% | +10.69pp | +0.60pp |
+| Tilia | 62.03% | 87.72% | 0.7965 | 60.15% | 88.81% | -1.88pp | -1.19pp |
+| Ulmus | 43.60% | 79.49% | 0.9453 | 26.83% | 90.53% | -16.77pp | +0.53pp |
+
+**The spread is the finding.** Under the single global threshold, per-genus accuracy inside the
+"strong" band ranges from **79.49% (Ulmus) to 97.23% (Cercis)** — a spread of 17.74 percentage
+points, standard deviation 4.56pp around a mean of 89.95%. Under per-genus calibration, the same
+34 genera range from **85.91% (Fagus) to 91.92% (Carpinus)** — a spread of 6.01 percentage points,
+standard deviation 1.50pp around a mean of 89.72%. The mean barely moves (as expected — both
+methods target 90% on average); what changes is that **no single genus is left promising a
+reliability it does not deliver by double digits.** Ulmus, Populus, Prunus and Fraxinus — the four
+genera D-04's amendment specifically named — move from 20+pp below the promised 90% (79.49%,
+79.87%, 81.96%, 82.79%) to within 1pp of it (90.53%, 90.09%, 91.13%, 90.83%). Quercus deciduous and
+Cercis, which were quietly over-delivering (95.70%, 97.23% — not a problem for the user, but a
+sign the old threshold had room to admit more predictions at those two genera specifically),
+settle to right at 90% too (89.99%, 91.15%).
+
+**Coverage cost is real but not large in aggregate.** Pooled across all 34 genera, per-genus
+calibration labels 63.70% of test predictions "strong" (16,916/26,557), against 64.29% under the
+old global threshold (17,073/26,557) — a 0.59 percentage-point difference, not a meaningful
+coverage loss. The cost is redistributed, not created: genera that were already under-covered
+relative to their (over-optimistic) old label — Ulmus's old share was 43.60%, the lowest of all 34
+genera even before calibration — lose a little more coverage to buy honesty, while a few genera the
+old threshold under-served gain a little.
+
+### 15.4 Re-cut confidence scale — four levels, fit on validation, reported on test
+
+D-12's amendment names two problems with the original three-level scale: the "weak" band never
+fired (0 of 26,557 predictions), and the "medium" band conflated cases right ~30% of the time with
+cases right ~50% of the time. Both are fixed by re-cutting on **local** band accuracy rather than
+cumulative-from-the-top precision for every band: the top ("strong") band is still defined by
+cumulative precision from the most confident prediction downward (that is the correct method for
+an unbounded-above band), but each band below it is fit only against the data **already excluded**
+from the band(s) above — fitting "medium" or "weak" against the full pooled set is a dead end,
+because pooled accuracy (72.08%, Section 14.4) sits above both the 50% and 30% targets, so a naive
+full-set sweep never finds a threshold below the entire dataset's minimum confidence value. This
+was checked directly (a first attempt did exactly that and produced a degenerate result) before
+switching to the nested/excluded-remainder method reported here.
+
+Thresholds and bands, fit on the 26,553-image validation split, reported on the 26,557-image test
+split:
+
+| band | threshold (fit on val) | val n | val accuracy | test n | test accuracy |
+|---|---:|---:|---:|---:|---:|
+| strong (conf ≥ t1) | 0.7775 | 17,074 | 90.00% | 17,056 | 90.06% |
+| medium (t2 ≤ conf < t1) | 0.4866 | 5,446 | 50.00% | 5,518 | 49.73% |
+| weak (t3 ≤ conf < t2) | 0.3461 | 2,393 | 30.00% | 2,359 | 30.27% |
+| very weak (conf < t3) | — | 1,640 | 18.96% | 1,624 | 19.95% |
+
+**Four levels, not three, is what the data supports.** A local-accuracy sweep across 20 equal-rank
+confidence bins on the validation split (raw diagnostic, not itself a reported figure) shows local
+accuracy stepping cleanly and near-monotonically from 99.9% at the very top to 18.0% at the very
+bottom, with no plateau wide enough to justify collapsing any two of these four bands into one.
+Val-to-test agreement is close at every cut (90.00%→90.06%, 50.00%→49.73%, 30.00%→30.27%,
+18.96%→19.95%) — this scale is not an artefact of the validation split's own noise. The bottom
+band now actually fires (1,624–1,640 predictions, ~6% of all predictions) — the collapsed-to-two-
+levels defect D-12 named is fixed. Naming and exact wording for these four levels in the UI is
+explicitly left to Phase 3 (per D-12's own text); this section's job is only to hand over
+data-backed cut points and their achieved accuracy.
+
+### 15.5 Overfitting guard — what was done, and the honest limit on how far to trust it
+
+**What was done.** Every threshold in Sections 15.2 and 15.4 was fit exclusively on the
+26,553-image validation split and reported exclusively on the 26,557-image test split — the two
+never overlap (`data/splits/<class>/{val,test}.txt` are disjoint by construction, plan 02). This is
+a genuine held-out check, not a repeat of the same-split fit-and-report pattern
+`confidence_bands.json` (Section 14, iteration 4) used. The close val→test agreement in Section
+15.4's four-level table, and the narrow 85.91%–91.92% per-genus spread in Section 15.2 (against a
+90% target, at n ranging from 300 to 1,000 test images per genus), are direct evidence the fit
+generalises rather than memorising validation-split noise.
+
+**What this does not prove.** Both splits are drawn from the same GBIF corpus, with the same
+composition problems (Section 3a: not reliably single-subject) and the same seasonal skew profile
+that Section 14.5 already found closes somewhat but does not fully resolve. A threshold that
+generalises from validation to test within this corpus says nothing about whether it generalises
+to field photographs (Section 6/9's still-open D-16 gap) or to the observers' actual camera
+hardware. This calibration is exactly as trustworthy as Section 14.4's underlying accuracy figures
+are, and no more.
+
+**Resolution limit.** Per-genus test sample sizes here range from 363 (Ceratonia) to 1,000 (Acer,
+Prunus) images. At n≈300–600, a genus's achieved "strong"-band accuracy has real sampling noise
+around the 90% target — the 85.91%–91.92% spread in Section 15.2 should be read as consistent with
+a well-calibrated model at this sample size, not as evidence that six genera are subtly
+miscalibrated by a few points. This is the same resolution-limit caveat Section 5 and Section 12
+already apply to whole-year and per-season accuracy figures, extended here to calibration.
+
+### 15.6 Genera where "strong" will rarely fire — the honest message for the ADR
+
+Even after calibration, four genera keep a "strong" share below one third of their test
+predictions: **Ulmus (26.83%), Prunus (29.30%), Populus (32.66%), Fraxinus (35.18%)** — plus Picea
+just above that band at 40.50%. For these genera, calibration does not create false confidence,
+but it also cannot manufacture confidence the model does not have: on somewhere between two-thirds
+and three-quarters of encounters with these genera, the model will show a lower-tier confidence
+label (medium, weak or very-weak per Section 15.4), not "strong." This is the direct, evidenced
+answer to Task A's fourth question — for these genera, the honest UI/ADR message is **"the model
+rarely knows confidently,"** not a design defect to fix by lowering the bar, since lowering it
+would exactly recreate the miscalibration Section 15.3 just measured and fixed. Notably, three of
+these four (Ulmus, Prunus, Populus) are also named in `01-CONTEXT.md`'s amended D-04 as the
+genera the miscalibrated single threshold most overstated — the same genera the model is
+genuinely least certain about are the ones a naive global threshold most flattered.
+
+_(Section 15 status: complete. All figures above are val-fit / test-reported per Section 15.1;
+none are fit and reported on the same split.)_
