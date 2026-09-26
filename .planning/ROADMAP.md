@@ -288,7 +288,7 @@ Plans:
 
 - [x] 01.9-01-PLAN.md — Build the render-count harness that stands in for the React DevTools before/after profile (D-02), run it on th (wave 1)
 - [x] 01.9-02-PLAN.md — Rewrite four of the ten React-spying hook tests, starting with `useSurveySync.test.ts`, onto the `renderHook` (wave 1)
-- [ ] 01.9-03-PLAN.md — Move the six remaining React-spying hook tests onto `renderHook`, with their assertions unchanged, before any (wave 1)
+- [x] 01.9-03-PLAN.md — Move the six remaining React-spying hook tests onto `renderHook`, with their assertions unchanged, before any (wave 1)
 - [x] 01.9-04-PLAN.md — Create the measuring tools the rest of the phase is checked against: the unused-style-key script D-04 asks for (wave 1)
 - [x] 01.9-05-PLAN.md — Create the French catalogue skeleton, the status message type and the sync-error texts, and translate the iOS (wave 1)
 - [x] 01.9-06-PLAN.md — Add native Android and iOS build jobs to CI, prove them green on a PR before any dependency change, document t (wave 1)
@@ -432,7 +432,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 6/32 | In Progress|  |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 7/32 | In Progress|  |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
