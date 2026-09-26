@@ -87,7 +87,7 @@ jest.mock("@bottom-tabs/react-navigation", () => ({
 
 // ─── Route probes ────────────────────────────────────────────────────────────
 
-const mockListConfigs: { useNativeNav: boolean; searchEntry: boolean }[] = []
+const mockListConfigs: { useNativeNav: boolean }[] = []
 const mockReloadSignals: unknown[] = []
 
 function mockRoute() {
@@ -107,7 +107,7 @@ jest.mock("./routes/AccountRoute", () => ({ AccountRoute: mockRoute() }))
 jest.mock("./routes/SettingsRoute", () => ({ SettingsRoute: mockRoute() }))
 jest.mock("./routes/SurveyListRoute", () => {
   const config = jest.requireActual("./stacks/surveys-stack-config") as {
-    useSurveysStackConfig: () => { useNativeNav: boolean; searchEntry: boolean }
+    useSurveysStackConfig: () => { useNativeNav: boolean }
   }
   return {
     SurveyListRoute: function SurveyListProbe() {
@@ -144,7 +144,13 @@ jest.mock("../state/surveys-context", () => ({ useSurveyActions: () => mockSurve
 
 import { AppNavigation } from "./AppNavigation"
 import { PublicMapReloadContext, createPublicMapReloadSignal } from "./public-map-reload"
-import { jsTabScreenOptions, nativeTabScreenOptions, TAB_TITLES } from "./tab-config"
+import { fr } from "../i18n"
+import {
+  JS_TAB_BAR_STYLE,
+  jsTabScreenOptions,
+  nativeTabScreenOptions,
+  TAB_TITLES,
+} from "./tab-config"
 import { JsRootTabs } from "./tabs/JsRootTabs"
 import { NativeRootTabs } from "./tabs/NativeRootTabs"
 
@@ -204,20 +210,17 @@ describe("AppNavigation tree choice", () => {
     )
     expect(mockScreens.search).toBeUndefined()
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(mockListConfigs).toEqual([{ useNativeNav: false, searchEntry: false }])
+    expect(mockListConfigs).toEqual([{ useNativeNav: false }])
   })
 
-  test("iOS in a native build mounts the native tabs with the search tab", async () => {
+  test("iOS in a native build mounts the native tabs with one survey stack", async () => {
     mockPlatform.OS = "ios"
     const tree = await mount(<AppNavigation />)
     expect(mockNavigators.nativeTabs).toHaveLength(1)
     expect(mockNavigators.jsTabs).toBeUndefined()
-    expect(mockScreens.search.options).toEqual({ role: "search" })
+    expect(mockScreens.search).toBeUndefined()
     expect(warn).not.toHaveBeenCalled()
-    expect(mockListConfigs).toEqual([
-      { useNativeNav: true, searchEntry: false },
-      { useNativeNav: true, searchEntry: true },
-    ])
+    expect(mockListConfigs).toEqual([{ useNativeNav: true }])
 
     // A re-render keeps the lazily created native navigator.
     await act(async () => {
@@ -263,7 +266,7 @@ describe("AppNavigation tree choice", () => {
     }
   })
 
-  test("the native tabs render no search tab outside iOS", async () => {
+  test("the native tabs render no search tab", async () => {
     await mount(
       <PublicMapReloadContext.Provider value={createPublicMapReloadSignal()}>
         <NativeRootTabs />
@@ -324,14 +327,13 @@ describe("tab listeners", () => {
     expect(mockSession.actions.handleLoadMyProfile).not.toHaveBeenCalled()
   })
 
-  test("the native tree wires the same listeners, the search tab included", async () => {
+  test("the native tree wires the same listeners", async () => {
     mockPlatform.OS = "ios"
     await mount(<AppNavigation />)
-    press("search")
     press("surveys")
     press("publicMap")
     press("account")
-    expect(mockSyncActions.handlePullChanges).toHaveBeenCalledTimes(2)
+    expect(mockSyncActions.handlePullChanges).toHaveBeenCalledTimes(1)
     expect(mockSurveyActions.closeSurveyDetailSelection).toHaveBeenCalledTimes(2)
     expect(mockSession.actions.handleLoadMyProfile).toHaveBeenCalledTimes(1)
   })
@@ -366,7 +368,7 @@ describe("tab options", () => {
     expect(options({ route: { focused: "surveyParcels" } }).tabBarStyle).toEqual({
       display: "none",
     })
-    expect(options({ route: { focused: "surveyForm" } }).tabBarStyle).toBeUndefined()
+    expect(options({ route: { focused: "surveyForm" } }).tabBarStyle).toBe(JS_TAB_BAR_STYLE)
     expect(options({ route: {} }).tabBarLabel).toBe(TAB_TITLES.surveys)
   })
 })
@@ -381,10 +383,10 @@ describe("stack options and listeners", () => {
   test("the factor detail title names the factor", async () => {
     await mount(<AppNavigation />)
     const options = mockScreens.surveyFactorDetail.options as OptionsFn
-    expect(options({ route: { params: { factor: "C" } } }).title).toBe("Factor C")
+    expect(options({ route: { params: { factor: "C" } } }).title).toBe("Facteur C")
   })
 
-  test("the JS surveys stack shows its own header; the native search stack sets up the search header", async () => {
+  test("the JS surveys stack shows its own header; the native one shows the search header", async () => {
     await mount(<AppNavigation />)
     const jsStack = mockNavigators.stack.find(
       (props) => (props.screenOptions as Options).headerTitleAlign === "left",
@@ -395,10 +397,9 @@ describe("stack options and listeners", () => {
     for (const key of Object.keys(mockScreens)) delete mockScreens[key]
     mockPlatform.OS = "ios"
     await mount(<AppNavigation />)
-    // The search stack renders last, so its options are the recorded ones.
     expect(mockScreens.surveysHome.options).toEqual(
       expect.objectContaining({
-        title: "Recherche",
+        title: fr.navigation.headers.surveys,
         headerShown: true,
         headerTransparent: false,
         headerBlurEffect: "systemMaterial",
@@ -411,9 +412,10 @@ describe("stack options and listeners", () => {
     const options = (mockScreens.accountHome.options as OptionsFn)({
       navigation: mockNavigation,
     })
-    expect(options.title).toBe("Compte")
+    expect(options.title).toBe(fr.navigation.headers.account)
     const button = await mount((options.headerRight as () => React.ReactElement)())
     const pressable = button.root.findByType("Pressable" as unknown as React.ElementType)
+    expect(pressable.props.accessibilityLabel).toBe(fr.navigation.a11y.openSettings)
     pressable.props.onPress()
     expect(mockNavigation.navigate).toHaveBeenCalledWith("settings")
   })

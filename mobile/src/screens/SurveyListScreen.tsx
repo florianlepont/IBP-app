@@ -88,7 +88,12 @@ type SurveyListScreenProps = {
   sortMode: SurveySort
   setSortMode: (value: SurveySort) => void
   resetFilters: () => void
+  /**
+   * The native iOS header (with its search bar) is shown above the list, so
+   * the screen drops its own hero header (01.9-25, D-08).
+   */
   useNativeSearchUI?: boolean
+  /** The inline search field (Android and the JS fallback). */
   showInlineSearch?: boolean
   onRefresh?: () => Promise<void>
   onDeleteSurvey: (surveyId: string) => void
@@ -307,6 +312,9 @@ export function SurveyListScreen({
   const tabBarHeight = useAppBottomTabBarHeight(Platform.select({ ios: 84, default: 68 }) ?? 68)
   const trimmedQuery = surveyQuery.trim()
   const showHero = !useNativeSearchUI
+  // The create card and the "À faire" card stay on Mes Relevés; only an
+  // active native header search replaces them with the results (D-08).
+  const showFeatured = showHero || trimmedQuery.length === 0
   const showFiltersPanel = useNativeSearchUI || showInlineSearch
 
   // Hero card inner width (for BrandBump)
@@ -375,8 +383,8 @@ export function SurveyListScreen({
   }, [continueDraftSurvey, attentionSurveys])
 
   const mainListSurveys = useMemo(
-    () => (showHero ? visibleSurveys.filter((s) => !excludedIds.has(s.id)) : visibleSurveys),
-    [showHero, visibleSurveys, excludedIds],
+    () => (showFeatured ? visibleSurveys.filter((s) => !excludedIds.has(s.id)) : visibleSurveys),
+    [showFeatured, visibleSurveys, excludedIds],
   )
 
   // D-11: ask for the first photo of every visible survey so a pulled ("remote")
@@ -791,7 +799,7 @@ export function SurveyListScreen({
 
   const createCardElement = useMemo(
     () =>
-      showHero ? (
+      showFeatured ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={createSurveyCardCopy.accessibilityLabel}
@@ -824,12 +832,12 @@ export function SurveyListScreen({
           </AppCard>
         </Pressable>
       ) : null,
-    [createSurveyCardCopy, onOpenCreateSurvey, showHero],
+    [createSurveyCardCopy, onOpenCreateSurvey, showFeatured],
   )
 
   const todoCardElement = useMemo(
     () =>
-      showHero && (attentionSurveys.length > 0 || continueDraftSurvey) ? (
+      showFeatured && (attentionSurveys.length > 0 || continueDraftSurvey) ? (
         <AppCard variant="surface" padding={14} style={styles.todoCard}>
           <AppSectionHeader
             title="À faire"
@@ -940,7 +948,7 @@ export function SurveyListScreen({
       continueDraftSurvey,
       hiddenAttentionCount,
       onOpenSurvey,
-      showHero,
+      showFeatured,
       visibleAttentionSurveys,
     ],
   )
@@ -949,9 +957,9 @@ export function SurveyListScreen({
     () =>
       mainListSurveys.length > 0 || (useNativeSearchUI && surveys.length > 0) ? (
         <AppSectionHeader
-          title={useNativeSearchUI ? "Résultats" : "Mes relevés"}
+          title={showFeatured ? "Mes relevés" : "Résultats"}
           subtitle={
-            showHero && mainListSurveys.length < visibleSurveys.length
+            showFeatured && mainListSurveys.length < visibleSurveys.length
               ? `${mainListSurveys.length} autre${mainListSurveys.length > 1 ? "s" : ""} relevé${mainListSurveys.length > 1 ? "s" : ""}`
               : visibleSurveySummary
           }
@@ -962,7 +970,7 @@ export function SurveyListScreen({
       ) : null,
     [
       mainListSurveys.length,
-      showHero,
+      showFeatured,
       surveys.length,
       useNativeSearchUI,
       visibleSurveySummary,

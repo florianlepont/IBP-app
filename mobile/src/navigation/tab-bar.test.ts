@@ -34,9 +34,7 @@ describe("getFocusedLeafRouteName", () => {
   })
 
   test("stops at a route whose navigator has no state yet", () => {
-    expect(getFocusedLeafRouteName({ index: 0, routes: [{ name: "publicMap" }] })).toBe(
-      "publicMap",
-    )
+    expect(getFocusedLeafRouteName({ index: 0, routes: [{ name: "publicMap" }] })).toBe("publicMap")
   })
 
   test("uses the last route of a partial state without an index", () => {

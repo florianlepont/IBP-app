@@ -1,5 +1,6 @@
 import { memo, useLayoutEffect } from "react"
 import type { FactorKey } from "../../app/types"
+import { fr } from "../../i18n"
 import { SurveyFormScreen } from "../../screens/SurveyFormScreen"
 import { useSession } from "../../state/session-context"
 import { useSurveyFormState } from "../../state/survey-form-context"
@@ -17,7 +18,9 @@ export const SurveyFormRoute = memo(function SurveyFormRoute({ navigation }: Sur
   const isEdit = state.formMode === "edit"
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: isEdit ? "Edit survey" : "New survey" })
+    navigation.setOptions({
+      title: isEdit ? fr.navigation.headers.editSurvey : fr.navigation.headers.newSurvey,
+    })
   }, [isEdit, navigation])
 
   const onOpenFactor = useLatestCallback((factor: FactorKey) => {

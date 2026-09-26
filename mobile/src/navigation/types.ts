@@ -32,7 +32,6 @@ export type PublicMapStackParamList = {
 export type RootTabParamList = {
   home: NavigatorScreenParams<HomeStackParamList> | undefined
   surveys: NavigatorScreenParams<SurveysStackParamList> | undefined
-  search: NavigatorScreenParams<SurveysStackParamList> | undefined
   publicMap: NavigatorScreenParams<PublicMapStackParamList> | undefined
   account: NavigatorScreenParams<AccountStackParamList> | undefined
 }

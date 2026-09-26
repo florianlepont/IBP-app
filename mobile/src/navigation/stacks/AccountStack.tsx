@@ -6,6 +6,7 @@ import {
 } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { AccountRoute } from "../routes/AccountRoute"
 import { SettingsRoute } from "../routes/SettingsRoute"
 import { styles } from "../styles"
@@ -16,14 +17,17 @@ const AccountStack = createNativeStackNavigator<AccountStackParamList>()
 
 function HeaderIconButton({
   icon,
+  accessibilityLabel,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap
+  accessibilityLabel: string
   onPress: () => void
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       hitSlop={8}
       onPress={onPress}
       style={{ width: 34, height: 34, alignItems: "center", justifyContent: "center" }}
@@ -37,10 +41,14 @@ function accountHomeOptions({
   navigation,
 }: NativeStackScreenProps<AccountStackParamList, "accountHome">): NativeStackNavigationOptions {
   return {
-    title: "Compte",
+    title: fr.navigation.headers.account,
     headerLargeTitle: false,
     headerRight: () => (
-      <HeaderIconButton icon="settings-outline" onPress={() => navigation.navigate("settings")} />
+      <HeaderIconButton
+        icon="settings-outline"
+        accessibilityLabel={fr.navigation.a11y.openSettings}
+        onPress={() => navigation.navigate("settings")}
+      />
     ),
   }
 }
@@ -61,7 +69,7 @@ export function AccountTabNavigator() {
         />
         <AccountStack.Screen
           name="settings"
-          options={{ title: "Paramètres" }}
+          options={{ title: fr.navigation.headers.settings }}
           component={SettingsRoute}
         />
       </AccountStack.Navigator>

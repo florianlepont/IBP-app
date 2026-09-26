@@ -1,5 +1,4 @@
 import { useRef, type ElementType } from "react"
-import { Platform } from "react-native"
 import { AccountTabNavigator } from "../stacks/AccountStack"
 import { HomeTabNavigator } from "../stacks/HomeStack"
 import { PublicMapTabNavigator } from "../stacks/PublicMapStack"
@@ -28,17 +27,25 @@ function getNativeTabNavigator(): TabNavigatorLike {
   return nativeBottomTabsModule.createNativeBottomTabNavigator<RootTabParamList>() as TabNavigatorLike
 }
 
-// The two surveys stacks differ only by their static configuration.
+// The native surveys stack: same screens, native header with the search bar.
 function NativeSurveysTab() {
   return <SurveysTabNavigator useNativeNav />
 }
 
-function NativeSearchTab() {
-  return <SurveysTabNavigator useNativeNav searchEntry />
+type NativeRootTabsProps = {
+  /**
+   * `@bottom-tabs/react-navigation` has no per-screen hide option, only this
+   * navigator-level flag, so AppNavigation computes it from the focused leaf
+   * route with the rule shared with the JS tree (D-13, tab-bar.ts).
+   */
+  tabBarHidden?: boolean
 }
 
-/** The native (iOS) tab bar from react-native-bottom-tabs. */
-export function NativeRootTabs() {
+/**
+ * The native (iOS) tab bar from react-native-bottom-tabs: four tabs. Search
+ * is the native header search bar of Mes Relevés, not a tab (D-08).
+ */
+export function NativeRootTabs({ tabBarHidden = false }: NativeRootTabsProps) {
   const deps = useTabListenerDeps()
   const nativeTabRef = useRef<TabNavigatorLike | null>(null)
 
@@ -49,21 +56,17 @@ export function NativeRootTabs() {
   const NativeTab = nativeTabRef.current
 
   return (
-    <NativeTab.Navigator screenOptions={nativeTabScreenOptions} minimizeBehavior="automatic">
+    <NativeTab.Navigator
+      screenOptions={nativeTabScreenOptions}
+      minimizeBehavior="automatic"
+      tabBarHidden={tabBarHidden}
+    >
       <NativeTab.Screen name="home" component={HomeTabNavigator} />
       <NativeTab.Screen
         name="surveys"
         listeners={makeSurveysTabListeners(deps)}
         component={NativeSurveysTab}
       />
-      {Platform.OS === "ios" ? (
-        <NativeTab.Screen
-          name="search"
-          options={{ role: "search" as const }}
-          listeners={makeSurveysTabListeners(deps)}
-          component={NativeSearchTab}
-        />
-      ) : null}
       <NativeTab.Screen
         name="publicMap"
         listeners={makePublicMapTabListeners(deps)}
