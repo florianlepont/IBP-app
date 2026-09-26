@@ -312,7 +312,7 @@ Plans:
 - [x] 01.9-24-PLAN.md — Split the 961-line navigation file into `mobile/src/navigation/`, type navigation globally, mount screens with (wave 5)
 - [x] 01.9-25-PLAN.md — Apply the owner's tab decisions: remove the Recherche tab in favour of the native header search in Mes Relevés (wave 6)
 - [x] 01.9-26-PLAN.md — Document the tab changes of 01.9-25 in the native README and the search user story (wave 7)
-- [ ] 01.9-27-PLAN.md — Split the rest of the survey list screen (hero, stat tiles, filters, attention and continue sections) under 40 (wave 7)
+- [x] 01.9-27-PLAN.md — Split the rest of the survey list screen (hero, stat tiles, filters, attention and continue sections) under 40 (wave 7)
 - [ ] 01.9-28-PLAN.md — Rebuild the public map screen on the 01.9-23 data layer: viewport loading with debounce and no auto-refit loop (wave 7)
 - [ ] 01.9-29-PLAN.md — Lock the phase's text, accessibility and structure rules: narrow status setters to the catalogue type, turn th (wave 8)
 - [x] 01.9-30-PLAN.md — Record this phase's facts in CLAUDE.md, in the same PR as the code (RESEARCH "two passes"; split out of the st (wave 7)
@@ -432,7 +432,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 27/32 | In Progress|  |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 28/32 | In Progress|  |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
