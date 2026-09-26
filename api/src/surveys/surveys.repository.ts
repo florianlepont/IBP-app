@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from "@nestjs/common"
 import { Queryable } from "../database/database.service"
 import { SurveyRow } from "./surveys.types"
-import { normalizeParcelIds } from "./surveys-normalize.utils"
+import { normalizeParcelIds, normalizeSurveyStatusFilter } from "./surveys-normalize.utils"
+import { normalizeDateInput } from "./public-map.utils"
+import { encodeListCursor, ListCursor } from "./list-cursor"
 
 export type OwnershipColumns = "ownership" | "full"
 
@@ -23,6 +25,105 @@ export type OwnedRow<C extends OwnershipColumns> = C extends "full" ? SurveyRow 
 const OWNED_SURVEY_SELECT: Record<OwnershipColumns, string> = {
   ownership: "SELECT id, user_id, status, visibility, sync_version, deleted_at",
   full: "SELECT *",
+}
+
+// D-11: one page request. limit null means unpaginated (today's answer); after is the decoded
+// keyset cursor, or null for the first page.
+export type ListPage = { limit: number | null; after: ListCursor | null }
+
+export type SurveyListFilters = { status?: string; from?: string; to?: string; q?: string }
+
+export type SurveyListItem = Pick<
+  SurveyRow,
+  | "id"
+  | "site_name"
+  | "status"
+  | "visibility"
+  | "parcel_id"
+  | "observation_year"
+  | "version_number"
+  | "updated_at"
+  | "sync_version"
+>
+
+/**
+ * D-11 paging rule shared by the three lists. Unpaginated (limit null): every row, next_cursor
+ * null. Limited: the query fetched limit + 1 rows; when the extra row came back it is dropped
+ * and next_cursor points after the last kept row, otherwise this is the last page.
+ */
+export function toListPage<Row, Item = Row>(
+  rows: Row[],
+  limit: number | null,
+  cursorOf: (row: Row) => ListCursor,
+  toItem: (row: Row) => Item = (row) => row as unknown as Item,
+): { items: Item[]; next_cursor: string | null } {
+  if (limit === null || rows.length <= limit) {
+    return { items: rows.map(toItem), next_cursor: null }
+  }
+  const kept = rows.slice(0, limit)
+  return {
+    items: kept.map(toItem),
+    next_cursor: encodeListCursor(cursorOf(kept[kept.length - 1])),
+  }
+}
+
+/**
+ * D-11: the GET /surveys query. Without a page limit and cursor the SQL is the pre-D-11 one plus
+ * the `id DESC` tiebreaker. The keyset predicate is appended after `user_id = $1`, so a
+ * replayed cursor never widens the caller's scope (T-01.7-44), and the cursor fields and the
+ * limit are always bound parameters (T-01.7-45). A limited page fetches limit + 1 rows so the
+ * caller can tell whether another page exists.
+ */
+export function buildListForUserQuery(
+  userId: string,
+  filters: SurveyListFilters | undefined,
+  page: ListPage,
+): { text: string; values: unknown[] } {
+  const conditions: string[] = ["user_id = $1", "deleted_at IS NULL"]
+  const values: unknown[] = [userId]
+
+  const normalizedStatus = normalizeSurveyStatusFilter(filters?.status)
+  if (normalizedStatus) {
+    values.push(normalizedStatus)
+    conditions.push(`status = $${values.length}`)
+  }
+
+  const fromDate = normalizeDateInput(filters?.from)
+  if (fromDate) {
+    values.push(fromDate)
+    conditions.push(`updated_at::date >= $${values.length}::date`)
+  }
+
+  const toDate = normalizeDateInput(filters?.to)
+  if (toDate) {
+    values.push(toDate)
+    conditions.push(`updated_at::date <= $${values.length}::date`)
+  }
+
+  const query = filters?.q?.trim()
+  if (query) {
+    values.push(`%${query}%`)
+    conditions.push(`(site_name ILIKE $${values.length} OR parcel_id ILIKE $${values.length})`)
+  }
+
+  if (page.after) {
+    values.push(page.after.t, page.after.i)
+    conditions.push(`(updated_at, id) < ($${values.length - 1}::timestamptz, $${values.length})`)
+  }
+
+  let limitClause = ""
+  if (page.limit !== null) {
+    values.push(page.limit + 1)
+    limitClause = `
+       LIMIT $${values.length}`
+  }
+
+  const text = `SELECT id, site_name, status, visibility, parcel_id, observation_year, version_number, updated_at::text, sync_version
+       FROM surveys
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY updated_at DESC, id DESC${limitClause}`
+
+  return { text, values }
 }
 
 /**
@@ -63,6 +164,17 @@ export class SurveysRepository {
       throw new NotFoundException("Survey not found")
     }
     return survey
+  }
+
+  async listForUser(
+    db: Queryable,
+    userId: string,
+    filters: SurveyListFilters | undefined,
+    page: ListPage,
+  ): Promise<{ items: SurveyListItem[]; next_cursor: string | null }> {
+    const query = buildListForUserQuery(userId, filters, page)
+    const result = await db.query<SurveyListItem>(query.text, query.values)
+    return toListPage(result.rows, page.limit, (row) => ({ t: row.updated_at, i: row.id }))
   }
 
   async getSurveyParcelIds(db: Queryable, surveyId: string): Promise<string[]> {

@@ -84,14 +84,18 @@ describe("SurveyEventsService", () => {
       db.query.mockResolvedValueOnce({ rows: [{ id: "s1" }] })
       db.query.mockResolvedValueOnce({ rows: events })
 
-      await expect(service.listForSurvey(USER, "s1")).resolves.toEqual({ items: events })
+      await expect(service.listForSurvey(USER, "s1")).resolves.toEqual({
+        items: events,
+        next_cursor: null,
+      })
 
       const sql = (db.query.mock.calls[1][0] as string).replace(/\s+/g, " ")
       expect(sql).toContain(
-        "SELECT id, survey_id, actor_id, event_type, payload, created_at::text FROM survey_events",
+        "SELECT id, survey_id, actor_id, event_type, payload, created_at::text, seq::text FROM survey_events",
       )
       expect(sql).toContain("WHERE survey_id = $1")
-      expect(sql).toContain("ORDER BY created_at DESC")
+      expect(sql).toContain("ORDER BY created_at DESC, seq DESC")
+      expect(sql).not.toContain("LIMIT")
       expect(db.query.mock.calls[1][1]).toEqual(["s1"])
     })
   })
