@@ -62,16 +62,6 @@ export class EnvironmentVariables {
   @IsOptional() @IsString() CADASTRE_IGN_WFS_TYPENAME?: string
   @IsOptional() @IsString() CADASTRE_IGN_WFS_COUNT?: string
 
-  // SMTP
-  @IsOptional() @IsString() SMTP_ENABLED?: string
-  @IsOptional() @IsString() SMTP_HOST?: string
-  @IsOptional() @IsString() SMTP_PORT?: string
-  @IsOptional() @IsString() SMTP_SECURE?: string
-  @IsOptional() @IsString() SMTP_USER?: string
-  @IsOptional() @IsString() SMTP_PASSWORD?: string
-  @IsOptional() @IsString() SMTP_FROM?: string
-  @IsOptional() @IsString() EMAIL_CHANGE_CONFIRM_URL_TEMPLATE?: string
-
   // Debug
   @IsOptional() @IsString() DEBUG_DATA_RESET_ENABLED?: string
 }

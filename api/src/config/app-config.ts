@@ -36,7 +36,7 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return truncated > 0 ? truncated : fallback
 }
 
-/** `(value ?? "false").toLowerCase() === "true"` (email.service.ts, debug.service.ts). */
+/** `(value ?? "false").toLowerCase() === "true"` (debug.service.ts). */
 function isTrue(value: string | undefined): boolean {
   return (value ?? "false").toLowerCase() === "true"
 }
@@ -116,17 +116,6 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       wfsUrl: v.CADASTRE_IGN_WFS_URL ?? "https://data.geopf.fr/wfs/ows",
       wfsTypename: v.CADASTRE_IGN_WFS_TYPENAME ?? "CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle",
       wfsCount: Math.min(MAX_WFS_COUNT, positiveInteger(v.CADASTRE_IGN_WFS_COUNT, 1200)),
-    },
-    smtp: {
-      // EmailService keeps its own "disabled when NODE_ENV is test" rule on top.
-      enabled: isTrue(v.SMTP_ENABLED),
-      host: v.SMTP_HOST?.trim() ?? "",
-      port: positiveInteger(v.SMTP_PORT, 587),
-      secure: isTrue(v.SMTP_SECURE),
-      user: v.SMTP_USER?.trim() ?? "",
-      password: v.SMTP_PASSWORD ?? "",
-      from: v.SMTP_FROM ?? "noreply@ibp.local",
-      emailChangeConfirmUrlTemplate: v.EMAIL_CHANGE_CONFIRM_URL_TEMPLATE?.trim() ?? "",
     },
     debug: {
       dataResetEnabled: isTrue(v.DEBUG_DATA_RESET_ENABLED),
