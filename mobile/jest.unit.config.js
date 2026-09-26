@@ -26,6 +26,9 @@ module.exports = {
     '^expo-image$': '<rootDir>/test/expo-image.mock.ts',
     '^react-native-svg$': '<rootDir>/test/react-native-svg.mock.ts',
     '\\.(png|jpg|jpeg|gif|webp)$': '<rootDir>/test/image.mock.ts',
+    // supercluster 9 is ESM-only; ts-jest runs CommonJS, so load its UMD build (hoisted to the
+    // root node_modules by 01.9-19). Metro resolves the ESM entry in the app.
+    '^supercluster$': '<rootDir>/../node_modules/supercluster/dist/supercluster.js',
   },
   globals: {
     __DEV__: true,
