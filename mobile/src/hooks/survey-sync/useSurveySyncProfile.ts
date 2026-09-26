@@ -9,6 +9,7 @@ import {
   uploadMyProfilePicture,
 } from "../../api/ibp-api"
 import { AuthUser } from "../../app/types"
+import { fr, logStatusDetail } from "../../i18n"
 import { AUTH_REQUIRED_ERROR } from "../useAuth0Session"
 import { guessMimeType } from "./utils"
 
@@ -28,6 +29,8 @@ type UseSurveySyncProfileParams = {
   handleLoadMyProfile: (options?: { silent?: boolean }) => Promise<AuthUser | null>
   setStatus: (message: string) => void
 }
+
+const text = fr.status.profile
 
 type ReactNativeFormFile = Blob & {
   uri: string
@@ -58,7 +61,7 @@ export function useSurveySyncProfile({
       }
 
       if (!payload.display_name) {
-        setStatus("Display name is required")
+        setStatus(text.displayNameRequired())
         return
       }
 
@@ -67,14 +70,15 @@ export function useSurveySyncProfile({
         const user = await withAuthRetry((token) => patchMyProfile(apiUrl, token, payload))
 
         setProfileFromUser(user)
-        setStatus("Profile updated")
+        setStatus(text.updated())
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
           await clearSession()
-          setStatus("Login required before updating profile")
+          setStatus(text.updateLoginRequired())
           return
         }
-        setStatus(`Profile update error: ${(error as Error).message}`)
+        logStatusDetail("profile.update", error)
+        setStatus(text.updateFailed())
       } finally {
         setProfileUpdating(false)
       }
@@ -95,7 +99,7 @@ export function useSurveySyncProfile({
 
       try {
         setProfileUpdating(true)
-        setStatus("Uploading profile picture...")
+        setStatus(text.pictureUploading())
         const uploadResponse = await withAuthRetry(async (token) => {
           const body = await uploadMyProfilePicture(apiUrl, token, payload)
           if (!body.profile_picture_url) {
@@ -106,7 +110,7 @@ export function useSurveySyncProfile({
 
         const baseUser = currentUser ?? (await handleLoadMyProfile({ silent: true }))
         if (!baseUser) {
-          setStatus("Profile picture uploaded, but profile refresh requires login")
+          setStatus(text.pictureUploadedRefreshNeedsLogin())
           return
         }
 
@@ -116,14 +120,15 @@ export function useSurveySyncProfile({
           display_name: baseUser.display_name,
           profile_picture_url: uploadResponse,
         })
-        setStatus("Profile picture uploaded")
+        setStatus(text.pictureUploaded())
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
           await clearSession()
-          setStatus("Login required before uploading profile picture")
+          setStatus(text.pictureUploadLoginRequired())
           return
         }
-        setStatus(`Profile picture upload error: ${(error as Error).message}`)
+        logStatusDetail("profile.pictureUpload", error)
+        setStatus(text.pictureUploadFailed())
       } finally {
         setProfileUpdating(false)
       }
@@ -143,7 +148,7 @@ export function useSurveySyncProfile({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (!permission.granted) {
-        setStatus("Media library permission is required")
+        setStatus(text.mediaLibraryPermissionRequired())
         return
       }
 
@@ -153,13 +158,14 @@ export function useSurveySyncProfile({
         quality: 0.8,
       })
       if (result.canceled || !result.assets?.[0]) {
-        setStatus("No image selected")
+        setStatus(text.noImageSelected())
         return
       }
 
       await uploadProfilePictureFromAsset(result.assets[0])
     } catch (error) {
-      setStatus(`Profile image picker error: ${(error as Error).message}`)
+      logStatusDetail("profile.pictureLibrary", error)
+      setStatus(text.pictureLibraryFailed())
     }
   }, [setStatus, uploadProfilePictureFromAsset])
 
@@ -167,7 +173,7 @@ export function useSurveySyncProfile({
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync()
       if (!permission.granted) {
-        setStatus("Camera permission is required")
+        setStatus(text.cameraPermissionRequired())
         return
       }
 
@@ -177,20 +183,21 @@ export function useSurveySyncProfile({
         quality: 0.8,
       })
       if (result.canceled || !result.assets?.[0]) {
-        setStatus("No photo captured")
+        setStatus(text.noPhotoCaptured())
         return
       }
 
       await uploadProfilePictureFromAsset(result.assets[0])
     } catch (error) {
-      setStatus(`Profile camera error: ${(error as Error).message}`)
+      logStatusDetail("profile.pictureCamera", error)
+      setStatus(text.pictureCameraFailed())
     }
   }, [setStatus, uploadProfilePictureFromAsset])
 
   const handleRemoveProfilePicture = useCallback(async (): Promise<void> => {
     const baseUser = currentUser ?? (await handleLoadMyProfile({ silent: true }))
     if (!baseUser) {
-      setStatus("Login required before removing profile picture")
+      setStatus(text.pictureRemoveLoginRequired())
       return
     }
 
@@ -203,14 +210,15 @@ export function useSurveySyncProfile({
         display_name: baseUser.display_name,
         profile_picture_url: null,
       })
-      setStatus("Profile picture removed")
+      setStatus(text.pictureRemoved())
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession()
-        setStatus("Login required before removing profile picture")
+        setStatus(text.pictureRemoveLoginRequired())
         return
       }
-      setStatus(`Profile picture remove error: ${(error as Error).message}`)
+      logStatusDetail("profile.pictureRemove", error)
+      setStatus(text.pictureRemoveFailed())
     } finally {
       setProfileUpdating(false)
     }
@@ -232,16 +240,18 @@ export function useSurveySyncProfile({
         if (currentUser) {
           setProfileFromUser({ ...currentUser, email: newEmail })
         }
-        setStatus("Email updated. Check your inbox to verify the new address.")
+        setStatus(text.emailUpdated())
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
           await clearSession()
-          setStatus("Login required")
+          setStatus(text.loginRequired())
           return
         }
-        const message = (error as Error).message
-        setStatus(`Email change error: ${message}`)
-        Alert.alert("Error", message, [{ text: "OK" }])
+        logStatusDetail("profile.changeEmail", error)
+        setStatus(text.emailChangeFailed())
+        Alert.alert(text.alerts.errorTitle, text.alerts.emailChangeFailed, [
+          { text: fr.common.actions.ok },
+        ])
       } finally {
         setProfileUpdating(false)
       }
@@ -253,21 +263,25 @@ export function useSurveySyncProfile({
     try {
       setProfileUpdating(true)
       await withAuthRetry((token) => requestPasswordReset(apiUrl, token))
-      setStatus("Password reset email sent. Check your inbox.")
+      setStatus(text.passwordResetSent())
       Alert.alert(
-        "Password reset",
-        `A reset link has been sent to ${currentUser?.email ?? "your email address"}. Check your inbox.`,
-        [{ text: "OK" }],
+        text.alerts.passwordResetTitle,
+        text.alerts.passwordResetSent({
+          email: currentUser?.email ?? text.alerts.yourEmailAddress,
+        }),
+        [{ text: fr.common.actions.ok }],
       )
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession()
-        setStatus("Login required")
+        setStatus(text.loginRequired())
         return
       }
-      const message = (error as Error).message
-      setStatus(`Error: ${message}`)
-      Alert.alert("Error", `Could not send password reset email: ${message}`, [{ text: "OK" }])
+      logStatusDetail("profile.passwordReset", error)
+      setStatus(text.passwordResetFailed())
+      Alert.alert(text.alerts.errorTitle, text.alerts.passwordResetFailed, [
+        { text: fr.common.actions.ok },
+      ])
     } finally {
       setProfileUpdating(false)
     }

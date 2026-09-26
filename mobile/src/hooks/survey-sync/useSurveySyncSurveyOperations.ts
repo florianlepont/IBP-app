@@ -3,6 +3,7 @@ import { Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { evaluateSubmitReadinessFromDraft } from "../../app/ibp-scoring"
 import { getSubmitBlockReason } from "../../app/survey-logic"
+import { fr, logStatusDetail } from "../../i18n"
 import {
   discardSurveyLocalChanges,
   getLocalSurveyDraft,
@@ -21,11 +22,36 @@ import { preparePhotoForStorage } from "../../storage/attachments"
 import { isAuthRequiredError } from "../auth-errors"
 import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
 import { isSyncSuspendedError, SyncActivity } from "./sync-activity"
-import { formatSubmitReadinessError, guessMimeType, isUnauthorizedResultMessage } from "./utils"
+import { guessMimeType, isUnauthorizedResultMessage } from "./utils"
 
-// D-04: these paths drain the whole sync_queue, so they honour the same owner
-// gate as useSurveySyncNetwork — the change stays queued locally until then.
-const OWNER_GATE_SUFFIX = "synchronisation en attente de la vérification du compte propriétaire"
+// D-04: the paths that drain the whole sync_queue honour the same owner gate as
+// useSurveySyncNetwork — the change stays queued locally until then.
+const text = fr.status.surveyOps
+
+type SubmitReadiness = ReturnType<typeof evaluateSubmitReadinessFromDraft>
+
+const surveyName = (survey: Pick<LocalSurvey, "site_name"> | undefined): string =>
+  survey?.site_name?.trim() || fr.common.untitledSurvey
+
+// D-06: names the missing pieces in French, without the survey id.
+const describeReadiness = (name: string, readiness: SubmitReadiness) => {
+  if (readiness.expired) return text.expired({ name })
+  const parts: string[] = []
+  if (readiness.missing_factors.length > 0) {
+    parts.push(text.readiness.missingFactors({ factors: readiness.missing_factors.join(", ") }))
+  }
+  if (readiness.missing_fields.includes("region_version")) {
+    parts.push(text.readiness.missingRegion)
+  }
+  if (readiness.missing_fields.includes("vegetation_stage")) {
+    parts.push(text.readiness.missingVegetationStage)
+  }
+  if (readiness.missing_fields.includes("parcel_ids")) {
+    parts.push(text.readiness.missingParcels)
+  }
+  if (parts.length === 0) return text.notReadyGeneric({ name })
+  return text.notReady({ name, details: parts.join(" ; ") })
+}
 
 type UseSurveySyncSurveyOperationsParams = {
   apiUrl: string
@@ -84,6 +110,7 @@ export function useSurveySyncSurveyOperations({
       surveyId: string,
       asset: ImagePicker.ImagePickerAsset,
       source: "camera" | "library",
+      name: string,
     ): Promise<void> => {
       const mimeType = asset.mimeType ?? guessMimeType(asset.uri)
 
@@ -116,7 +143,7 @@ export function useSurveySyncSurveyOperations({
       }
 
       await refreshLocalAttachments()
-      setStatus(`${source === "camera" ? "Camera photo" : "Photo"} queued for survey ${surveyId}`)
+      setStatus(source === "camera" ? text.cameraPhotoQueued({ name }) : text.photoQueued({ name }))
       void maybeAutoSync("attachment-queued")
     },
     [maybeAutoSync, refreshLocalAttachments, setStatus],
@@ -124,37 +151,34 @@ export function useSurveySyncSurveyOperations({
 
   const handleSubmitSurvey = useCallback(
     async (surveyId: string): Promise<void> => {
+      const name = surveyName(surveys.find((survey) => survey.id === surveyId))
       const blockReason = getSubmitBlockReason(surveyId, surveys)
       if (blockReason === "not_found") {
-        setStatus(`Survey not found locally: ${surveyId}`)
+        setStatus(text.notFound())
         return
       }
       if (blockReason === "global_blocked") {
         const blocked = surveys.find((survey) => survey.sync_blocked === 1)
-        setStatus(
-          `Sync conflict unresolved for ${blocked?.id ?? surveyId}. Use Retry now or Discard local change first.`,
-        )
+        setStatus(text.conflictUnresolved({ name: blocked ? surveyName(blocked) : name }))
         return
       }
       if (blockReason === "already_submitted") {
-        setStatus(`Survey ${surveyId} is already submitted`)
+        setStatus(text.alreadySubmitted({ name }))
         return
       }
       if (blockReason === "not_synced") {
-        setStatus(`Survey ${surveyId} must be synced before submit`)
+        setStatus(text.notSynced({ name }))
         return
       }
       if (blockReason === "survey_blocked") {
-        setStatus(
-          `Survey ${surveyId} has unresolved sync conflict. Retry or discard local change first.`,
-        )
+        setStatus(text.surveyConflict({ name }))
         return
       }
 
       try {
         const draft = await getLocalSurveyDraft(surveyId)
         if (!draft) {
-          setStatus(`Survey not found locally: ${surveyId}`)
+          setStatus(text.notFound())
           return
         }
 
@@ -171,16 +195,17 @@ export function useSurveySyncSurveyOperations({
             await markSurveyExpiredLocally(surveyId)
             await refreshLocalSurveys()
           }
-          setStatus(formatSubmitReadinessError(surveyId, readiness))
+          setStatus(describeReadiness(name, readiness))
           return
         }
       } catch (error) {
-        setStatus(`Submit check error for ${surveyId}: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.submitCheck", error)
+        setStatus(text.submitCheckFailed({ name }))
         return
       }
 
       if (!syncAllowed) {
-        setStatus(`Submit postponed for ${surveyId}: ${OWNER_GATE_SUFFIX}`)
+        setStatus(text.submitPostponed({ name }))
         return
       }
 
@@ -202,20 +227,20 @@ export function useSurveySyncSurveyOperations({
         if (result.ok && editingSurveyId === surveyId) {
           onStopEditing()
         }
-        setStatus(
-          result.ok ? `Submitted ${surveyId}` : `Submit blocked for ${surveyId}: ${result.message}`,
-        )
+        if (!result.ok) logStatusDetail("surveyOps.submit", result.message)
+        setStatus(result.ok ? text.submitted({ name }) : text.submitRejected({ name }))
       } catch (error) {
         if (isAuthRequiredError(error)) {
           await clearSession()
-          setStatus("Login required before submit")
+          setStatus(text.submitLoginRequired())
           return
         }
         if (isSyncOwnerMismatchError(error)) {
-          setStatus(`Submit postponed for ${surveyId}: ${OWNER_GATE_SUFFIX}`)
+          setStatus(text.submitPostponed({ name }))
           return
         }
-        setStatus(`Submit error for ${surveyId}: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.submit", error)
+        setStatus(text.submitFailed({ name }))
       }
     },
     [
@@ -240,9 +265,10 @@ export function useSurveySyncSurveyOperations({
         const result = await retrySurveyNow(surveyId)
         await refreshLocalSurveys()
         await refreshLocalAttachments()
-        setStatus(`Retry queued for ${surveyId} (${result.queued} queue item(s))`)
+        setStatus(text.retryQueued({ count: result.queued }))
       } catch (error) {
-        setStatus(`Retry error: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.retry", error)
+        setStatus(text.retryFailed())
       }
     },
     [refreshLocalAttachments, refreshLocalSurveys, setStatus],
@@ -254,11 +280,10 @@ export function useSurveySyncSurveyOperations({
         const result = await discardSurveyLocalChanges(surveyId)
         await refreshLocalSurveys()
         await refreshLocalAttachments()
-        setStatus(
-          `Local changes discarded for ${surveyId} (${result.removed_queue} queue item(s) removed)`,
-        )
+        setStatus(text.discarded({ count: result.removed_queue }))
       } catch (error) {
-        setStatus(`Discard error: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.discard", error)
+        setStatus(text.discardFailed())
       }
     },
     [refreshLocalAttachments, refreshLocalSurveys, setStatus],
@@ -266,19 +291,24 @@ export function useSurveySyncSurveyOperations({
 
   const handleToggleVisibility = useCallback(
     async (surveyId: string, visibility: "private" | "public"): Promise<void> => {
+      const label = text.visibility[visibility]
       try {
         // An empty token makes updateSurveyVisibility queue the change without
         // draining the queue itself; the owner-guarded sync below sends it.
         const queued = await updateSurveyVisibility(apiUrl, "", surveyId, visibility)
         if (!queued.queued || !accessToken) {
           await refreshLocalSurveys()
-          setStatus(queued.message)
+          setStatus(
+            queued.queued
+              ? text.visibilityQueuedLoginRequired({ visibility: label })
+              : text.visibilityUnchanged({ visibility: label }),
+          )
           return
         }
 
         if (!syncAllowed) {
           await refreshLocalSurveys()
-          setStatus(`Visibility queued locally (${visibility}); ${OWNER_GATE_SUFFIX}`)
+          setStatus(text.visibilityQueuedOwnerPending({ visibility: label }))
           return
         }
 
@@ -287,31 +317,29 @@ export function useSurveySyncSurveyOperations({
           await refreshLocalSurveys()
           await refreshLocalAttachments()
           if (result.failed > 0) {
-            setStatus(
-              `Visibility update warning for ${surveyId}: Visibility queued locally, but sync reported ${result.failed} failed operation(s)`,
-            )
+            setStatus(text.visibilitySyncWarning({ failed: result.failed }))
             return
           }
           void handleLoadCanonicalDetails(surveyId, { silent: true })
-          setStatus(`Visibility set to ${visibility} and synced`)
+          setStatus(text.visibilitySynced({ visibility: label }))
         } catch (error) {
           await refreshLocalSurveys()
           await refreshLocalAttachments()
           if (isAuthRequiredError(error)) {
             await clearSession()
-            setStatus("Login required before changing visibility")
+            setStatus(text.visibilityLoginRequired())
             return
           }
           if (isSyncOwnerMismatchError(error) || isSyncSuspendedError(error)) {
-            setStatus(`Visibility queued locally (${visibility}); ${OWNER_GATE_SUFFIX}`)
+            setStatus(text.visibilityQueuedOwnerPending({ visibility: label }))
             return
           }
-          setStatus(
-            `Visibility queued locally (${visibility}); sync pending (${(error as Error).message})`,
-          )
+          logStatusDetail("surveyOps.visibilitySync", error)
+          setStatus(text.visibilityQueuedSyncPending({ visibility: label }))
         }
       } catch (error) {
-        setStatus(`Visibility update error: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.visibility", error)
+        setStatus(text.visibilityFailed())
       }
     },
     [
@@ -329,36 +357,31 @@ export function useSurveySyncSurveyOperations({
 
   const confirmDeleteSurvey = useCallback(
     (surveyId: string): void => {
-      Alert.alert(
-        "Delete survey",
-        "This will remove the survey locally and queue remote deletion.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              queueDeleteSurvey(surveyId)
-                .then(async (result) => {
-                  await refreshLocalSurveys()
-                  await refreshLocalAttachments()
-                  if (result.queued_delete && selectedSurveyId === surveyId) {
-                    onCloseSurveyDetail()
-                  }
-                  setStatus(
-                    result.queued_delete
-                      ? `Deletion queued for ${surveyId}`
-                      : `Survey not found: ${surveyId}`,
-                  )
-                  if (result.queued_delete) {
-                    void maybeAutoSync("survey-delete-queued")
-                  }
-                })
-                .catch((error) => setStatus(`Delete error: ${(error as Error).message}`))
-            },
+      Alert.alert(text.alerts.deleteSurvey.title, text.alerts.deleteSurvey.message, [
+        { text: fr.common.actions.cancel, style: "cancel" },
+        {
+          text: fr.common.actions.delete,
+          style: "destructive",
+          onPress: () => {
+            queueDeleteSurvey(surveyId)
+              .then(async (result) => {
+                await refreshLocalSurveys()
+                await refreshLocalAttachments()
+                if (result.queued_delete && selectedSurveyId === surveyId) {
+                  onCloseSurveyDetail()
+                }
+                setStatus(result.queued_delete ? text.deletionQueued() : text.deleteNotFound())
+                if (result.queued_delete) {
+                  void maybeAutoSync("survey-delete-queued")
+                }
+              })
+              .catch((error) => {
+                logStatusDetail("surveyOps.deleteSurvey", error)
+                setStatus(text.deleteFailed())
+              })
           },
-        ],
-      )
+        },
+      ])
     },
     [
       maybeAutoSync,
@@ -374,14 +397,14 @@ export function useSurveySyncSurveyOperations({
     async (surveyId: string): Promise<void> => {
       const current = surveys.find((survey) => survey.id === surveyId)
       if (current?.status === "submitted") {
-        setStatus(`Survey ${surveyId} is submitted and read-only`)
+        setStatus(text.readOnly({ name: surveyName(current) }))
         return
       }
 
       try {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
         if (!permission.granted) {
-          setStatus("Media library permission is required")
+          setStatus(text.mediaLibraryPermissionRequired())
           return
         }
 
@@ -392,13 +415,14 @@ export function useSurveySyncSurveyOperations({
         })
 
         if (result.canceled || !result.assets?.[0]) {
-          setStatus("No image selected")
+          setStatus(text.noImageSelected())
           return
         }
 
-        await queueAttachmentAsset(surveyId, result.assets[0], "library")
+        await queueAttachmentAsset(surveyId, result.assets[0], "library", surveyName(current))
       } catch (error) {
-        setStatus(`Attachment queue error: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.queueAttachment", error)
+        setStatus(text.attachmentQueueFailed())
       }
     },
     [queueAttachmentAsset, setStatus, surveys],
@@ -408,14 +432,14 @@ export function useSurveySyncSurveyOperations({
     async (surveyId: string): Promise<void> => {
       const current = surveys.find((survey) => survey.id === surveyId)
       if (current?.status === "submitted") {
-        setStatus(`Survey ${surveyId} is submitted and read-only`)
+        setStatus(text.readOnly({ name: surveyName(current) }))
         return
       }
 
       try {
         const permission = await ImagePicker.requestCameraPermissionsAsync()
         if (!permission.granted) {
-          setStatus("Camera permission is required")
+          setStatus(text.cameraPermissionRequired())
           return
         }
 
@@ -426,13 +450,14 @@ export function useSurveySyncSurveyOperations({
         })
 
         if (result.canceled || !result.assets?.[0]) {
-          setStatus("No photo captured")
+          setStatus(text.noPhotoCaptured())
           return
         }
 
-        await queueAttachmentAsset(surveyId, result.assets[0], "camera")
+        await queueAttachmentAsset(surveyId, result.assets[0], "camera", surveyName(current))
       } catch (error) {
-        setStatus(`Attachment queue error: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.queueAttachment", error)
+        setStatus(text.attachmentQueueFailed())
       }
     },
     [queueAttachmentAsset, setStatus, surveys],
@@ -442,21 +467,21 @@ export function useSurveySyncSurveyOperations({
     async (surveyId: string, localAttachmentId: string): Promise<void> => {
       const current = surveys.find((survey) => survey.id === surveyId)
       if (current?.status === "submitted") {
-        setStatus(`Survey ${surveyId} is submitted and read-only`)
+        setStatus(text.readOnly({ name: surveyName(current) }))
         return
       }
 
       try {
         const result = await queueDeleteAttachment(surveyId, localAttachmentId)
         if (!result.removed_local) {
-          setStatus(`Attachment not found locally: ${localAttachmentId}`)
+          setStatus(text.attachmentNotFound())
           return
         }
 
         if (result.queued_delete && !syncAllowed) {
           await refreshLocalSurveys()
           await refreshLocalAttachments()
-          setStatus(`Attachment removed locally; delete queued (${OWNER_GATE_SUFFIX})`)
+          setStatus(text.attachmentRemovedOwnerPending())
           return
         }
 
@@ -465,37 +490,35 @@ export function useSurveySyncSurveyOperations({
             const syncResult = await runOwnerGuardedSync()
             await refreshLocalSurveys()
             await refreshLocalAttachments()
-            setStatus(
-              `Attachment removed and synced: ${syncResult.synced} synced, ${syncResult.failed} failed, ${syncResult.pulled_surveys} surveys pulled, ${syncResult.pulled_attachments} attachments pulled`,
-            )
+            setStatus(text.attachmentRemovedSynced({ failed: syncResult.failed }))
             return
           } catch (error) {
             if (isAuthRequiredError(error)) {
               await refreshLocalSurveys()
               await refreshLocalAttachments()
-              setStatus("Attachment removed locally. Login and sync to propagate server deletion.")
+              setStatus(text.attachmentRemovedLoginRequired())
               return
             }
             if (isSyncOwnerMismatchError(error) || isSyncSuspendedError(error)) {
               await refreshLocalSurveys()
               await refreshLocalAttachments()
-              setStatus(`Attachment removed locally; delete queued (${OWNER_GATE_SUFFIX})`)
+              setStatus(text.attachmentRemovedOwnerPending())
               return
             }
             await refreshLocalSurveys()
             await refreshLocalAttachments()
-            setStatus(
-              `Attachment removed locally; delete queued (sync pending: ${(error as Error).message})`,
-            )
+            logStatusDetail("surveyOps.deleteAttachmentSync", error)
+            setStatus(text.attachmentRemovedSyncPending())
             return
           }
         }
 
         await refreshLocalSurveys()
         await refreshLocalAttachments()
-        setStatus("Attachment removed locally")
+        setStatus(text.attachmentRemoved())
       } catch (error) {
-        setStatus(`Attachment delete error: ${(error as Error).message}`)
+        logStatusDetail("surveyOps.deleteAttachment", error)
+        setStatus(text.attachmentDeleteFailed())
       }
     },
     [

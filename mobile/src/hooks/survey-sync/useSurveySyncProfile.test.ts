@@ -38,7 +38,10 @@ jest.mock("expo-image-picker", () => ({
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
 import { Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
+import { fr } from "../../i18n"
 import { useSurveySyncProfile } from "./useSurveySyncProfile"
+
+const text = fr.status.profile
 
 const AUTH_USER = {
   id: "user-1",
@@ -82,11 +85,16 @@ async function buildHook(overrides: Record<string, unknown> = {}) {
 }
 
 describe("useSurveySyncProfile", () => {
+  // logStatusDetail writes raw error detail to console.debug in dev builds.
+  let debug: jest.SpyInstance
+
   beforeEach(() => {
     jest.clearAllMocks()
+    debug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
   })
 
   afterEach(async () => {
+    debug.mockRestore()
     await cleanup()
   })
 
@@ -103,7 +111,7 @@ describe("useSurveySyncProfile", () => {
         display_name: "New Name",
       })
 
-      expect(setStatus).toHaveBeenCalledWith("Profile updated")
+      expect(setStatus).toHaveBeenCalledWith(text.updated())
       expect(setProfileFromUser).toHaveBeenCalledWith(
         expect.objectContaining({ display_name: "New Name" }),
       )
@@ -114,7 +122,7 @@ describe("useSurveySyncProfile", () => {
 
       await handleUpdateProfile({ first_name: "User", last_name: "Example", display_name: "   " })
 
-      expect(setStatus).toHaveBeenCalledWith("Display name is required")
+      expect(setStatus).toHaveBeenCalledWith(text.displayNameRequired())
       expect(mockPatchMyProfile).not.toHaveBeenCalled()
     })
 
@@ -135,7 +143,7 @@ describe("useSurveySyncProfile", () => {
 
       await handleUpdateProfile({ first_name: "U", last_name: "E", display_name: "Name" })
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Server error"))
+      expect(setStatus).toHaveBeenCalledWith(text.updateFailed())
     })
 
     test("trims whitespace from profile fields", async () => {
@@ -165,7 +173,7 @@ describe("useSurveySyncProfile", () => {
 
       await handleChangeEmail("new@example.com")
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Email updated"))
+      expect(setStatus).toHaveBeenCalledWith(text.emailUpdated())
       expect(setProfileFromUser).toHaveBeenCalledWith(
         expect.objectContaining({ email: "new@example.com" }),
       )
@@ -188,8 +196,12 @@ describe("useSurveySyncProfile", () => {
 
       await handleChangeEmail("taken@example.com")
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Email change error"))
-      expect(Alert.alert).toHaveBeenCalledWith("Error", "Email already taken", expect.any(Array))
+      expect(setStatus).toHaveBeenCalledWith(text.emailChangeFailed())
+      expect(Alert.alert).toHaveBeenCalledWith(
+        text.alerts.errorTitle,
+        text.alerts.emailChangeFailed,
+        expect.any(Array),
+      )
     })
   })
 
@@ -202,10 +214,10 @@ describe("useSurveySyncProfile", () => {
 
       await handlePasswordReset()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Password reset"))
+      expect(setStatus).toHaveBeenCalledWith(text.passwordResetSent())
       expect(Alert.alert).toHaveBeenCalledWith(
-        "Password reset",
-        expect.stringContaining(AUTH_USER.email),
+        text.alerts.passwordResetTitle,
+        text.alerts.passwordResetSent({ email: AUTH_USER.email }),
         expect.any(Array),
       )
     })
@@ -228,10 +240,23 @@ describe("useSurveySyncProfile", () => {
       await handlePasswordReset()
 
       expect(Alert.alert).toHaveBeenCalledWith(
-        "Error",
-        expect.stringContaining("SMTP error"),
+        text.alerts.errorTitle,
+        text.alerts.passwordResetFailed,
         expect.any(Array),
       )
+    })
+
+    test("logs the raw error for dev tools and keeps it out of the status", async () => {
+      const failure = new Error("SMTP error")
+      const { handlePasswordReset, setStatus } = await buildHook({
+        withAuthRetry: jest.fn().mockRejectedValue(failure),
+      })
+
+      await handlePasswordReset()
+
+      expect(setStatus).toHaveBeenCalledWith(text.passwordResetFailed())
+      expect(setStatus).not.toHaveBeenCalledWith(expect.stringContaining("SMTP error"))
+      expect(debug).toHaveBeenCalledWith("[status] profile.passwordReset", failure)
     })
   })
 
@@ -246,7 +271,7 @@ describe("useSurveySyncProfile", () => {
 
       await handlePickProfilePictureFromLibrary()
 
-      expect(setStatus).toHaveBeenCalledWith("Media library permission is required")
+      expect(setStatus).toHaveBeenCalledWith(text.mediaLibraryPermissionRequired())
     })
 
     test("sets status when picker is cancelled", async () => {
@@ -258,7 +283,7 @@ describe("useSurveySyncProfile", () => {
 
       await handlePickProfilePictureFromLibrary()
 
-      expect(setStatus).toHaveBeenCalledWith("No image selected")
+      expect(setStatus).toHaveBeenCalledWith(text.noImageSelected())
     })
   })
 
@@ -273,7 +298,7 @@ describe("useSurveySyncProfile", () => {
 
       await handleTakeProfilePictureFromCamera()
 
-      expect(setStatus).toHaveBeenCalledWith("Camera permission is required")
+      expect(setStatus).toHaveBeenCalledWith(text.cameraPermissionRequired())
     })
 
     test("sets status when camera is cancelled", async () => {
@@ -283,7 +308,7 @@ describe("useSurveySyncProfile", () => {
 
       await handleTakeProfilePictureFromCamera()
 
-      expect(setStatus).toHaveBeenCalledWith("No photo captured")
+      expect(setStatus).toHaveBeenCalledWith(text.noPhotoCaptured())
     })
   })
 
@@ -303,7 +328,7 @@ describe("useSurveySyncProfile", () => {
         "token",
         expect.objectContaining({ profile_picture_url: null }),
       )
-      expect(setStatus).toHaveBeenCalledWith("Profile picture removed")
+      expect(setStatus).toHaveBeenCalledWith(text.pictureRemoved())
     })
 
     test("calls clearSession on AUTH_REQUIRED", async () => {
