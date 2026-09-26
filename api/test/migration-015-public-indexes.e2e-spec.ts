@@ -30,6 +30,14 @@ const SEEDED_CENTROIDS: Array<{ centroid: string; lat: number | null; lng: numbe
   // Exponent form would overflow double precision if the guard let it reach the cast.
   { centroid: '{"lat":"1e400","lng":"1e400"}', lat: null, lng: null },
   { centroid: JSON.stringify({ lat: "9".repeat(400), lng: 2 }), lat: null, lng: 2 },
+  // Full double precision (17 significant digits) must keep its generated value.
+  {
+    centroid: '{"lat":48.85661400000001,"lng":2.3522219999999997}',
+    lat: Number("48.85661400000001"),
+    lng: Number("2.3522219999999997"),
+  },
+  // A decimal part longer than 30 digits could underflow the cast; it becomes NULL.
+  { centroid: JSON.stringify({ lat: "0." + "0".repeat(400) + "1", lng: 2 }), lat: null, lng: 2 },
 ]
 
 const parcelIdAt = (index: number): string => `75056000AB${String(index).padStart(4, "0")}`

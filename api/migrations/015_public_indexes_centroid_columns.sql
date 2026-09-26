@@ -11,12 +11,12 @@ CREATE INDEX IF NOT EXISTS idx_surveys_public_submitted
 -- digits, so every matching string casts to double precision without overflow.
 ALTER TABLE parcels
   ADD COLUMN IF NOT EXISTS centroid_lat double precision GENERATED ALWAYS AS (
-    CASE WHEN (centroid ->> 'lat') ~ '^\s*-?[0-9]{1,3}(\.[0-9]{1,15})?\s*$'
+    CASE WHEN (centroid ->> 'lat') ~ '^\s*-?[0-9]{1,3}(\.[0-9]{1,30})?\s*$'
       THEN CASE WHEN (centroid ->> 'lat')::double precision BETWEEN -90 AND 90
                 THEN (centroid ->> 'lat')::double precision END
     END) STORED,
   ADD COLUMN IF NOT EXISTS centroid_lng double precision GENERATED ALWAYS AS (
-    CASE WHEN (centroid ->> 'lng') ~ '^\s*-?[0-9]{1,3}(\.[0-9]{1,15})?\s*$'
+    CASE WHEN (centroid ->> 'lng') ~ '^\s*-?[0-9]{1,3}(\.[0-9]{1,30})?\s*$'
       THEN CASE WHEN (centroid ->> 'lng')::double precision BETWEEN -180 AND 180
                 THEN (centroid ->> 'lng')::double precision END
     END) STORED;
