@@ -3019,3 +3019,101 @@ per-class cap, the same backbone) should not be expected to produce another leap
 next real lever, if the ADR calls for one, is more data specifically for the genera still short of
 the bar, or the still-parked Tela Botanica/Wikimedia Commons sources from Section 13.3, not a repeat
 of this iteration's recipe.
+
+---
+
+## 15. Per-genus confidence calibration (plan 01-05, Task A — D-04/D-12 amended 2026-09-26)
+
+**Status: raw table below, committed first; analysis follows in 15.3 onward.**
+
+**Why this section exists.** D-04 was amended: instead of a partial-go that enables suggestions
+only for genera clearing the D-02 95% top-3 bar (which iteration 4 leaves at 1 of 34, Tamarix —
+Section 14.4/14.6), the user chose a full go — all 34 genera are suggested, each carrying an
+honest confidence indicator, and the ecologist judges. D-12 was amended alongside it: that only
+works if "strong" means roughly the same thing everywhere. It did not. At the single global
+threshold iteration 4's `confidence_bands.json` computed (0.7763, fit and reported on the same
+test split), "strong" predictions were right 96% of the time on Quercus deciduous and Cercis but
+only 79% on Ulmus, 80% on Populus, 82% on Prunus, 83% on Fraxinus — the model partly
+self-regulates (it calls "strong" on only 44% of Ulmus predictions versus 78% of Quercus
+deciduous), but not enough to make one confidence label mean one reliability figure across all 34
+genera. D-12 also flagged a second defect: the three-level scale's "weak" band received zero of
+26,557 predictions outright, because a 34-way softmax's top-1 probability floor (0.1045 in that
+same file) never falls low enough to trigger it.
+
+### 15.1 Method — fit on validation, report on test
+
+Every other accuracy figure in this document (Sections 5, 11.3, 14.4) is measured on the TEST
+split. Fitting a per-genus threshold on that same split and then reporting how well it performs
+would measure the threshold against the exact noise it was tuned to fit — the split's own image
+selection, not a genuine held-out check. This section instead:
+
+1. Ran the promoted iteration-4 model (`train/genus_classifier.tflite`, unchanged, no retraining)
+   over the **validation** split — 26,553 images across 34 classes, the same split
+   `training_report.json`'s `val_top1`/`val_top3` figures come from, never previously used for any
+   per-image or per-genus accuracy claim in this document. New script:
+   `eval/calibrate_confidence.py`, structurally identical to `eval/evaluate_seasonal_accuracy.py`
+   (same model load, same preprocessing, same top-3 extraction) with `val.txt` substituted for
+   `test.txt` as the image-path source. Output: `eval/results_v4/val_per_genus_confidence.csv`
+   (26,553 rows: class, image, top1_correct, top3_correct, top1_confidence).
+2. For each genus, swept validation predictions sorted by confidence descending, and found the
+   **largest** prefix (i.e. the **lowest** confidence value) whose cumulative top-1 accuracy is
+   still ≥ 90% (`TARGET_STRONG_ACCURACY`, chosen because it matches D-12's own prior text — "top-1
+   correct 90.0% in the 'strong' band ... pooled" — rather than introducing an unstated new
+   target). That confidence value is the genus's calibrated "strong" threshold.
+3. Applied that val-fit threshold to the **test** split (`eval/results_v4/per_genus_per_season.csv`,
+   the same 26,557-image test file Sections 12/14.5 already use) and reports the resulting share
+   of test predictions labelled strong and the accuracy actually achieved within that band —
+   the held-out check this document's other confidence-band claims did not have.
+
+New script: `eval/analyze_calibration.py` (reads both CSVs, writes
+`eval/results_v4/per_genus_calibration.csv` and `eval/results_v4/confidence_scale_recut.json`,
+neither retrains nor re-exports).
+
+**Reporting threshold.** Genera with fewer than 30 validation images would get an unstably-fit
+threshold; none of the 34 fell below this (minimum: Ceratonia at 363 validation images) — the
+`insufficient-val-samples` status this script supports never fires for this model's actual val
+split sizes, but is left in place as a guard for a future, smaller iteration.
+
+### 15.2 Per-genus calibrated thresholds — raw table
+
+Fit on validation (`val_n`, `val_n_strong`, `val_share_strong`, `val_accuracy_strong`), reported on
+test (`test_n`, `test_n_strong`, `test_correct_strong`, `test_share_strong`, `test_accuracy_strong`).
+All 34 genera reached a threshold (none hit `no-achievable-90pct-threshold`). Raw counts sit
+alongside every percentage, per D-03.
+
+| genus | val n | threshold | val n strong | val share strong | val acc strong | test n | test n strong | test correct strong | test share strong | test acc strong |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Abies | 600 | 0.8463 | 351 | 58.50% | 90.03% | 600 | 352 | 321 | 58.67% | 91.19% |
+| Acer | 1000 | 0.8456 | 522 | 52.20% | 90.04% | 1000 | 519 | 465 | 51.90% | 89.60% |
+| Alnus | 983 | 0.714 | 680 | 69.18% | 90.00% | 983 | 650 | 579 | 66.12% | 89.08% |
+| Arbutus | 600 | 0.5422 | 512 | 85.33% | 90.04% | 600 | 530 | 475 | 88.33% | 89.62% |
+| Betula | 998 | 0.7933 | 541 | 54.21% | 90.02% | 997 | 561 | 492 | 56.27% | 87.70% |
+| Carpinus | 933 | 0.9063 | 502 | 53.80% | 90.04% | 934 | 495 | 455 | 53.00% | 91.92% |
+| Castanea | 864 | 0.6043 | 691 | 79.98% | 90.01% | 865 | 700 | 615 | 80.92% | 87.86% |
+| Celtis | 958 | 0.7863 | 544 | 56.78% | 90.07% | 959 | 554 | 496 | 57.77% | 89.53% |
+| Cupressus | 530 | 0.7739 | 396 | 74.72% | 90.15% | 530 | 375 | 330 | 70.75% | 88.00% |
+| Fagus | 999 | 0.5766 | 817 | 81.78% | 90.09% | 998 | 809 | 695 | 81.06% | 85.91% |
+| Fraxinus | 992 | 0.9265 | 358 | 36.09% | 90.22% | 992 | 349 | 317 | 35.18% | 90.83% |
+| Juglans | 945 | 0.7324 | 632 | 66.88% | 90.03% | 945 | 634 | 581 | 67.09% | 91.64% |
+| Juniperus | 597 | 0.7253 | 400 | 67.00% | 90.00% | 597 | 411 | 376 | 68.84% | 91.48% |
+| Larix | 599 | 0.6946 | 464 | 77.46% | 90.09% | 599 | 456 | 410 | 76.13% | 89.91% |
+| Malus | 835 | 0.8138 | 485 | 58.08% | 90.10% | 835 | 478 | 413 | 57.25% | 86.40% |
+| Ostrya | 763 | 0.7507 | 533 | 69.86% | 90.06% | 763 | 528 | 468 | 69.20% | 88.64% |
+| Pinus | 600 | 0.7214 | 444 | 74.00% | 90.09% | 600 | 438 | 396 | 73.00% | 90.41% |
+| Picea | 595 | 0.8905 | 256 | 43.03% | 90.23% | 595 | 241 | 221 | 40.50% | 91.70% |
+| Populus | 990 | 0.9152 | 361 | 36.46% | 90.03% | 989 | 323 | 291 | 32.66% | 90.09% |
+| Prunus | 1000 | 0.9519 | 300 | 30.00% | 90.00% | 1000 | 293 | 267 | 29.30% | 91.13% |
+| Pyrus | 904 | 0.8806 | 435 | 48.12% | 90.11% | 905 | 425 | 373 | 46.96% | 87.76% |
+| Quercus_deciduae | 951 | 0.5064 | 850 | 89.38% | 90.00% | 951 | 859 | 773 | 90.33% | 89.99% |
+| Quercus_sempervirens | 855 | 0.7345 | 615 | 71.93% | 90.08% | 856 | 624 | 566 | 72.90% | 90.71% |
+| Salix | 966 | 0.8292 | 495 | 51.24% | 90.10% | 966 | 494 | 447 | 51.14% | 90.49% |
+| Sorbus | 888 | 0.5467 | 772 | 86.94% | 90.03% | 889 | 772 | 699 | 86.84% | 90.54% |
+| Tamarix | 544 | 0.2027 | 543 | 99.82% | 90.06% | 544 | 544 | 483 | 100.00% | 88.79% |
+| Taxus | 533 | 0.5876 | 465 | 87.24% | 90.11% | 533 | 447 | 405 | 83.86% | 90.60% |
+| Tilia | 906 | 0.7965 | 515 | 56.84% | 90.10% | 906 | 545 | 484 | 60.15% | 88.81% |
+| Ulmus | 984 | 0.9453 | 255 | 25.91% | 90.20% | 984 | 264 | 239 | 26.83% | 90.53% |
+| Ceratonia | 363 | 0.5058 | 326 | 89.81% | 90.18% | 363 | 331 | 295 | 91.18% | 89.12% |
+| Cercis | 570 | 0.4221 | 538 | 94.39% | 90.15% | 571 | 531 | 484 | 92.99% | 91.15% |
+| Olea | 592 | 0.6315 | 464 | 78.38% | 90.09% | 591 | 462 | 406 | 78.17% | 87.88% |
+| Phillyrea | 546 | 0.7094 | 450 | 82.42% | 90.00% | 546 | 442 | 400 | 80.95% | 90.50% |
+| Pistacia | 570 | 0.6373 | 467 | 81.93% | 90.15% | 571 | 480 | 437 | 84.06% | 91.04% |
