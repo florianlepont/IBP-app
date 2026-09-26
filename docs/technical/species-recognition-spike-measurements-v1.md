@@ -2787,3 +2787,189 @@ figures cannot be assumed to carry over from iteration 3's 6.13 MB MobileNetV3La
 (`export_report_v4.json`: `keras_tflite_top1_agreement: 1.0`, `keras_top1_accuracy_on_sample: 0.765`,
 `tflite_top1_accuracy_on_sample: 0.765`) — comfortably above the 90% pass threshold, and a clean
 match with no float16-rounding-induced argmax flips at all on this sample (iteration 3 had one).
+
+### 14.4 Per-genus accuracy — four-way comparison (iterations 1, 2, 3, 4)
+
+**Source model:** `genus_classifier_v4.tflite` (Section 14.3, not yet promoted — see Section 14.6).
+**Test split:** iteration 4's own held-out test split, 26,557 images across 34 classes (up from
+iteration 3's 19,466). **Measured:** 2026-09-26, same `eval/evaluate_accuracy.py` script, same
+D-03/D-04 rules (per genus, raw counts alongside percentages, no headline average).
+
+**Raw numbers below, exactly as `eval/results_v4/per_genus_accuracy.csv` reports them — committed
+before this interpretation (commit `0b785cf` and this section).** `group` marks the 21
+Île-de-France-targeted genera this iteration's cap-raise and season-fix applied to (`IdF`) against
+the 13 Mediterranean/evergreen/other genera left untouched (`Med`) — the split the user's own
+question turns on.
+
+| genus | group | it1 n | it1 top1 | it1 top3 | it2 n | it2 top1 | it2 top3 | it3 n | it3 top1 | it3 top3 | it4 n | it4 top1 | it4 top3 | it4 clears | top3 Δ 3→4 |
+|---|:---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---:|---:|
+| Abies | Med | 35 | 45.7% | 60.00% | 198 | 55.0% | 81.31% | 600 | 70.2% | 89.67% | 600 | 73.8% | 92.33% | False | +2.66pp |
+| Acer | **IdF** | 35 | 14.3% | 25.71% | 191 | 58.6% | 79.58% | 600 | 61.5% | 80.83% | 1000 | 63.2% | 80.90% | False | +0.07pp |
+| Alnus | **IdF** | 35 | 31.4% | 54.29% | 199 | 54.8% | 70.85% | 600 | 59.2% | 77.33% | 983 | 71.5% | 84.94% | False | +7.61pp |
+| Arbutus | Med | 35 | 54.3% | 80.00% | 197 | 66.5% | 87.82% | 600 | 80.2% | 91.17% | 600 | 82.2% | 93.67% | False | +2.50pp |
+| Betula | **IdF** | 35 | 42.9% | 51.43% | 191 | 50.8% | 68.59% | 600 | 61.8% | 82.33% | 997 | 67.0% | 85.96% | False | +3.63pp |
+| Carpinus | **IdF** | 35 | 37.1% | 51.43% | 199 | 61.8% | 79.40% | 600 | 59.7% | 81.00% | 934 | 70.1% | 88.12% | False | +7.12pp |
+| Castanea | **IdF** | 35 | 37.1% | 51.43% | 192 | 63.5% | 81.77% | 600 | 74.0% | 83.83% | 865 | 74.5% | 88.90% | False | +5.07pp |
+| Celtis | **IdF** | 35 | 31.4% | 48.57% | 170 | 38.8% | 65.88% | 600 | 59.7% | 80.67% | 959 | 68.4% | 85.82% | False | +5.15pp |
+| Cupressus | Med | 35 | 37.1% | 74.29% | 165 | 64.2% | 83.64% | 530 | 72.6% | 90.94% | 530 | 76.4% | 92.64% | False | +1.70pp |
+| Fagus | **IdF** | 35 | 51.4% | 71.43% | 169 | 56.8% | 78.11% | 599 | 66.9% | 83.47% | 998 | 75.0% | 88.28% | False | +4.81pp |
+| Fraxinus | **IdF** | 35 | 5.7% | 22.86% | 141 | 29.8% | 63.12% | 594 | 48.3% | 77.61% | 992 | 58.4% | 83.17% | False | +5.56pp |
+| Juglans | **IdF** | 35 | 14.3% | 42.86% | 179 | 52.5% | 73.74% | 589 | 59.4% | 80.81% | 945 | 73.8% | 89.63% | False | +8.82pp |
+| Juniperus | Med | 35 | 25.7% | 60.00% | 177 | 53.7% | 76.27% | 597 | 71.5% | 90.79% | 597 | 78.9% | 92.13% | False | +1.34pp |
+| Larix | Med | 35 | 42.9% | 54.29% | 176 | 62.5% | 79.55% | 599 | 72.0% | 87.65% | 599 | 78.0% | 90.32% | False | +2.67pp |
+| Malus | **IdF** | 35 | 54.3% | 71.43% | 191 | 53.4% | 72.25% | 561 | 60.6% | 80.21% | 835 | 68.6% | 87.54% | False | +7.33pp |
+| Ostrya | **IdF** | 35 | 22.9% | 34.29% | 185 | 53.0% | 69.19% | 540 | 65.7% | 84.26% | 763 | 72.4% | 88.60% | False | +4.34pp |
+| Pinus | **IdF** | 35 | 42.9% | 74.29% | 189 | 59.3% | 83.07% | 578 | 73.0% | 91.35% | 600 | 78.2% | 92.83% | False | +1.48pp |
+| Picea | Med | 35 | 34.3% | 65.71% | 186 | 48.4% | 82.26% | 595 | 63.2% | 88.74% | 595 | 71.9% | 91.26% | False | +2.52pp |
+| Populus | **IdF** | 35 | 17.1% | 40.00% | 191 | 47.1% | 69.11% | 598 | 55.7% | 79.60% | 989 | 57.1% | 80.79% | False | +1.19pp |
+| Prunus | **IdF** | 35 | 31.4% | 48.57% | 197 | 49.8% | 73.60% | 600 | 56.0% | 80.50% | 1000 | 60.8% | 84.40% | False | +3.90pp |
+| Pyrus | **IdF** | 35 | 20.0% | 42.86% | 188 | 43.1% | 71.28% | 563 | 62.2% | 82.42% | 905 | 65.3% | 87.18% | False | +4.76pp |
+| Quercus_deciduae | **IdF** | 35 | 40.0% | 60.00% | 196 | 69.9% | 84.69% | 467 | 73.0% | 84.15% | 951 | 84.0% | 93.69% | False | +9.54pp |
+| Quercus_sempervirens | **IdF** | 35 | 37.1% | 62.86% | 195 | 63.6% | 82.05% | 568 | 70.4% | 85.74% | 856 | 77.3% | 91.59% | False | +5.85pp |
+| Salix | **IdF** | 35 | 37.1% | 60.00% | 196 | 56.1% | 81.63% | 598 | 64.5% | 84.95% | 966 | 69.5% | 85.30% | False | +0.35pp |
+| Sorbus | **IdF** | 35 | 37.1% | 62.86% | 194 | 69.1% | 81.96% | 598 | 77.6% | 87.96% | 889 | 81.5% | 90.21% | False | +2.25pp |
+| Tamarix | Med | 35 | 51.4% | 65.71% | 179 | 81.0% | 88.27% | 544 | 88.6% | 95.04% | 544 | 88.8% | 96.88% | True | +1.84pp |
+| Taxus | Med | 35 | 45.7% | 68.57% | 197 | 67.5% | 85.28% | 533 | 74.7% | 91.93% | 533 | 80.7% | 92.68% | False | +0.75pp |
+| Tilia | **IdF** | 35 | 25.7% | 60.00% | 199 | 55.3% | 78.89% | 575 | 59.1% | 77.74% | 906 | 69.8% | 88.19% | False | +10.45pp |
+| Ulmus | **IdF** | 30 | 0.0% | 16.67% | 197 | 45.2% | 67.51% | 598 | 48.7% | 74.92% | 984 | 53.3% | 79.07% | False | +4.15pp |
+| Ceratonia | Med | 35 | 65.7% | 85.71% | 193 | 80.8% | 92.75% | 363 | 77.1% | 90.63% | 363 | 83.5% | 92.56% | False | +1.93pp |
+| Cercis | Med | 35 | 42.9% | 65.71% | 191 | 73.3% | 80.63% | 571 | 82.0% | 89.49% | 571 | 86.2% | 92.29% | False | +2.80pp |
+| Olea | Med | 35 | 60.0% | 94.29% | 193 | 71.5% | 88.60% | 591 | 75.1% | 91.20% | 591 | 77.7% | 90.69% | False | -0.51pp |
+| Phillyrea | Med | 35 | 60.0% | 88.57% | 199 | 71.4% | 88.44% | 546 | 79.1% | 92.67% | 546 | 82.8% | 94.14% | False | +1.47pp |
+| Pistacia | Med | 33 | 48.5% | 81.82% | 187 | 61.0% | 82.35% | 571 | 78.5% | 91.07% | 571 | 80.9% | 90.89% | False | -0.18pp |
+
+**Pooled (all test images): top1 67.42%→72.08%, top3 85.24%→88.25% (+3.02pp).** Unweighted per-genus
+mean top3 delta across all 34 classes: **+3.67pp, 32/34 improved** (only Olea -0.51pp and Pistacia
+-0.18pp regressed, both Mediterranean genera with small, plausibly-noise-level drops on samples that
+did not grow between iterations — their test split was already at its true ceiling and unchanged in
+size, unlike every genus this iteration touched).
+
+**1 of 34 genera still clears the D-02 95% top-3 bar: Tamarix, now 96.88% (527/544 top-3, 483/544
+top-1), up from 95.04% in iteration 3.** No new genus crosses the bar this iteration — consistent
+with Section 14.2's saturation finding: the gains this iteration bought are broad and real, but not
+enough to push a second genus over a 95%-of-a-hard-multiclass-problem bar in one pass.
+
+**The split the user's actual question turns on — and it is not subtle:**
+
+| group | n genera | mean top3 Δ (3→4) | n improved / n total |
+|---|---:|---:|---:|
+| **Île-de-France temperate (targeted this iteration)** | 21 | **+4.93pp** | **21/21** |
+| Mediterranean/evergreen/other (untouched this iteration) | 13 | +1.65pp | 11/13 |
+
+**Every one of the 21 Île-de-France-targeted genera improved, by a mean nearly 3x the untouched
+group's.** The untouched Mediterranean group still improved on average (a stronger backbone and a
+longer, better-converged training schedule benefit every class, not just the ones with more data),
+but by materially less, and with 2 of 13 genera essentially flat-to-slightly-down (both within noise
+of a test split whose size did not change between iterations). This is the evidence that the
+targeted rebalance (raise the cap for exactly the weak genera, leave the already-adequate genera
+alone) worked as intended, not just that "a bigger model trained longer helps everything a bit."
+
+**Largest individual gains, all Île-de-France genera:** Tilia +10.45pp (77.74%→88.19%), Quercus
+deciduous +9.54pp (84.15%→93.69%), Juglans +8.82pp (80.81%→89.63%), Malus +7.33pp, Alnus +7.61pp,
+Carpinus +7.12pp. **Smallest gains among Île-de-France genera:** Acer +0.07pp and Salix +0.35pp —
+both already had large corpora at iteration 3 (600 and 598 test images) and both grew their test
+split by a similar proportion to the others, so this reads as those two genera being closer to
+whatever ceiling this backbone/corpus combination can reach for them specifically, not as the
+rebalance failing them.
+
+### 14.5 Per-genus × per-season accuracy — does the fix hold up, in the format Section 12 established
+
+**Method:** identical to Section 12 — `eval/evaluate_seasonal_accuracy.py` re-run against
+`genus_classifier_v4.tflite`, joined against `manifest.csv`'s `season` column, one row per test
+image. **Coverage: 26,557/26,557 test images have a manifest season value (100.00%); 0 missing.**
+
+**The headline result: every one of the 34×4 = 136 genus×season cells now clears the n≥30
+insufficient-samples threshold, including the 5 that were thin in iteration 3
+(Acer/Pinus/Prunus autumn, Malus/Sorbus winter).** This is Section 13.1's fix showing up exactly
+where it was aimed — the autumn-specific gap for Acer, Pinus and Prunus is no longer just larger,
+it is **measurable for the first time across four iterations**:
+
+| genus | winter n | autumn n (it3) | autumn n (it4) | autumn top3 (it4) |
+|---|---:|---:|---:|---:|
+| Acer | 238 | 4 (insufficient) | **250** | 82.40% |
+| Prunus | 238 | 1 (insufficient) | **250** | 81.60% |
+| Pinus | 141 | 3 (insufficient) | **172** | **95.35%** |
+
+**Pinus's autumn figure (95.35%, 164/172) clears the D-02 95% bar in isolation** — the first time
+any genus×season cell for these three has cleared it, though Section 0/D-03's rule against
+substituting a cell for the whole-year figure applies here exactly as it does everywhere else in
+this document: Pinus's whole-year top-3 is 92.83% (Section 14.4), which does not clear the bar, so
+Pinus itself is not a partial-go candidate on this evidence — its autumn cell is a genuinely strong,
+specific data point for exactly the season IBP surveys happen in, not a headline result.
+
+**Full 34×4 cross-tabulation, raw numbers, committed before interpretation:**
+
+| genus | winter n | winter top3 | spring n | spring top3 | summer n | summer top3 | autumn n | autumn top3 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Abies | 130 | 91.54% | 142 | 96.48% | 150 | 89.33% | 178 | 92.13% |
+| Acer | 238 | 73.95% | 247 | 81.38% | 265 | 85.28% | 250 | 82.40% |
+| Alnus | 219 | 85.39% | 250 | 86.00% | 265 | 84.15% | 249 | 84.34% |
+| Arbutus | 141 | 93.62% | 144 | 92.36% | 141 | 95.04% | 174 | 93.68% |
+| Betula | 237 | 87.34% | 247 | 90.28% | 264 | 81.06% | 249 | 85.54% |
+| Carpinus | 135 | 83.70% | 267 | 88.39% | 277 | 90.61% | 255 | 87.45% |
+| Castanea | 60 | 78.33% | 272 | 87.50% | 254 | 89.76% | 279 | 91.76% |
+| Celtis | 229 | 85.59% | 245 | 82.45% | 253 | 89.72% | 232 | 85.34% |
+| Cupressus | 131 | 93.13% | 131 | 90.08% | 132 | 95.45% | 136 | 91.91% |
+| Fagus | 237 | 89.45% | 246 | 85.37% | 264 | 88.26% | 251 | 90.04% |
+| Fraxinus | 232 | 76.29% | 247 | 84.62% | 265 | 86.79% | 248 | 84.27% |
+| Juglans | 150 | 82.67% | 258 | 90.70% | 277 | 93.50% | 260 | 88.46% |
+| Juniperus | 159 | 90.57% | 188 | 93.09% | 171 | 92.98% | 79 | 91.14% |
+| Larix | 72 | 83.33% | 153 | 92.16% | 207 | 89.86% | 167 | 92.22% |
+| Malus | 58 | 77.59% | 253 | 90.51% | 271 | 87.82% | 253 | 86.56% |
+| Ostrya | 79 | 88.61% | 230 | 93.04% | 286 | 87.76% | 167 | 83.83% |
+| Pinus | 141 | 92.91% | 145 | 90.34% | 142 | 92.25% | 172 | **95.35%** |
+| Picea | 126 | 88.10% | 140 | 92.86% | 149 | 94.63% | 180 | 89.44% |
+| Populus | 229 | 74.67% | 245 | 77.96% | 266 | 85.71% | 249 | 83.94% |
+| Prunus | 238 | 86.55% | 247 | 88.26% | 265 | 81.51% | 250 | 81.60% |
+| Pyrus | 100 | 80.00% | 253 | 87.35% | 279 | 89.25% | 270 | 87.41% |
+| Quercus_deciduae | 172 | 92.44% | 259 | 91.51% | 270 | 92.59% | 250 | 98.00% |
+| Quercus_sempervirens | 190 | 92.63% | 236 | 92.80% | 222 | 88.74% | 208 | 92.31% |
+| Salix | 207 | 80.19% | 253 | 86.96% | 260 | 88.46% | 246 | 84.55% |
+| Sorbus | 83 | 83.13% | 259 | 86.49% | 265 | 92.08% | 282 | 93.97% |
+| Tamarix | 97 | 95.88% | 150 | 97.33% | 160 | 96.25% | 136 | 97.79% |
+| Taxus | 141 | 90.78% | 87 | 88.51% | 156 | 92.95% | 149 | 96.64% |
+| Tilia | 98 | 78.57% | 261 | 89.66% | 276 | 90.94% | 270 | 87.41% |
+| Ulmus | 225 | 79.56% | 247 | 76.11% | 262 | 81.68% | 250 | 78.80% |
+| Ceratonia | 52 | 88.46% | 93 | 91.40% | 70 | 95.71% | 139 | 94.24% |
+| Cercis | 53 | 77.36% | 229 | 97.82% | 156 | 92.31% | 133 | 88.72% |
+| Olea | 140 | 92.14% | 138 | 89.86% | 142 | 88.73% | 171 | 91.81% |
+| Phillyrea | 107 | 96.26% | 140 | 95.00% | 135 | 91.85% | 154 | 93.51% |
+| Pistacia | 122 | 89.34% | 137 | 93.43% | 142 | 85.92% | 168 | 94.05% |
+
+**Season margins (pooled and unweighted per-genus mean, all 34 genera now measurable at n≥30 in
+every season — no thin-cell asterisks needed this time):**
+
+| season | pooled n | pooled top3 | unweighted per-genus mean top3 |
+|---|---:|---:|---:|
+| winter | 5,028 | 85.62% | 85.88% |
+| spring | 7,039 | 88.72% | 89.35% |
+| summer | 7,359 | 89.03% | 89.68% |
+| autumn | 7,104 | 88.82% | 89.43% |
+
+**Winter remains the weakest season (as in iteration 3, Section 12.3), not autumn or spring.**
+Spring — the season the user was most disappointed with — is now within 0.3–1.0pp of summer and
+autumn, both pooled and unweighted, essentially closing the gap Section 12 originally surfaced
+(iteration 3: spring pooled 84.4%, the weakest of the four).
+
+**Spring, specifically, for the four genera the user named as spring's worst performers:**
+
+| genus | spring top3, iteration 3 | spring top3, iteration 4 | Δ |
+|---|---:|---:|---:|
+| Fraxinus | 74% (Section 12.2) | 84.62% | +10.6pp |
+| Ulmus | 71% | 76.11% | +5.1pp |
+| Juglans | 71% | 90.70% | **+19.7pp** |
+| Tilia | 75% | 89.66% | +14.7pp |
+
+**All four improved, three of them substantially.** Juglans's spring cell in particular went from
+one of the weakest whole-corpus figures anywhere in Section 12 to one of the strongest in this
+iteration's table.
+
+**Acer/Prunus/Pinus autumn "holds up" verdict (Section 12.6's question, now answerable for the first
+time):** Pinus's autumn figure (95.35%) is its *strongest* season and the only cell of the three that
+clears D-02 in isolation — holds up, emphatically. Acer's autumn (82.40%) sits within 1.5pp of its
+own whole-year figure (80.90%) — holds up. Prunus's autumn (81.60%) sits 2.8pp below its whole-year
+figure (84.40%) and is in fact its second-weakest season after summer (81.51%) — a real, now
+adequately-measured (n=250) genus-specific weakness in autumn specifically, the opposite of "holds
+up," though not one that changes any go/no-go call since Prunus does not clear D-02 at any
+resolution. All three verdicts are now backed by n≥250 (Acer, Prunus) or n=172 (Pinus) autumn test
+images, not the 1–4-image cells that made this question unanswerable in Section 12.6.
