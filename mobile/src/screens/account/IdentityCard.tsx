@@ -5,6 +5,7 @@ import { brandColors, brandComponentTokens } from "../../app/brand-tokens"
 import { AuthUser } from "../../app/types"
 import { AppCard } from "../../ui/AppCard"
 import { AppStatusChip } from "../../ui/AppStatusChip"
+import { fr } from "../../i18n"
 import { identityStyles as styles } from "./styles"
 
 export type IdentityCardProps = {
@@ -27,7 +28,7 @@ export const resolveInitials = (user: AuthUser | null, fallbackProfile: string):
     user?.display_name?.trim() ||
     user?.email?.trim() ||
     fallbackProfile.trim() ||
-    "Compte"
+    fr.account.fallbackName
 
   return source
     .split(/[\s@._-]+/)
@@ -60,26 +61,27 @@ export function IdentityCard({
     () => resolveProfilePictureUri(currentUser.profile_picture_url, apiUrl),
     [apiUrl, currentUser.profile_picture_url],
   )
-  const heroSubtitle = currentUser.email ?? "Aucun email associé"
+  const heroSubtitle = currentUser.email ?? fr.account.noEmail
   const initials = resolveInitials(currentUser, profile)
-  const roleLabel = currentUser.role?.trim() || "membre"
+  const roleLabel = currentUser.role?.trim() || fr.account.defaultRole
 
   // ACC-01 : Action Sheet native au lieu du Modal custom
   const openPhotoActions = (): void => {
-    const options = ["Annuler", "Prendre une photo", "Choisir depuis la galerie"]
+    const photo = fr.account.alerts.photo
+    const options: string[] = [fr.common.actions.cancel, photo.take, photo.pick]
     const actions = [
       () => void onTakeProfilePictureFromCamera(),
       () => void onPickProfilePictureFromLibrary(),
     ]
     if (profilePictureUri) {
-      options.push("Supprimer la photo")
+      options.push(photo.remove)
       actions.push(() => void onRemoveProfilePicture())
     }
 
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          title: "Photo de profil",
+          title: photo.title,
           options,
           cancelButtonIndex: 0,
           destructiveButtonIndex: profilePictureUri ? options.length - 1 : undefined,
@@ -91,24 +93,24 @@ export function IdentityCard({
     } else {
       // Android fallback via Alert
       Alert.alert(
-        "Photo de profil",
+        photo.title,
         undefined,
         [
-          { text: "Prendre une photo", onPress: () => void onTakeProfilePictureFromCamera() },
+          { text: photo.take, onPress: () => void onTakeProfilePictureFromCamera() },
           {
-            text: "Choisir depuis la galerie",
+            text: photo.pick,
             onPress: () => void onPickProfilePictureFromLibrary(),
           },
           ...(profilePictureUri
             ? [
                 {
-                  text: "Supprimer la photo",
+                  text: photo.remove,
                   style: "destructive" as const,
                   onPress: () => void onRemoveProfilePicture(),
                 },
               ]
             : []),
-          { text: "Annuler", style: "cancel" as const },
+          { text: fr.common.actions.cancel, style: "cancel" as const },
         ],
         { cancelable: true },
       )
@@ -129,8 +131,8 @@ export function IdentityCard({
           onPress={openPhotoActions}
           disabled={profileUpdating}
           accessibilityRole="button"
-          accessibilityLabel="Modifier la photo de profil"
-          accessibilityHint="Ouvre les options de photo"
+          accessibilityLabel={fr.account.a11y.editPhoto}
+          accessibilityHint={fr.account.a11y.editPhotoHint}
           hitSlop={{ top: 4, right: 4, bottom: 4, left: 0 }}
         >
           {profilePictureUri ? (
@@ -145,7 +147,7 @@ export function IdentityCard({
           ) : (
             <View style={styles.avatarFallback}>
               <Text style={styles.avatarFallbackText} accessible={false}>
-                {initials || "A"}
+                {initials || fr.account.initialsFallback}
               </Text>
             </View>
           )}

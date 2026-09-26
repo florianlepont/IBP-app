@@ -6,6 +6,7 @@ import { AppCard } from "../../ui/AppCard"
 import { AppField } from "../../ui/AppField"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { AppStatusChip } from "../../ui/AppStatusChip"
+import { fr } from "../../i18n"
 import { profileStyles as styles } from "./styles"
 
 type ProfileCardProps = {
@@ -37,6 +38,7 @@ export function ProfileCard({
   // ACC-13 : refs pour le chaining de focus clavier
   const lastNameRef = useRef<TextInput>(null)
   const displayNameRef = useRef<TextInput>(null)
+  const texts = fr.account.profile
 
   return (
     <AppCard
@@ -46,13 +48,13 @@ export function ProfileCard({
     >
       {/* ACC-07 : AppSectionHeader au lieu du header custom */}
       <AppSectionHeader
-        title="Profil"
+        title={texts.title}
         titleStyle={styles.panelTitle}
         trailing={
           isProfileDirty ? (
-            <AppStatusChip label="Non sauvegardé" tone="warning" />
+            <AppStatusChip label={texts.unsaved} tone="warning" />
           ) : (
-            <AppStatusChip label="Sauvegardé" tone="success" />
+            <AppStatusChip label={texts.saved} tone="success" />
           )
         }
         style={styles.panelHeader}
@@ -63,10 +65,10 @@ export function ProfileCard({
           {/* ACC-12 : AppField direct sans wrapper ProfileField */}
           {/* ACC-13 : returnKeyType + onSubmitEditing pour le chaining */}
           <AppField
-            label="Prénom"
+            label={texts.firstName}
             value={firstName}
             onChangeText={onFirstNameChange}
-            placeholder="Florian"
+            placeholder={texts.firstNamePlaceholder}
             autoCapitalize="words"
             autoCorrect={false}
             containerStyle={styles.fieldGroup}
@@ -79,10 +81,10 @@ export function ProfileCard({
         </View>
         <View style={styles.halfField}>
           <AppField
-            label="Nom"
+            label={texts.lastName}
             value={lastName}
             onChangeText={onLastNameChange}
-            placeholder="Lepont"
+            placeholder={texts.lastNamePlaceholder}
             autoCapitalize="words"
             autoCorrect={false}
             inputRef={lastNameRef}
@@ -98,10 +100,10 @@ export function ProfileCard({
 
       {/* ACC-17 : placeholder = exemple, pas une description */}
       <AppField
-        label="Nom d'affichage"
+        label={texts.displayName}
         value={displayName}
         onChangeText={onDisplayNameChange}
-        placeholder="ex. F. Lepont"
+        placeholder={texts.displayNamePlaceholder}
         autoCapitalize="words"
         autoCorrect={false}
         inputRef={displayNameRef}
@@ -116,7 +118,7 @@ export function ProfileCard({
       {/* ACC-I06 : bouton Enregistrer visible uniquement si des modifications sont en cours */}
       {isProfileDirty && (
         <AppButton
-          label={profileUpdating ? "Enregistrement..." : "Enregistrer le profil"}
+          label={profileUpdating ? texts.saving : texts.save}
           leadingIcon={profileUpdating ? undefined : "save-outline"}
           loading={profileUpdating}
           onPress={onSave}

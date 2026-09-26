@@ -4,6 +4,7 @@ import { AuthUser } from "../../app/types"
 import { AppButton } from "../../ui/AppButton"
 import { AppField } from "../../ui/AppField"
 import { AppSettingsRow } from "../../ui/AppSettingsRow"
+import { fr } from "../../i18n"
 import { accountStyles, profileStyles as styles } from "./styles"
 
 // ACC-06 : validation email correcte
@@ -34,14 +35,11 @@ export function AccountSettingsRows({
 
   // ACC-I05 : confirmation avant reset mot de passe
   const handlePasswordReset = (): void => {
-    Alert.alert(
-      "Réinitialiser le mot de passe",
-      `Un email de réinitialisation sera envoyé à ${currentUser.email ?? "votre adresse email"}.`,
-      [
-        { text: "Annuler", style: "cancel" },
-        { text: "Envoyer", onPress: () => void onPasswordReset() },
-      ],
-    )
+    const texts = fr.account.alerts.passwordReset
+    Alert.alert(texts.title, texts.message(currentUser.email ?? texts.emailFallback), [
+      { text: fr.common.actions.cancel, style: "cancel" },
+      { text: texts.confirm, onPress: () => void onPasswordReset() },
+    ])
   }
 
   return (
@@ -49,7 +47,7 @@ export function AccountSettingsRows({
       {emailEditing ? (
         <View style={styles.emailEditBlock}>
           <AppField
-            label="Nouvel email"
+            label={fr.account.email.newLabel}
             value={newEmail}
             onChangeText={setNewEmail}
             autoCapitalize="none"
@@ -61,12 +59,19 @@ export function AccountSettingsRows({
             inputStyle={styles.fieldInput}
             returnKeyType="done"
             // ACC-06 : afficher une erreur inline si email invalide
-            error={newEmail.length > 0 && !isValidEmail(newEmail) ? "Email invalide" : undefined}
+            error={
+              newEmail.length > 0 && !isValidEmail(newEmail) ? fr.account.email.invalid : undefined
+            }
           />
           <View style={styles.emailEditActions}>
-            <AppButton label="Annuler" variant="secondary" size="sm" onPress={closeEmailEditor} />
             <AppButton
-              label="Enregistrer"
+              label={fr.common.actions.cancel}
+              variant="secondary"
+              size="sm"
+              onPress={closeEmailEditor}
+            />
+            <AppButton
+              label={fr.common.actions.save}
               size="sm"
               loading={profileUpdating}
               disabled={profileUpdating || !isValidEmail(newEmail)}
@@ -76,9 +81,9 @@ export function AccountSettingsRows({
         </View>
       ) : (
         <AppSettingsRow
-          label="Email"
-          value={currentUser.email ?? "—"}
-          accessibilityLabel="Modifier l'adresse email"
+          label={fr.account.email.label}
+          value={currentUser.email ?? fr.account.email.empty}
+          accessibilityLabel={fr.account.a11y.editEmail}
           onPress={() => {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
             setNewEmail(currentUser.email ?? "")
@@ -89,9 +94,9 @@ export function AccountSettingsRows({
 
       {/* ACC-I08 : value = action courte, pas une description longue */}
       <AppSettingsRow
-        label="Mot de passe"
-        value="Réinitialiser"
-        accessibilityLabel="Réinitialiser le mot de passe"
+        label={fr.account.password.label}
+        value={fr.account.password.action}
+        accessibilityLabel={fr.account.a11y.resetPassword}
         onPress={handlePasswordReset}
       />
     </>
@@ -102,15 +107,16 @@ export function AccountSettingsRows({
 export function LogoutButton({ onLogout }: { onLogout: () => Promise<void> }) {
   // ACC-I05 : confirmation avant déconnexion
   const handleLogout = (): void => {
-    Alert.alert("Se déconnecter", "Vous serez déconnecté de votre compte.", [
-      { text: "Annuler", style: "cancel" },
-      { text: "Se déconnecter", style: "destructive", onPress: () => void onLogout() },
+    const texts = fr.account.alerts.logout
+    Alert.alert(texts.title, texts.message, [
+      { text: fr.common.actions.cancel, style: "cancel" },
+      { text: texts.confirm, style: "destructive", onPress: () => void onLogout() },
     ])
   }
 
   return (
     <AppButton
-      label="Se déconnecter"
+      label={fr.account.logout}
       leadingIcon="log-out-outline"
       variant="secondary"
       onPress={handleLogout}

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors, brandSpacing } from "../app/brand-tokens"
 import { AuthUser } from "../app/types"
 import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
+import { fr } from "../i18n"
 import { AccountSettingsRows, LogoutButton } from "./account/AccountSettingsRows"
 import { IdentityCard } from "./account/IdentityCard"
 import { ProfileCard } from "./account/ProfileCard"
@@ -71,7 +72,7 @@ export function AccountScreen({
     [firstName.trim(), lastName.trim()].filter((p) => p.length > 0).join(" ") ||
     currentUser?.display_name ||
     profile ||
-    "Compte"
+    fr.account.fallbackName
   // Keep header/tab bar clearance inside the scroll content so it scrolls away naturally.
   const topContentPadding = Platform.OS === "ios" ? headerHeight + brandSpacing.md : brandSpacing.md
   const bottomContentPadding = Math.max(tabBarHeight, insets.bottom) + brandSpacing.md
