@@ -2,38 +2,25 @@ import { useCallback, useEffect, useRef } from "react"
 import * as Network from "expo-network"
 import { createSurveyReport } from "../../api/ibp-api"
 import { hasPendingSyncWork, LocalSurvey, pullRemoteChanges, syncPending } from "../../storage"
+import { fr, logStatusDetail } from "../../i18n"
+import type { StatusMessage } from "../../i18n"
 import { isAuthRequiredError, isAuthTemporarilyUnavailableError } from "../auth-errors"
 import type { LocalDataOwnerStatus } from "../useLocalDataOwner"
 import { assertSyncOwner, EnsureSyncOwner, isSyncOwnerMismatchError } from "./sync-owner-guard"
 import { isSyncSuspendedError, SyncActivity } from "./sync-activity"
 import { isOnlineNetworkState } from "./utils"
 
-const RETRY_LATER_MESSAGE =
-  "Synchronisation reportée : authentification momentanément indisponible. Vos relevés locaux sont conservés."
+const text = fr.status.sync
+const ownerText = fr.status.owner
 
 // D-04: local data owned by another account suspends every automatic and
 // manual sync/pull path until the conflict is resolved (owner-check status
-// leaves "conflict" or turns "ok"). Only the "conflict" status may say so.
-const OWNER_SUSPENDED_MESSAGE =
-  "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte."
-
-// Any other status that blocks sync ("checking", "error", "idle"): the owner
-// check has not approved this session yet (WR-07).
-const OWNER_CHECK_PENDING_MESSAGE =
-  "Vérification des données locales en cours… La synchronisation reprendra ensuite."
-
-// WR-08: a local-data purge (logout, account switch) is in progress.
-const PURGE_IN_PROGRESS_MESSAGE =
-  "Synchronisation suspendue : suppression des données locales en cours."
-
-function ownerGateMessage(ownerStatus: LocalDataOwnerStatus): string {
-  return ownerStatus === "conflict" ? OWNER_SUSPENDED_MESSAGE : OWNER_CHECK_PENDING_MESSAGE
+// leaves "conflict" or turns "ok"). Only the "conflict" status may say so; any
+// other blocking status ("checking", "error", "idle") means the owner check has
+// not approved this session yet (WR-07).
+function ownerGateMessage(ownerStatus: LocalDataOwnerStatus): StatusMessage {
+  return ownerStatus === "conflict" ? ownerText.syncSuspended() : ownerText.checkPending()
 }
-
-// The execution-time owner check refused (the token's account, the session
-// owner and the stored local-data owner disagree): nothing was sent.
-const OWNER_RECHECK_MESSAGE =
-  "Synchronisation reportée : vérification du compte propriétaire des données locales en cours."
 
 type UseSurveySyncNetworkParams = {
   apiUrl: string
@@ -81,7 +68,7 @@ export function useSurveySyncNetwork({
   }, [recheckOwner])
 
   const runSync = useCallback(
-    async (mode: "manual" | "auto", trigger?: string): Promise<void> => {
+    async (mode: "manual" | "auto"): Promise<void> => {
       if (!syncAllowed) {
         if (mode === "manual") {
           retryFailedOwnerCheck()
@@ -92,18 +79,14 @@ export function useSurveySyncNetwork({
 
       if (syncInProgressRef.current) {
         if (mode === "manual") {
-          setStatus("Sync already in progress...")
+          setStatus(text.alreadyRunning())
         }
         return
       }
 
       syncInProgressRef.current = true
       try {
-        if (mode === "manual") {
-          setStatus("Sync in progress...")
-        } else {
-          setStatus(`Back online. Sync in progress${trigger ? ` (${trigger})` : ""}...`)
-        }
+        setStatus(mode === "manual" ? text.inProgress() : text.autoInProgress())
         const result = await withAuthRetry(async (token, tokenSub) => {
           await assertSyncOwner(ensureSyncOwner, tokenSub)
           return syncActivity.run(() => syncPending(apiUrl, token))
@@ -111,31 +94,34 @@ export function useSurveySyncNetwork({
         await refreshLocalSurveys()
         await refreshLocalAttachments()
         setStatus(
-          `Sync complete: ${result.synced} synced, ${result.failed} failed, ${result.pulled_surveys} surveys pulled, ${result.pulled_attachments} attachments pulled`,
+          text.done({
+            synced: result.synced,
+            failed: result.failed,
+            receivedCount: result.pulled_surveys + result.pulled_attachments,
+          }),
         )
       } catch (error) {
         if (isSyncSuspendedError(error)) {
           if (mode === "manual") {
-            setStatus(PURGE_IN_PROGRESS_MESSAGE)
+            setStatus(text.purgeInProgress())
           }
           return
         }
         if (isSyncOwnerMismatchError(error)) {
-          setStatus(OWNER_RECHECK_MESSAGE)
+          setStatus(ownerText.recheckPending())
           return
         }
         if (isAuthTemporarilyUnavailableError(error)) {
-          setStatus(RETRY_LATER_MESSAGE)
+          setStatus(text.retryLater())
           return
         }
         if (isAuthRequiredError(error)) {
           await clearSession()
-          setStatus(
-            mode === "manual" ? "Login required before sync" : "Sync paused: login required",
-          )
+          setStatus(mode === "manual" ? text.loginRequired() : text.pausedLoginRequired())
           return
         }
-        setStatus(`Sync error: ${(error as Error).message}`)
+        logStatusDetail("sync.run", error)
+        setStatus(text.failed())
       } finally {
         syncInProgressRef.current = false
       }
@@ -176,7 +162,7 @@ export function useSurveySyncNetwork({
       lastAutoSyncAtRef.current = now
 
       if (hasWork) {
-        await runSync("auto", trigger)
+        await runSync("auto")
         return
       }
 
@@ -196,7 +182,7 @@ export function useSurveySyncNetwork({
           await refreshLocalSurveys()
           await refreshLocalAttachments()
           setStatus(
-            `Server changes pulled: ${result.surveys} surveys, ${result.attachments} attachments`,
+            text.pulled({ surveyCount: result.surveys, attachmentCount: result.attachments }),
           )
         }
       } catch (error) {
@@ -204,12 +190,12 @@ export function useSurveySyncNetwork({
           return
         }
         if (isAuthTemporarilyUnavailableError(error)) {
-          setStatus(RETRY_LATER_MESSAGE)
+          setStatus(text.retryLater())
           return
         }
         if (isAuthRequiredError(error)) {
           await clearSession()
-          setStatus("Sync paused: login required")
+          setStatus(text.pausedLoginRequired())
           return
         }
       } finally {
@@ -242,35 +228,34 @@ export function useSurveySyncNetwork({
       return
     }
     try {
-      setStatus("Pulling server changes...")
+      setStatus(text.pulling())
       const result = await withAuthRetry(async (token, tokenSub) => {
         await assertSyncOwner(ensureSyncOwner, tokenSub)
         return syncActivity.run(() => pullRemoteChanges(apiUrl, token))
       })
       await refreshLocalSurveys()
       await refreshLocalAttachments()
-      setStatus(
-        `Pull complete: ${result.surveys} surveys, ${result.attachments} attachments, pages ${result.pages}`,
-      )
+      setStatus(text.pulled({ surveyCount: result.surveys, attachmentCount: result.attachments }))
     } catch (error) {
       if (isSyncSuspendedError(error)) {
-        setStatus(PURGE_IN_PROGRESS_MESSAGE)
+        setStatus(text.purgeInProgress())
         return
       }
       if (isSyncOwnerMismatchError(error)) {
-        setStatus(OWNER_RECHECK_MESSAGE)
+        setStatus(ownerText.recheckPending())
         return
       }
       if (isAuthTemporarilyUnavailableError(error)) {
-        setStatus(RETRY_LATER_MESSAGE)
+        setStatus(text.retryLater())
         return
       }
       if (isAuthRequiredError(error)) {
         await clearSession()
-        setStatus("Login required before pulling server changes")
+        setStatus(text.pullLoginRequired())
         return
       }
-      setStatus(`Pull error: ${(error as Error).message}`)
+      logStatusDetail("sync.pull", error)
+      setStatus(text.pullFailed())
     }
   }, [
     apiUrl,
@@ -290,12 +275,12 @@ export function useSurveySyncNetwork({
       const surveyIdTrimmed = surveyId.trim()
       const reasonTrimmed = reason.trim()
       if (!surveyIdTrimmed) {
-        const message = "Survey id is required before reporting"
+        const message = text.reportSurveyMissing()
         setStatus(message)
         return { ok: false, message }
       }
       if (!reasonTrimmed) {
-        const message = "Report reason is required"
+        const message = text.reportReasonRequired()
         setStatus(message)
         return { ok: false, message }
       }
@@ -304,23 +289,23 @@ export function useSurveySyncNetwork({
         await withAuthRetry((token) =>
           createSurveyReport(apiUrl, token, { survey_id: surveyIdTrimmed, reason: reasonTrimmed }),
         )
-        const message = "Report sent to moderation"
+        const message = text.reportSent()
         setStatus(message)
         return { ok: true, message }
       } catch (error) {
         if (isAuthTemporarilyUnavailableError(error)) {
-          const message =
-            "Signalement non envoyé : authentification momentanément indisponible. Réessayez plus tard."
+          const message = text.reportRetryLater()
           setStatus(message)
           return { ok: false, message }
         }
         if (isAuthRequiredError(error)) {
           await clearSession()
-          const message = "Login required before reporting a survey"
+          const message = text.reportLoginRequired()
           setStatus(message)
           return { ok: false, message }
         }
-        const message = `Report error: ${(error as Error).message}`
+        logStatusDetail("sync.report", error)
+        const message = text.reportFailed()
         setStatus(message)
         return { ok: false, message }
       }
