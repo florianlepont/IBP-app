@@ -40,7 +40,11 @@ jest.mock("expo-network", () => ({
 }))
 
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr } from "../../i18n"
 import { useSurveySyncNetwork } from "./useSurveySyncNetwork"
+
+const text = fr.status.sync
+const ownerText = fr.status.owner
 import { createSyncActivity } from "./sync-activity"
 
 async function buildHook(overrides: Record<string, unknown> = {}) {
@@ -77,6 +81,15 @@ describe("useSurveySyncNetwork", () => {
     await cleanup()
   })
 
+  // logStatusDetail writes raw error detail to console.debug in dev builds.
+  let consoleDebug: jest.SpyInstance
+  beforeEach(() => {
+    consoleDebug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    consoleDebug.mockRestore()
+  })
+
   describe("handleSync", () => {
     test("calls syncPending and refreshes data on success", async () => {
       mockSyncPending.mockResolvedValue({
@@ -90,8 +103,7 @@ describe("useSurveySyncNetwork", () => {
 
       await handleSync()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Sync complete"))
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("2 synced"))
+      expect(setStatus).toHaveBeenCalledWith(text.done({ synced: 2, failed: 0, receivedCount: 1 }))
       expect(refreshLocalSurveys).toHaveBeenCalled()
       expect(refreshLocalAttachments).toHaveBeenCalled()
     })
@@ -104,7 +116,7 @@ describe("useSurveySyncNetwork", () => {
       await handleSync()
 
       expect(clearSession).toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Login required"))
+      expect(setStatus).toHaveBeenCalledWith(text.loginRequired())
     })
 
     test("AUTH_TEMPORARILY_UNAVAILABLE keeps the session and reports retry-later", async () => {
@@ -115,7 +127,7 @@ describe("useSurveySyncNetwork", () => {
       await handleSync()
 
       expect(clearSession).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Synchronisation reportée"))
+      expect(setStatus).toHaveBeenCalledWith(text.retryLater())
     })
 
     test("sets error status on generic error", async () => {
@@ -125,7 +137,20 @@ describe("useSurveySyncNetwork", () => {
 
       await handleSync()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Network timeout"))
+      expect(setStatus).toHaveBeenCalledWith(text.failed())
+    })
+
+    test("a generic error never reaches the status text", async () => {
+      const { handleSync, setStatus } = await buildHook({
+        withAuthRetry: jest.fn().mockRejectedValue(new Error("HTTP 500 survey 1f2e3d4c")),
+      })
+
+      await handleSync()
+
+      for (const [message] of setStatus.mock.calls) {
+        expect(message).not.toContain("1f2e3d4c")
+        expect(message).not.toContain("HTTP 500")
+      }
     })
   })
 
@@ -137,7 +162,7 @@ describe("useSurveySyncNetwork", () => {
 
       await handlePullChanges()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Pull complete"))
+      expect(setStatus).toHaveBeenCalledWith(text.pulled({ surveyCount: 3, attachmentCount: 1 }))
       expect(refreshLocalSurveys).toHaveBeenCalled()
       expect(refreshLocalAttachments).toHaveBeenCalled()
     })
@@ -160,7 +185,7 @@ describe("useSurveySyncNetwork", () => {
       await handlePullChanges()
 
       expect(clearSession).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Synchronisation reportée"))
+      expect(setStatus).toHaveBeenCalledWith(text.retryLater())
     })
 
     test("sets error status on generic error", async () => {
@@ -170,7 +195,7 @@ describe("useSurveySyncNetwork", () => {
 
       await handlePullChanges()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Connection refused"))
+      expect(setStatus).toHaveBeenCalledWith(text.pullFailed())
     })
   })
 
@@ -181,7 +206,7 @@ describe("useSurveySyncNetwork", () => {
       const result = await handleReportSurvey("", "spam")
 
       expect(result.ok).toBe(false)
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("required"))
+      expect(setStatus).toHaveBeenCalledWith(text.reportSurveyMissing())
     })
 
     test("returns error when reason is empty", async () => {
@@ -190,7 +215,7 @@ describe("useSurveySyncNetwork", () => {
       const result = await handleReportSurvey("survey-1", "")
 
       expect(result.ok).toBe(false)
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("required"))
+      expect(setStatus).toHaveBeenCalledWith(text.reportReasonRequired())
     })
 
     test("returns ok:true and sets status on successful report", async () => {
@@ -200,8 +225,8 @@ describe("useSurveySyncNetwork", () => {
       const result = await handleReportSurvey("survey-1", "This is spam content")
 
       expect(result.ok).toBe(true)
-      expect(result.message).toContain("moderation")
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("moderation"))
+      expect(result.message).toBe(text.reportSent())
+      expect(setStatus).toHaveBeenCalledWith(text.reportSent())
     })
 
     test("calls clearSession and returns ok:false on AUTH_REQUIRED", async () => {
@@ -224,7 +249,7 @@ describe("useSurveySyncNetwork", () => {
 
       expect(clearSession).not.toHaveBeenCalled()
       expect(result.ok).toBe(false)
-      expect(result.message).toContain("Signalement non envoyé")
+      expect(result.message).toBe(text.reportRetryLater())
     })
 
     test("returns ok:false and sets error status on generic failure", async () => {
@@ -235,7 +260,7 @@ describe("useSurveySyncNetwork", () => {
       const result = await handleReportSurvey("survey-1", "some reason")
 
       expect(result.ok).toBe(false)
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Report failed"))
+      expect(setStatus).toHaveBeenCalledWith(text.reportFailed())
     })
 
     test("trims surveyId and reason before sending", async () => {
@@ -269,9 +294,7 @@ describe("useSurveySyncNetwork", () => {
       await handleSync()
 
       expect(withAuthRetry).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(
-        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
-      )
+      expect(setStatus).toHaveBeenCalledWith(ownerText.syncSuspended())
     })
 
     test("maybeAutoSync does not call syncPending or pullRemoteChanges when syncAllowed is false, even online with pending work", async () => {
@@ -300,9 +323,7 @@ describe("useSurveySyncNetwork", () => {
 
       expect(withAuthRetry).not.toHaveBeenCalled()
       expect(mockPullRemoteChanges).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(
-        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
-      )
+      expect(setStatus).toHaveBeenCalledWith(ownerText.syncSuspended())
     })
 
     test("WR-07: a failed owner check retries it on manual sync and does not blame another account", async () => {
@@ -315,10 +336,8 @@ describe("useSurveySyncNetwork", () => {
 
       expect(withAuthRetry).not.toHaveBeenCalled()
       expect(recheckOwner).toHaveBeenCalled()
-      expect(setStatus).not.toHaveBeenCalledWith(
-        "Synchronisation suspendue : des relevés locaux appartiennent à un autre compte.",
-      )
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+      expect(setStatus).not.toHaveBeenCalledWith(ownerText.syncSuspended())
+      expect(setStatus).toHaveBeenCalledWith(ownerText.checkPending())
     })
 
     test("WR-07: a manual pull during the owner check reports the check, not a conflict", async () => {
@@ -330,7 +349,7 @@ describe("useSurveySyncNetwork", () => {
       await handlePullChanges()
 
       expect(recheckOwner).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Vérification"))
+      expect(setStatus).toHaveBeenCalledWith(ownerText.checkPending())
     })
 
     test("handleReportSurvey is not gated by syncAllowed", async () => {
@@ -354,7 +373,7 @@ describe("useSurveySyncNetwork", () => {
 
       expect(ensureSyncOwner).toHaveBeenCalledWith("auth0|owner")
       expect(mockSyncPending).not.toHaveBeenCalled()
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("vérification du compte"))
+      expect(setStatus).toHaveBeenCalledWith(ownerText.recheckPending())
     })
 
     test("handlePullChanges re-checks the owner right before pullRemoteChanges (CR-01)", async () => {
@@ -393,7 +412,7 @@ describe("useSurveySyncNetwork", () => {
 
       await handleSync()
 
-      expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Sync complete"))
+      expect(setStatus).toHaveBeenCalledWith(text.done({ synced: 1, failed: 0 }))
     })
   })
 })

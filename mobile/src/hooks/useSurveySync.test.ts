@@ -111,26 +111,34 @@ jest.mock("./survey-sync/useAttachmentPreviews", () => ({
 }))
 
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
+import { fr } from "../i18n"
 import { useSurveySync } from "./useSurveySync"
 
-// Status texts produced by the hook. Kept in one place so the switch to
-// status codes (phase 01.9 I18N) only edits this block.
+// Status texts produced by the hook, taken from the French catalogue (D-06).
+// Kept in one place so the tests below only reference these names.
 const STATUS = {
-  initial: "Ready",
-  detailLoaded: (id: string) => `Canonical details loaded for ${id}`,
-  detailError: (message: string) => `Load detail error: ${message}`,
-  detailAuthRequired: "Login required before loading canonical details",
-  eventsLoaded: (id: string) => `Events loaded for ${id}`,
-  eventsError: (message: string) => `Load events error: ${message}`,
-  eventsAuthRequired: "Login required before loading survey events",
-  debugAuthRequired: "Login required before debug reset",
-  debugIbpTitle: "Debug reset IBP data",
-  debugUserTitle: "Debug reset user data",
-  debugError: (title: string, message: string) => `${title} error: ${message}`,
-  ibpResetDone: "IBP data reset done: 1 surveys, 0 attachments, 0 events",
-  userResetDone: "User data reset done: 1 users, 0 surveys, 0 attachments",
-  unsyncedTitle: "Données non synchronisées",
-  deleteAccountButton: "Delete my account",
+  initial: fr.status.session.ready(),
+  detailLoaded: fr.status.sync.detailLoaded(),
+  detailError: fr.status.sync.detailFailed(),
+  detailAuthRequired: fr.status.sync.detailLoginRequired(),
+  eventsLoaded: fr.status.sync.eventsLoaded(),
+  eventsError: fr.status.sync.eventsFailed(),
+  eventsAuthRequired: fr.status.sync.eventsLoginRequired(),
+  debugAuthRequired: fr.status.debug.loginRequired(),
+  debugIbpTitle: fr.status.debug.alerts.resetIbp.title,
+  debugUserTitle: fr.status.debug.alerts.resetUser.title,
+  debugIbpError: fr.status.debug.resetIbpFailed(),
+  debugUserError: fr.status.debug.resetUserFailed(),
+  ibpResetDone: fr.status.debug.resetIbpDone({ surveyCount: 1, attachmentCount: 0, eventCount: 0 }),
+  userResetDone: fr.status.debug.resetUserDone({
+    userCount: 1,
+    surveyCount: 0,
+    attachmentCount: 0,
+  }),
+  unsyncedTitle: fr.status.session.alerts.unsyncedLogout.title,
+  deleteAccountButton: fr.status.session.alerts.deleteAccount.confirm,
+  cancelButton: fr.common.actions.cancel,
+  resetButton: fr.status.debug.alerts.confirm,
 }
 
 const noopAsync = async (): Promise<void> => undefined
@@ -177,7 +185,14 @@ function alertButton(predicate: (button: AlertButton) => boolean, call = 0): Ale
 const INITIAL_OPERATION_STATUS = { session: { state: "idle", message: "" } }
 const UPDATED_OPERATION_STATUS = { session: { state: "running" } }
 
+// logStatusDetail writes raw error detail to console.debug in dev builds.
+let consoleDebug: jest.SpyInstance
+beforeEach(() => {
+  consoleDebug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
+})
+
 afterEach(async () => {
+  consoleDebug.mockRestore()
   await cleanup()
 })
 
@@ -555,7 +570,7 @@ describe("useSurveySync", () => {
       await act(async () => {
         await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
       })
-      expect(result.current.status).toBe(STATUS.detailLoaded("s1"))
+      expect(result.current.status).toBe(STATUS.detailLoaded)
     })
 
     test("AUTH_REQUIRED error calls clearSession", async () => {
@@ -577,7 +592,7 @@ describe("useSurveySync", () => {
       await act(async () => {
         await result.current.surveyOperations.handleLoadCanonicalDetails("s1")
       })
-      expect(result.current.status).toBe(STATUS.detailError("Network error"))
+      expect(result.current.status).toBe(STATUS.detailError)
       expect(result.current.surveyDetailsState.detailsLoadingSurveyId).toBeNull()
     })
 
@@ -616,7 +631,7 @@ describe("useSurveySync", () => {
 
       expect(mockLoadSurveyEvents).toHaveBeenCalledWith("http://localhost:3000", "token-abc", "s1")
       expect(result.current.surveyDetailsState.surveyEvents).toEqual({ s1: [{ id: "e1" }] })
-      expect(result.current.status).toBe(STATUS.eventsLoaded("s1"))
+      expect(result.current.status).toBe(STATUS.eventsLoaded)
       expect(result.current.surveyDetailsState.eventsLoadingSurveyId).toBeNull()
     })
 
@@ -650,7 +665,7 @@ describe("useSurveySync", () => {
       await act(async () => {
         await result.current.surveyOperations.handleLoadSurveyEvents("s1")
       })
-      expect(result.current.status).toBe(STATUS.eventsError("Connection lost"))
+      expect(result.current.status).toBe(STATUS.eventsError)
     })
 
     test("silent mode on AUTH_REQUIRED skips status", async () => {
@@ -697,8 +712,8 @@ describe("useSurveySync", () => {
       })
       const buttons = mockAlert.mock.calls[0][2] as AlertButton[]
       const texts = buttons.map((b) => b.text)
-      expect(texts).toContain("Cancel")
-      expect(texts).toContain("Reset")
+      expect(texts).toContain(STATUS.cancelButton)
+      expect(texts).toContain(STATUS.resetButton)
     })
 
     test("Reset button onPress calls withAuthRetry and clearLocalIbpData", async () => {
@@ -712,7 +727,7 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetIbpData()
       })
 
-      alertButton((b) => b.text === "Reset").onPress?.()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockResetIbpData).toHaveBeenCalled()
@@ -727,7 +742,7 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetIbpData()
       })
 
-      alertButton((b) => b.text === "Reset").onPress?.()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
@@ -741,10 +756,10 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetIbpData()
       })
 
-      const resetButton = alertButton((b) => b.text === "Reset")
+      const resetButton = alertButton((b) => b.text === STATUS.resetButton)
       expect(() => resetButton.onPress?.()).not.toThrow()
       await flushAsyncWork()
-      expect(result.current.status).toBe(STATUS.debugError(STATUS.debugIbpTitle, "Server error"))
+      expect(result.current.status).toBe(STATUS.debugIbpError)
     })
 
     test("Reset button calls onStopEditing when editingSurveyId is set", async () => {
@@ -759,7 +774,7 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetIbpData()
       })
 
-      alertButton((b) => b.text === "Reset").onPress?.()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(onStopEditing).toHaveBeenCalled()
@@ -792,7 +807,7 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetUserData()
       })
 
-      alertButton((b) => b.text === "Reset").onPress?.()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockResetUserData).toHaveBeenCalled()
@@ -807,7 +822,7 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetUserData()
       })
 
-      alertButton((b) => b.text === "Reset").onPress?.()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(mockAuth0Session.clearSession).toHaveBeenCalled()
@@ -821,10 +836,10 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetUserData()
       })
 
-      const resetButton = alertButton((b) => b.text === "Reset")
+      const resetButton = alertButton((b) => b.text === STATUS.resetButton)
       expect(() => resetButton.onPress?.()).not.toThrow()
       await flushAsyncWork()
-      expect(result.current.status).toBe(STATUS.debugError(STATUS.debugUserTitle, "Timeout"))
+      expect(result.current.status).toBe(STATUS.debugUserError)
     })
 
     test("Reset button calls onStopEditing when editingSurveyId is set", async () => {
@@ -839,7 +854,7 @@ describe("useSurveySync", () => {
         await result.current.syncActions.handleDebugResetUserData()
       })
 
-      alertButton((b) => b.text === "Reset").onPress?.()
+      alertButton((b) => b.text === STATUS.resetButton).onPress?.()
       await flushAsyncWork()
 
       expect(onStopEditing).toHaveBeenCalled()
@@ -920,6 +935,24 @@ describe("useSurveySync", () => {
       expect(mockCountUnsyncedLocalWork).not.toHaveBeenCalled()
       expect(mockAuth0Session.handleLogout).toHaveBeenCalledTimes(1)
       expect(mockClearLocalIbpData).toHaveBeenCalledTimes(1)
+    })
+
+    test("a failure shows catalogue texts, never the raw error", async () => {
+      mockDeleteMyAccount.mockRejectedValue(new Error("HTTP 500 user 9a8b7c6d"))
+      const { result } = await renderSync()
+      await act(async () => {
+        await result.current.sessionActions.handleDeleteAccount()
+      })
+
+      alertButton((b) => b.text === STATUS.deleteAccountButton).onPress?.()
+      await flushAsyncWork()
+
+      const failedAlert = fr.status.session.alerts.deleteAccountFailed
+      expect(result.current.status).toBe(fr.status.session.deleteAccountFailed())
+      expect(mockAlert).toHaveBeenLastCalledWith(failedAlert.title, failedAlert.message, [
+        { text: fr.common.actions.ok },
+      ])
+      expect(mockClearLocalIbpData).not.toHaveBeenCalled()
     })
   })
 

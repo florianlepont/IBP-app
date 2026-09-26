@@ -9,6 +9,8 @@ import {
   resetIbpData,
   resetUserData,
 } from "../api/ibp-api"
+import { fr, logStatusDetail } from "../i18n"
+import type { StatusMessage } from "../i18n"
 import { clearLocalIbpData } from "../storage/surveys"
 import { countUnsyncedLocalWork } from "../storage/local-owner"
 import type { LocalSurvey } from "../storage/types"
@@ -25,6 +27,11 @@ import { useSurveySyncNetwork } from "./survey-sync/useSurveySyncNetwork"
 import { useSurveySyncProfile } from "./survey-sync/useSurveySyncProfile"
 import { useSurveySyncSurveyOperations } from "./survey-sync/useSurveySyncSurveyOperations"
 import { useStableActions } from "../state/useLatestCallback"
+
+const sessionText = fr.status.session
+const ownerText = fr.status.owner
+const syncText = fr.status.sync
+const debugText = fr.status.debug
 
 type UseSurveySyncParams = {
   apiUrl: string
@@ -49,9 +56,9 @@ export function useSurveySync({
   onCloseSurveyDetail,
   onStopEditing,
 }: UseSurveySyncParams) {
-  const [statusText, setStatusText] = useState<string>("Ready")
+  const [statusText, setStatusText] = useState<string>(() => sessionText.ready())
   // Internal only: no consumer reads it (RESEARCH Pattern 1).
-  const [, setOperationStatus] = useState(createInitialOperationStatus("Ready"))
+  const [, setOperationStatus] = useState(() => createInitialOperationStatus(sessionText.ready()))
   const [surveyDetails, setSurveyDetails] = useState<Record<string, SurveyDetailResponse>>({})
   const [detailsLoadingSurveyId, setDetailsLoadingSurveyId] = useState<string | null>(null)
   const [surveyEvents, setSurveyEvents] = useState<Record<string, SurveyEventItem[]>>({})
@@ -156,9 +163,10 @@ export function useSurveySync({
       await clearLocalIbpData()
       await refreshLocalSurveys()
       await refreshLocalAttachments()
-      setStatus("Déconnecté")
+      setStatus(sessionText.loggedOut())
     } catch (error) {
-      setStatus(`Erreur de déconnexion : ${(error as Error).message}`)
+      logStatusDetail("session.logout", error)
+      setStatus(sessionText.logoutFailed())
     } finally {
       resumeSync()
     }
@@ -167,20 +175,17 @@ export function useSurveySync({
   const handleLogout = useCallback(async (): Promise<void> => {
     const work = await countUnsyncedLocalWork()
     if (hasUnsyncedWork(work)) {
-      Alert.alert(
-        "Données non synchronisées",
-        `Non synchronisé : ${formatUnsyncedWorkSummary(work)}. Si vous vous déconnectez maintenant, ces données seront définitivement supprimées de cet appareil.`,
-        [
-          { text: "Annuler", style: "cancel" },
-          {
-            text: "Supprimer et se déconnecter",
-            style: "destructive",
-            onPress: () => {
-              void performLogoutAndPurge()
-            },
+      const alert = sessionText.alerts.unsyncedLogout
+      Alert.alert(alert.title, alert.message({ summary: formatUnsyncedWorkSummary(work) }), [
+        { text: fr.common.actions.cancel, style: "cancel" },
+        {
+          text: alert.confirm,
+          style: "destructive",
+          onPress: () => {
+            void performLogoutAndPurge()
           },
-        ],
-      )
+        },
+      ])
       return
     }
 
@@ -194,13 +199,14 @@ export function useSurveySync({
   }, [handleAuthLogout])
 
   const handleDiscardForeignData = useCallback((): void => {
+    const alert = ownerText.alerts.discardForeign
     Alert.alert(
-      "Supprimer les données de l'autre compte ?",
-      `${formatUnsyncedWorkSummary(localDataOwner.foreignWork)} seront définitivement supprimés de cet appareil. Cette action est irréversible.`,
+      alert.title,
+      alert.message({ summary: formatUnsyncedWorkSummary(localDataOwner.foreignWork) }),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: fr.common.actions.cancel, style: "cancel" },
         {
-          text: "Supprimer",
+          text: alert.confirm,
           style: "destructive",
           onPress: () => {
             void localDataOwner.discardForeignData()
@@ -230,7 +236,7 @@ export function useSurveySync({
 
   const performDeleteAccount = useCallback(async (): Promise<void> => {
     try {
-      setStatus("Deleting account...")
+      setStatus(sessionText.deletingAccount())
       await withAuthRetry((token) => deleteMyAccount(apiUrl, token))
       // The account no longer exists on the server, so the data can never
       // sync — purge without the unsynced-work alert (the delete dialog
@@ -239,33 +245,29 @@ export function useSurveySync({
     } catch (error) {
       if ((error as Error).message === AUTH_REQUIRED_ERROR) {
         await clearSession()
-        setStatus("Login required before deleting account")
+        setStatus(sessionText.deleteAccountLoginRequired())
         return
       }
 
-      const message = (error as Error).message
-      setStatus(`Delete account error: ${message}`)
-      Alert.alert("Delete account failed", `The account has not been deleted. ${message}`, [
-        { text: "OK" },
-      ])
+      logStatusDetail("session.deleteAccount", error)
+      setStatus(sessionText.deleteAccountFailed())
+      const alert = sessionText.alerts.deleteAccountFailed
+      Alert.alert(alert.title, alert.message, [{ text: fr.common.actions.ok }])
     }
   }, [apiUrl, clearSession, performLogoutAndPurge, setStatus, withAuthRetry])
 
   const handleDeleteAccount = useCallback(async (): Promise<void> => {
-    Alert.alert(
-      "Delete account",
-      "This action is immediate and irreversible. Your name, email, and profile photo will be permanently deleted. Previously submitted surveys will be anonymised and retained for scientific purposes.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete my account",
-          style: "destructive",
-          onPress: () => {
-            void performDeleteAccount()
-          },
+    const alert = sessionText.alerts.deleteAccount
+    Alert.alert(alert.title, alert.message, [
+      { text: fr.common.actions.cancel, style: "cancel" },
+      {
+        text: alert.confirm,
+        style: "destructive",
+        onPress: () => {
+          void performDeleteAccount()
         },
-      ],
-    )
+      },
+    ])
   }, [performDeleteAccount])
 
   const { handleSync, handlePullChanges, handleReportSurvey, maybeAutoSync } = useSurveySyncNetwork(
@@ -300,17 +302,21 @@ export function useSurveySync({
       title,
       message,
       inProgressMessage,
+      failedMessage,
+      detailContext,
       onReset,
     }: {
       title: string
       message: string
-      inProgressMessage: string
-      onReset: () => Promise<string>
+      inProgressMessage: StatusMessage
+      failedMessage: StatusMessage
+      detailContext: string
+      onReset: () => Promise<StatusMessage>
     }): void => {
       Alert.alert(title, message, [
-        { text: "Cancel", style: "cancel" },
+        { text: fr.common.actions.cancel, style: "cancel" },
         {
-          text: "Reset",
+          text: debugText.alerts.confirm,
           style: "destructive",
           onPress: () => {
             void (async () => {
@@ -321,11 +327,12 @@ export function useSurveySync({
               } catch (error) {
                 if ((error as Error).message === AUTH_REQUIRED_ERROR) {
                   await clearSession()
-                  setStatus("Login required before debug reset")
+                  setStatus(debugText.loginRequired())
                   return
                 }
 
-                setStatus(`${title} error: ${(error as Error).message}`)
+                logStatusDetail(detailContext, error)
+                setStatus(failedMessage)
               }
             })()
           },
@@ -337,28 +344,39 @@ export function useSurveySync({
 
   const handleDebugResetIbpData = useCallback(async (): Promise<void> => {
     runDebugReset({
-      title: "Debug reset IBP data",
-      message:
-        "This will delete all IBP surveys/events/attachments on server and clear local IBP data.",
-      inProgressMessage: "Debug reset IBP data in progress...",
+      title: debugText.alerts.resetIbp.title,
+      message: debugText.alerts.resetIbp.message,
+      inProgressMessage: debugText.resetIbpInProgress(),
+      failedMessage: debugText.resetIbpFailed(),
+      detailContext: "debug.resetIbpData",
       onReset: async () => {
         const result = await withAuthRetry((token) => resetIbpData(apiUrl, token))
         await resetLocalSurveyState()
-        return `IBP data reset done: ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments, ${result.events_deleted ?? 0} events`
+        return debugText.resetIbpDone({
+          surveyCount: result.surveys_deleted ?? 0,
+          attachmentCount: result.attachments_deleted ?? 0,
+          eventCount: result.events_deleted ?? 0,
+        })
       },
     })
   }, [apiUrl, resetLocalSurveyState, runDebugReset, withAuthRetry])
 
   const handleDebugResetUserData = useCallback(async (): Promise<void> => {
     runDebugReset({
-      title: "Debug reset user data",
-      message: "This will delete all users on server and clear your local session and IBP data.",
-      inProgressMessage: "Debug reset user data in progress...",
+      title: debugText.alerts.resetUser.title,
+      message: debugText.alerts.resetUser.message,
+      inProgressMessage: debugText.resetUserInProgress(),
+      failedMessage: debugText.resetUserFailed(),
+      detailContext: "debug.resetUserData",
       onReset: async () => {
         const result = await withAuthRetry((token) => resetUserData(apiUrl, token))
         await resetLocalSurveyState()
         await clearSession()
-        return `User data reset done: ${result.users_deleted ?? 0} users, ${result.surveys_deleted ?? 0} surveys, ${result.attachments_deleted ?? 0} attachments`
+        return debugText.resetUserDone({
+          userCount: result.users_deleted ?? 0,
+          surveyCount: result.surveys_deleted ?? 0,
+          attachmentCount: result.attachments_deleted ?? 0,
+        })
       },
     })
   }, [apiUrl, clearSession, resetLocalSurveyState, runDebugReset, withAuthRetry])
@@ -369,7 +387,7 @@ export function useSurveySync({
       try {
         setDetailsLoadingSurveyId(surveyId)
         if (!silent) {
-          setStatus(`Loading canonical details for ${surveyId}...`)
+          setStatus(syncText.detailLoading())
         }
         const payload = await withAuthRetry((token) => loadSurveyDetail(apiUrl, token, surveyId))
 
@@ -378,7 +396,7 @@ export function useSurveySync({
           delete detailAutoLoadCooldownUntilRef.current[surveyId]
         }
         if (!silent) {
-          setStatus(`Canonical details loaded for ${surveyId}`)
+          setStatus(syncText.detailLoaded())
         }
       } catch (error) {
         // Prevent endless request loops on non-fetchable surveys (local-only or server errors).
@@ -386,12 +404,13 @@ export function useSurveySync({
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
           await clearSession()
           if (!silent) {
-            setStatus("Login required before loading canonical details")
+            setStatus(syncText.detailLoginRequired())
           }
           return
         }
+        logStatusDetail("sync.loadDetail", error)
         if (!silent) {
-          setStatus(`Load detail error: ${(error as Error).message}`)
+          setStatus(syncText.detailFailed())
         }
       } finally {
         setDetailsLoadingSurveyId((current) => (current === surveyId ? null : current))
@@ -407,24 +426,25 @@ export function useSurveySync({
       try {
         setEventsLoadingSurveyId(surveyId)
         if (!silent) {
-          setStatus(`Loading events for ${surveyId}...`)
+          setStatus(syncText.eventsLoading())
         }
         const payload = await withAuthRetry((token) => loadSurveyEvents(apiUrl, token, surveyId))
 
         setSurveyEvents((previous) => ({ ...previous, [surveyId]: payload.items ?? [] }))
         if (!silent) {
-          setStatus(`Events loaded for ${surveyId}`)
+          setStatus(syncText.eventsLoaded())
         }
       } catch (error) {
         if ((error as Error).message === AUTH_REQUIRED_ERROR) {
           await clearSession()
           if (!silent) {
-            setStatus("Login required before loading survey events")
+            setStatus(syncText.eventsLoginRequired())
           }
           return
         }
+        logStatusDetail("sync.loadEvents", error)
         if (!silent) {
-          setStatus(`Load events error: ${(error as Error).message}`)
+          setStatus(syncText.eventsFailed())
         }
       } finally {
         setEventsLoadingSurveyId((current) => (current === surveyId ? null : current))
