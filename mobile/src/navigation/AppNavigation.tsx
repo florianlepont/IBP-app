@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Platform, StatusBar } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
-import Constants, { ExecutionEnvironment } from "expo-constants"
+import { getNativeTabsAvailability } from "./native-tabs-availability"
 import { PublicMapReloadContext, createPublicMapReloadSignal } from "./public-map-reload"
 import { JsRootTabs } from "./tabs/JsRootTabs"
 import { NativeRootTabs } from "./tabs/NativeRootTabs"
@@ -18,35 +18,26 @@ import { NativeRootTabs } from "./tabs/NativeRootTabs"
  * screens), types.ts (param lists and the global RootParamList).
  */
 
-// ─── Native availability detection ───────────────────────────────────────────
-
-function isNativeBottomTabViewAvailable(): boolean {
-  if (Platform.OS !== "ios") return false
-  // Opt-out via env var (set EXPO_PUBLIC_ENABLE_NATIVE_TABS=false to force JS tabs)
-  if (process.env.EXPO_PUBLIC_ENABLE_NATIVE_TABS === "false") return false
-  return (
-    Constants.executionEnvironment !== ExecutionEnvironment.StoreClient &&
-    Constants.appOwnership !== "expo"
-  )
-}
-
 // ─── Root (single NavigationContainer) ───────────────────────────────────────
 
 function AppTabs() {
-  const nativeBottomTabsAvailable = isNativeBottomTabViewAvailable()
+  // Decided once per mount: the inputs are fixed for the lifetime of the bundle.
+  const [availability] = useState(() => getNativeTabsAvailability())
 
   useEffect(() => {
-    if (!nativeBottomTabsAvailable) {
-      console.warn(
-        "RNCTabView unavailable — falling back to JS tabs (Expo Go or native binary not built yet).",
+    if (!availability.native) {
+      console.warn(`[tabs] native=false reason=${availability.reason}`)
+    } else if (availability.envOptOutIgnored) {
+      console.info(
+        "[tabs] native=true reason=ok (EXPO_PUBLIC_ENABLE_NATIVE_TABS=false ignored in Release)",
       )
     }
-  }, [nativeBottomTabsAvailable])
+  }, [availability])
 
   return (
     <>
       <StatusBar barStyle={Platform.OS === "android" ? "dark-content" : "light-content"} />
-      {nativeBottomTabsAvailable ? <NativeRootTabs /> : <JsRootTabs />}
+      {availability.native ? <NativeRootTabs /> : <JsRootTabs />}
     </>
   )
 }

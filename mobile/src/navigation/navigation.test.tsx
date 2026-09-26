@@ -237,6 +237,30 @@ describe("AppNavigation tree choice", () => {
     expect(mockNavigators.jsTabs).toHaveLength(1)
     expect(mockNavigators.nativeTabs).toBeUndefined()
     expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toMatch(/^\[tabs\] native=false reason=/)
+  })
+
+  test("a Release build ignores the env opt-out, stays native and says so once", async () => {
+    mockPlatform.OS = "ios"
+    process.env.EXPO_PUBLIC_ENABLE_NATIVE_TABS = "false"
+    const info = jest.spyOn(console, "info").mockImplementation(() => undefined)
+    const globals = globalThis as { __DEV__?: boolean }
+    const previousDev = globals.__DEV__
+    globals.__DEV__ = false
+    try {
+      const tree = await mount(<AppNavigation />)
+      await act(async () => {
+        tree.update(<AppNavigation />)
+      })
+      expect(mockNavigators.nativeTabs).toBeDefined()
+      expect(mockNavigators.jsTabs).toBeUndefined()
+      expect(warn).not.toHaveBeenCalled()
+      expect(info).toHaveBeenCalledTimes(1)
+      expect(String(info.mock.calls[0][0])).toContain("[tabs] native=true reason=ok")
+    } finally {
+      globals.__DEV__ = previousDev
+      info.mockRestore()
+    }
   })
 
   test("the native tabs render no search tab outside iOS", async () => {
