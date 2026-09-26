@@ -71,8 +71,6 @@ describe("config: loadAppConfig defaults (D-02: outside production nothing chang
     expect(config.cadastre.wfsTypename).toBe("CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle")
     expect(config.cadastre.reverseUrl).toBe("https://data.geopf.fr/geocodage/reverse")
     expect(config.cadastre.apiCartoParcelUrl).toBe("https://apicarto.ign.fr/api/cadastre/parcelle")
-    expect(config.smtp.port).toBe(587)
-    expect(config.smtp.from).toBe("noreply@ibp.local")
     expect(config.auth0.domain).toBe("")
     expect(config.auth0.audience).toBe("")
     expect(config.auth0.httpTimeoutMs).toBe(5000)
@@ -87,6 +85,10 @@ describe("config: loadAppConfig defaults (D-02: outside production nothing chang
     ).toBe("login.example")
     expect(loadAppConfig({ TRUST_PROXY: "  " }).http.trustProxy).toBe("loopback,uniquelocal")
     expect(loadAppConfig({ TRUST_PROXY: " 1 " }).http.trustProxy).toBe("1")
+  })
+
+  it("has no e-mail settings (D-09: the API sends no e-mail)", () => {
+    expect(Object.keys(loadAppConfig({}))).not.toContain("smtp")
   })
 
   it("rejects an unknown NODE_ENV and names it", () => {
@@ -131,20 +133,12 @@ describe("config: number parsing (garbage or empty falls back, never throws)", (
       2000,
     ],
     ["POSTGRES_PORT", "0", (c: ReturnType<typeof loadAppConfig>) => c.database.port, 5432],
-    ["SMTP_PORT", "465", (c: ReturnType<typeof loadAppConfig>) => c.smtp.port, 465],
   ])("%s=%p resolves to %p", (name, value, pick, expected) => {
     expect(pick(loadAppConfig({ NODE_ENV: "test", [name]: value }))).toBe(expected)
   })
 })
 
 describe("config: boolean and enum parsing (today's predicates)", () => {
-  it("parses SMTP_ENABLED case-insensitively against 'true' only", () => {
-    expect(loadAppConfig({ SMTP_ENABLED: "TRUE" }).smtp.enabled).toBe(true)
-    expect(loadAppConfig({ SMTP_ENABLED: "yes" }).smtp.enabled).toBe(false)
-    expect(loadAppConfig({}).smtp.enabled).toBe(false)
-    expect(loadAppConfig({ SMTP_SECURE: "true" }).smtp.secure).toBe(true)
-  })
-
   it("parses DEBUG_DATA_RESET_ENABLED case-insensitively", () => {
     expect(loadAppConfig({ DEBUG_DATA_RESET_ENABLED: "True" }).debug.dataResetEnabled).toBe(true)
     expect(loadAppConfig({ DEBUG_DATA_RESET_ENABLED: "1" }).debug.dataResetEnabled).toBe(false)
@@ -226,6 +220,18 @@ describe("config: production rules (D-02, D-03, D-18)", () => {
       )
     },
   )
+
+  it("still starts when leftover SMTP_* lines remain in the env (D-09, unknown keys ignored)", () => {
+    const env = validProductionEnv({
+      SMTP_ENABLED: "true",
+      SMTP_HOST: "smtp.example",
+      SMTP_PORT: "not-a-port",
+      SMTP_PASSWORD: "x",
+      EMAIL_CHANGE_CONFIRM_URL_TEMPLATE: "https://example/confirm?t={token}",
+    })
+    expect(() => validateEnv(env)).not.toThrow()
+    expect(findProductionProblems(env)).toEqual([])
+  })
 
   it("refuses minio mode without OBJECT_STORAGE_ENDPOINT", () => {
     expect(productionError(validProductionEnv({ OBJECT_STORAGE_ENDPOINT: "" }))).toContain(
