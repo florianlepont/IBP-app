@@ -173,13 +173,15 @@ export async function resetUserData(
 
 export async function fetchPublicMapItems(
   apiUrl: string,
-  input?: { from?: string; to?: string; region?: string },
+  input?: { from?: string; to?: string; region?: string; bbox?: string },
 ): Promise<{ items: PublicMapItem[] }> {
   const queryParts: string[] = []
   if (input?.from?.trim()) queryParts.push(`from=${encodeURIComponent(input.from.trim())}`)
   if (input?.to?.trim()) queryParts.push(`to=${encodeURIComponent(input.to.trim())}`)
   if (input?.region?.trim())
     queryParts.push(`region=${encodeURIComponent(input.region.trim().toUpperCase())}`)
+  // Viewport filter, minLng,minLat,maxLng,maxLat (D-05); the server validates it (01.9-07).
+  if (input?.bbox?.trim()) queryParts.push(`bbox=${encodeURIComponent(input.bbox.trim())}`)
   const suffix = queryParts.length > 0 ? `?${queryParts.join("&")}` : ""
 
   return apiRequest<{ items: PublicMapItem[] }>({
