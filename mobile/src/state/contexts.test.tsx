@@ -257,6 +257,7 @@ jest.mock("react-native-auth0", () => ({
 
 import { cleanup, renderHook } from "@testing-library/react-native/pure"
 import App from "../../App"
+import { fr } from "../i18n"
 import { AppStateProvider } from "./AppStateProvider"
 import { useAccessToken, useSession, type SessionContextValue } from "./session-context"
 import { useStatus, type StatusContextValue } from "./status-context"
@@ -473,7 +474,7 @@ describe("AppStateProvider", () => {
     const snapshot = latest()
     expect(snapshot.surveys.state.selectedSurveyId).toBe("s-01")
     expect(snapshot.surveys.state.surveyDetailTab).toBe("summary")
-    expect(snapshot.status.status).toBe("Survey s-01 opened")
+    expect(snapshot.status.status).toBe(fr.status.app.surveyOpened({ name: "Site 01" }))
 
     await act(async () => {
       latest().surveys.actions.closeSurveyDetailSelection()
@@ -486,6 +487,31 @@ describe("AppStateProvider", () => {
       latest().session.actions.setApiUrl("http://example.test/v1")
     })
     expect(latest().session.state.apiUrl).toBe("http://example.test/v1")
+  })
+
+  test("shows the catalogue init error, not the raw error text", async () => {
+    const { initLocalDb } = jest.requireMock("../storage/db") as { initLocalDb: jest.Mock }
+    initLocalDb.mockRejectedValueOnce(new Error("disk I/O error"))
+    const consoleDebug = jest.spyOn(console, "debug").mockImplementation(() => undefined)
+    let mounted: renderer.ReactTestRenderer | null = null
+    await act(async () => {
+      mounted = renderer.create(
+        <AppStateProvider>
+          <Probe />
+        </AppStateProvider>,
+      )
+    })
+    await settle()
+
+    expect(latest().status.status).toBe(fr.status.app.initFailed())
+
+    const tree = mounted as renderer.ReactTestRenderer | null
+    if (tree) {
+      await act(async () => {
+        tree.unmount()
+      })
+    }
+    consoleDebug.mockRestore()
   })
 })
 

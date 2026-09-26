@@ -12,6 +12,7 @@ import { useSurveyDraftPatcher } from "../hooks/useSurveyDraftPatcher"
 import { useSurveyForm } from "../hooks/useSurveyForm"
 import { useSurveyList } from "../hooks/useSurveyList"
 import { useSurveySync } from "../hooks/useSurveySync"
+import { fr, logStatusDetail } from "../i18n"
 import { persistLegacyAttachmentFiles } from "../storage/attachments"
 import { initLocalDb } from "../storage/db"
 import {
@@ -153,14 +154,22 @@ function useAppController() {
       await refreshLocalAttachments()
     }
 
-    bootstrap().catch((error) => setStatus(`Init error: ${(error as Error).message}`))
+    bootstrap().catch((error: unknown) => {
+      logStatusDetail("app.init", error)
+      setStatus(fr.status.app.initFailed())
+    })
   }, [refreshLocalAttachments, refreshLocalSurveys, setStatus])
 
   const openSurvey = useCallback(
     (surveyId: string): void => {
       surveyList.openSurvey(surveyId)
       setSurveyDetailTab("summary")
-      setStatus(`Survey ${surveyId} opened`)
+      const opened = surveyList.surveys.find((survey) => survey.id === surveyId)
+      setStatus(
+        fr.status.app.surveyOpened({
+          name: opened?.site_name?.trim() || fr.common.untitledSurvey,
+        }),
+      )
     },
     [setStatus, surveyList],
   )
