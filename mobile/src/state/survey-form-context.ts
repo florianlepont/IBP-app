@@ -1,14 +1,14 @@
 import { createContext, useContext } from "react"
 import type { GpsCaptureResult } from "../app/types"
-import type { NearbyParcelsState } from "../hooks/useNearbyParcels"
 import type { useSurveyForm } from "../hooks/useSurveyForm"
+import type { FormMode } from "../navigation/types"
 
 type SurveyForm = ReturnType<typeof useSurveyForm>
 
 /**
  * Survey form context (phase 01.9, D-01): the fields of the survey being
- * created or edited, the nearby parcels and the form actions. It is the only
- * value that changes on a form keystroke.
+ * created or edited and the form actions. It is the only value that changes on
+ * a form keystroke. The nearby parcels have their own context (01.9-18).
  */
 export type SurveyFormState = {
   siteName: SurveyForm["siteName"]
@@ -20,7 +20,9 @@ export type SurveyFormState = {
   factorRetainedScores: SurveyForm["factorRetainedScores"]
   formErrors: SurveyForm["formErrors"]
   draftInput: SurveyForm["draftInput"]
-  nearbyParcels: NearbyParcelsState
+  /** Also in the surveys state; repeated here so the form routes read one context (01.9-18). */
+  formMode: FormMode
+  editingSurveyId: string | null
 }
 
 export type SurveyFormActions = {
@@ -33,7 +35,6 @@ export type SurveyFormActions = {
   applyDraftToForm: SurveyForm["applyDraftToForm"]
   resetSurveyForm: SurveyForm["resetSurveyForm"]
   buildDraftInput: SurveyForm["buildDraftInput"]
-  loadNearbyParcels: () => Promise<void>
   saveSurveyEdits: () => Promise<boolean>
   createDraft: () => Promise<boolean>
   captureGpsLocation: () => Promise<GpsCaptureResult | null>

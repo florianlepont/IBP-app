@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from "../storage/surveys"
 import { DEFAULT_SURVEY_FORM } from "../app/constants"
-import { FormMode } from "../app/AuthenticatedAppNavigation"
+import type { FormMode } from "../navigation/types"
 import { useSurveyForm } from "./useSurveyForm"
 import { useSurveyList } from "./useSurveyList"
 

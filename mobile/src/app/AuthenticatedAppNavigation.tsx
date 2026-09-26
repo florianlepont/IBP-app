@@ -1,148 +1,46 @@
-import { useEffect, useRef, type ElementType } from "react"
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  View,
-} from "react-native"
-import {
-  NavigationContainer,
-  getFocusedRouteNameFromRoute,
-  useNavigation,
-  type NavigatorScreenParams,
-} from "@react-navigation/native"
+import { useContext, useEffect, useRef, useState, type ElementType } from "react"
+import { Platform, Pressable, StatusBar, View } from "react-native"
+import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import Constants, { ExecutionEnvironment } from "expo-constants"
-import type { SearchBarCommands } from "react-native-screens"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors } from "./brand-tokens"
-import { devOnlyHandler } from "./dev-tools"
 import { styles } from "./styles"
 import {
-  FactorKey,
-  GpsCaptureResult,
-  RegionVersion,
-  SurveyDetailTab,
-  VegetationStage,
-} from "./types"
-import { SurveyFormScreen } from "../screens/SurveyFormScreen"
-import { SurveyListScreen } from "../screens/SurveyListScreen"
-import { SurveyDetailScreen } from "../screens/SurveyDetailScreen"
-import { PublicMapScreen } from "../screens/PublicMapScreen"
-import { AccountScreen } from "../screens/AccountScreen"
-import { SettingsScreen } from "../screens/SettingsScreen"
-import { FactorDetailScreen } from "../screens/FactorDetailScreen"
-import { SurveyParcelSelectionScreen } from "../screens/SurveyParcelSelectionScreen"
-import { HomeScreen } from "../screens/HomeScreen"
-import { usePublicMapExplorer } from "../hooks/usePublicMapExplorer"
-import type { NearbyParcelsState } from "../hooks/useNearbyParcels"
-import {
-  useAccessToken,
-  useSession,
-  type SessionActions,
-  type SessionState,
-} from "../state/session-context"
-import { useStatus } from "../state/status-context"
-import {
-  useSurveyFormState,
-  type SurveyFormActions,
-  type SurveyFormState,
-} from "../state/survey-form-context"
-import { useSurveys, type SurveyActions, type SurveysState } from "../state/surveys-context"
-import { useSyncActions, type SyncActions } from "../state/sync-actions-context"
-import type { SurveyStats } from "./types"
+  PublicMapReloadContext,
+  createPublicMapReloadSignal,
+  type PublicMapReloadSignal,
+} from "../navigation/public-map-reload"
+import { AccountRoute } from "../navigation/routes/AccountRoute"
+import { FactorDetailRoute } from "../navigation/routes/FactorDetailRoute"
+import { HomeRoute } from "../navigation/routes/HomeRoute"
+import { ParcelSelectionRoute } from "../navigation/routes/ParcelSelectionRoute"
+import { PublicMapRoute } from "../navigation/routes/PublicMapRoute"
+import { SettingsRoute } from "../navigation/routes/SettingsRoute"
+import { SurveyDetailRoute } from "../navigation/routes/SurveyDetailRoute"
+import { SurveyFormRoute } from "../navigation/routes/SurveyFormRoute"
+import { SurveyListRoute } from "../navigation/routes/SurveyListRoute"
+import type {
+  AccountStackParamList,
+  HomeStackParamList,
+  PublicMapStackParamList,
+  RootTabParamList,
+  SurveysStackParamList,
+} from "../navigation/types"
+import { useSession, type SessionActions } from "../state/session-context"
+import { useSurveyActions } from "../state/surveys-context"
+import { useSyncActions } from "../state/sync-actions-context"
 
-type HomeStackParamList = {
-  homeRoot: undefined
-}
-
-type AccountStackParamList = {
-  accountHome: undefined
-  settings: undefined
-}
-
-type SurveysStackParamList = {
-  surveysHome: undefined
-  surveyDetail: undefined
-  surveyForm: undefined
-  surveyFactorDetail: { factor: FactorKey }
-  surveyParcels: { surveyId: string; mode: "wizard" | "edit" }
-}
-
-type PublicMapStackParamList = {
-  publicMapHome: undefined
-}
-
-export type RootTabParamList = {
-  home: NavigatorScreenParams<HomeStackParamList> | undefined
-  surveys: NavigatorScreenParams<SurveysStackParamList> | undefined
-  search: NavigatorScreenParams<SurveysStackParamList> | undefined
-  publicMap: NavigatorScreenParams<PublicMapStackParamList> | undefined
-  account: NavigatorScreenParams<AccountStackParamList> | undefined
-}
-
-export type FormMode = "create" | "edit"
-
-// Phase 01.9-09: the internal navigators still take the pre-context shapes;
-// AuthenticatedAppNavigation rebuilds them from the five contexts at its top.
-// Plan 01.9-18 replaces these with per-screen route components.
-type SurveyFormController = SurveyFormState & SurveyFormActions
-type SurveyListController = SurveysState &
-  SurveyActions & {
-    refreshLocalSurveys: () => Promise<void>
-    refreshLocalAttachments: () => Promise<void>
-  }
-type SurveySyncController = SessionState &
-  SessionActions &
-  SyncActions & {
-    accessToken: string | null
-    status: string
-    surveyDetails: SurveysState["surveyDetails"]
-    detailsLoadingSurveyId: SurveysState["detailsLoadingSurveyId"]
-    surveyEvents: SurveysState["surveyEvents"]
-    eventsLoadingSurveyId: SurveysState["eventsLoadingSurveyId"]
-    handleLoadSurveyEvents: SurveyActions["loadSurveyEvents"]
-    handleQueueAttachmentFromCamera: SurveyActions["queueAttachmentFromCamera"]
-    handleQueueAttachmentFromLibrary: SurveyActions["queueAttachmentFromLibrary"]
-    handleDeleteAttachment: SurveyActions["deleteAttachment"]
-    confirmDeleteSurvey: SurveyActions["confirmDeleteSurvey"]
-    handleSubmitSurvey: SurveyActions["submitSurvey"]
-    handleRetrySurvey: SurveyActions["retrySurvey"]
-    handleDiscardSurvey: SurveyActions["discardSurvey"]
-    handleToggleVisibility: SurveyActions["toggleVisibility"]
-  }
-type PublicMapExplorerController = ReturnType<typeof usePublicMapExplorer>
-
-type NavigationData = {
-  apiUrl: string
-  formMode: FormMode
-  editingSurveyId: string | null
-  surveyStats: SurveyStats
-  nearbyParcels: NearbyParcelsState
-  onLoadNearbyParcels: () => void
-  surveyDetailTab: SurveyDetailTab
-  setSurveyDetailTab: (tab: SurveyDetailTab) => void
-  surveyForm: SurveyFormController
-  surveyList: SurveyListController
-  surveySync: SurveySyncController
-  publicMapExplorer: PublicMapExplorerController
-  ownSurveyIds: string[]
-  onOpenCreateSurvey: () => void
-  onOpenSurvey: (surveyId: string) => void
-  onStartEditSurvey: (surveyId: string) => Promise<boolean>
-  onRenameSurvey: (surveyId: string, nextSiteName: string) => Promise<void>
-  onUpdateRegionVersion: (surveyId: string, region: RegionVersion) => Promise<void>
-  onUpdateVegetationStage: (surveyId: string, stage: VegetationStage) => Promise<void>
-  onSaveSurveyEdits: () => Promise<boolean>
-  onCreateDraft: () => Promise<boolean>
-  onCaptureGpsLocation: () => Promise<GpsCaptureResult | null>
-  onApiUrlChange: (value: string) => void
-  onCloseSurveyDetailSelection: () => void
-}
+/*
+ * The navigation tree (phase 01.9-18, D-01). It holds the navigators, their
+ * options and the tab listeners, and passes no data: every screen is a route
+ * component under src/navigation/routes/ that reads its own contexts. The tree
+ * itself reads only stable action objects and the session (for the
+ * isAuthenticated check in the listeners), so a status update, a keystroke or
+ * a list refresh never re-renders it. Plan 01.9-24 moves it into
+ * src/navigation/.
+ */
 
 // ─── Navigators ──────────────────────────────────────────────────────────────
 
@@ -287,84 +185,80 @@ const jsTabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList }
 
 // ─── Shared tab listeners ─────────────────────────────────────────────────────
 
-function makeSurveysTabListeners(surveySync: SurveySyncController) {
+type TabListenerDeps = {
+  isAuthenticated: boolean
+  handlePullChanges: () => Promise<void>
+  handleLoadMyProfile: SessionActions["handleLoadMyProfile"]
+  closeSurveyDetailSelection: () => void
+  publicMapReload: PublicMapReloadSignal
+}
+
+function makeSurveysTabListeners({ isAuthenticated, handlePullChanges }: TabListenerDeps) {
   return {
     tabPress: () => {
-      if (surveySync.isAuthenticated) {
-        void surveySync.handlePullChanges()
+      if (isAuthenticated) {
+        void handlePullChanges()
       }
     },
   }
 }
 
-function makePublicMapTabListeners(
-  publicMapExplorer: PublicMapExplorerController,
-  onCloseSurveyDetailSelection: () => void,
-) {
+function makePublicMapTabListeners({
+  closeSurveyDetailSelection,
+  publicMapReload,
+}: TabListenerDeps) {
   return {
     tabPress: () => {
-      onCloseSurveyDetailSelection()
-      void publicMapExplorer.loadPublicMap()
+      closeSurveyDetailSelection()
+      // The map route reloads the public map (pending until it mounts).
+      publicMapReload.request()
     },
   }
 }
 
-function makeAccountTabListeners(
-  surveySync: SurveySyncController,
-  onCloseSurveyDetailSelection: () => void,
-) {
+function makeAccountTabListeners({
+  isAuthenticated,
+  handleLoadMyProfile,
+  closeSurveyDetailSelection,
+}: TabListenerDeps) {
   return {
     tabPress: () => {
-      onCloseSurveyDetailSelection()
-      if (surveySync.isAuthenticated) {
-        void surveySync.handleLoadMyProfile({ silent: true })
+      closeSurveyDetailSelection()
+      if (isAuthenticated) {
+        void handleLoadMyProfile({ silent: true })
       }
     },
+  }
+}
+
+/** Reads only the session and stable action objects. */
+function useTabListenerDeps(): TabListenerDeps {
+  const { state: session, actions: sessionActions } = useSession()
+  const syncActions = useSyncActions()
+  const surveyActions = useSurveyActions()
+  const publicMapReload = useContext(PublicMapReloadContext)
+  if (publicMapReload === null) {
+    throw new Error("The root tabs must be rendered inside AuthenticatedAppNavigation")
+  }
+  return {
+    isAuthenticated: session.isAuthenticated,
+    handlePullChanges: syncActions.handlePullChanges,
+    handleLoadMyProfile: sessionActions.handleLoadMyProfile,
+    closeSurveyDetailSelection: surveyActions.closeSurveyDetailSelection,
+    publicMapReload,
   }
 }
 
 // ─── Surveys stack ────────────────────────────────────────────────────────────
 
-type SurveysTabNavigatorProps = Omit<
-  NavigationData,
-  "publicMapExplorer" | "ownSurveyIds" | "onApiUrlChange"
-> & { useNativeNav?: boolean; searchEntry?: boolean }
+type SurveysTabNavigatorProps = { useNativeNav?: boolean; searchEntry?: boolean }
 
 function SurveysTabNavigator({
-  apiUrl,
-  formMode,
-  editingSurveyId,
-  surveyDetailTab,
-  setSurveyDetailTab,
-  surveyForm,
-  surveyList,
-  surveySync,
-  onOpenSurvey,
-  onStartEditSurvey,
-  onRenameSurvey,
-  onUpdateRegionVersion,
-  onUpdateVegetationStage,
-  onSaveSurveyEdits,
-  onCreateDraft,
-  onCaptureGpsLocation,
-  onOpenCreateSurvey,
-  onCloseSurveyDetailSelection,
   useNativeNav = false,
   searchEntry = false,
 }: SurveysTabNavigatorProps) {
+  const surveyActions = useSurveyActions()
   const nativeSearchEnabled = useNativeNav && Platform.OS === "ios" && searchEntry
-  const hasDedicatedSearchTab = useNativeNav && Platform.OS === "ios"
-  const searchBarRef = useRef<SearchBarCommands>(null!)
-
-  useEffect(() => {
-    if (!nativeSearchEnabled) return
-    if (surveyList.surveyQuery.trim().length === 0) {
-      searchBarRef.current?.clearText()
-      return
-    }
-
-    searchBarRef.current?.setText(surveyList.surveyQuery)
-  }, [nativeSearchEnabled, surveyList.surveyQuery])
 
   return (
     <View style={styles.tabScreenContainer}>
@@ -390,75 +284,18 @@ function SurveysTabNavigator({
       >
         <SurveysStack.Screen
           name="surveysHome"
-          options={() => ({
+          options={{
             title: searchEntry ? "Recherche" : "Mes Relevés",
             headerShown: nativeSearchEnabled,
             headerLargeTitle: false,
             headerTransparent: nativeSearchEnabled ? false : undefined,
             headerBlurEffect: nativeSearchEnabled ? "systemMaterial" : undefined,
             headerShadowVisible: false,
-            headerSearchBarOptions: nativeSearchEnabled
-              ? {
-                  ref: searchBarRef,
-                  placeholder: "Rechercher des relevés",
-                  placement: searchEntry ? "automatic" : "integratedButton",
-                  hideWhenScrolling: false,
-                  obscureBackground: false,
-                  autoCapitalize: "none",
-                  tintColor: brandColors.forest,
-                  onChangeText: (event) => {
-                    surveyList.setSurveyQuery(event.nativeEvent.text)
-                  },
-                  onCancelButtonPress: () => {
-                    surveyList.setSurveyQuery("")
-                  },
-                }
-              : undefined,
-          })}
+            // headerSearchBarOptions are set by SurveyListRoute (it owns the query).
+          }}
         >
-          {({ navigation }) => (
-            <SurveyListScreen
-              surveys={surveyList.surveys}
-              visibleSurveys={
-                hasDedicatedSearchTab && !searchEntry
-                  ? surveyList.surveys
-                  : surveyList.visibleSurveys
-              }
-              selectedSurveyId={surveyList.selectedSurveyId}
-              attachmentsBySurvey={surveyList.attachmentsBySurvey}
-              surveyQuery={surveyList.surveyQuery}
-              setSurveyQuery={surveyList.setSurveyQuery}
-              surveyFromDate={surveyList.surveyFromDate}
-              setSurveyFromDate={surveyList.setSurveyFromDate}
-              surveyToDate={surveyList.surveyToDate}
-              setSurveyToDate={surveyList.setSurveyToDate}
-              statusFilter={surveyList.statusFilter}
-              setStatusFilter={surveyList.setStatusFilter}
-              visibilityFilter={surveyList.visibilityFilter}
-              setVisibilityFilter={surveyList.setVisibilityFilter}
-              syncFilter={surveyList.syncFilter}
-              setSyncFilter={surveyList.setSyncFilter}
-              blockedFilter={surveyList.blockedFilter}
-              setBlockedFilter={surveyList.setBlockedFilter}
-              attachmentFilter={surveyList.attachmentFilter}
-              setAttachmentFilter={surveyList.setAttachmentFilter}
-              sortMode={surveyList.sortMode}
-              setSortMode={surveyList.setSortMode}
-              resetFilters={surveyList.resetFilters}
-              useNativeSearchUI={nativeSearchEnabled}
-              showInlineSearch={!hasDedicatedSearchTab}
-              onRefresh={surveySync.handlePullChanges}
-              onDeleteSurvey={surveySync.confirmDeleteSurvey}
-              onOpenCreateSurvey={() => {
-                onOpenCreateSurvey()
-                navigation.navigate("surveyForm")
-              }}
-              onOpenSurvey={(surveyId) => {
-                onOpenSurvey(surveyId)
-                navigation.navigate("surveyDetail")
-              }}
-              onEnsureAttachmentPreviews={surveySync.handleEnsureAttachmentPreviews}
-            />
+          {(props) => (
+            <SurveyListRoute {...props} useNativeNav={useNativeNav} searchEntry={searchEntry} />
           )}
         </SurveysStack.Screen>
         <SurveysStack.Screen
@@ -469,99 +306,21 @@ function SurveysTabNavigator({
           }}
           listeners={{
             beforeRemove: () => {
-              onCloseSurveyDetailSelection()
+              surveyActions.closeSurveyDetailSelection()
             },
           }}
         >
-          {({ navigation }) => (
-            <>
-              {surveyList.selectedSurvey ? (
-                <SurveyDetailScreen
-                  apiUrl={apiUrl}
-                  selectedSurvey={surveyList.selectedSurvey}
-                  selectedSurveyAttachments={surveyList.selectedSurveyAttachments}
-                  surveyDetailTab={surveyDetailTab}
-                  setSurveyDetailTab={setSurveyDetailTab}
-                  surveyDetails={surveySync.surveyDetails}
-                  detailsLoadingSurveyId={surveySync.detailsLoadingSurveyId}
-                  surveyEvents={surveySync.surveyEvents}
-                  eventsLoadingSurveyId={surveySync.eventsLoadingSurveyId}
-                  onLoadSurveyEvents={surveySync.handleLoadSurveyEvents}
-                  onTakePhoto={surveySync.handleQueueAttachmentFromCamera}
-                  onPickPhoto={surveySync.handleQueueAttachmentFromLibrary}
-                  onDeleteAttachment={surveySync.handleDeleteAttachment}
-                  onDeleteSurvey={surveySync.confirmDeleteSurvey}
-                  onSubmitSurvey={surveySync.handleSubmitSurvey}
-                  onRetrySurvey={surveySync.handleRetrySurvey}
-                  onDiscardSurvey={surveySync.handleDiscardSurvey}
-                  onToggleVisibility={surveySync.handleToggleVisibility}
-                  onOpenFactor={async (surveyId, factor) => {
-                    const loaded = await onStartEditSurvey(surveyId)
-                    if (loaded) {
-                      navigation.navigate("surveyFactorDetail", { factor })
-                    }
-                  }}
-                  onRenameSurvey={onRenameSurvey}
-                  onUpdateRegionVersion={onUpdateRegionVersion}
-                  onUpdateVegetationStage={onUpdateVegetationStage}
-                  onOpenParcels={async (surveyId) => {
-                    const loaded = await onStartEditSurvey(surveyId)
-                    if (loaded) {
-                      navigation.navigate("surveyParcels", { surveyId, mode: "edit" })
-                    }
-                  }}
-                  onEnsureAttachmentPreviews={surveySync.handleEnsureAttachmentPreviews}
-                  onSimulateMissingAttachmentFile={devOnlyHandler(
-                    surveySync.handleSimulateMissingAttachmentFile,
-                  )}
-                />
-              ) : null}
-            </>
-          )}
+          {(props) => <SurveyDetailRoute {...props} />}
         </SurveysStack.Screen>
         <SurveysStack.Screen
           name="surveyForm"
           options={{
-            title: formMode === "edit" ? "Edit survey" : "New survey",
+            // SurveyFormRoute sets the create/edit title.
+            title: "New survey",
             headerLargeTitle: false,
           }}
         >
-          {({ navigation }) => (
-            <SurveyFormScreen
-              apiUrl={apiUrl}
-              screen={formMode === "edit" ? "edit" : "create"}
-              editingSurveyId={editingSurveyId}
-              siteName={surveyForm.siteName}
-              setSiteName={surveyForm.setSiteName}
-              regionVersion={surveyForm.regionVersion}
-              vegetationStage={surveyForm.vegetationStage}
-              setVegetationStage={surveyForm.setVegetationStage}
-              onRegionChange={surveyForm.handleRegionChange}
-              gpsLocation={surveyForm.gpsLocation}
-              selectedParcelIds={surveyForm.selectedParcelIds}
-              onToggleParcelSelection={surveyForm.toggleParcelSelection}
-              onCaptureGpsLocation={onCaptureGpsLocation}
-              factorSections={surveyForm.factorSections}
-              factorRetainedScores={surveyForm.factorRetainedScores}
-              formErrors={surveyForm.formErrors}
-              onOpenFactor={(factor) => navigation.navigate("surveyFactorDetail", { factor })}
-              onOpenParcelFullscreen={() =>
-                navigation.navigate("surveyParcels", {
-                  surveyId: editingSurveyId ?? "draft",
-                  mode: "wizard",
-                })
-              }
-              onSaveSurveyEdits={async () => {
-                const saved = await onSaveSurveyEdits()
-                if (saved) navigation.goBack()
-              }}
-              onCreateDraft={async () => {
-                const created = await onCreateDraft()
-                if (created) navigation.goBack()
-              }}
-              status={surveySync.status}
-            />
-          )}
+          {(props) => <SurveyFormRoute {...props} />}
         </SurveysStack.Screen>
         <SurveysStack.Screen
           name="surveyFactorDetail"
@@ -570,15 +329,7 @@ function SurveysTabNavigator({
             headerLargeTitle: false,
           })}
         >
-          {({ route }) => (
-            <ScrollView style={styles.mainScroll} contentContainerStyle={styles.content}>
-              <FactorDetailScreen
-                factor={route.params.factor}
-                fields={surveyForm.factorSections[route.params.factor]}
-                retainedScore={surveyForm.factorRetainedScores[route.params.factor]}
-              />
-            </ScrollView>
-          )}
+          {(props) => <FactorDetailRoute {...props} />}
         </SurveysStack.Screen>
         <SurveysStack.Screen
           name="surveyParcels"
@@ -596,20 +347,7 @@ function SurveysTabNavigator({
             contentStyle: { backgroundColor: "#132434" },
           }}
         >
-          {({ route, navigation }) => (
-            <SurveyParcelSelectionScreen
-              apiUrl={apiUrl}
-              gpsLocation={surveyForm.gpsLocation}
-              selectedParcelIds={surveyForm.selectedParcelIds}
-              onToggleParcelSelection={surveyForm.toggleParcelSelection}
-              onCaptureGpsLocation={onCaptureGpsLocation}
-              hideDoneAction={route.params.mode === "wizard"}
-              onSave={async () => {
-                const saved = await onSaveSurveyEdits()
-                if (saved) navigation.goBack()
-              }}
-            />
-          )}
+          {(props) => <ParcelSelectionRoute {...props} />}
         </SurveysStack.Screen>
       </SurveysStack.Navigator>
     </View>
@@ -618,54 +356,11 @@ function SurveysTabNavigator({
 
 // ─── Home stack ──────────────────────────────────────────────────────────────
 
-type HomeTabNavigatorProps = {
-  currentUser: SurveySyncController["currentUser"]
-  surveys: SurveyListController["surveys"]
-  surveyStats: SurveyStats
-  nearbyParcels: NearbyParcelsState
-  onLoadNearbyParcels: () => void
-  onOpenCreateSurvey: () => void
-  onOpenSurvey: (surveyId: string) => void
-  onRefresh: () => Promise<void>
-}
-
-function HomeTabNavigator({
-  currentUser,
-  surveys,
-  surveyStats,
-  nearbyParcels,
-  onLoadNearbyParcels,
-  onOpenCreateSurvey,
-  onOpenSurvey,
-  onRefresh,
-}: HomeTabNavigatorProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tabNav = useNavigation() as any
-
+function HomeTabNavigator() {
   return (
     <View style={styles.tabScreenContainer}>
       <HomeStack.Navigator screenOptions={{ ...baseStackScreenOptions, headerShown: false }}>
-        <HomeStack.Screen name="homeRoot">
-          {() => (
-            <HomeScreen
-              currentUser={currentUser}
-              surveys={surveys}
-              surveyStats={surveyStats}
-              nearbyParcels={nearbyParcels}
-              onLoadNearbyParcels={onLoadNearbyParcels}
-              onCreateSurvey={() => {
-                onOpenCreateSurvey()
-                tabNav.navigate("surveys", { screen: "surveyForm" })
-              }}
-              onOpenSurvey={(surveyId) => {
-                onOpenSurvey(surveyId)
-                tabNav.navigate("surveys", { screen: "surveyDetail" })
-              }}
-              onNavigateToExplorer={() => tabNav.navigate("publicMap")}
-              onRefresh={onRefresh}
-            />
-          )}
-        </HomeStack.Screen>
+        <HomeStack.Screen name="homeRoot">{(props) => <HomeRoute {...props} />}</HomeStack.Screen>
       </HomeStack.Navigator>
     </View>
   )
@@ -673,53 +368,12 @@ function HomeTabNavigator({
 
 // ─── Public map ───────────────────────────────────────────────────────────────
 
-type PublicMapTabProps = {
-  publicMapExplorer: PublicMapExplorerController
-  ownSurveyIds: string[]
-  onReportSurvey: SurveySyncController["handleReportSurvey"]
-}
-
-function PublicMapTab({ publicMapExplorer, ownSurveyIds, onReportSurvey }: PublicMapTabProps) {
-  const insets = useSafeAreaInsets()
-
-  return (
-    <View style={[styles.tabScreenContainer, { marginTop: -insets.top }]}>
-      <PublicMapScreen
-        items={publicMapExplorer.items}
-        parcelStatuses={publicMapExplorer.parcelStatuses}
-        ownSurveyIds={ownSurveyIds}
-        loading={publicMapExplorer.loading}
-        parcelsLoading={publicMapExplorer.parcelsLoading}
-        fromDate={publicMapExplorer.fromDate}
-        toDate={publicMapExplorer.toDate}
-        region={publicMapExplorer.region}
-        onChangeFromDate={publicMapExplorer.setFromDate}
-        onChangeToDate={publicMapExplorer.setToDate}
-        onChangeRegion={publicMapExplorer.setRegion}
-        onLoad={publicMapExplorer.loadPublicMap}
-        onLoadParcels={publicMapExplorer.loadPublicParcels}
-        onReportSurvey={onReportSurvey}
-      />
-    </View>
-  )
-}
-
-function PublicMapTabNavigator({
-  publicMapExplorer,
-  ownSurveyIds,
-  onReportSurvey,
-}: PublicMapTabProps) {
+function PublicMapTabNavigator() {
   return (
     <View style={styles.tabScreenContainer}>
       <PublicMapStack.Navigator screenOptions={{ ...baseStackScreenOptions, headerShown: false }}>
         <PublicMapStack.Screen name="publicMapHome">
-          {() => (
-            <PublicMapTab
-              publicMapExplorer={publicMapExplorer}
-              ownSurveyIds={ownSurveyIds}
-              onReportSurvey={onReportSurvey}
-            />
-          )}
+          {(props) => <PublicMapRoute {...props} />}
         </PublicMapStack.Screen>
       </PublicMapStack.Navigator>
     </View>
@@ -727,13 +381,6 @@ function PublicMapTabNavigator({
 }
 
 // ─── Account stack ────────────────────────────────────────────────────────────
-
-type AccountTabNavigatorProps = {
-  apiUrl: string
-  onApiUrlChange: (value: string) => void
-  surveyList: SurveyListController
-  surveySync: SurveySyncController
-}
 
 function HeaderIconButton({
   icon,
@@ -754,12 +401,7 @@ function HeaderIconButton({
   )
 }
 
-function AccountTabNavigator({
-  apiUrl,
-  onApiUrlChange,
-  surveyList,
-  surveySync,
-}: AccountTabNavigatorProps) {
+function AccountTabNavigator() {
   return (
     <View style={styles.tabScreenContainer}>
       <AccountStack.Navigator
@@ -781,43 +423,10 @@ function AccountTabNavigator({
             ),
           })}
         >
-          {() => (
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-              style={styles.accountScreenWrap}
-            >
-              <AccountScreen
-                accessToken={surveySync.accessToken ?? ""}
-                currentUser={surveySync.currentUser}
-                profile={surveySync.profile}
-                profileUpdating={surveySync.profileUpdating}
-                apiUrl={apiUrl}
-                onSaveProfile={(input) => surveySync.handleUpdateProfile(input)}
-                onChangeEmail={(email) => surveySync.handleChangeEmail(email)}
-                onPasswordReset={() => surveySync.handlePasswordReset()}
-                onPickProfilePictureFromLibrary={surveySync.handlePickProfilePictureFromLibrary}
-                onTakeProfilePictureFromCamera={surveySync.handleTakeProfilePictureFromCamera}
-                onRemoveProfilePicture={surveySync.handleRemoveProfilePicture}
-                onLogout={surveySync.handleLogout}
-              />
-            </KeyboardAvoidingView>
-          )}
+          {(props) => <AccountRoute {...props} />}
         </AccountStack.Screen>
         <AccountStack.Screen name="settings" options={{ title: "Paramètres" }}>
-          {() => (
-            <SettingsScreen
-              apiUrl={apiUrl}
-              onApiUrlChange={onApiUrlChange}
-              onSync={surveySync.handleSync}
-              onPullChanges={surveySync.handlePullChanges}
-              onRefreshLocalList={surveyList.refreshLocalSurveys}
-              onRefreshLocalAttachments={surveyList.refreshLocalAttachments}
-              onDeleteAccount={surveySync.handleDeleteAccount}
-              onDebugResetIbpData={surveySync.handleDebugResetIbpData}
-              onDebugResetUserData={surveySync.handleDebugResetUserData}
-              status={surveySync.status}
-            />
-          )}
+          {(props) => <SettingsRoute {...props} />}
         </AccountStack.Screen>
       </AccountStack.Navigator>
     </View>
@@ -826,13 +435,8 @@ function AccountTabNavigator({
 
 // ─── Root tab navigators ──────────────────────────────────────────────────────
 
-function NativeRootTabs({
-  publicMapExplorer,
-  ownSurveyIds,
-  onApiUrlChange,
-  ...surveysProps
-}: NavigationData) {
-  const { surveySync, onCloseSurveyDetailSelection } = surveysProps
+function NativeRootTabs() {
+  const deps = useTabListenerDeps()
   const nativeTabRef = useRef<TabNavigatorLike | null>(null)
 
   if (nativeTabRef.current == null) {
@@ -843,84 +447,36 @@ function NativeRootTabs({
 
   return (
     <NativeTab.Navigator screenOptions={nativeTabScreenOptions} minimizeBehavior="automatic">
-      <NativeTab.Screen name="home">
-        {() => (
-          <HomeTabNavigator
-            currentUser={surveySync.currentUser}
-            surveys={surveysProps.surveyList.surveys}
-            surveyStats={surveysProps.surveyStats}
-            nearbyParcels={surveysProps.nearbyParcels}
-            onLoadNearbyParcels={surveysProps.onLoadNearbyParcels}
-            onOpenCreateSurvey={surveysProps.onOpenCreateSurvey}
-            onOpenSurvey={surveysProps.onOpenSurvey}
-            onRefresh={surveySync.handlePullChanges}
-          />
-        )}
-      </NativeTab.Screen>
-      <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(surveySync)}>
-        {() => <SurveysTabNavigator {...surveysProps} useNativeNav />}
+      <NativeTab.Screen name="home">{() => <HomeTabNavigator />}</NativeTab.Screen>
+      <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(deps)}>
+        {() => <SurveysTabNavigator useNativeNav />}
       </NativeTab.Screen>
       {Platform.OS === "ios" ? (
         <NativeTab.Screen
           name="search"
           options={{ role: "search" as const }}
-          listeners={makeSurveysTabListeners(surveySync)}
+          listeners={makeSurveysTabListeners(deps)}
         >
-          {() => <SurveysTabNavigator {...surveysProps} useNativeNav searchEntry />}
+          {() => <SurveysTabNavigator useNativeNav searchEntry />}
         </NativeTab.Screen>
       ) : null}
-      <NativeTab.Screen
-        name="publicMap"
-        listeners={makePublicMapTabListeners(publicMapExplorer, onCloseSurveyDetailSelection)}
-      >
-        {() => (
-          <PublicMapTabNavigator
-            publicMapExplorer={publicMapExplorer}
-            ownSurveyIds={ownSurveyIds}
-            onReportSurvey={surveySync.handleReportSurvey}
-          />
-        )}
+      <NativeTab.Screen name="publicMap" listeners={makePublicMapTabListeners(deps)}>
+        {() => <PublicMapTabNavigator />}
       </NativeTab.Screen>
-      <NativeTab.Screen
-        name="account"
-        listeners={makeAccountTabListeners(surveySync, onCloseSurveyDetailSelection)}
-      >
-        {() => (
-          <AccountTabNavigator
-            apiUrl={surveysProps.apiUrl}
-            onApiUrlChange={onApiUrlChange}
-            surveyList={surveysProps.surveyList}
-            surveySync={surveySync}
-          />
-        )}
+      <NativeTab.Screen name="account" listeners={makeAccountTabListeners(deps)}>
+        {() => <AccountTabNavigator />}
       </NativeTab.Screen>
     </NativeTab.Navigator>
   )
 }
 
-function JsRootTabs({
-  publicMapExplorer,
-  ownSurveyIds,
-  onApiUrlChange,
-  ...surveysProps
-}: NavigationData) {
-  const { surveySync, onCloseSurveyDetailSelection } = surveysProps
+function JsRootTabs() {
+  const deps = useTabListenerDeps()
 
   return (
     <JsTab.Navigator screenOptions={jsTabScreenOptions}>
       <JsTab.Screen name="home" options={{ headerShown: false }}>
-        {() => (
-          <HomeTabNavigator
-            currentUser={surveySync.currentUser}
-            surveys={surveysProps.surveyList.surveys}
-            surveyStats={surveysProps.surveyStats}
-            nearbyParcels={surveysProps.nearbyParcels}
-            onLoadNearbyParcels={surveysProps.onLoadNearbyParcels}
-            onOpenCreateSurvey={surveysProps.onOpenCreateSurvey}
-            onOpenSurvey={surveysProps.onOpenSurvey}
-            onRefresh={surveySync.handlePullChanges}
-          />
-        )}
+        {() => <HomeTabNavigator />}
       </JsTab.Screen>
       <JsTab.Screen
         name="surveys"
@@ -932,36 +488,23 @@ function JsRootTabs({
               ? { display: "none" }
               : undefined,
         })}
-        listeners={makeSurveysTabListeners(surveySync)}
+        listeners={makeSurveysTabListeners(deps)}
       >
-        {() => <SurveysTabNavigator {...surveysProps} />}
+        {() => <SurveysTabNavigator />}
       </JsTab.Screen>
       <JsTab.Screen
         name="publicMap"
         options={{ headerShown: false }}
-        listeners={makePublicMapTabListeners(publicMapExplorer, onCloseSurveyDetailSelection)}
+        listeners={makePublicMapTabListeners(deps)}
       >
-        {() => (
-          <PublicMapTabNavigator
-            publicMapExplorer={publicMapExplorer}
-            ownSurveyIds={ownSurveyIds}
-            onReportSurvey={surveySync.handleReportSurvey}
-          />
-        )}
+        {() => <PublicMapTabNavigator />}
       </JsTab.Screen>
       <JsTab.Screen
         name="account"
         options={{ headerShown: false }}
-        listeners={makeAccountTabListeners(surveySync, onCloseSurveyDetailSelection)}
+        listeners={makeAccountTabListeners(deps)}
       >
-        {() => (
-          <AccountTabNavigator
-            apiUrl={surveysProps.apiUrl}
-            onApiUrlChange={onApiUrlChange}
-            surveyList={surveysProps.surveyList}
-            surveySync={surveySync}
-          />
-        )}
+        {() => <AccountTabNavigator />}
       </JsTab.Screen>
     </JsTab.Navigator>
   )
@@ -969,7 +512,7 @@ function JsRootTabs({
 
 // ─── Root (single NavigationContainer) ───────────────────────────────────────
 
-function AppTabs(props: NavigationData) {
+function AppTabs() {
   const nativeBottomTabsAvailable = isNativeBottomTabViewAvailable()
 
   useEffect(() => {
@@ -983,84 +526,19 @@ function AppTabs(props: NavigationData) {
   return (
     <>
       <StatusBar barStyle={Platform.OS === "android" ? "dark-content" : "light-content"} />
-      {nativeBottomTabsAvailable ? <NativeRootTabs {...props} /> : <JsRootTabs {...props} />}
+      {nativeBottomTabsAvailable ? <NativeRootTabs /> : <JsRootTabs />}
     </>
   )
 }
 
 export function AuthenticatedAppNavigation() {
-  const session = useSession()
-  const accessToken = useAccessToken()
-  const { status } = useStatus()
-  const syncActions = useSyncActions()
-  const surveys = useSurveys()
-  const form = useSurveyFormState()
-
-  // Map state stays local to the map tab (not in the assembler); plan 01.9-18
-  // moves this call into the map route.
-  const publicMapExplorer = usePublicMapExplorer({
-    apiUrl: session.state.apiUrl,
-    onStatusChange: syncActions.setStatus,
-  })
-
-  const surveyForm: SurveyFormController = { ...form.state, ...form.actions }
-  const surveyList: SurveyListController = {
-    ...surveys.state,
-    ...surveys.actions,
-    refreshLocalSurveys: syncActions.refreshLocalSurveys,
-    refreshLocalAttachments: syncActions.refreshLocalAttachments,
-  }
-  const surveySync: SurveySyncController = {
-    ...session.state,
-    ...session.actions,
-    ...syncActions,
-    accessToken,
-    status,
-    surveyDetails: surveys.state.surveyDetails,
-    detailsLoadingSurveyId: surveys.state.detailsLoadingSurveyId,
-    surveyEvents: surveys.state.surveyEvents,
-    eventsLoadingSurveyId: surveys.state.eventsLoadingSurveyId,
-    handleLoadSurveyEvents: surveys.actions.loadSurveyEvents,
-    handleQueueAttachmentFromCamera: surveys.actions.queueAttachmentFromCamera,
-    handleQueueAttachmentFromLibrary: surveys.actions.queueAttachmentFromLibrary,
-    handleDeleteAttachment: surveys.actions.deleteAttachment,
-    confirmDeleteSurvey: surveys.actions.confirmDeleteSurvey,
-    handleSubmitSurvey: surveys.actions.submitSurvey,
-    handleRetrySurvey: surveys.actions.retrySurvey,
-    handleDiscardSurvey: surveys.actions.discardSurvey,
-    handleToggleVisibility: surveys.actions.toggleVisibility,
-  }
-
-  const data: NavigationData = {
-    apiUrl: session.state.apiUrl,
-    formMode: surveys.state.formMode,
-    editingSurveyId: surveys.state.editingSurveyId,
-    surveyStats: surveys.state.surveyStats,
-    nearbyParcels: form.state.nearbyParcels,
-    onLoadNearbyParcels: form.actions.loadNearbyParcels,
-    surveyDetailTab: surveys.state.surveyDetailTab,
-    setSurveyDetailTab: surveys.actions.setSurveyDetailTab,
-    surveyForm,
-    surveyList,
-    surveySync,
-    publicMapExplorer,
-    ownSurveyIds: surveys.state.ownSurveyIds,
-    onOpenCreateSurvey: surveys.actions.openCreateSurvey,
-    onOpenSurvey: surveys.actions.openSurvey,
-    onStartEditSurvey: surveys.actions.startEditSurvey,
-    onRenameSurvey: surveys.actions.renameSurvey,
-    onUpdateRegionVersion: surveys.actions.updateRegionVersion,
-    onUpdateVegetationStage: surveys.actions.updateVegetationStage,
-    onSaveSurveyEdits: form.actions.saveSurveyEdits,
-    onCreateDraft: form.actions.createDraft,
-    onCaptureGpsLocation: form.actions.captureGpsLocation,
-    onApiUrlChange: session.actions.setApiUrl,
-    onCloseSurveyDetailSelection: surveys.actions.closeSurveyDetailSelection,
-  }
+  const [publicMapReload] = useState(createPublicMapReloadSignal)
 
   return (
-    <NavigationContainer>
-      <AppTabs {...data} />
-    </NavigationContainer>
+    <PublicMapReloadContext.Provider value={publicMapReload}>
+      <NavigationContainer>
+        <AppTabs />
+      </NavigationContainer>
+    </PublicMapReloadContext.Provider>
   )
 }

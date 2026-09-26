@@ -261,8 +261,14 @@ import { AppStateProvider } from "./AppStateProvider"
 import { useAccessToken, useSession, type SessionContextValue } from "./session-context"
 import { useStatus, type StatusContextValue } from "./status-context"
 import { useSyncActions, type SyncActions } from "./sync-actions-context"
-import { useSurveys, type SurveysContextValue } from "./surveys-context"
+import {
+  useSurveyActions,
+  useSurveys,
+  type SurveyActions,
+  type SurveysContextValue,
+} from "./surveys-context"
 import { useSurveyFormState, type SurveyFormContextValue } from "./survey-form-context"
+import { useNearbyParcelsState, type NearbyParcelsContextValue } from "./nearby-parcels-context"
 
 type Snapshot = {
   session: SessionContextValue
@@ -271,6 +277,8 @@ type Snapshot = {
   syncActions: SyncActions
   surveys: SurveysContextValue
   form: SurveyFormContextValue
+  surveyActions: SurveyActions
+  nearby: NearbyParcelsContextValue
 }
 
 const snapshots: Snapshot[] = []
@@ -283,6 +291,8 @@ function Probe() {
     syncActions: useSyncActions(),
     surveys: useSurveys(),
     form: useSurveyFormState(),
+    surveyActions: useSurveyActions(),
+    nearby: useNearbyParcelsState(),
   })
   return null
 }
@@ -326,6 +336,8 @@ describe("context hooks outside AppStateProvider", () => {
     ["useSyncActions", useSyncActions],
     ["useSurveys", useSurveys],
     ["useSurveyFormState", useSurveyFormState],
+    ["useSurveyActions", useSurveyActions],
+    ["useNearbyParcelsState", useNearbyParcelsState],
   ] as const)("%s throws a clear error", async (name, hook) => {
     await expect(renderHook(() => hook())).rejects.toThrow(
       `${name} must be used inside AppStateProvider`,
@@ -405,6 +417,7 @@ describe("AppStateProvider", () => {
     expect(after.syncActions).toBe(before.syncActions)
     expect(after.surveys).toBe(before.surveys)
     expect(after.form).toBe(before.form)
+    expect(after.nearby).toBe(before.nearby)
   })
 
   test("a form keystroke changes only the form value", async () => {
@@ -420,6 +433,9 @@ describe("AppStateProvider", () => {
     expect(after.status).toBe(before.status)
     expect(after.syncActions).toBe(before.syncActions)
     expect(after.surveys).toBe(before.surveys)
+    // 01.9-18: the nearby parcels left the form value, so the home screen
+    // does not re-render on a keystroke.
+    expect(after.nearby).toBe(before.nearby)
   })
 
   test("the sync-actions value never changed identity", () => {
@@ -431,6 +447,20 @@ describe("AppStateProvider", () => {
     expect(
       snapshots.every((snapshot) => snapshot.session.actions === snapshots[0].session.actions),
     ).toBe(true)
+    // The actions-only surveys context is the same stable object.
+    expect(snapshots.every((snapshot) => snapshot.surveyActions === snapshot.surveys.actions)).toBe(
+      true,
+    )
+    expect(snapshots.every((snapshot) => snapshot.nearby.load === snapshots[0].nearby.load)).toBe(
+      true,
+    )
+  })
+
+  test("the form value mirrors the form mode and the edited survey", () => {
+    const { form, surveys } = latest()
+    expect(form.state.formMode).toBe(surveys.state.formMode)
+    expect(form.state.editingSurveyId).toBe(surveys.state.editingSurveyId)
+    expect(form.state).not.toHaveProperty("nearbyParcels")
   })
 
   test("openSurvey selects the survey, resets the tab and reports a status", async () => {
