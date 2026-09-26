@@ -313,7 +313,7 @@ export class SurveysAttachmentsService {
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, uploaded_at::text
        FROM attachments
        WHERE survey_id = $1 AND deleted_at IS NULL
-       ORDER BY created_at DESC`,
+       ORDER BY attachments.created_at DESC, attachments.id DESC`,
       [surveyId],
     )
 
