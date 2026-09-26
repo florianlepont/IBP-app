@@ -115,9 +115,16 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 3. Moderator updates report state (`PATCH /reports/{id}`)
 
 ### G) Public Map Read
-1. Client requests public items (`GET /public/map-items`)
+1. Client requests public items (`GET /public/map-items`), optionally limited to a viewport with `bbox=minLng,minLat,maxLng,maxLat`; without `bbox` the response is unchanged
 2. API returns anonymized items from read model
 3. Only surveys with `visibility=public` and not deleted are exposed
+4. Mobile viewport loading (phase 01.9, D-05):
+   - The map loads the items of the visible `bbox` once the region has settled for 400 ms (`useMapViewport`, `useDebouncedValue`). `usePublicMapExplorer` skips a request equal to the one in flight or the last completed one, and drops stale responses.
+   - The camera fits the items only after the first load and after an explicit filter apply (which loads every matching item, without `bbox`). It never re-fits after a viewport load: moving the camera would change the `bbox` and trigger another load, in a loop.
+   - The Explorer tab press forces a reload of the last viewport `bbox`.
+   - The cadastre parcel layer is loaded on the same debounce, from zoom 15.
+5. Mobile clustering: markers are grouped on the device with `supercluster` (radius 60 px, clusters up to zoom 16, `useMapClusters`). Survey and cluster markers are memoised and their presses pass ids. A cluster tap zooms to its expansion zoom; when the cluster cannot split (locations are rounded, so several surveys can share one point), it opens the list of its surveys instead.
+6. Anonymisation and rounding are unchanged: the API still rounds `display_location` to 2 decimals (about 1 km) and exposes no personal data. The map shows scores, dates and region codes, never survey ids.
 
 ### H) Parcel Resolution and Versioning
 1. Mobile captures GPS or manual address
