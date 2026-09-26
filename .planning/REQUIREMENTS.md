@@ -73,7 +73,7 @@ Two carry open defects, fixed in Phase 7.
 Blocking prerequisites for `REQ-C-species-recognition`. Both exist because US-C9 is invisible to
 every binding contract (conflict-report warning 5).
 
-- [x] **REQ-ML-adr** — An accepted ADR records the on-device ML approach: inference runtime, model and licence, on-device model size, measured latency and accuracy on real iOS and Android devices, offline-vs-online behaviour, and an explicit go/no-go for US-C9 in this milestone with a stated fallback. *(New)*
+- [x] **REQ-ML-adr** — An accepted ADR records the on-device ML approach: inference runtime, model and licence, on-device model size, measured latency and accuracy on real iOS and Android devices, offline-vs-online behaviour, and an explicit go/no-go for US-C9 in this milestone with a stated fallback. *(New — satisfied 2026-09-26 by ADR-002 (Accepted), **with one accepted deviation**: no real Android device was measured, by user decision; see `01-VERIFICATION.md` override. The Android latency run and accuracy spot-check must close before Phase 3 ships.)*
 - [ ] **REQ-ML-contracts** — `docs/technical/data-contract-v1.md` redefines Factor A as a list of observed native genera from the CNPF regional list, with the count derived from it (ADR-002, D-15); `docs/technical/api-contract-v1.md` documents that shape in the survey payload under `/v1`; a migration implements it and preserves the scores of surveys already recorded as a bare count. The genus list round-trips through `POST /surveys/sync` idempotently. No species entity, no recognition endpoint, no stored suggestion outcome (D-01, D-06, D-14). *(New — revised 2026-09-26 to match ADR-002)*
 
 ### INF — Infrastructure

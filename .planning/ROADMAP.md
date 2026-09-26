@@ -112,6 +112,7 @@ Plans:
   3. A suggestion never applies itself: the surveyor confirms it, and the accepted genus is added to Factor A's genus list (Phase 2), which is there again when the survey is reopened. The recognition photo is not kept (D-13).
   4. Recognition works with the device in airplane mode: the model is bundled in the app binary (D-07, amended) and inference is on-device (D-06). If the model fails to load, the surveyor sees a clear message and falls back to manual entry (D-08).
   5. The genus list reaches the server through the normal sync flow and appears in the survey read back from the API.
+  6. **Closes Phase 1's accepted Android deviation:** a real Android device run records median, p95 and worst total latency, online and in airplane mode, against the 3 s budget, plus an accuracy spot-check confirming the bundled `.tflite` behaves as on iOS. Recorded in the same format as the measurement document's Section 7. The feature does not ship until this is done.
 
 **Plans**: TBD
 **UI hint**: yes
