@@ -69,12 +69,16 @@ export class PublicMapService {
     from?: string
     to?: string
     region?: string
+    bbox?: string
   }): Promise<{ items: PublicMapItem[] }> {
     const region = input?.region?.trim()
+    // 01.9 D-05: parseBbox throws its fixed-message 400 before any query; blank means no bbox.
+    const bbox = parseBbox(input?.bbox)
     const query = buildPublicMapItemsQuery({
       from: normalizeDateInput(input?.from),
       to: normalizeDateInput(input?.to),
       region: region && region.length > 0 ? region : null,
+      bbox,
     })
 
     const result = await this.db.query<PublicMapDbRow>(query.text, query.values)

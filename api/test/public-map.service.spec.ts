@@ -52,6 +52,39 @@ const feature = (overrides: Partial<WfsParcelFeature> = {}): WfsParcelFeature =>
   ...overrides,
 })
 
+// The /public/map-items SQL as it was before 01.9 D-05, copied from the builder's output before
+// the bbox was added: without a bbox the query must stay byte-identical.
+const PRE_BBOX_MAP_ITEMS_SQL = [
+  "SELECT",
+  "   s.id,",
+  "   s.region_version,",
+  "   s.scores,",
+  "   s.submitted_at::text,",
+  "   agg.parcel_centroid_lat,",
+  "   agg.parcel_centroid_lng",
+  " FROM (",
+  "   SELECT s.id, s.region_version, s.scores, s.submitted_at",
+  "   FROM surveys s",
+  "   WHERE s.status = 'submitted' AND s.visibility = 'public' AND s.deleted_at IS NULL",
+  "     AND s.submitted_at IS NOT NULL",
+  "%FILTERS%   ORDER BY s.submitted_at DESC",
+  "   LIMIT 500",
+  " ) s",
+  " LEFT JOIN LATERAL (",
+  "   SELECT",
+  "     AVG(p.centroid_lat) AS parcel_centroid_lat,",
+  "     AVG(p.centroid_lng) AS parcel_centroid_lng",
+  "   FROM survey_parcels sp",
+  "   JOIN parcels p",
+  "     ON p.parcel_id = sp.parcel_id",
+  "   WHERE sp.survey_id = s.id",
+  " ) agg ON true",
+  " ORDER BY s.submitted_at DESC",
+].join("\n")
+
+const preBboxSql = (filters: string[] = []): string =>
+  PRE_BBOX_MAP_ITEMS_SQL.replace("%FILTERS%", filters.map((line) => `     AND ${line}\n`).join(""))
+
 describe("public map queries (D-13)", () => {
   it("map items: limits the public surveys first, then aggregates their parcels in a LATERAL", () => {
     const { text, values } = buildPublicMapItemsQuery()
@@ -90,6 +123,46 @@ describe("public map queries (D-13)", () => {
     expect(values).toEqual(["2026-12-31", "ACA"])
     expect(flat(text)).toContain("s.submitted_at::date <= $1::date")
     expect(flat(text)).toContain("s.region_version = $2")
+  })
+
+  it("map items: without a bbox the query is byte-identical to the pre-01.9 one (D-05)", () => {
+    expect(buildPublicMapItemsQuery()).toEqual({ text: preBboxSql(), values: [] })
+    expect(buildPublicMapItemsQuery({ bbox: null })).toEqual({ text: preBboxSql(), values: [] })
+    expect(
+      buildPublicMapItemsQuery({ from: "2026-01-01", to: "2026-12-31", region: "ACA" }),
+    ).toEqual({
+      text: preBboxSql([
+        "s.submitted_at::date >= $1::date",
+        "s.submitted_at::date <= $2::date",
+        "s.region_version = $3",
+      ]),
+      values: ["2026-01-01", "2026-12-31", "ACA"],
+    })
+  })
+
+  it("map items: the bbox is an EXISTS on the centroid columns, appended last, before the limit (D-05)", () => {
+    const bbox = { minLng: 2, minLat: 48, maxLng: 3, maxLat: 49 }
+    const { text, values } = buildPublicMapItemsQuery({
+      from: "2026-01-01",
+      to: "2026-12-31",
+      region: "ACA",
+      bbox,
+    })
+    const sql = flat(text)
+
+    expect(values).toEqual(["2026-01-01", "2026-12-31", "ACA", 2, 3, 48, 49])
+    expect(sql).toContain(
+      "AND s.region_version = $3 AND EXISTS ( SELECT 1 FROM survey_parcels sp JOIN parcels p ON p.parcel_id = sp.parcel_id WHERE sp.survey_id = s.id AND p.centroid_lng BETWEEN $4::double precision AND $5::double precision AND p.centroid_lat BETWEEN $6::double precision AND $7::double precision )",
+    )
+    expect(sql.indexOf("EXISTS")).toBeLessThan(sql.indexOf("LIMIT 500"))
+    expect(sql).toContain(
+      "WHERE s.status = 'submitted' AND s.visibility = 'public' AND s.deleted_at IS NULL AND s.submitted_at IS NOT NULL",
+    )
+
+    const alone = buildPublicMapItemsQuery({ bbox })
+    expect(alone.values).toEqual([2, 3, 48, 49])
+    expect(flat(alone.text)).toContain("p.centroid_lng BETWEEN $1::double precision")
+    expect(flat(alone.text)).toContain("p.centroid_lat BETWEEN $3::double precision")
   })
 
   it("parcel statuses: the bbox is a range on the generated columns, then a LATERAL latest survey", () => {
@@ -175,6 +248,39 @@ describe("PublicMapService", () => {
       await buildService(db).getPublicMapItems()
       expect(db.query.mock.calls[0][1]).toEqual([])
       expect(db.query.mock.calls[1][1]).toEqual([])
+    })
+    it("passes a parsed bbox to the query (D-05)", async () => {
+      const db = buildDb()
+      await buildService(db).getPublicMapItems({ region: "ACA", bbox: " 2.1, 48.5 ,2.6,48.9 " })
+      const [text, values] = db.query.mock.calls[0] as [string, unknown[]]
+      expect(text).toBe(
+        buildPublicMapItemsQuery({
+          region: "ACA",
+          bbox: { minLng: 2.1, minLat: 48.5, maxLng: 2.6, maxLat: 48.9 },
+        }).text,
+      )
+      expect(values).toEqual(["ACA", 2.1, 2.6, 48.5, 48.9])
+    })
+
+    it("rejects a malformed bbox with parseBbox's fixed message before any query (D-05)", async () => {
+      const db = buildDb()
+      const service = buildService(db)
+      await expect(service.getPublicMapItems({ bbox: "1,2" })).rejects.toThrow(
+        new BadRequestException("bbox must contain exactly 4 comma-separated numbers"),
+      )
+      await expect(service.getPublicMapItems({ bbox: "a,b,c,d" })).rejects.toThrow(
+        new BadRequestException("bbox contains invalid coordinate values"),
+      )
+      await expect(service.getPublicMapItems({ bbox: "3,48,2,49" })).rejects.toThrow(
+        new BadRequestException("bbox bounds are invalid"),
+      )
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+    it("treats a blank bbox as no bbox", async () => {
+      const db = buildDb()
+      await buildService(db).getPublicMapItems({ bbox: "  " })
+      expect(db.query.mock.calls[0]).toEqual([preBboxSql(), []])
     })
   })
 
