@@ -57,4 +57,14 @@ export const syncStatusFr = {
     ),
   reportLoginRequired: () => statusText("Connectez-vous pour signaler un relevé"),
   reportFailed: () => statusText("Signalement non envoyé. Réessayez plus tard."),
+
+  // Survey detail and history loaded from the server (useSurveySync)
+  detailLoading: () => statusText("Chargement du relevé…"),
+  detailLoaded: () => statusText("Relevé chargé"),
+  detailLoginRequired: () => statusText("Connectez-vous pour charger le relevé"),
+  detailFailed: () => statusText("Impossible de charger le relevé. Réessayez plus tard."),
+  eventsLoading: () => statusText("Chargement de l'historique…"),
+  eventsLoaded: () => statusText("Historique chargé"),
+  eventsLoginRequired: () => statusText("Connectez-vous pour charger l'historique"),
+  eventsFailed: () => statusText("Impossible de charger l'historique. Réessayez plus tard."),
 } as const
