@@ -30,7 +30,12 @@ function item(id: string, lat: number, lng: number): PublicMapItem {
 
 const LYON: Region = { latitude: 45.76, longitude: 4.84, latitudeDelta: 0.5, longitudeDelta: 0.5 }
 const PARIS: Region = { latitude: 48.85, longitude: 2.35, latitudeDelta: 0.5, longitudeDelta: 0.5 }
-const NANTES: Region = { latitude: 47.21, longitude: -1.55, latitudeDelta: 0.5, longitudeDelta: 0.5 }
+const NANTES: Region = {
+  latitude: 47.21,
+  longitude: -1.55,
+  latitudeDelta: 0.5,
+  longitudeDelta: 0.5,
+}
 const PARCEL_ZOOM: Region = {
   latitude: 45.76,
   longitude: 4.84,
@@ -40,12 +45,12 @@ const PARCEL_ZOOM: Region = {
 
 type Props = Pick<UseMapViewportArgs, "items" | "showParcelLayer">
 
-function setup(initial: Partial<Props> = {}) {
+async function setup(initial: Partial<Props> = {}) {
   const loadPublicMap = jest.fn(async () => undefined)
   const loadParcels = jest.fn(async () => undefined)
   const animateToRegion = jest.fn()
   const onViewportBboxChange = jest.fn()
-  const view = renderHook(
+  const view = await renderHook(
     ({ items, showParcelLayer }: Props) =>
       useMapViewport({
         items,

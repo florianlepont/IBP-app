@@ -99,11 +99,23 @@ describe("SurveyMarker", () => {
   test("re-renders when the selection or the position changes", () => {
     const onSelect = jest.fn()
     const tree = mount(
-      <SurveyMarker id="s-1" coordinate={COORDINATE} ibpTotal={30} selected={false} onSelect={onSelect} />,
+      <SurveyMarker
+        id="s-1"
+        coordinate={COORDINATE}
+        ibpTotal={30}
+        selected={false}
+        onSelect={onSelect}
+      />,
     )
     act(() => {
       tree.update(
-        <SurveyMarker id="s-1" coordinate={COORDINATE} ibpTotal={30} selected onSelect={onSelect} />,
+        <SurveyMarker
+          id="s-1"
+          coordinate={COORDINATE}
+          ibpTotal={30}
+          selected
+          onSelect={onSelect}
+        />,
       )
     })
     act(() => {
@@ -124,7 +136,13 @@ describe("SurveyMarker", () => {
   test("passes its id to onSelect and labels itself with the score, not the id", () => {
     const onSelect = jest.fn()
     const tree = mount(
-      <SurveyMarker id="s-42" coordinate={COORDINATE} ibpTotal={27} selected={false} onSelect={onSelect} />,
+      <SurveyMarker
+        id="s-42"
+        coordinate={COORDINATE}
+        ibpTotal={27}
+        selected={false}
+        onSelect={onSelect}
+      />,
     )
     const props = markerProps(tree)
     ;(props.onPress as () => void)()
@@ -158,7 +176,12 @@ describe("ClusterMarker", () => {
     expect(tree.root.findByType("Text" as never).props.children).toBe("99+")
     act(() => {
       tree.update(
-        <ClusterMarker clusterId={8} coordinate={{ ...COORDINATE }} count={150} onPress={onPress} />,
+        <ClusterMarker
+          clusterId={8}
+          coordinate={{ ...COORDINATE }}
+          count={150}
+          onPress={onPress}
+        />,
       )
     })
     expect(mockMarkerRenders.count).toBe(1)
