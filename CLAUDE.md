@@ -25,7 +25,7 @@ Other top-level directories:
 
 | Concern | Technology |
 |---------|-----------|
-| Mobile framework | React Native 0.81.5 + Expo 54 |
+| Mobile framework | React Native 0.86.3 + Expo 57 |
 | Mobile language | TypeScript 5.x (strict) |
 | Mobile navigation | React Navigation (native-stack + bottom-tabs) |
 | Mobile local DB | Expo SQLite (`cortege-local.db`) |
@@ -35,7 +35,7 @@ Other top-level directories:
 | Database | PostgreSQL 16 (raw SQL via `pg`, no ORM) |
 | Auth | Auth0 — RS256 JWT validated against JWKS; native Auth0 SDK on mobile |
 | Object storage | S3-compatible: MinIO (local dev), configurable for AWS S3 (prod) |
-| Maps | React Native Maps 1.20 |
+| Maps | React Native Maps 1.27 |
 | Testing | Jest 29 + ts-jest; Supertest for API E2E |
 | Linting | ESLint 8 + `@typescript-eslint` |
 | Formatting | Prettier 3.8 |

@@ -31,8 +31,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR (completed 2026-09-26)
 - [ ] **Phase 1.1: Reconcile the IBP method version** (INSERTED) - Establish whether the app still implements the current CNPF method, and what changes if not
-- [ ] **Phase 2: Species Contracts & Data-Contract Corrections** - Give species a data model, an API surface and a migration; correct the stale form spec
-- [ ] **Phase 3: Species Recognition for Factor A** - Photograph a tree, get a species suggestion, keep or reject it
+- [ ] **Phase 2: Factor A Genus List & Data-Contract Corrections** - Record the observed genera as a list rather than a count, migrate existing surveys; correct the stale form spec
+- [ ] **Phase 3: Genus Recognition for Factor A** - Photograph a tree, get a calibrated genus suggestion, confirm it
 - [ ] **Phase 4: Offline Map & Own-Survey Navigation** - Navigate a parcel with no network, and see your own surveys on the map
 - [ ] **Phase 5: Survey Export & Ownership** - Export a survey as a PDF offline and delete your own surveys
 - [ ] **Phase 6: Durable Backend** - Backups that restore, migrations that hold, hosting ratified, dead and unsafe code gone
@@ -83,32 +83,35 @@ Plans:
 
 - [ ] TBD (run /gsd-plan-phase 01.1 to break down)
 
-### Phase 2: Species Contracts & Data-Contract Corrections
+### Phase 2: Factor A Genus List & Data-Contract Corrections
 
-**Goal**: A species observation can be stored, synced and read back through contracts written down before any UI exists — and the two stale spec sections that contradict shipped behaviour are corrected.
+**Goal**: Factor A records the observed native genera as a list rather than a bare count, through contracts written down before any UI exists; surveys already recorded keep their scores; and the two stale spec sections that contradict shipped behaviour are corrected.
 **Depends on**: Phase 1, Phase 1.1 (the Factor A genus list must come from the ratified method version)
 **Requirements**: REQ-ML-contracts, REQ-DOC-form-spec
 **Success Criteria** (what must be TRUE):
 
-  1. `docs/technical/data-contract-v1.md` defines a species entity linked to a survey's Factor A, carrying the species, its confidence score, and whether the suggestion was confirmed, edited or rejected.
-  2. `docs/technical/api-contract-v1.md` documents the species endpoint(s) under `/v1` with request and response shapes and standard error codes.
-  3. A migration creates the species schema and `npm run migrate:api` applies it cleanly on an empty database.
-  4. Species data survives a round-trip through `POST /surveys/sync`: an E2E test replays the same payload twice and no species row is duplicated.
-  5. `docs/specs/ibp-form-spec.md` §4 states that a survey may reference one or many parcels (`parcel_ids[]`), and §10.1 lists the shipped status enum `draft | submitted | synced | error | expired` with `submitted_at` and `deleted_at` — no `deleted` value, no `published_at`.
+  1. `docs/technical/data-contract-v1.md` defines Factor A as a list of observed native genera drawn from the closed CNPF regional list, with the genus count derived from it, replacing the single `native_genus_count` number (ADR-002, D-15). There is no species entity: recognition is genus-level only (D-01), and neither the recognition photo (D-13) nor the ecologist's acceptance or correction of a suggestion (D-14) is stored.
+  2. `docs/technical/api-contract-v1.md` documents the Factor A genus-list shape in the survey payload under `/v1`, validated against the CNPF list, with standard error codes. No recognition endpoint exists — inference is on-device (ADR-002, D-06).
+  3. A migration introduces the genus list and states explicitly what happens to surveys already recorded as a bare count, which cannot be decomposed into named genera; their Factor A score is unchanged. `npm run migrate:api` applies cleanly on an empty database and on a copy of existing data.
+  4. Factor A scoring derives from the genus list on both sides — `api/src/surveys/ibp-rules.service.ts` and `mobile/src/app/ibp-scoring.ts` — and the 17 reference cases in `docs/technical/ibp-validation-matrix-v1.md` still pass.
+  5. The genus list survives a round-trip through `POST /surveys/sync`: an E2E test replays the same payload twice and nothing is duplicated.
+  6. `docs/specs/ibp-form-spec.md` §4 states that a survey may reference one or many parcels (`parcel_ids[]`), and §10.1 lists the shipped status enum `draft | submitted | synced | error | expired` with `submitted_at` and `deleted_at` — no `deleted` value, no `published_at`.
 
 **Plans**: TBD
 
-### Phase 3: Species Recognition for Factor A
+### Phase 3: Genus Recognition for Factor A
 
-**Goal**: A surveyor fills Factor A faster by photographing a tree than by naming it from memory.
+**Goal**: A surveyor fills Factor A faster by photographing a tree than by naming its genus from memory.
 **Depends on**: Phase 2
 **Requirements**: REQ-C-species-recognition
+**Inputs from Phase 1**: the promoted model `genus_classifier.tflite` (EfficientNet-B0, float16, 8.24 MB) and the per-genus confidence calibration table — both measured artefacts ADR-002 rests on. They must be preserved outside the throwaway `spike/` tree before it is deleted.
 **Success Criteria** (what must be TRUE):
 
-  1. From the Factor A section, the surveyor adds one or more photos and sees suggested species, each with a confidence score.
-  2. The surveyor can confirm, edit or reject each suggestion; the retained species is saved with the survey and is there again when the survey is reopened.
-  3. With the device in airplane mode, suggestions still work on-device — or the app states plainly that recognition needs connectivity, exactly as the Phase 1 ADR decided.
-  4. Confirmed species reach the server through the normal sync flow and appear in the survey read back from the API.
+  1. From the Factor A section, the surveyor photographs a single subject — one tree, a leaf or bark (D-10) — and sees the most likely genus first with its alternatives underneath (D-11), each carrying a plain-words confidence indicator (D-12).
+  2. The indicator uses ADR-002's per-genus calibrated thresholds, so a given label means the same reliability whichever genus is shown; all 34 CNPF genera are suggested and none is withheld (D-04).
+  3. A suggestion never applies itself: the surveyor confirms it, and the accepted genus is added to Factor A's genus list (Phase 2), which is there again when the survey is reopened. The recognition photo is not kept (D-13).
+  4. Recognition works with the device in airplane mode: the model is bundled in the app binary (D-07, amended) and inference is on-device (D-06). If the model fails to load, the surveyor sees a clear message and falls back to manual entry (D-08).
+  5. The genus list reaches the server through the normal sync flow and appears in the survey read back from the API.
 
 **Plans**: TBD
 **UI hint**: yes
@@ -186,8 +189,8 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Species Recognition — Approach Decision | 6/6 | Complete   | 2026-09-26 |
-| 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
-| 3. Species Recognition for Factor A | 0/TBD | Not started | - |
+| 2. Factor A Genus List & Data-Contract Corrections | 0/TBD | Not started | - |
+| 3. Genus Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
 | 5. Survey Export & Ownership | 0/TBD | Not started | - |
 | 6. Durable Backend | 0/TBD | Not started | - |
