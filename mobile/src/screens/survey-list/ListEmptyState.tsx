@@ -2,8 +2,11 @@ import { Image, StyleSheet, Text } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors, brandTypography } from "../../app/brand-tokens"
 import { AppButton } from "../../ui/AppButton"
+import { fr } from "../../i18n"
 import { AppCard } from "../../ui/AppCard"
 import { styles as sharedStyles } from "./styles"
+
+const t = fr.surveyList
 
 type ListEmptyStateProps = {
   /** No local survey at all (true) or none left after the filters (false). */
@@ -22,10 +25,8 @@ export function ListEmptyState({ noSurveys, resetFilters }: ListEmptyStateProps)
           style={styles.emptyStateMarten}
           resizeMode="contain"
         />
-        <Text style={styles.emptyStateTitle}>La nature vous attend</Text>
-        <Text style={styles.emptyStateBody}>
-          Commencez votre premier relevé IBP et contribuez à la connaissance de la biodiversité.
-        </Text>
+        <Text style={styles.emptyStateTitle}>{t.empty.none.title}</Text>
+        <Text style={styles.emptyStateBody}>{t.empty.none.body}</Text>
       </AppCard>
     )
   }
@@ -33,12 +34,10 @@ export function ListEmptyState({ noSurveys, resetFilters }: ListEmptyStateProps)
   return (
     <AppCard variant="panelElevated" padding={22} style={styles.emptyState}>
       <Ionicons name="funnel-outline" size={28} color={brandColors.forest} />
-      <Text style={styles.emptyStateTitle}>Aucun résultat</Text>
-      <Text style={styles.emptyStateBody}>
-        Élargissez les critères ou réinitialisez les filtres pour voir plus de relevés.
-      </Text>
+      <Text style={styles.emptyStateTitle}>{t.empty.filtered.title}</Text>
+      <Text style={styles.emptyStateBody}>{t.empty.filtered.body}</Text>
       <AppButton
-        label="Réinitialiser les filtres"
+        label={t.filters.reset}
         variant="secondary"
         size="sm"
         onPress={resetFilters}

@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { brandColors, brandRadius, brandTypography } from "../../app/brand-tokens"
 import { formatShortDateTime, formatSyncErrorForUser } from "../../app/formatters"
 import { formatSurveyUiStatusLabel, resolveSurveyUiStatus } from "../../app/survey-logic"
+import { fr } from "../../i18n"
 import type { LocalSurvey } from "../../storage"
 import { AppCard } from "../../ui/AppCard"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
@@ -82,6 +83,8 @@ export function pickAttentionSurveys(
   return items.slice(0, MAX_ATTENTION)
 }
 
+const t = fr.surveyList.attention
+
 type AttentionSectionProps = {
   attentionSurveys: LocalSurvey[]
   continueDraftSurvey: LocalSurvey | null
@@ -101,13 +104,13 @@ export function AttentionSection({
   return (
     <AppCard variant="surface" padding={14} style={styles.todoCard}>
       <AppSectionHeader
-        title="À faire"
+        title={t.title}
         subtitle={
           count > 0 && continueDraftSurvey
-            ? `${count} problème${count > 1 ? "s" : ""} · brouillon en cours`
+            ? t.problemsAndDraft(count)
             : count > 0
-              ? `${count} relevé${count > 1 ? "s" : ""} à examiner`
-              : "Brouillon en cours"
+              ? t.toReview(count)
+              : t.draftOnly
         }
         titleStyle={sharedStyles.homeSectionTitle}
         subtitleStyle={sharedStyles.homeSectionSubtitle}
@@ -122,7 +125,10 @@ export function AttentionSection({
           <Pressable
             key={survey.id}
             accessibilityRole="button"
-            accessibilityLabel={`${survey.site_name}, ${formatSurveyUiStatusLabel(uiStatus)}`}
+            accessibilityLabel={t.rowA11y({
+              name: survey.site_name,
+              status: formatSurveyUiStatusLabel(uiStatus),
+            })}
             onPress={() => {
               triggerHaptic()
               onOpenSurvey(survey.id)
@@ -140,7 +146,7 @@ export function AttentionSection({
               </Text>
               <Text numberOfLines={1} style={styles.attentionRowMeta}>
                 {formatSyncErrorForUser(survey.last_sync_error) ??
-                  `Mis à jour ${formatShortDateTime(survey.updated_at)}`}
+                  t.updated(formatShortDateTime(survey.updated_at))}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
@@ -149,12 +155,7 @@ export function AttentionSection({
       })}
 
       {/* "Voir N autres" if more than 2 */}
-      {hiddenCount > 0 ? (
-        <Text style={styles.seeMoreText}>
-          +{hiddenCount} autre{hiddenCount > 1 ? "s" : ""} relevé
-          {hiddenCount > 1 ? "s" : ""} à examiner
-        </Text>
-      ) : null}
+      {hiddenCount > 0 ? <Text style={styles.seeMoreText}>{t.more(hiddenCount)}</Text> : null}
 
       {/* Divider between attention rows and draft */}
       {count > 0 && continueDraftSurvey ? <View style={styles.todoDivider} /> : null}

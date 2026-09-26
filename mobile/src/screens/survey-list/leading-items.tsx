@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import type { ReactElement } from "react"
 import type { LocalSurvey } from "../../storage"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
+import { fr } from "../../i18n"
 import { AttentionSection } from "./AttentionSection"
 import { CreateSurveyCard } from "./CreateSurveyCard"
 import { styles } from "./styles"
@@ -71,10 +72,10 @@ export function useLeadingItems({
     () =>
       mainListCount > 0 || (useNativeSearchUI && surveyCount > 0) ? (
         <AppSectionHeader
-          title={showFeatured ? "Mes relevés" : "Résultats"}
+          title={showFeatured ? fr.surveyList.section.mine : fr.surveyList.section.results}
           subtitle={
             showFeatured && mainListCount < visibleCount
-              ? `${mainListCount} autre${mainListCount > 1 ? "s" : ""} relevé${mainListCount > 1 ? "s" : ""}`
+              ? fr.surveyList.section.others(mainListCount)
               : visibleSurveySummary
           }
           titleStyle={styles.homeSectionTitle}

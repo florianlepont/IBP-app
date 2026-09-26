@@ -5,37 +5,39 @@ import type {
   SurveyStatusFilter,
   SurveySyncFilter,
 } from "../../app/types"
+import { fr } from "../../i18n"
 
 export type FilterOption<T extends string> = { label: string; value: T }
 
-export const STATUS_OPTIONS: Array<FilterOption<SurveyStatusFilter>> = [
-  { label: "Tous", value: "all" },
-  { label: "Brouillon", value: "draft" },
-  { label: "Soumis", value: "submitted" },
-  { label: "Expiré", value: "expired" },
-]
+const { options } = fr.surveyList.filters
 
-export const SYNC_OPTIONS: Array<FilterOption<SurveySyncFilter>> = [
-  { label: "Tous", value: "all" },
-  { label: "En attente", value: "pending" },
-  { label: "Synchronisé", value: "synced" },
-  { label: "Erreur", value: "failed" },
-]
+// The values and their order drive the filters; the labels come from the catalogue.
+const withLabels = <T extends string>(
+  values: readonly T[],
+  labels: Record<T, string>,
+): Array<FilterOption<T>> => values.map((value) => ({ label: labels[value], value }))
 
-export const BLOCKED_OPTIONS: Array<FilterOption<SurveyBlockedFilter>> = [
-  { label: "Tous", value: "all" },
-  { label: "Bloqués", value: "blocked" },
-  { label: "Non bloqués", value: "unblocked" },
-]
+export const STATUS_OPTIONS = withLabels<SurveyStatusFilter>(
+  ["all", "draft", "submitted", "expired"],
+  options.status,
+)
 
-export const ATTACHMENT_OPTIONS: Array<FilterOption<SurveyAttachmentFilter>> = [
-  { label: "Tous", value: "all" },
-  { label: "Avec photo", value: "with" },
-  { label: "Sans photo", value: "without" },
-]
+export const SYNC_OPTIONS = withLabels<SurveySyncFilter>(
+  ["all", "pending", "synced", "failed"],
+  options.sync,
+)
 
-export const SORT_OPTIONS: Array<FilterOption<SurveySort>> = [
-  { label: "Récent en premier", value: "updated_desc" },
-  { label: "Ancien en premier", value: "updated_asc" },
-  { label: "Site A-Z", value: "site_asc" },
-]
+export const BLOCKED_OPTIONS = withLabels<SurveyBlockedFilter>(
+  ["all", "blocked", "unblocked"],
+  options.blocked,
+)
+
+export const ATTACHMENT_OPTIONS = withLabels<SurveyAttachmentFilter>(
+  ["all", "with", "without"],
+  options.attachment,
+)
+
+export const SORT_OPTIONS = withLabels<SurveySort>(
+  ["updated_desc", "updated_asc", "site_asc"],
+  options.sort,
+)

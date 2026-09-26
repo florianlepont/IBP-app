@@ -7,6 +7,7 @@ import type {
   SurveyStatusFilter,
   SurveySyncFilter,
 } from "../../app/types"
+import { fr } from "../../i18n"
 import { AppButton } from "../../ui/AppButton"
 import { AppChoiceChip } from "../../ui/AppChoiceChip"
 import { AppField } from "../../ui/AppField"
@@ -19,6 +20,8 @@ import {
 } from "./filter-options"
 import type { FilterOption } from "./filter-options"
 import { styles as sharedStyles } from "./styles"
+
+const t = fr.surveyList.filters
 
 export type SurveyListFilters = {
   surveyFromDate: string
@@ -76,7 +79,7 @@ export function FilterPanel({ advancedOpen, ...filters }: FilterPanelProps) {
       {/* P2-COMPACT-02: Status chips only when active filter or advanced panel open */}
       {filters.statusFilter !== "all" || advancedOpen ? (
         <FilterSection
-          label="Statut"
+          label={t.sections.status}
           options={STATUS_OPTIONS}
           value={filters.statusFilter}
           onChange={filters.setStatusFilter}
@@ -87,10 +90,10 @@ export function FilterPanel({ advancedOpen, ...filters }: FilterPanelProps) {
         <View style={styles.advancedPanel}>
           <View style={styles.dateInputsRow}>
             <AppField
-              label="Du"
+              label={t.sections.from}
               value={filters.surveyFromDate}
               onChangeText={filters.setSurveyFromDate}
-              placeholder="AAAA-MM-JJ"
+              placeholder={t.datePlaceholder}
               autoCapitalize="none"
               autoCorrect={false}
               containerStyle={styles.dateInputBlock}
@@ -98,10 +101,10 @@ export function FilterPanel({ advancedOpen, ...filters }: FilterPanelProps) {
               inputStyle={styles.compactInput}
             />
             <AppField
-              label="Au"
+              label={t.sections.to}
               value={filters.surveyToDate}
               onChangeText={filters.setSurveyToDate}
-              placeholder="AAAA-MM-JJ"
+              placeholder={t.datePlaceholder}
               autoCapitalize="none"
               autoCorrect={false}
               containerStyle={styles.dateInputBlock}
@@ -111,32 +114,32 @@ export function FilterPanel({ advancedOpen, ...filters }: FilterPanelProps) {
           </View>
 
           <FilterSection
-            label="Synchronisation"
+            label={t.sections.sync}
             options={SYNC_OPTIONS}
             value={filters.syncFilter}
             onChange={filters.setSyncFilter}
           />
           <FilterSection
-            label="Bloqués"
+            label={t.sections.blocked}
             options={BLOCKED_OPTIONS}
             value={filters.blockedFilter}
             onChange={filters.setBlockedFilter}
           />
           <FilterSection
-            label="Pièces jointes"
+            label={t.sections.attachments}
             options={ATTACHMENT_OPTIONS}
             value={filters.attachmentFilter}
             onChange={filters.setAttachmentFilter}
           />
           <FilterSection
-            label="Tri"
+            label={t.sections.sort}
             options={SORT_OPTIONS}
             value={filters.sortMode}
             onChange={filters.setSortMode}
           />
 
           <AppButton
-            label="Réinitialiser les filtres"
+            label={t.reset}
             variant="secondary"
             size="sm"
             onPress={filters.resetFilters}

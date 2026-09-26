@@ -6,9 +6,12 @@ import {
   brandRadius,
   brandTypography,
 } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import type { LocalSurvey } from "../../storage"
 import { triggerHaptic } from "./haptics"
 import { styles as sharedStyles } from "./styles"
+
+const t = fr.surveyList.continueDraft
 
 type ContinueDraftCardProps = {
   survey: LocalSurvey
@@ -20,7 +23,7 @@ export function ContinueDraftCard({ survey, onOpenSurvey }: ContinueDraftCardPro
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Continuer le brouillon : ${survey.site_name}`}
+      accessibilityLabel={t.a11y(survey.site_name)}
       onPress={() => {
         triggerHaptic()
         onOpenSurvey(survey.id)
@@ -43,7 +46,7 @@ export function ContinueDraftCard({ survey, onOpenSurvey }: ContinueDraftCardPro
             ]}
           />
         </View>
-        <Text style={styles.draftMeta}>{survey.completion_rate}% complété</Text>
+        <Text style={styles.draftMeta}>{t.completion(survey.completion_rate)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={brandColors.textSecondary} />
     </Pressable>

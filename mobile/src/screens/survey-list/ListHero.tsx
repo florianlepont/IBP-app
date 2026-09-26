@@ -11,9 +11,12 @@ import {
 } from "../../app/brand-tokens"
 import type { computeSurveyStats } from "../../app/survey-logic"
 import type { SurveyBlockedFilter, SurveyStatusFilter, SurveySyncFilter } from "../../app/types"
+import { fr } from "../../i18n"
 import { BrandBump } from "../../ui/BrandBump"
 import { StatTile } from "./StatTile"
 import type { StatTileProps } from "./StatTile"
+
+const t = fr.surveyList
 
 // P3-LAYOUT-01: reserve enough room so the round logo never collides with copy
 const HERO_ORNAMENT_EXCLUSION = 92
@@ -98,61 +101,64 @@ export function ListHero({
 
   const compactSummary = useMemo(() => {
     if (totalFilterCount > 0) {
-      return `${visibleCount} sur ${surveyCount} affichés • ${totalFilterCount} filtre${totalFilterCount > 1 ? "s" : ""} actif${totalFilterCount > 1 ? "s" : ""}`
+      return t.hero.compactFiltered({
+        visible: visibleCount,
+        total: surveyCount,
+        filters: totalFilterCount,
+      })
     }
-    return `${stats.total} relevés • ${stats.draft} brouillons • ${stats.pending} en attente`
+    return t.hero.compactSummary({ total: stats.total, draft: stats.draft, pending: stats.pending })
   }, [totalFilterCount, visibleCount, surveyCount, stats.total, stats.draft, stats.pending])
 
   // P2-GLANCE-03: dynamic hero body
   const heroBodyText = useMemo(() => {
-    if (surveyCount === 0) return "Commencez votre premier relevé IBP."
-    if (stats.blocked > 0)
-      return `${stats.blocked} relevé${stats.blocked > 1 ? "s" : ""} nécessite${stats.blocked > 1 ? "nt" : ""} votre attention.`
-    if (attentionCount > 0)
-      return `${attentionCount} relevé${attentionCount > 1 ? "s" : ""} à examiner.`
-    if (continueDraftName) return `${continueDraftName} vous attend.`
-    if (stats.submitted > 0 && stats.draft === 0) return "Tous vos relevés sont à jour."
-    return "Retrouvez vos relevés et reprenez où vous vous êtes arrêté."
+    const body = t.hero.body
+    if (surveyCount === 0) return body.empty
+    if (stats.blocked > 0) return body.blocked(stats.blocked)
+    if (attentionCount > 0) return body.attention(attentionCount)
+    if (continueDraftName) return body.draftWaiting(continueDraftName)
+    if (stats.submitted > 0 && stats.draft === 0) return body.upToDate
+    return body.fallback
   }, [surveyCount, stats, attentionCount, continueDraftName])
 
   // P3-PERSON-05: hero stat tiles with severity
   const heroStats = useMemo<StatTileProps[]>(
     () => [
       {
-        label: "relevés",
+        label: t.stats.total,
         value: String(stats.total),
         severity: "neutral",
         onPress: resetFilters,
-        accessibilityLabel: `${stats.total} relevés au total — appuyer pour tout afficher`,
+        accessibilityLabel: t.stats.a11y.total(stats.total),
       },
       {
-        label: "brouillons",
+        label: t.stats.draft,
         value: String(stats.draft),
         severity: "neutral",
         onPress: () => setStatusFilter("draft"),
-        accessibilityLabel: `${stats.draft} brouillons — appuyer pour filtrer`,
+        accessibilityLabel: t.stats.a11y.draft(stats.draft),
       },
       {
-        label: "en attente",
+        label: t.stats.pending,
         value: String(stats.pending),
         severity: stats.pending > 0 ? "warning" : "neutral",
         onPress: () => setSyncFilter("pending"),
-        accessibilityLabel: `${stats.pending} en attente de sync — appuyer pour filtrer`,
+        accessibilityLabel: t.stats.a11y.pending(stats.pending),
       },
       stats.blocked > 0
         ? {
-            label: "bloqués",
+            label: t.stats.blocked,
             value: String(stats.blocked),
             severity: "danger",
             onPress: () => setBlockedFilter("blocked"),
-            accessibilityLabel: `${stats.blocked} relevés bloqués — appuyer pour filtrer`,
+            accessibilityLabel: t.stats.a11y.blocked(stats.blocked),
           }
         : {
-            label: "soumis",
+            label: t.stats.submitted,
             value: String(stats.submitted),
             severity: "neutral",
             onPress: () => setStatusFilter("submitted"),
-            accessibilityLabel: `${stats.submitted} relevés soumis — appuyer pour filtrer`,
+            accessibilityLabel: t.stats.a11y.submitted(stats.submitted),
           },
     ],
     [stats, resetFilters, setStatusFilter, setSyncFilter, setBlockedFilter],
@@ -217,8 +223,8 @@ export function ListHero({
             onLayout={geometry.onHeaderLayout}
           >
             {/* P2-PERSON-02: Contextual eyebrow */}
-            <Text style={styles.heroEyebrow}>ACCUEIL</Text>
-            <Text style={styles.heroTitleExpanded}>Votre carnet de terrain</Text>
+            <Text style={styles.heroEyebrow}>{t.hero.eyebrow}</Text>
+            <Text style={styles.heroTitleExpanded}>{t.hero.title}</Text>
             {/* P2-GLANCE-03: Dynamic body */}
             <Text style={styles.heroBody}>{heroBodyText}</Text>
           </View>
@@ -244,7 +250,7 @@ export function ListHero({
           ]}
         >
           <Text numberOfLines={1} style={styles.heroTitleCompact}>
-            Votre carnet de terrain
+            {t.hero.title}
           </Text>
           <Text numberOfLines={1} style={styles.heroCompactSummary}>
             {compactSummary}

@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors, brandSpacing } from "../app/brand-tokens"
 import { computeSurveyStats } from "../app/survey-logic"
+import { fr } from "../i18n"
 import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import type { LocalAttachment } from "../storage"
 import {
@@ -140,19 +141,18 @@ export function SurveyListScreen({
   // ── Summary labels ──────────────────────────────────────────────────────────
 
   const visibleSurveySummary = useMemo(() => {
-    if (surveys.length === 0) return "Aucun relevé local"
+    const summary = fr.surveyList.summary
+    if (surveys.length === 0) return summary.noLocalSurvey
     if (trimmedQuery.length > 0) {
-      return `${visibleSurveys.length} résultat${visibleSurveys.length > 1 ? "s" : ""} pour « ${trimmedQuery} »`
+      return summary.results({ count: visibleSurveys.length, query: trimmedQuery })
     }
-    if (visibleSurveys.length === surveys.length) {
-      return `${visibleSurveys.length} relevé${visibleSurveys.length > 1 ? "s" : ""} affiché${visibleSurveys.length > 1 ? "s" : ""}`
-    }
-    return `${visibleSurveys.length} sur ${surveys.length} relevés affichés`
+    if (visibleSurveys.length === surveys.length) return summary.shown(visibleSurveys.length)
+    return summary.shownOf({ visible: visibleSurveys.length, total: surveys.length })
   }, [surveys.length, trimmedQuery, visibleSurveys.length])
 
   const filtersSummaryLabel =
     totalFilterCount > 0
-      ? `${totalFilterCount} filtre${totalFilterCount > 1 ? "s" : ""} actif${totalFilterCount > 1 ? "s" : ""}`
+      ? fr.surveyList.summary.activeFilters(totalFilterCount)
       : visibleSurveySummary
 
   // ── Layout under the hero ───────────────────────────────────────────────────

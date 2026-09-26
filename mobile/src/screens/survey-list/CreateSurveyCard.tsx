@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors, brandRadius, brandTypography } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { AppCard } from "../../ui/AppCard"
 import { triggerHaptic } from "./haptics"
 
@@ -11,26 +12,12 @@ type CreateSurveyCardProps = {
 
 // The "create a survey" call to action at the top of the list.
 export function CreateSurveyCard({ firstSurvey, onOpenCreateSurvey }: CreateSurveyCardProps) {
-  const copy = firstSurvey
-    ? {
-        badge: "Premier relevé",
-        title: "Créez votre premier relevé",
-        body: "Commencez votre carnet de terrain IBP en quelques étapes.",
-        actionLabel: "Commencer",
-        accessibilityLabel: "Créer votre premier relevé",
-      }
-    : {
-        badge: "Nouveau relevé",
-        title: "Créer un nouveau relevé",
-        body: "Ajoutez un relevé IBP à votre carnet de terrain.",
-        actionLabel: "Créer",
-        accessibilityLabel: "Créer un nouveau relevé",
-      }
+  const copy = firstSurvey ? fr.surveyList.createCard.first : fr.surveyList.createCard.next
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={copy.accessibilityLabel}
+      accessibilityLabel={copy.a11y}
       onPress={() => {
         triggerHaptic()
         onOpenCreateSurvey()
@@ -48,7 +35,7 @@ export function CreateSurveyCard({ firstSurvey, onOpenCreateSurvey }: CreateSurv
           </View>
 
           <View style={styles.createSurveyActionPill}>
-            <Text style={styles.createSurveyActionText}>{copy.actionLabel}</Text>
+            <Text style={styles.createSurveyActionText}>{copy.action}</Text>
             <Ionicons name="arrow-forward" size={14} color={brandColors.white} />
           </View>
         </View>

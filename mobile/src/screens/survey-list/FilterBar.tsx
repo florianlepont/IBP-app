@@ -2,9 +2,12 @@ import { useState } from "react"
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors, brandRadius, brandTypography } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { AppCard } from "../../ui/AppCard"
 import { FilterPanel } from "./FilterPanel"
 import type { SurveyListFilters } from "./FilterPanel"
+
+const t = fr.surveyList.filters
 
 type FilterBarProps = SurveyListFilters & {
   useNativeSearchUI: boolean
@@ -45,7 +48,7 @@ export function FilterBar({
           <View style={styles.filtersHeadingBlock}>
             <View style={styles.filtersCompactTitleRow}>
               <Ionicons name="funnel-outline" size={14} color={brandColors.forest} />
-              <Text style={styles.filtersCompactTitle}>Filtres</Text>
+              <Text style={styles.filtersCompactTitle}>{t.title}</Text>
             </View>
             <Text numberOfLines={1} style={styles.filtersCompactMeta}>
               {summaryLabel}
@@ -53,9 +56,7 @@ export function FilterBar({
           </View>
 
           <Pressable
-            accessibilityLabel={
-              advancedOpen ? "Masquer les filtres avancés" : "Afficher les filtres avancés"
-            }
+            accessibilityLabel={advancedOpen ? t.toggle.hide : t.toggle.show}
             accessibilityRole="button"
             accessibilityState={{ expanded: advancedOpen }}
             style={styles.advancedToggle}
@@ -68,10 +69,10 @@ export function FilterBar({
             />
             <Text style={styles.advancedToggleText}>
               {advancedOpen
-                ? "Fermer"
+                ? t.toggle.close
                 : advancedFilterCount > 0
-                  ? `${advancedFilterCount} actif${advancedFilterCount > 1 ? "s" : ""}`
-                  : "Plus"}
+                  ? t.toggle.active(advancedFilterCount)
+                  : t.toggle.more}
             </Text>
           </Pressable>
         </View>
@@ -84,7 +85,7 @@ export function FilterBar({
               <TextInput
                 value={surveyQuery}
                 onChangeText={setSurveyQuery}
-                placeholder="Rechercher par nom de site"
+                placeholder={t.search.placeholder}
                 placeholderTextColor={brandColors.textSecondary}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -94,7 +95,7 @@ export function FilterBar({
               />
               {hasQuery ? (
                 <Pressable
-                  accessibilityLabel="Effacer la recherche"
+                  accessibilityLabel={t.search.clear}
                   accessibilityRole="button"
                   hitSlop={10}
                   onPress={() => setSurveyQuery("")}
