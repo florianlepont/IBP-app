@@ -93,6 +93,7 @@ import {
   type NearbyParcelsContextValue,
 } from "../../state/nearby-parcels-context"
 import { PublicMapReloadContext, createPublicMapReloadSignal } from "../public-map-reload"
+import { SurveysStackConfigContext } from "../stacks/surveys-stack-config"
 import { AccountRoute } from "./AccountRoute"
 import { FactorDetailRoute } from "./FactorDetailRoute"
 import { HomeRoute } from "./HomeRoute"
@@ -393,7 +394,9 @@ describe("SurveyListRoute", () => {
     const fixture = makeFixture()
     await mount(
       <Providers fixture={fixture}>
-        <SurveyListRoute navigation={makeNavigation() as never} route={{} as never} useNativeNav />
+        <SurveysStackConfigContext.Provider value={{ useNativeNav: true, searchEntry: false }}>
+          <SurveyListRoute navigation={makeNavigation() as never} route={{} as never} />
+        </SurveysStackConfigContext.Provider>
       </Providers>,
     )
     expect(props("surveyList").visibleSurveys).toBe(fixture.surveys.state.surveys)
@@ -404,6 +407,7 @@ describe("SurveyListRoute", () => {
     mockPlatform.OS = "ios"
     const fixture = makeFixture()
     const navigation = makeNavigation()
+    const searchTabConfig = { useNativeNav: true, searchEntry: true }
     const route = (query: string) => (
       <Providers
         fixture={{
@@ -411,12 +415,9 @@ describe("SurveyListRoute", () => {
           surveys: { ...fixture.surveys, state: { ...fixture.surveys.state, surveyQuery: query } },
         }}
       >
-        <SurveyListRoute
-          navigation={navigation as never}
-          route={{} as never}
-          useNativeNav
-          searchEntry
-        />
+        <SurveysStackConfigContext.Provider value={searchTabConfig}>
+          <SurveyListRoute navigation={navigation as never} route={{} as never} />
+        </SurveysStackConfigContext.Provider>
       </Providers>
     )
     const tree = await mount(route(""))

@@ -55,8 +55,8 @@ jest.mock("../screens/ProfileSetupScreen", () => ({
 jest.mock("../screens/LocalDataOwnerConflictScreen", () => ({
   LocalDataOwnerConflictScreen: mockOverlayProbe("ownerConflict"),
 }))
-jest.mock("../app/AuthenticatedAppNavigation", () => ({
-  AuthenticatedAppNavigation: () => null,
+jest.mock("../navigation/AppNavigation", () => ({
+  AppNavigation: () => null,
 }))
 
 jest.mock("react-native-gesture-handler", () => {

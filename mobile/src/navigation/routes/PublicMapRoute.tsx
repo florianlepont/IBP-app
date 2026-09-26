@@ -1,7 +1,6 @@
 import { memo, useContext, useEffect } from "react"
 import { View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { styles } from "../../app/styles"
 import { usePublicMapExplorer } from "../../hooks/usePublicMapExplorer"
 import { PublicMapScreen } from "../../screens/PublicMapScreen"
 import { useSession } from "../../state/session-context"
@@ -9,6 +8,7 @@ import { useSurveys } from "../../state/surveys-context"
 import { useSyncActions } from "../../state/sync-actions-context"
 import { useLatestCallback } from "../../state/useLatestCallback"
 import { PublicMapReloadContext } from "../public-map-reload"
+import { styles } from "../styles"
 import type { PublicMapRouteProps } from "../types"
 
 /**

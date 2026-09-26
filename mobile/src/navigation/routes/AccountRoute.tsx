@@ -1,8 +1,8 @@
 import { memo } from "react"
 import { KeyboardAvoidingView, Platform } from "react-native"
-import { styles } from "../../app/styles"
 import { AccountScreen } from "../../screens/AccountScreen"
 import { useAccessToken, useSession } from "../../state/session-context"
+import { styles } from "../styles"
 import type { AccountRouteProps } from "../types"
 
 /**
