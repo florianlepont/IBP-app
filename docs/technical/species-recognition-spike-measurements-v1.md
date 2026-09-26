@@ -2973,3 +2973,49 @@ adequately-measured (n=250) genus-specific weakness in autumn specifically, the 
 up," though not one that changes any go/no-go call since Prunus does not clear D-02 at any
 resolution. All three verdicts are now backed by n≥250 (Acer, Prunus) or n=172 (Pinus) autumn test
 images, not the 1–4-image cells that made this question unanswerable in Section 12.6.
+
+### 14.6 Promotion to the canonical model path — verdict
+
+**Promoted.** `genus_classifier_v4.tflite` (8,238,676 bytes, EfficientNetB0, float16) is copied to
+the canonical `spike/species-recognition/train/genus_classifier.tflite` path that plan 03's
+device-harness cache convention and plan 05 read from, along with `genus_classifier_keras_v4` →
+`genus_classifier_keras/`, `training_report_v4.json` → `training_report.json`,
+`export_report_v4.json` → `export_report.json`, and `eval/results_v4/*` → `eval/results/*`.
+`eval/GATE` still reads `GATE-MODEL: PASS`. Iterations 1–3's models, keras exports, training/export
+reports and eval results are all preserved separately under their `*_iteration1*`/`*_v2*`/`*_v3*`
+suffixes, untouched and unmodified regardless of what sits at the canonical path — the same
+promotion discipline iterations 2 and 3 followed (Sections 10.5, 11.6).
+
+**Promotion criterion, applied explicitly rather than assumed (mirroring iteration 3's own
+instruction to check, not assume): does iteration 4 genuinely beat iteration 3 on the temperate
+genera specifically, not just on the pooled mean?** Yes, unambiguously:
+
+- **21 of 21 Île-de-France-targeted genera improved** (Section 14.4), mean +4.93pp top-3 — no
+  exceptions, no regressions, in the exact genus group this iteration's corpus work targeted.
+- The untouched Mediterranean/evergreen/other group also improved on average (+1.65pp, a stronger
+  backbone and longer schedule help everyone somewhat) but by roughly a third as much, with 2 of 13
+  essentially flat (Olea -0.51pp, Pistacia -0.18pp) — confirming the improvement is concentrated
+  where the corpus work was concentrated, not an artefact of a generally better model that would
+  have shown the same pattern regardless of which genera were targeted.
+- Pooled and unweighted-mean figures across all 34 genera also improved (+3.02pp pooled, +3.67pp
+  unweighted), so promotion is not bought at the expense of the untouched genera either.
+- The specific gap this iteration was launched to close — Acer/Pinus/Prunus autumn measurability —
+  is closed: all three now have adequately-sampled (n≥172) autumn cells, one of which (Pinus,
+  95.35%) clears D-02 in isolation.
+
+**No genus regressed on the temperate/targeted list.** The two genera anywhere in the corpus that
+did regress (Olea, Pistacia) are both Mediterranean/untouched, both within noise (well under 1pp,
+on a test split that did not change size between iterations 3 and 4), and neither is a genus this
+iteration's cap-raise or season-fix touched. **Verdict: promote, unreservedly, on the evidence this
+section presents.**
+
+**What did not change, and is not claimed to have changed:** only 1 of 34 genera (Tamarix) clears
+the D-02 95% top-3 bar — the same one as iteration 3, at a higher figure (96.88% vs 95.04%). This
+iteration moved the temperate genera meaningfully closer to a usable partial-go (several gained
+5–10pp) without pushing any of them, or a new Mediterranean genus, over the bar itself. Section
+14.2's saturation finding (this backbone/corpus combination has stopped being schedule-limited) means
+a fifth iteration repeating the same three levers (more epochs, a still-larger corpus at the same
+per-class cap, the same backbone) should not be expected to produce another leap of this size — the
+next real lever, if the ADR calls for one, is more data specifically for the genera still short of
+the bar, or the still-parked Tela Botanica/Wikimedia Commons sources from Section 13.3, not a repeat
+of this iteration's recipe.
