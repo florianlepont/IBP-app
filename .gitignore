@@ -30,3 +30,8 @@ mobile/assets/herbier-transparent/
 # of the project, which is what produced three local patches this year.
 mobile/ios/
 mobile/android/
+
+# Species-recognition spike (Phase 1) is throwaway by design — see
+# .planning/phases/01-species-recognition-approach-decision/. Its only durable
+# output is docs/technical/species-recognition-spike-measurements-v1.md.
+spike/

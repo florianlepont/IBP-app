@@ -29,7 +29,7 @@ in October rather than discovered in December.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR
+- [x] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR (completed 2026-09-26)
 - [ ] **Phase 1.1: Reconcile the IBP method version** (INSERTED) - Establish whether the app still implements the current CNPF method, and what changes if not
 - [x] **Phase 1.2: Stop field data loss and account exposure** (INSERTED) - Session errors never delete offline data; no account takeover or open debug surface (completed 2026-09-24)
 - [x] **Phase 1.3: CI and test safety net** (INSERTED) - Typecheck in CI, reproducible image, tests that run real SQL (completed 2026-09-24)
@@ -39,8 +39,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1.7: API configuration, service split and database tuning** (INSERTED) - Fail-fast config, split SurveysService, bounded and indexed queries (completed 2026-09-26)
 - [ ] **Phase 1.8: Shared IBP domain package and test completeness** (INSERTED) - IBP rules defined once; RS256 path tested
 - [ ] **Phase 1.9: Mobile state architecture, i18n, accessibility and hygiene** (INSERTED) - Targeted re-renders, French catalogue, accessible controls, accurate docs
-- [ ] **Phase 2: Species Contracts & Data-Contract Corrections** - Give species a data model, an API surface and a migration; correct the stale form spec
-- [ ] **Phase 3: Species Recognition for Factor A** - Photograph a tree, get a species suggestion, keep or reject it
+- [ ] **Phase 2: Factor A Genus List & Data-Contract Corrections** - Record the observed genera as a list rather than a count, migrate existing surveys; correct the stale form spec
+- [ ] **Phase 3: Genus Recognition for Factor A** - Photograph a tree, get a calibrated genus suggestion, confirm it
 - [ ] **Phase 4: Offline Map & Own-Survey Navigation** - Navigate a parcel with no network, and see your own surveys on the map
 - [ ] **Phase 5: Survey Export & Ownership** - Export a survey as a PDF offline and delete your own surveys
 - [ ] **Phase 6: Durable Backend** - Backups that restore, migrations that hold, hosting ratified, dead and unsafe code gone
@@ -60,15 +60,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The ADR states an explicit go/no-go for US-C9 in this milestone, and if it is a no-go, describes the fallback (manual species entry) and what moves to the next milestone.
   4. The ADR adds no recurring inference cost to the ~€346/yr budget, or states plainly what it would cost.
 
-**Plans**: 6 plans
+**Plans**: 6/6 plans complete
 Plans:
 
-- [ ] 01-01-PLAN.md — Spike scaffold, benchmark-device and field-photo asks, measurement document skeleton
-- [ ] 01-02-PLAN.md — CNPF Factor A genus label set (34 classes) and a licence-clean image corpus
-- [ ] 01-03-PLAN.md — On-device TFLite harness on real iOS and Android, proven with a stock model
-- [ ] 01-04-PLAN.md — Fine-tune, export quantised .tflite, measure top-1/top-3 accuracy per genus
-- [ ] 01-05-PLAN.md — Real-device latency against the 3 s budget and field-photograph validation
-- [ ] 01-06-PLAN.md — ADR-002 with the go / partial go / no-go for US-C9, ratified
+- [x] 01-01-PLAN.md — Spike scaffold, benchmark-device and field-photo asks, measurement document skeleton
+- [x] 01-02-PLAN.md — CNPF Factor A genus label set (34 classes) and a licence-clean image corpus
+- [x] 01-03-PLAN.md — On-device TFLite harness on real iOS and Android, proven with a stock model
+- [x] 01-04-PLAN.md — Fine-tune, export quantised .tflite, measure top-1/top-3 accuracy per genus
+- [x] 01-05-PLAN.md — Real-device latency against the 3 s budget and field-photograph validation
+- [x] 01-06-PLAN.md — ADR-002 with the go / partial go / no-go for US-C9, ratified
 
 ### Phase 01.1: Reconcile the IBP method version — repo implements Fr v3.0, CNPF publishes FR v3.2 (INSERTED)
 
@@ -319,32 +319,36 @@ Plans:
 - [ ] 01.9-31-PLAN.md — Prove the phase: run and record the full local gate and every measurement, record PR #158's CI evidence suppli (wave 9)
 - [ ] 01.9-32-PLAN.md — Close phase 01.9 after phase 01.8: final documentation sweep, complete audit status links, and the French vali (wave 10)
 
-### Phase 2: Species Contracts & Data-Contract Corrections
+### Phase 2: Factor A Genus List & Data-Contract Corrections
 
-**Goal**: A species observation can be stored, synced and read back through contracts written down before any UI exists — and the two stale spec sections that contradict shipped behaviour are corrected.
-**Depends on**: Phase 1, Phase 1.1 (the Factor A genus list must come from the ratified method version)
+**Goal**: Factor A records the observed native genera as a list rather than a bare count, through contracts written down before any UI exists; surveys already recorded keep their scores; and the two stale spec sections that contradict shipped behaviour are corrected.
+**Depends on**: Phase 1, Phase 1.1 (the Factor A genus list must come from the ratified method version), Phase 1.8 (the Factor A rules, the CNPF genus list as an allowed set, and the sync contract types all belong in the `packages/ibp-domain` workspace that phase creates)
 **Requirements**: REQ-ML-contracts, REQ-DOC-form-spec
 **Success Criteria** (what must be TRUE):
 
-  1. `docs/technical/data-contract-v1.md` defines a species entity linked to a survey's Factor A, carrying the species, its confidence score, and whether the suggestion was confirmed, edited or rejected.
-  2. `docs/technical/api-contract-v1.md` documents the species endpoint(s) under `/v1` with request and response shapes and standard error codes.
-  3. A migration creates the species schema and `npm run migrate:api` applies it cleanly on an empty database.
-  4. Species data survives a round-trip through `POST /surveys/sync`: an E2E test replays the same payload twice and no species row is duplicated.
-  5. `docs/specs/ibp-form-spec.md` §4 states that a survey may reference one or many parcels (`parcel_ids[]`), and §10.1 lists the shipped status enum `draft | submitted | synced | error | expired` with `submitted_at` and `deleted_at` — no `deleted` value, no `published_at`.
+  1. `docs/technical/data-contract-v1.md` defines Factor A as a list of observed native genera drawn from the closed CNPF regional list, with the genus count derived from it, replacing the single `native_genus_count` number (ADR-002, D-15). There is no species entity: recognition is genus-level only (D-01), and neither the recognition photo (D-13) nor the ecologist's acceptance or correction of a suggestion (D-14) is stored.
+  2. `docs/technical/api-contract-v1.md` documents the Factor A genus-list shape in the survey payload under `/v1`, validated against the CNPF list, with standard error codes. No recognition endpoint exists — inference is on-device (ADR-002, D-06).
+  3. A migration introduces the genus list and states explicitly what happens to surveys already recorded as a bare count, which cannot be decomposed into named genera; their Factor A score is unchanged. `npm run migrate:api` applies cleanly on an empty database and on a copy of existing data.
+  4. Factor A scoring derives from the genus list in `packages/ibp-domain` (Phase 1.8), to which both `IbpRulesService` and `mobile/src/app/ibp-scoring.ts` delegate; the CNPF genus list is one of the package's allowed sets and the genus-list payload shape is one of its sync contract types. The package's parity fixture and the 17 reference cases in `docs/technical/ibp-validation-matrix-v1.md` still pass.
+  5. The genus list survives a round-trip through `POST /surveys/sync`: an E2E test replays the same payload twice and nothing is duplicated.
+  6. `docs/specs/ibp-form-spec.md` §4 states that a survey may reference one or many parcels (`parcel_ids[]`), and §10.1 lists the shipped status enum `draft | submitted | synced | error | expired` with `submitted_at` and `deleted_at` — no `deleted` value, no `published_at`.
 
 **Plans**: TBD
 
-### Phase 3: Species Recognition for Factor A
+### Phase 3: Genus Recognition for Factor A
 
-**Goal**: A surveyor fills Factor A faster by photographing a tree than by naming it from memory.
+**Goal**: A surveyor fills Factor A faster by photographing a tree than by naming its genus from memory.
 **Depends on**: Phase 2
 **Requirements**: REQ-C-species-recognition
+**Inputs from Phase 1**: the promoted model `genus_classifier.tflite` (EfficientNet-B0, float16, 8.24 MB) and the per-genus confidence calibration table — both measured artefacts ADR-002 rests on. Both are preserved outside the repository at `~/Projects/cortege-ml-artifacts/genus-classifier-iteration4/` (model, labels, Keras source, training and export reports, calibration table and re-cut scale — 42 MB, MD5-verified against the originals on 2026-09-26). They are deliberately not committed: 42 MB of binaries would stay in git history forever. The calibrated thresholds are also versioned in `docs/technical/species-recognition-spike-measurements-v1.md` §15.2.
 **Success Criteria** (what must be TRUE):
 
-  1. From the Factor A section, the surveyor adds one or more photos and sees suggested species, each with a confidence score.
-  2. The surveyor can confirm, edit or reject each suggestion; the retained species is saved with the survey and is there again when the survey is reopened.
-  3. With the device in airplane mode, suggestions still work on-device — or the app states plainly that recognition needs connectivity, exactly as the Phase 1 ADR decided.
-  4. Confirmed species reach the server through the normal sync flow and appear in the survey read back from the API.
+  1. From the Factor A section, the surveyor photographs a single subject — one tree, a leaf or bark (D-10) — and sees the most likely genus first with its alternatives underneath (D-11), each carrying a plain-words confidence indicator (D-12).
+  2. The indicator uses ADR-002's per-genus calibrated thresholds, so a given label means the same reliability whichever genus is shown; all 34 CNPF genera are suggested and none is withheld (D-04).
+  3. A suggestion never applies itself: the surveyor confirms it, and the accepted genus is added to Factor A's genus list (Phase 2), which is there again when the survey is reopened. The recognition photo is not kept (D-13).
+  4. Recognition works with the device in airplane mode: the model is bundled in the app binary (D-07, amended) and inference is on-device (D-06). If the model fails to load, the surveyor sees a clear message and falls back to manual entry (D-08).
+  5. The genus list reaches the server through the normal sync flow and appears in the survey read back from the API.
+  6. **Closes Phase 1's accepted Android deviation:** a real Android device run records median, p95 and worst total latency, online and in airplane mode, against the 3 s budget, plus an accuracy spot-check confirming the bundled `.tflite` behaves as on iOS. Recorded in the same format as the measurement document's Section 7. The feature does not ship until this is done.
 
 **Plans**: TBD
 **UI hint**: yes
@@ -423,7 +427,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Species Recognition — Approach Decision | 0/6 | Not started | - |
+| 1. Species Recognition — Approach Decision | 6/6 | Complete   | 2026-09-26 |
 | 1.1. Reconcile the IBP method version | 0/TBD | Not started | - |
 | 1.2. Stop field data loss and account exposure | 9/9 | Complete    | 2026-09-24 |
 | 1.3. CI and test safety net | 7/7 | Complete    | 2026-09-24 |
@@ -433,8 +437,8 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
 | 1.9. Mobile state architecture, i18n, accessibility and hygiene | 30/32 | In Progress|  |
-| 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
-| 3. Species Recognition for Factor A | 0/TBD | Not started | - |
+| 2. Factor A Genus List & Data-Contract Corrections | 0/TBD | Not started | - |
+| 3. Genus Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
 | 5. Survey Export & Ownership | 0/TBD | Not started | - |
 | 6. Durable Backend | 0/TBD | Not started | - |
