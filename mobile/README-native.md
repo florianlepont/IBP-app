@@ -53,3 +53,29 @@ a stale plugin fails the build instead of shipping a broken app.
 than a lockfile. That is the accepted trade-off of generated native projects:
 the versions are determined by the Expo SDK, which *is* pinned in
 `package.json`.
+
+## Native builds in CI
+
+Because nothing native is committed, two CI jobs regenerate and compile the
+projects on every relevant change (`.github/workflows/ci.yml`):
+
+- **Native build — Android** (`native-android`, Ubuntu): `npx expo prebuild -p
+  android --clean`, then `./gradlew assembleRelease` with Java 17. The Expo
+  template signs the release variant with the debug keystore, so the APK is not
+  publishable, but the whole release pipeline (JS bundle, R8 settings, native
+  modules) is compiled.
+- **Native build — iOS** (`native-ios`, macOS 26): `npx expo prebuild -p ios
+  --clean`, which also runs `pod install`, then `xcodebuild` of the Release
+  configuration for the iOS Simulator with `CODE_SIGNING_ALLOWED=NO`.
+
+No signing key, certificate or secret is used. The `EXPO_PUBLIC_*` variables are
+dummy values (`https://ci.invalid/...`); the resulting apps are never run.
+
+The jobs run when a pull request or a push to `main` touches `mobile/**`, the
+root `package.json` or `package-lock.json`, or `.github/workflows/ci.yml`.
+They are part of **CI OK**, which accepts them as passed or skipped. To start
+them by hand, open Actions → CI → Run workflow and pick the branch.
+
+CI proves that the native projects build. It does not prove how the app looks
+or behaves: the tab bar after login (native liquid-glass bar on iPhone, 4 tabs)
+still needs a Release build on a device.
