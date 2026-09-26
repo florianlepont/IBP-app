@@ -2,6 +2,7 @@ import { ReactNode, useState } from "react"
 import { LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors, brandRadius, brandSpacing, brandTypography } from "../app/brand-tokens"
+import { fr } from "../i18n"
 import { AppStatusChip } from "./AppStatusChip"
 
 type AppCollapsibleSectionProps = {
@@ -31,7 +32,7 @@ export function AppCollapsibleSection({
         onPress={toggle}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        accessibilityLabel={`${title} — ${expanded ? "réduire" : "développer"}`}
+        accessibilityLabel={fr.components.collapsibleSection.toggleLabel({ title, expanded })}
       >
         <Text style={styles.title}>{title}</Text>
         {badge ? <AppStatusChip label={badge} tone="neutral" /> : null}
