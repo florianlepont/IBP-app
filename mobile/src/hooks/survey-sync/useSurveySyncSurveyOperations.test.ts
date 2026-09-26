@@ -1,8 +1,9 @@
 /**
  * Tests for useSurveySyncSurveyOperations.
  *
- * Strategy: spy on React.useCallback so the hook can be called directly in
- * Node without a renderer (same pattern as other survey-sync hooks).
+ * Strategy: render the real hook with renderHook from
+ * @testing-library/react-native/pure (see render-hook-smoke.test.ts). The hook
+ * holds no React state, so its callbacks are called directly.
  */
 
 const mockGetSubmitBlockReason = jest.fn()
@@ -58,13 +59,13 @@ jest.mock("../../storage/attachment-files", () => ({
   deleteAttachmentFile: mockDeleteAttachmentFile,
 }))
 
-import React from "react"
+import { cleanup, renderHook } from "@testing-library/react-native/pure"
 import * as ImagePicker from "expo-image-picker"
 import { Alert } from "react-native"
 import { useSurveySyncSurveyOperations } from "./useSurveySyncSurveyOperations"
 import { createSyncActivity } from "./sync-activity"
 
-function useBuildHook(overrides: Record<string, unknown> = {}) {
+async function buildHook(overrides: Record<string, unknown> = {}) {
   const params = {
     apiUrl: "http://localhost:3000",
     accessToken: "access-token",
@@ -88,20 +89,17 @@ function useBuildHook(overrides: Record<string, unknown> = {}) {
     syncActivity: createSyncActivity(),
     ...overrides,
   }
-  const hook = useSurveySyncSurveyOperations(params as never)
-  return { ...hook, ...params }
+  const { result } = await renderHook(() => useSurveySyncSurveyOperations(params as never))
+  return { ...result.current, ...params }
 }
 
 describe("useSurveySyncSurveyOperations", () => {
-  let useCallbackSpy: jest.SpyInstance
-
   beforeEach(() => {
     jest.clearAllMocks()
-    useCallbackSpy = jest.spyOn(React, "useCallback").mockImplementation((fn) => fn as never)
   })
 
-  afterEach(() => {
-    useCallbackSpy.mockRestore()
+  afterEach(async () => {
+    await cleanup()
   })
 
   // ─── handleSubmitSurvey ───────────────────────────────────────────────────
@@ -109,14 +107,14 @@ describe("useSurveySyncSurveyOperations", () => {
   describe("handleSubmitSurvey", () => {
     test("sets status when survey not found", async () => {
       mockGetSubmitBlockReason.mockReturnValue("not_found")
-      const { handleSubmitSurvey, setStatus } = useBuildHook()
+      const { handleSubmitSurvey, setStatus } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("not found"))
     })
 
     test("sets status when global sync conflict", async () => {
       mockGetSubmitBlockReason.mockReturnValue("global_blocked")
-      const { handleSubmitSurvey, setStatus } = useBuildHook({
+      const { handleSubmitSurvey, setStatus } = await buildHook({
         surveys: [{ id: "survey-1", sync_blocked: 1 }],
       })
       await handleSubmitSurvey("survey-1")
@@ -125,21 +123,21 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("sets status when already submitted", async () => {
       mockGetSubmitBlockReason.mockReturnValue("already_submitted")
-      const { handleSubmitSurvey, setStatus } = useBuildHook()
+      const { handleSubmitSurvey, setStatus } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("already submitted"))
     })
 
     test("sets status when not synced", async () => {
       mockGetSubmitBlockReason.mockReturnValue("not_synced")
-      const { handleSubmitSurvey, setStatus } = useBuildHook()
+      const { handleSubmitSurvey, setStatus } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("must be synced"))
     })
 
     test("sets status when survey-level sync conflict", async () => {
       mockGetSubmitBlockReason.mockReturnValue("survey_blocked")
-      const { handleSubmitSurvey, setStatus } = useBuildHook()
+      const { handleSubmitSurvey, setStatus } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("unresolved sync conflict"))
     })
@@ -147,7 +145,7 @@ describe("useSurveySyncSurveyOperations", () => {
     test("sets status when draft not found locally", async () => {
       mockGetSubmitBlockReason.mockReturnValue(null)
       mockGetLocalSurveyDraft.mockResolvedValue(null)
-      const { handleSubmitSurvey, setStatus } = useBuildHook()
+      const { handleSubmitSurvey, setStatus } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("not found locally"))
     })
@@ -167,7 +165,7 @@ describe("useSurveySyncSurveyOperations", () => {
         missing_factors: ["A1"],
         missing_fields: [],
       })
-      const { handleSubmitSurvey, setStatus } = useBuildHook()
+      const { handleSubmitSurvey, setStatus } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("A1"))
     })
@@ -188,7 +186,7 @@ describe("useSurveySyncSurveyOperations", () => {
         missing_fields: [],
       })
       mockMarkSurveyExpiredLocally.mockResolvedValue(undefined)
-      const { handleSubmitSurvey, refreshLocalSurveys } = useBuildHook()
+      const { handleSubmitSurvey, refreshLocalSurveys } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(mockMarkSurveyExpiredLocally).toHaveBeenCalledWith("survey-1")
       expect(refreshLocalSurveys).toHaveBeenCalled()
@@ -210,7 +208,7 @@ describe("useSurveySyncSurveyOperations", () => {
         missing_fields: [],
       })
       mockSubmitSurvey.mockResolvedValue({ ok: true, message: "Submitted" })
-      const { handleSubmitSurvey, setStatus, refreshLocalSurveys } = useBuildHook()
+      const { handleSubmitSurvey, setStatus, refreshLocalSurveys } = await buildHook()
       await handleSubmitSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Submitted"))
       expect(refreshLocalSurveys).toHaveBeenCalled()
@@ -231,7 +229,7 @@ describe("useSurveySyncSurveyOperations", () => {
         missing_factors: [],
         missing_fields: [],
       })
-      const { handleSubmitSurvey, clearSession } = useBuildHook({
+      const { handleSubmitSurvey, clearSession } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
       await handleSubmitSurvey("survey-1")
@@ -253,7 +251,7 @@ describe("useSurveySyncSurveyOperations", () => {
         missing_factors: [],
         missing_fields: [],
       })
-      const { handleSubmitSurvey, setStatus } = useBuildHook({
+      const { handleSubmitSurvey, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Network error")),
       })
       await handleSubmitSurvey("survey-1")
@@ -276,7 +274,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("does not submit when syncAllowed is false", async () => {
       readyToSubmit()
-      const { handleSubmitSurvey, withAuthRetry } = useBuildHook({ syncAllowed: false })
+      const { handleSubmitSurvey, withAuthRetry } = await buildHook({ syncAllowed: false })
       await handleSubmitSurvey("survey-1")
       expect(withAuthRetry).not.toHaveBeenCalled()
       expect(mockSubmitSurvey).not.toHaveBeenCalled()
@@ -284,7 +282,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("the execution-time owner check blocks submitSurvey", async () => {
       readyToSubmit()
-      const { handleSubmitSurvey, setStatus } = useBuildHook({
+      const { handleSubmitSurvey, setStatus } = await buildHook({
         ensureSyncOwner: jest.fn().mockResolvedValue(false),
       })
       await handleSubmitSurvey("survey-1")
@@ -298,7 +296,7 @@ describe("useSurveySyncSurveyOperations", () => {
   describe("handleRetrySurvey", () => {
     test("retries and sets status on success", async () => {
       mockRetrySurveyNow.mockResolvedValue({ queued: 1 })
-      const { handleRetrySurvey, setStatus, refreshLocalSurveys } = useBuildHook()
+      const { handleRetrySurvey, setStatus, refreshLocalSurveys } = await buildHook()
       await handleRetrySurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Retry queued"))
       expect(refreshLocalSurveys).toHaveBeenCalled()
@@ -306,7 +304,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("sets error status on failure", async () => {
       mockRetrySurveyNow.mockRejectedValue(new Error("Retry failed"))
-      const { handleRetrySurvey, setStatus } = useBuildHook()
+      const { handleRetrySurvey, setStatus } = await buildHook()
       await handleRetrySurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Retry failed"))
     })
@@ -317,14 +315,14 @@ describe("useSurveySyncSurveyOperations", () => {
   describe("handleDiscardSurvey", () => {
     test("discards and sets status on success", async () => {
       mockDiscardSurveyLocalChanges.mockResolvedValue({ removed_queue: 2 })
-      const { handleDiscardSurvey, setStatus } = useBuildHook()
+      const { handleDiscardSurvey, setStatus } = await buildHook()
       await handleDiscardSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Local changes discarded"))
     })
 
     test("sets error status on failure", async () => {
       mockDiscardSurveyLocalChanges.mockRejectedValue(new Error("Discard failed"))
-      const { handleDiscardSurvey, setStatus } = useBuildHook()
+      const { handleDiscardSurvey, setStatus } = await buildHook()
       await handleDiscardSurvey("survey-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Discard failed"))
     })
@@ -345,7 +343,7 @@ describe("useSurveySyncSurveyOperations", () => {
       mockUpdateSurveyVisibility.mockResolvedValue(QUEUED)
       mockSyncPending.mockResolvedValue({ synced: 1, failed: 0 })
       const { handleToggleVisibility, setStatus, handleLoadCanonicalDetails, ensureSyncOwner } =
-        useBuildHook()
+        await buildHook()
       await handleToggleVisibility("survey-1", "public")
       // Queue-only call: updateSurveyVisibility never drains the queue itself.
       expect(mockUpdateSurveyVisibility).toHaveBeenCalledWith(
@@ -367,7 +365,7 @@ describe("useSurveySyncSurveyOperations", () => {
         queued: false,
         synced: false,
       })
-      const { handleToggleVisibility, setStatus } = useBuildHook()
+      const { handleToggleVisibility, setStatus } = await buildHook()
       await handleToggleVisibility("survey-1", "public")
       expect(mockSyncPending).not.toHaveBeenCalled()
       expect(setStatus).toHaveBeenCalledWith("Visibility already public")
@@ -376,14 +374,14 @@ describe("useSurveySyncSurveyOperations", () => {
     test("sets warning status when sync reports failures", async () => {
       mockUpdateSurveyVisibility.mockResolvedValue(QUEUED)
       mockSyncPending.mockResolvedValue({ synced: 0, failed: 2 })
-      const { handleToggleVisibility, setStatus } = useBuildHook()
+      const { handleToggleVisibility, setStatus } = await buildHook()
       await handleToggleVisibility("survey-1", "public")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("2 failed operation(s)"))
     })
 
     test("calls clearSession when the session ended (AUTH_REQUIRED)", async () => {
       mockUpdateSurveyVisibility.mockResolvedValue(QUEUED)
-      const { handleToggleVisibility, clearSession, setStatus } = useBuildHook({
+      const { handleToggleVisibility, clearSession, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
       await handleToggleVisibility("survey-1", "public")
@@ -393,7 +391,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("keeps the change queued when sync fails", async () => {
       mockUpdateSurveyVisibility.mockResolvedValue(QUEUED)
-      const { handleToggleVisibility, setStatus } = useBuildHook({
+      const { handleToggleVisibility, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("Network down")),
       })
       await handleToggleVisibility("survey-1", "public")
@@ -402,14 +400,14 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("sets error status on exception", async () => {
       mockUpdateSurveyVisibility.mockRejectedValue(new Error("Visibility error"))
-      const { handleToggleVisibility, setStatus } = useBuildHook()
+      const { handleToggleVisibility, setStatus } = await buildHook()
       await handleToggleVisibility("survey-1", "public")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Visibility error"))
     })
 
     test("WR-01: queues only and never drains the queue when syncAllowed is false", async () => {
       mockUpdateSurveyVisibility.mockResolvedValue(QUEUED)
-      const { handleToggleVisibility, withAuthRetry, setStatus } = useBuildHook({
+      const { handleToggleVisibility, withAuthRetry, setStatus } = await buildHook({
         syncAllowed: false,
       })
       await handleToggleVisibility("survey-1", "public")
@@ -426,7 +424,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("WR-01: the execution-time owner check blocks syncPending", async () => {
       mockUpdateSurveyVisibility.mockResolvedValue(QUEUED)
-      const { handleToggleVisibility } = useBuildHook({
+      const { handleToggleVisibility } = await buildHook({
         ensureSyncOwner: jest.fn().mockResolvedValue(false),
       })
       await handleToggleVisibility("survey-1", "public")
@@ -437,8 +435,8 @@ describe("useSurveySyncSurveyOperations", () => {
   // ─── confirmDeleteSurvey ──────────────────────────────────────────────────
 
   describe("confirmDeleteSurvey", () => {
-    test("shows an Alert with Delete and Cancel options", () => {
-      const { confirmDeleteSurvey } = useBuildHook()
+    test("shows an Alert with Delete and Cancel options", async () => {
+      const { confirmDeleteSurvey } = await buildHook()
       confirmDeleteSurvey("survey-1")
       expect(Alert.alert).toHaveBeenCalledWith(
         "Delete survey",
@@ -455,7 +453,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
   describe("handleQueueAttachmentFromLibrary", () => {
     test("sets status for submitted survey", async () => {
-      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook({
+      const { handleQueueAttachmentFromLibrary, setStatus } = await buildHook({
         surveys: [{ id: "survey-1", status: "submitted" }],
       })
       await handleQueueAttachmentFromLibrary("survey-1")
@@ -466,7 +464,7 @@ describe("useSurveySyncSurveyOperations", () => {
       ;(ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
         granted: false,
       })
-      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromLibrary, setStatus } = await buildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
       expect(setStatus).toHaveBeenCalledWith("Media library permission is required")
     })
@@ -476,7 +474,7 @@ describe("useSurveySyncSurveyOperations", () => {
         granted: true,
       })
       ;(ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({ canceled: true })
-      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromLibrary, setStatus } = await buildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
       expect(setStatus).toHaveBeenCalledWith("No image selected")
     })
@@ -506,7 +504,7 @@ describe("useSurveySyncSurveyOperations", () => {
         height: 100,
       })
       mockQueueLocalAttachment.mockResolvedValue(undefined)
-      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromLibrary, setStatus } = await buildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
 
       expect(mockPreparePhotoForStorage).toHaveBeenCalledWith({
@@ -542,7 +540,7 @@ describe("useSurveySyncSurveyOperations", () => {
         assets: [{ uri: "file://photo.jpg", width: 100, height: 100 }],
       })
       mockPreparePhotoForStorage.mockRejectedValue(new Error("resize failed"))
-      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromLibrary, setStatus } = await buildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
 
       expect(mockQueueLocalAttachment).not.toHaveBeenCalled()
@@ -565,7 +563,7 @@ describe("useSurveySyncSurveyOperations", () => {
         height: 100,
       })
       mockQueueLocalAttachment.mockRejectedValue(new Error("db error"))
-      const { handleQueueAttachmentFromLibrary, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromLibrary, setStatus } = await buildHook()
       await handleQueueAttachmentFromLibrary("survey-1")
 
       expect(mockDeleteAttachmentFile).toHaveBeenCalledWith(
@@ -582,7 +580,7 @@ describe("useSurveySyncSurveyOperations", () => {
       ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({
         granted: false,
       })
-      const { handleQueueAttachmentFromCamera, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromCamera, setStatus } = await buildHook()
       await handleQueueAttachmentFromCamera("survey-1")
       expect(setStatus).toHaveBeenCalledWith("Camera permission is required")
     })
@@ -590,7 +588,7 @@ describe("useSurveySyncSurveyOperations", () => {
     test("sets status when camera cancelled", async () => {
       ;(ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true })
       ;(ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({ canceled: true })
-      const { handleQueueAttachmentFromCamera, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromCamera, setStatus } = await buildHook()
       await handleQueueAttachmentFromCamera("survey-1")
       expect(setStatus).toHaveBeenCalledWith("No photo captured")
     })
@@ -617,7 +615,7 @@ describe("useSurveySyncSurveyOperations", () => {
         height: 1536,
       })
       mockQueueLocalAttachment.mockResolvedValue(undefined)
-      const { handleQueueAttachmentFromCamera, setStatus } = useBuildHook()
+      const { handleQueueAttachmentFromCamera, setStatus } = await buildHook()
       await handleQueueAttachmentFromCamera("survey-1")
 
       expect(mockPreparePhotoForStorage).toHaveBeenCalledWith({
@@ -649,7 +647,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
   describe("handleDeleteAttachment", () => {
     test("sets status for submitted survey", async () => {
-      const { handleDeleteAttachment, setStatus } = useBuildHook({
+      const { handleDeleteAttachment, setStatus } = await buildHook({
         surveys: [{ id: "survey-1", status: "submitted" }],
       })
       await handleDeleteAttachment("survey-1", "att-1")
@@ -658,7 +656,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("sets status when attachment not found locally", async () => {
       mockQueueDeleteAttachment.mockResolvedValue({ removed_local: false, queued_delete: false })
-      const { handleDeleteAttachment, setStatus } = useBuildHook()
+      const { handleDeleteAttachment, setStatus } = await buildHook()
       await handleDeleteAttachment("survey-1", "att-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("not found locally"))
     })
@@ -671,14 +669,14 @@ describe("useSurveySyncSurveyOperations", () => {
         pulled_surveys: 0,
         pulled_attachments: 0,
       })
-      const { handleDeleteAttachment, setStatus } = useBuildHook()
+      const { handleDeleteAttachment, setStatus } = await buildHook()
       await handleDeleteAttachment("survey-1", "att-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("synced"))
     })
 
     test("handles AUTH_REQUIRED during sync after delete", async () => {
       mockQueueDeleteAttachment.mockResolvedValue({ removed_local: true, queued_delete: true })
-      const { handleDeleteAttachment, setStatus } = useBuildHook({
+      const { handleDeleteAttachment, setStatus } = await buildHook({
         withAuthRetry: jest.fn().mockRejectedValue(new Error("AUTH_REQUIRED")),
       })
       await handleDeleteAttachment("survey-1", "att-1")
@@ -687,14 +685,14 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("removes locally without sync when queued_delete is false", async () => {
       mockQueueDeleteAttachment.mockResolvedValue({ removed_local: true, queued_delete: false })
-      const { handleDeleteAttachment, setStatus } = useBuildHook()
+      const { handleDeleteAttachment, setStatus } = await buildHook()
       await handleDeleteAttachment("survey-1", "att-1")
       expect(setStatus).toHaveBeenCalledWith("Attachment removed locally")
     })
 
     test("WR-01: removes locally without draining the queue when syncAllowed is false", async () => {
       mockQueueDeleteAttachment.mockResolvedValue({ removed_local: true, queued_delete: true })
-      const { handleDeleteAttachment, withAuthRetry, setStatus } = useBuildHook({
+      const { handleDeleteAttachment, withAuthRetry, setStatus } = await buildHook({
         syncAllowed: false,
       })
       await handleDeleteAttachment("survey-1", "att-1")
@@ -706,7 +704,7 @@ describe("useSurveySyncSurveyOperations", () => {
     test("WR-01: the execution-time owner check blocks syncPending", async () => {
       mockQueueDeleteAttachment.mockResolvedValue({ removed_local: true, queued_delete: true })
       const ensureSyncOwner = jest.fn().mockResolvedValue(false)
-      const { handleDeleteAttachment } = useBuildHook({ ensureSyncOwner })
+      const { handleDeleteAttachment } = await buildHook({ ensureSyncOwner })
       await handleDeleteAttachment("survey-1", "att-1")
       expect(ensureSyncOwner).toHaveBeenCalledWith("auth0|owner")
       expect(mockSyncPending).not.toHaveBeenCalled()
@@ -714,7 +712,7 @@ describe("useSurveySyncSurveyOperations", () => {
 
     test("sets error status on exception", async () => {
       mockQueueDeleteAttachment.mockRejectedValue(new Error("Delete failed"))
-      const { handleDeleteAttachment, setStatus } = useBuildHook()
+      const { handleDeleteAttachment, setStatus } = await buildHook()
       await handleDeleteAttachment("survey-1", "att-1")
       expect(setStatus).toHaveBeenCalledWith(expect.stringContaining("Delete failed"))
     })
