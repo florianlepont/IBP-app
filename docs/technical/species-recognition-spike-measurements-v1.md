@@ -2639,7 +2639,7 @@ before any data loading, per the precondition this check exists to enforce (Sect
 `GATE-CORPUS: PASS`, `CLASSES-USABLE: 32/34` (Betula and Phillyrea remain composition-excluded,
 unchanged from iterations 1–3 — Section 3a's finding, not re-audited this iteration).
 
-### 14.2 Training — in progress
+### 14.2 Training — complete
 
 **Launched** 2026-09-25 13:29 CEST as a background process (PID 19098):
 `finetune.py --backbone efficientnet_b0 --output-suffix _v4 --head-epochs 8 --finetune-epochs 20
@@ -2709,3 +2709,81 @@ for a total iteration-4 training wall-clock in the range of iteration 3's 4h46mi
 10–12 hours end-to-end, depending on where `EarlyStopping` actually triggers. Reported here as a
 planning number, not a promise — the actual duration and the epoch `EarlyStopping` stops at are
 recorded in Section 14.3 once training completes.
+
+**Actual result (`train/training_report_v4.json`).** Total wall-clock 84,477.7s (23.47h): head
+phase 20,872.8s (5.80h, 8 epochs), fine-tune phase 63,570.9s (17.66h, 20 epochs run) — longer than
+the planning estimate above, consistent with EfficientNetB0's heavier per-step compute on this
+hardware. `train_images_used=212,436`, `val_images_used=26,553`, 0 skipped-corrupt in either split.
+
+**`best_finetune_epoch_1indexed: 20` of 20 run — `EarlyStopping` did NOT fire.** Unlike a genuine
+plateau, `val_top3` set a new (marginal) high every single epoch through the full 20-epoch budget,
+so `patience=3`'s "no improvement for 3 consecutive epochs" condition was never met, and
+`restore_best_weights=True` restored epoch 20's weights because they were, by that literal
+criterion, the best ones seen. The full fine-tune history:
+
+| epoch | train loss | train top1 | train top3 | val_loss | val_top1 | val_top3 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1.9643 | 0.4325 | 0.6612 | 1.4606 | 0.5672 | 0.7787 |
+| 2 | 1.5390 | 0.5409 | 0.7620 | 1.2853 | 0.6155 | 0.8146 |
+| 3 | 1.3642 | 0.5895 | 0.7994 | 1.1897 | 0.6426 | 0.8329 |
+| 4 | 1.2507 | 0.6216 | 0.8228 | 1.1272 | 0.6600 | 0.8429 |
+| 5 | 1.1634 | 0.6470 | 0.8395 | 1.0844 | 0.6715 | 0.8532 |
+| 6 | 1.0960 | 0.6657 | 0.8531 | 1.0473 | 0.6831 | 0.8599 |
+| 7 | 1.0276 | 0.6858 | 0.8661 | 1.0216 | 0.6931 | 0.8642 |
+| 8 | 0.9775 | 0.7014 | 0.8754 | 1.0026 | 0.6990 | 0.8681 |
+| 9 | 0.9274 | 0.7144 | 0.8841 | 0.9867 | 0.7039 | 0.8720 |
+| 10 | 0.8851 | 0.7263 | 0.8919 | 0.9803 | 0.7080 | 0.8731 |
+| 11 | 0.8424 | 0.7391 | 0.9000 | 0.9646 | 0.7139 | 0.8751 |
+| 12 | 0.8078 | 0.7497 | 0.9064 | 0.9587 | 0.7153 | 0.8775 |
+| 13 | 0.7742 | 0.7594 | 0.9114 | 0.9587 | 0.7180 | 0.8790 |
+| 14 | 0.7389 | 0.7691 | 0.9168 | 0.9558 | 0.7192 | 0.8791 |
+| 15 | 0.7068 | 0.7790 | 0.9230 | **0.9549** | 0.7205 | 0.8788 |
+| 16 | 0.6777 | 0.7877 | 0.9275 | 0.9558 | 0.7224 | 0.8813 |
+| 17 | 0.6495 | 0.7954 | 0.9322 | 0.9620 | 0.7258 | 0.8817 |
+| 18 | 0.6246 | 0.8026 | 0.9362 | 0.9580 | 0.7251 | 0.8827 |
+| 19 | 0.6027 | 0.8103 | 0.9396 | 0.9660 | 0.7267 | 0.8833 |
+| 20 | 0.5772 | 0.8176 | 0.9435 | 0.9738 | 0.7259 | **0.8837** |
+
+**This answers, plainly, the schedule- vs. data/approach-limited question lever 3 was raised to
+settle — and the answer flips from iteration 3's.** Iteration 3's fine-tune run showed `val_top3`
+climbing at a healthy, undecayed clip through its full (8-epoch) budget with no sign of a plateau —
+schedule-limited, not data- or approach-limited (Section 11.7). This run, on a 1.36x larger corpus
+with a stronger backbone and 2.5x the epoch budget, shows the opposite: **per-epoch `val_top3` gains
+decayed from +3.59pp (epoch 1→2) to +0.42pp, +0.04pp, +0.10pp, +0.06pp, +0.04pp across epochs 16–20
+— roughly two orders of magnitude smaller than the early-training rate.** More directly, `val_loss`
+**bottomed at epoch 15 (0.9549) and rose in 4 of the next 5 epochs** (0.9558, 0.9620, 0.9580, 0.9660,
+0.9738) while training loss kept falling sharply (0.7068→0.5772) and training top1/top3 kept
+climbing fast (+3.86pp/+2.05pp over the same 5 epochs) — the textbook signature of overfitting: the
+model is increasingly fitting training-set-specific detail that does not generalise, even while the
+coarser, ceiling-bounded `val_top3` metric continues to inch upward. **This backbone and corpus
+combination is no longer schedule-limited — it has reached saturation and the onset of
+overfitting.** Given this, the epoch budget is not the lever to pull further for another rebalance
+pass; the next lever (if the temperate genera still fall short after Section 14.5's comparison)
+would be more data specifically for the genera that need it, not more epochs.
+
+**A genuine limitation of monitoring `val_top3` for `EarlyStopping`, not previously visible at
+iteration 3's shorter, still-climbing budget: a coarse, upper-bounded metric can keep posting tiny
+new highs for several epochs after the more sensitive `val_loss` has already turned, so
+`patience=3` on `val_top3` alone did not catch the overfitting onset this run's own data shows
+starting around epoch 15.** The practical cost of this was small here — epoch 15's `val_top3`
+(0.8788) is 0.49pp below epoch 20's (0.8837) — but it means the exported model (epoch 20's weights)
+is trained slightly past the point where validation loss stopped improving. Recorded as a finding
+for a later iteration's `EarlyStopping` configuration (e.g. monitoring `val_loss` with `mode="min"`,
+or a stricter patience), not re-run here — D-19 timebox discipline applies, and the practical
+difference is small enough (well under 1pp) not to justify a second training run to test it.
+
+### 14.3 Export — complete
+
+`train/genus_classifier_v4.tflite`: **8,238,676 bytes (8.24 MB)** — larger than iteration 2/3's
+6,127,976 bytes (6.13 MB), as expected: EfficientNetB0's 4,093,125 total params (float16-quantised)
+against MobileNetV3Large's 3,029,026. Both are float16 post-training quantisation (Section 4's
+finding — int8 dynamic-range measurably degrades this corpus's predictions — applies identically
+here; not re-tested, since nothing about the quantisation scheme's own tradeoff changed with the
+backbone). **Plan 01-05 will need to re-time this larger model on device — its latency and memory
+figures cannot be assumed to carry over from iteration 3's 6.13 MB MobileNetV3Large measurement.**
+
+**Export parity: 100% top-1 agreement (68/68)** between the trained Keras model and the exported
+`.tflite`, on the same 68-image (2/class) parity sample every prior iteration used
+(`export_report_v4.json`: `keras_tflite_top1_agreement: 1.0`, `keras_top1_accuracy_on_sample: 0.765`,
+`tflite_top1_accuracy_on_sample: 0.765`) — comfortably above the 90% pass threshold, and a clean
+match with no float16-rounding-induced argmax flips at all on this sample (iteration 3 had one).
