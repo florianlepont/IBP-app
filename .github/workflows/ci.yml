@@ -217,7 +217,6 @@ jobs:
       OBJECT_STORAGE_MODE: local
       OBJECT_STORAGE_BUCKET: ibp-media
       ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
-      SMTP_ENABLED: false
       DEBUG_DATA_RESET_ENABLED: true
       CADASTRE_PROVIDER: synthetic
       CADASTRE_PROVIDER_ALLOW_FALLBACK: true
@@ -305,7 +304,6 @@ jobs:
       OBJECT_STORAGE_ACCESS_KEY: minio
       OBJECT_STORAGE_SECRET_KEY: minio123
       ATTACHMENTS_UPLOAD_DIR: /tmp/ibp-uploads
-      SMTP_ENABLED: false
       DEBUG_DATA_RESET_ENABLED: true
       CADASTRE_PROVIDER: synthetic
       CADASTRE_PROVIDER_ALLOW_FALLBACK: true
@@ -626,7 +624,6 @@ jobs:
             -e OBJECT_STORAGE_MODE=local \
             -e OBJECT_STORAGE_BUCKET=ibp-media \
             -e ATTACHMENTS_UPLOAD_DIR=/tmp/ibp-uploads \
-            -e SMTP_ENABLED=false \
             -e DEBUG_DATA_RESET_ENABLED=true \
             -e CADASTRE_PROVIDER=synthetic \
             -e CADASTRE_PROVIDER_ALLOW_FALLBACK=true \

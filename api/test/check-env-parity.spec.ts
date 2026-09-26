@@ -25,6 +25,7 @@ if (!bashAvailable) {
 const DB_SECRET = "Pq7-db-secret-parity-marker"
 const STORAGE_SECRET = "Zx9-storage-secret-parity-marker"
 const MGMT_SECRET = "Mg3-mgmt-secret-parity-marker"
+const SMTP_SECRET = "Sm5-smtp-secret-parity-marker"
 
 const VALID_LINES: Record<string, string> = {
   POSTGRES_DB: "cortege",
@@ -184,6 +185,10 @@ const FIXTURES: Array<[string, string]> = [
     `${withChanges({})}\nACCESS_TOKEN_SECRET=CHANGE_ME_64_CHAR_HEX\nREFRESH_TOKEN_SECRET=x\nAUTH_DEV_EXPOSE_EMAIL_TOKEN=false`,
   ],
   [
+    "leftover SMTP lines are harmless (phase 01.9 D-09)",
+    `${withChanges({})}\nSMTP_ENABLED=true\nSMTP_HOST=smtp.example.org\nSMTP_PASSWORD=${SMTP_SECRET}\nEMAIL_CHANGE_CONFIRM_URL_TEMPLATE=https://example.org/confirm`,
+  ],
+  [
     "several faults at once",
     withChanges({
       POSTGRES_PASSWORD: "ibp",
@@ -206,7 +211,7 @@ describeIfBash("check-env.sh agrees with the API production check", () => {
     } else {
       expect(shell.output).toContain("À corriger avant la fusion :")
     }
-    for (const secret of [DB_SECRET, STORAGE_SECRET, MGMT_SECRET]) {
+    for (const secret of [DB_SECRET, STORAGE_SECRET, MGMT_SECRET, SMTP_SECRET]) {
       expect(shell.output).not.toContain(secret)
     }
   })
@@ -230,6 +235,20 @@ describeIfBash("check-env.sh agrees with the API production check", () => {
       "INFO : ACCESS_TOKEN_SECRET : ligne inutile, peut être supprimée",
     )
     expect(shell.output).not.toContain(DB_SECRET)
+  })
+
+  it("flags leftover SMTP lines as obsolete and never echoes their values (D-09)", () => {
+    const { shell } = runBoth(
+      `${withChanges({})}\nSMTP_ENABLED=true\nSMTP_PASSWORD=${SMTP_SECRET}\nEMAIL_CHANGE_CONFIRM_URL_TEMPLATE=https://example.org/confirm`,
+    )
+    expect(shell.status).toBe(0)
+    expect(shell.output).toContain("INFO : SMTP_PASSWORD : ligne inutile, peut être supprimée.")
+    expect(shell.output).toContain("INFO : SMTP_ENABLED : ligne inutile, peut être supprimée.")
+    expect(shell.output).toContain(
+      "INFO : EMAIL_CHANGE_CONFIRM_URL_TEMPLATE : ligne inutile, peut être supprimée.",
+    )
+    expect(shell.output).not.toContain(SMTP_SECRET)
+    expect(shell.output).not.toContain("ERREUR")
   })
 
   it("works when piped into `bash -s --` (the owner command)", () => {
