@@ -2,11 +2,12 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Date
 
-2026-09-26
+2026-09-26 (ratified 2026-09-26: accepted as written, with D-07 resolved to bundle the model in
+the app binary)
 
 ## Context
 
