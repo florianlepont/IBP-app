@@ -711,15 +711,22 @@ import App from "../../App"
  * change these numbers; every change must be a decrease for
  * statusUpdate/formKeystroke/formKeystrokeAutosave/oneSurveyRefresh.
  *
- * `rows` is 19 per list render for 20 seeded drafts: the list lifts the most
- * recently updated draft into the "continue draft" card, which is not a
- * Swipeable row. `surveyDetail` is 0 until a survey is selected (the edit
+ * `rows` counted 19 per list render for 20 seeded drafts before 01.9-22: the
+ * list lifts the most recently updated draft into the "continue draft" card,
+ * which is not a Swipeable row. `surveyDetail` is 0 until a survey is selected (the edit
  * set-up in formKeystrokeAutosave selects survey s-01).
  *
  * After 01.9-18 (per-screen route components, data-free navigation tree):
  * a status update re-renders only Settings, and a keystroke only the three form
  * screens. The autosave and the one-survey refresh still re-render the screens
- * that read the surveys context, and every row (01.9-22 memoises the rows).
+ * that read the surveys context.
+ *
+ * After 01.9-22 (FlatList, memo(SurveyRow), structural sharing in
+ * useSurveyList): the list mounts its initial window of 10 rows, and only rows
+ * whose survey object changed re-render. In formKeystrokeAutosave the edited
+ * s-01 becomes the most recent draft and moves into the "continue draft" card,
+ * so s-20 re-enters the list as a row: 1 row render. In oneSurveyRefresh the
+ * renamed s-17 is the one row that re-renders.
  * The pre-phase numbers are in 01.9-render-counts-before.json.
  */
 const EXPECTED: Record<ScenarioName, Counts> = {
@@ -769,7 +776,7 @@ const EXPECTED: Record<ScenarioName, Counts> = {
     publicMap: 1,
     account: 0,
     settings: 0,
-    rows: 10,
+    rows: 1,
   },
   oneSurveyRefresh: {
     home: 1,
@@ -781,7 +788,7 @@ const EXPECTED: Record<ScenarioName, Counts> = {
     publicMap: 1,
     account: 0,
     settings: 0,
-    rows: 10,
+    rows: 1,
   },
 }
 
@@ -914,7 +921,8 @@ describe("render counts (D-02)", () => {
   it("oneSurveyRefresh", async () => {
     expect(mockCaptured.refreshLocalSurveys).not.toBeNull()
     resetCounts()
-    mockRows[5] = { ...mockRows[5], site_name: `${mockRows[5].site_name} (renamed)` }
+    // Survey s-17 is the 4th list row, inside the FlatList's initial window (01.9-22).
+    mockRows[16] = { ...mockRows[16], site_name: `${mockRows[16].site_name} (renamed)` }
     await act(async () => {
       await mockCaptured.refreshLocalSurveys?.()
     })
