@@ -429,3 +429,90 @@ jobs:
 | **Court terme (1 à 2 sprints)** | Transactions API et SQLite (ARCH-3), mutex de sync, lots ≤ 100, photos persistées et redimensionnées (M-H1 à M-H4), typecheck et image reproductible en CI (CI-1, CI-2), plafond de retry corrigé |
 | **Moyen terme** | Paquet `ibp-domain` partagé (ARCH-1), découpage de `SurveysService` (ARCH-2), `@nestjs/config`, contextes React avec `FlatList` et mémoïsation (ARCH-4), index Postgres, seuils de couverture, filtrage par chemin et `expo-doctor` en CI |
 | **Fond** | Séquence monotone pour `/sync/changes` (ARCH-6), migrations SQLite versionnées (ARCH-5), i18n, accessibilité, mise à jour de `CLAUDE.md` (ARCH-8) |
+
+---
+
+## 8. Statut
+
+Cette section relie chaque constat à la phase de remédiation qui le traite et à la ou les PR qui l'ont fusionné. Les PR ont été retrouvées dans l'historique Git : chaque fusion de `main` a été rattachée aux plans (`01.x-NN`) de ses commits, puis chaque constat à sa phase via la matrice de traçabilité du plan de remédiation (§6) et la ligne « Source » de chaque phase dans la feuille de route. La phase 01.2 commence à #125 : ses deux premiers plans (limite de débit, identité) ont été fusionnés dans #125 et #126. Les PR de vérification et de clôture de chaque phase (#130 à #133, #141 à #144, #146 à #149, #151 à #153, #155, #157) ne contiennent que de la documentation et ne sont pas répétées ci-dessous. Les constats des phases 01.8 et 01.9 sont « en attente » : le plan de clôture 01.9-32 complétera leurs liens.
+
+| Réf. | Constat (court) | Phase | PR |
+|---|---|---|---|
+| [ARCH-1](#arch-1) | Règles IBP et contrats dupliqués | 01.8 | en attente |
+| [ARCH-2](#arch-2) | `SurveysService` trop gros, S3 ×3, `process.env` épars | 01.6, 01.7 | [#154](https://github.com/florianlepont/cortege/pull/154), [#156](https://github.com/florianlepont/cortege/pull/156) |
+| [ARCH-3](#arch-3) | Transactions : API | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| [ARCH-3](#arch-3) | Transactions : SQLite mobile | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| [ARCH-4](#arch-4) | Couche d'état mobile en entonnoir de props | 01.9 | en attente |
+| [ARCH-5](#arch-5) | Schéma SQLite non versionné, `op_type`, `fetch` direct | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| [ARCH-6](#arch-6) | Ordre du flux `/sync/changes` et cas B | 01.6 | [#154](https://github.com/florianlepont/cortege/pull/154) |
+| [ARCH-7](#arch-7) | Hygiène : `REFRESH_TOKEN_SECRET`, tables `auth_sessions`, verrou de migration | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| [ARCH-7](#arch-7) | Hygiène : `App.tsx` et dépendances racine, dépendances inutiles, bibliothèques d'onglets | 01.9 | en attente |
+| [ARCH-8](#arch-8) | `CLAUDE.md` obsolète | 01.9 | en attente |
+| [A-C1](#a-c1) | Limite de débit globale partagée | 01.2 | [#125](https://github.com/florianlepont/cortege/pull/125), [#129](https://github.com/florianlepont/cortege/pull/129) |
+| [A-H1](#a-h1) | Liaison de compte par e-mail non vérifié | 01.2 | [#126](https://github.com/florianlepont/cortege/pull/126), [#129](https://github.com/florianlepont/cortege/pull/129) |
+| [A-H2](#a-h2) | `/sync` non validé, contournement de la soumission | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| [A-H3](#a-h3) | Photos de profil perdues au redéploiement | 01.6 | [#154](https://github.com/florianlepont/cortege/pull/154) |
+| [A-H4](#a-h4) | Module debug toujours chargé, HS256 | 01.2 | [#128](https://github.com/florianlepont/cortege/pull/128) |
+| [A-M1](#a-m1) | `syncSurveyParcels` avale les erreurs | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| A-M2 | `parcel_ids` sans limite : validation | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| A-M2 | `parcel_ids` sans limite : écriture en lot | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| A-M3 | Clé de stockage hors du dossier d'upload | 01.6 | [#154](https://github.com/florianlepont/cortege/pull/154) |
+| A-M4 | Taille d'upload non contrôlée (MinIO) | 01.6 | [#154](https://github.com/florianlepont/cortege/pull/154) |
+| A-M5 | Erreurs déterministes retentées, détails exposés | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| A-M6 | Identité du signaleur visible | 01.2 | [#126](https://github.com/florianlepont/cortege/pull/126) |
+| A-M7 | Soumissions concurrentes sur une parcelle | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| A-M8 | Pool `pg` et configuration | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| A-M9 | Ordre de suppression de compte | 01.4 | [#145](https://github.com/florianlepont/cortege/pull/145) |
+| §3.1 Faible | `in` dans `isAllowedMimeType` | 01.6 | [#154](https://github.com/florianlepont/cortege/pull/154) |
+| §3.1 Faible | CORS permissif | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §3.1 Faible | Motif de signalement sans `MaxLength` | 01.2 | [#126](https://github.com/florianlepont/cortege/pull/126) |
+| §3.1 Faible | `console.error`, pas de `Logger` Nest | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| [M-C1](#m-c1) | Effacement des données sur erreur de session | 01.2 | [#127](https://github.com/florianlepont/cortege/pull/127), [#128](https://github.com/florianlepont/cortege/pull/128), [#129](https://github.com/florianlepont/cortege/pull/129) |
+| [M-H1](#m-h1) | Drains concurrents, écrasement d'une édition | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| [M-H2](#m-h2) | Photos fragiles et trop lourdes | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| [M-H3](#m-h3) | Bbox « parcelles proches » inversée | 01.2 | [#127](https://github.com/florianlepont/cortege/pull/127) |
+| [M-H4](#m-h4) | Lots de sync sans découpage | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| [M-H5](#m-h5) | Outils de développement en production | 01.2 | [#127](https://github.com/florianlepont/cortege/pull/127) |
+| §3.2 Moyen | Plafond de retry inopérant (`terminalOverride`) | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §3.2 Moyen | `fetch` de sync sans timeout | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §3.2 Moyen | Pull qui écrase des modifications non synchronisées | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §3.2 Moyen | Retry 401 sans `forceRefresh` | 01.2 | [#127](https://github.com/florianlepont/cortege/pull/127) |
+| §3.2 Moyen | Autosave sauté | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §3.2 Moyen | IDs non uniques | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §3.2 Moyen | Pièces jointes distantes avec `local_uri=""` | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §3.2 Faible | Stubs d'authentification morts | 01.2 | [#128](https://github.com/florianlepont/cortege/pull/128) |
+| §3.2 Faible | `useNavigation() as any` | 01.9 | en attente |
+| §3.2 Faible | Textes FR/EN, messages techniques | 01.9 | en attente |
+| §3.2 Faible | Accessibilité des `Pressable` | 01.9 | en attente |
+| §4 API | Sync séquentielle, nombre de requêtes | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | Index partiel des relevés publics | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | Bbox sur `centroid` JSON | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | Index `survey_events(actor_id)` | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | Index redondants | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | IGN sans cache ni timeout sur le corps | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | Fallback de `/sync/changes` non borné | 01.6 | [#154](https://github.com/florianlepont/cortege/pull/154) |
+| §4 API | Listes sans `LIMIT` (`listForUser`, `getEvents`, `listReports`) | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 API | `SELECT *` pour les contrôles de propriété | 01.7 | [#156](https://github.com/florianlepont/cortege/pull/156) |
+| §4 Mobile | Re-rendus globaux (`useSurveySync`) | 01.9 | en attente |
+| §4 Mobile | Pas de `FlatList` | 01.9 | en attente |
+| §4 Mobile | Images décodées en pleine résolution | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §4 Mobile | `listLocalSurveys` parse chaque payload | 01.9 | en attente |
+| §4 Mobile | Pas de transaction SQLite ni de WAL | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §4 Mobile | Index SQLite manquants | 01.5 | [#150](https://github.com/florianlepont/cortege/pull/150) |
+| §4 Mobile | Carte : bbox, clustering, marqueurs | 01.9 | en attente |
+| T1 (§5) | Pas de seuil de couverture | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| T2 (§5) | Modules à risque non testés : session, sync, pièces jointes | 01.2, 01.3, 01.5 | [#127](https://github.com/florianlepont/cortege/pull/127), [#134](https://github.com/florianlepont/cortege/pull/134), [#150](https://github.com/florianlepont/cortege/pull/150) |
+| T2 (§5) | Chemin RS256 du garde non testé | 01.8 | en attente |
+| T3 (§5) | Mock SQLite qui n'exécute rien | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| T3 (§5) | Tests de hooks qui espionnent React | 01.9 | en attente |
+| T4 (§5) | `testMatch` sans `.tsx`, `moduleNameMapper` en double | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| T5 (§5) | Base E2E jamais nettoyée | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| T5 (§5) | Fichier E2E fourre-tout, `Date.now()` | 01.8 | en attente |
+| T6 (§5) | Pas de test de parité IBP | 01.8 | en attente |
+| [CI-1](#ci-1) | Typecheck absent de la CI | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| [CI-2](#ci-2) | Image non reproductible, `:latest` publiable partout | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| CI-3 | Pas de filtrage par chemin | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| CI-4 | Permissions, SHA, timeouts, concurrence | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| CI-5 | Couverture, audit, CodeQL, build mobile | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| CI-6 | Jobs fusionnés, cache, sonde Postgres | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
+| §6 | `npm audit` : vulnérabilités modérées | 01.3 | [#134](https://github.com/florianlepont/cortege/pull/134) |
