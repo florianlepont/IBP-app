@@ -1,0 +1,268 @@
+Database: ibp_p17_13_test on localhost:5432
+Seed: 200 users, 8000 parcels (+200 without centroid), 10000 surveys, 1-3 links each, 30000 events, 20000 reports; rolled back.
+Lists: first page (limit 50) and the page after row 500; busy user explain-u1@example.test, busy survey explain-s1.
+Bbox: {"minLng":2,"maxLng":3,"minLat":48,"maxLat":49}; each EXPLAIN runs 3 times.
+
+===== /public/map-items - before (pre-01.7)
+Limit  (cost=1144.17..1145.30 rows=455 width=108) (actual time=19.659..19.713 rows=500 loops=1)
+  Buffers: shared hit=11879
+  ->  Sort  (cost=1144.17..1145.30 rows=455 width=108) (actual time=19.658..19.683 rows=500 loops=1)
+        Sort Key: s.submitted_at DESC
+        Sort Method: top-N heapsort  Memory: 136kB
+        Buffers: shared hit=11879
+        ->  HashAggregate  (cost=1114.98..1124.08 rows=455 width=108) (actual time=18.148..19.040 rows=1907 loops=1)
+              Group Key: s.id
+              Batches: 1  Memory Usage: 881kB
+              Buffers: shared hit=11879
+              ->  Nested Loop Left Join  (cost=149.84..1094.84 rows=895 width=109) (actual time=1.416..14.244 rows=3788 loops=1)
+                    Buffers: shared hit=11879
+                    ->  Hash Right Join  (cost=149.56..740.60 rows=895 width=75) (actual time=1.406..6.158 rows=3788 loops=1)
+                          Hash Cond: (sp.survey_id = s.id)
+                          Buffers: shared hit=587
+                          ->  Seq Scan on survey_parcels sp  (cost=0.00..537.79 rows=20279 width=29) (actual time=0.006..1.878 rows=20279 loops=1)
+                                Buffers: shared hit=335
+                          ->  Hash  (cost=143.87..143.87 rows=455 width=60) (actual time=1.395..1.396 rows=1907 loops=1)
+                                Buckets: 2048 (originally 1024)  Batches: 1 (originally 1)  Memory Usage: 196kB
+                                Buffers: shared hit=252
+                                ->  Index Scan using idx_surveys_public_submitted on surveys s  (cost=0.28..143.87 rows=455 width=60) (actual time=0.009..0.970 rows=1907 loops=1)
+                                      Index Cond: (submitted_at IS NOT NULL)
+                                      Buffers: shared hit=252
+                    ->  Index Scan using parcels_parcel_id_key on parcels p  (cost=0.29..0.40 rows=1 width=64) (actual time=0.002..0.002 rows=1 loops=3788)
+                          Index Cond: (parcel_id = sp.parcel_id)
+                          Buffers: shared hit=11292
+Planning:
+  Buffers: shared hit=36
+Planning Time: 0.510 ms
+Execution Time: 19.814 ms
+
+===== /public/map-items - after
+Nested Loop Left Join  (cost=25.22..11504.93 rows=455 width=108) (actual time=0.025..4.305 rows=500 loops=1)
+  Buffers: shared hit=4495
+  ->  Limit  (cost=0.28..143.87 rows=455 width=60) (actual time=0.008..0.243 rows=500 loops=1)
+        Buffers: shared hit=72
+        ->  Index Scan using idx_surveys_public_submitted on surveys s  (cost=0.28..143.87 rows=455 width=60) (actual time=0.007..0.206 rows=500 loops=1)
+              Index Cond: (submitted_at IS NOT NULL)
+              Buffers: shared hit=72
+  ->  Aggregate  (cost=24.94..24.95 rows=1 width=16) (actual time=0.008..0.008 rows=1 loops=500)
+        Buffers: shared hit=4423
+        ->  Nested Loop  (cost=0.57..24.93 rows=2 width=16) (actual time=0.004..0.007 rows=2 loops=500)
+              Buffers: shared hit=4423
+              ->  Index Only Scan using survey_parcels_pkey on survey_parcels sp  (cost=0.29..8.32 rows=2 width=15) (actual time=0.002..0.003 rows=2 loops=500)
+                    Index Cond: (survey_id = s.id)
+                    Heap Fetches: 975
+                    Buffers: shared hit=1489
+              ->  Index Scan using parcels_parcel_id_key on parcels p  (cost=0.29..8.30 rows=1 width=31) (actual time=0.002..0.002 rows=1 loops=978)
+                    Index Cond: (parcel_id = sp.parcel_id)
+                    Buffers: shared hit=2934
+Planning:
+  Buffers: shared hit=12
+Planning Time: 0.299 ms
+Execution Time: 4.373 ms
+
+===== /public/parcels/status?bbox - before (pre-01.7)
+Limit  (cost=1816.61..1902.72 rows=1 width=123) (actual time=13.890..17.550 rows=78 loops=1)
+  Buffers: shared hit=972
+  ->  Merge Left Join  (cost=1816.61..1902.72 rows=1 width=123) (actual time=13.889..17.543 rows=78 loops=1)
+        Merge Cond: (p.parcel_id = lp.parcel_id)
+        Buffers: shared hit=972
+        ->  Sort  (cost=813.96..813.97 rows=1 width=69) (actual time=5.185..5.194 rows=78 loops=1)
+              Sort Key: p.parcel_id
+              Sort Method: quicksort  Memory: 32kB
+              Buffers: shared hit=385
+              ->  Seq Scan on parcels p  (cost=0.00..813.95 rows=1 width=69) (actual time=0.151..5.145 rows=78 loops=1)
+                    Filter: ((((centroid ->> 'lng'::text))::double precision >= '2'::double precision) AND (((centroid ->> 'lng'::text))::double precision <= '3'::double precision) AND (((centroid ->> 'lat'::text))::double precision >= '48'::double precision) AND (((centroid ->> 'lat'::text))::double precision <= '49'::double precision))
+                    Rows Removed by Filter: 8501
+                    Buffers: shared hit=385
+        ->  Materialize  (cost=1002.65..1088.71 rows=11 width=67) (actual time=8.656..11.913 rows=3218 loops=1)
+              Buffers: shared hit=587
+              ->  Subquery Scan on lp  (cost=1002.65..1088.68 rows=11 width=67) (actual time=8.653..10.768 rows=3218 loops=1)
+                    Filter: (lp.rank_in_parcel = 1)
+                    Buffers: shared hit=587
+                    ->  WindowAgg  (cost=1002.65..1060.00 rows=2294 width=87) (actual time=8.651..10.525 rows=3218 loops=1)
+                          Run Condition: (row_number() OVER (?) <= 1)
+                          Buffers: shared hit=587
+                          ->  Sort  (cost=1002.65..1008.39 rows=2294 width=79) (actual time=8.644..8.840 rows=3704 loops=1)
+                                Sort Key: sp.parcel_id, s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
+                                Sort Method: quicksort  Memory: 479kB
+                                Buffers: shared hit=587
+                                ->  Hash Join  (cost=283.56..874.61 rows=2294 width=79) (actual time=1.325..6.015 rows=3764 loops=1)
+                                      Hash Cond: (sp.survey_id = s.id)
+                                      Buffers: shared hit=587
+                                      ->  Seq Scan on survey_parcels sp  (cost=0.00..537.79 rows=20279 width=29) (actual time=0.007..1.865 rows=20279 loops=1)
+                                            Buffers: shared hit=335
+                                      ->  Hash  (cost=268.99..268.99 rows=1166 width=64) (actual time=1.311..1.312 rows=1907 loops=1)
+                                            Buckets: 2048  Batches: 1  Memory Usage: 197kB
+                                            Buffers: shared hit=252
+                                            ->  Index Scan using idx_surveys_public_submitted on surveys s  (cost=0.28..268.99 rows=1166 width=64) (actual time=0.010..0.918 rows=1907 loops=1)
+                                                  Buffers: shared hit=252
+Planning:
+  Buffers: shared hit=18
+Planning Time: 0.508 ms
+Execution Time: 17.608 ms
+
+===== /public/parcels/status?bbox - after
+Nested Loop Left Join  (cost=268.71..2180.80 rows=68 width=123) (actual time=0.158..1.225 rows=78 loops=1)
+  Buffers: shared hit=953
+  ->  Limit  (cost=240.21..240.38 rows=68 width=69) (actual time=0.136..0.149 rows=78 loops=1)
+        Buffers: shared hit=69
+        ->  Sort  (cost=240.21..240.38 rows=68 width=69) (actual time=0.136..0.142 rows=78 loops=1)
+              Sort Key: p.parcel_id
+              Sort Method: quicksort  Memory: 35kB
+              Buffers: shared hit=69
+              ->  Bitmap Heap Scan on parcels p  (cost=61.23..238.14 rows=68 width=69) (actual time=0.055..0.102 rows=78 loops=1)
+                    Recheck Cond: ((centroid_lat >= '48'::double precision) AND (centroid_lat <= '49'::double precision) AND (centroid_lng >= '2'::double precision) AND (centroid_lng <= '3'::double precision))
+                    Heap Blocks: exact=63
+                    Buffers: shared hit=69
+                    ->  Bitmap Index Scan on idx_parcels_centroid_lat_lng  (cost=0.00..61.21 rows=68 width=0) (actual time=0.046..0.047 rows=78 loops=1)
+                          Index Cond: ((centroid_lat >= '48'::double precision) AND (centroid_lat <= '49'::double precision) AND (centroid_lng >= '2'::double precision) AND (centroid_lng <= '3'::double precision))
+                          Buffers: shared hit=6
+  ->  Limit  (cost=28.50..28.51 rows=1 width=64) (actual time=0.013..0.013 rows=0 loops=78)
+        Buffers: shared hit=884
+        ->  Sort  (cost=28.50..28.51 rows=1 width=64) (actual time=0.013..0.013 rows=0 loops=78)
+              Sort Key: s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=884
+              ->  Nested Loop  (cost=4.59..28.49 rows=1 width=64) (actual time=0.011..0.012 rows=1 loops=78)
+                    Buffers: shared hit=884
+                    ->  Bitmap Heap Scan on survey_parcels sp  (cost=4.30..11.86 rows=2 width=14) (actual time=0.004..0.005 rows=2 loops=78)
+                          Recheck Cond: (parcel_id = p.parcel_id)
+                          Heap Blocks: exact=182
+                          Buffers: shared hit=338
+                          ->  Bitmap Index Scan on idx_survey_parcels_parcel_id  (cost=0.00..4.30 rows=2 width=0) (actual time=0.003..0.003 rows=2 loops=78)
+                                Index Cond: (parcel_id = p.parcel_id)
+                                Buffers: shared hit=156
+                    ->  Index Scan using surveys_pkey on surveys s  (cost=0.29..8.31 rows=1 width=64) (actual time=0.002..0.002 rows=0 loops=182)
+                          Index Cond: (id = sp.survey_id)
+                          Filter: ((deleted_at IS NULL) AND (status = 'submitted'::text) AND (visibility = 'public'::text))
+                          Rows Removed by Filter: 1
+                          Buffers: shared hit=546
+Planning:
+  Buffers: shared hit=12
+Planning Time: 0.291 ms
+Execution Time: 1.255 ms
+
+===== GET /surveys (busy user) - first page (limit 50)
+Limit  (cost=2.40..112.07 rows=51 width=108) (actual time=0.048..0.073 rows=51 loops=1)
+  Buffers: shared hit=16
+  ->  Incremental Sort  (cost=2.40..2131.25 rows=990 width=108) (actual time=0.047..0.069 rows=51 loops=1)
+        Sort Key: updated_at DESC, id DESC
+        Presorted Key: updated_at
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+        Buffers: shared hit=16
+        ->  Index Scan using idx_surveys_user_updated on surveys  (cost=0.29..2086.70 rows=990 width=108) (actual time=0.011..0.047 rows=52 loops=1)
+              Index Cond: (user_id = '17af56f5-4f74-42c0-b599-dd14c523cae6'::uuid)
+              Filter: (deleted_at IS NULL)
+              Rows Removed by Filter: 5
+              Buffers: shared hit=16
+Planning Time: 0.052 ms
+Execution Time: 0.089 ms
+
+===== GET /surveys (busy user) - middle page (after row 500)
+Limit  (cost=3.22..154.46 rows=51 width=108) (actual time=0.049..0.073 rows=51 loops=1)
+  Buffers: shared hit=17
+  ->  Incremental Sort  (cost=3.22..1272.46 rows=428 width=108) (actual time=0.048..0.069 rows=51 loops=1)
+        Sort Key: updated_at DESC, id DESC
+        Presorted Key: updated_at
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+        Buffers: shared hit=17
+        ->  Index Scan using idx_surveys_user_updated on surveys  (cost=0.29..1253.20 rows=428 width=108) (actual time=0.014..0.047 rows=52 loops=1)
+              Index Cond: ((user_id = '17af56f5-4f74-42c0-b599-dd14c523cae6'::uuid) AND (updated_at <= '2026-09-22 08:09:04.676297+00'::timestamp with time zone))
+              Filter: ((deleted_at IS NULL) AND (ROW(updated_at, id) < ROW('2026-09-22 08:09:04.676297+00'::timestamp with time zone, 'explain-s5550'::text)))
+              Rows Removed by Filter: 7
+              Buffers: shared hit=17
+Planning Time: 0.063 ms
+Execution Time: 0.090 ms
+
+===== GET /surveys/:id/events (busy survey) - first page (limit 50)
+Limit  (cost=3.21..130.96 rows=51 width=160) (actual time=0.100..0.127 rows=51 loops=1)
+  Buffers: shared hit=4
+  ->  Incremental Sort  (cost=3.21..2513.22 rows=1002 width=160) (actual time=0.099..0.123 rows=51 loops=1)
+        Sort Key: created_at DESC, seq DESC
+        Presorted Key: created_at
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 30kB  Peak Memory: 30kB
+        Buffers: shared hit=4
+        ->  Index Scan using idx_survey_events_survey on survey_events  (cost=0.41..2472.15 rows=1002 width=160) (actual time=0.055..0.078 rows=60 loops=1)
+              Index Cond: (survey_id = 'explain-s1'::text)
+              Buffers: shared hit=4
+Planning Time: 0.040 ms
+Execution Time: 0.142 ms
+
+===== GET /surveys/:id/events (busy survey) - middle page (after row 500)
+Limit  (cost=3.23..132.36 rows=51 width=160) (actual time=0.062..0.089 rows=51 loops=1)
+  Buffers: shared hit=4
+  ->  Incremental Sort  (cost=3.23..2497.25 rows=985 width=160) (actual time=0.062..0.086 rows=51 loops=1)
+        Sort Key: created_at DESC, seq DESC
+        Presorted Key: created_at
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 30kB  Peak Memory: 30kB
+        Buffers: shared hit=4
+        ->  Index Scan using idx_survey_events_survey on survey_events  (cost=0.41..2456.81 rows=985 width=160) (actual time=0.017..0.042 rows=60 loops=1)
+              Index Cond: ((survey_id = 'explain-s1'::text) AND (created_at <= '2026-09-26 04:38:14+00'::timestamp with time zone))
+              Filter: (ROW(created_at, seq) < ROW('2026-09-26 04:38:14+00'::timestamp with time zone, '61131'::bigint))
+              Rows Removed by Filter: 1
+              Buffers: shared hit=4
+Planning Time: 0.054 ms
+Execution Time: 0.106 ms
+
+===== GET /reports - first page (limit 50)
+Limit  (cost=0.41..13.44 rows=51 width=198) (actual time=0.007..0.032 rows=51 loops=1)
+  Buffers: shared hit=7
+  ->  Index Scan using idx_reports_created_id on reports  (cost=0.41..5111.94 rows=20013 width=198) (actual time=0.007..0.028 rows=51 loops=1)
+        Buffers: shared hit=7
+Planning Time: 0.030 ms
+Execution Time: 0.042 ms
+
+===== GET /reports - middle page (after row 500)
+Limit  (cost=0.41..13.65 rows=51 width=198) (actual time=0.011..0.034 rows=51 loops=1)
+  Buffers: shared hit=5
+  ->  Index Scan using idx_reports_created_id on reports  (cost=0.41..5064.81 rows=19514 width=198) (actual time=0.011..0.030 rows=51 loops=1)
+        Index Cond: (ROW(created_at, id) < ROW('2026-09-25 16:54:55.076297+00'::timestamp with time zone, 'a71f2331-03f9-4c45-b72b-f39bf0bdbcb2'::text))
+        Buffers: shared hit=5
+Planning Time: 0.059 ms
+Execution Time: 0.047 ms
+
+===== GET /reports?status=open - first page (limit 50)
+Limit  (cost=1.80..74.20 rows=51 width=198) (actual time=0.047..0.071 rows=51 loops=1)
+  Buffers: shared hit=20
+  ->  Incremental Sort  (cost=1.80..1434.17 rows=1009 width=198) (actual time=0.047..0.068 rows=51 loops=1)
+        Sort Key: created_at DESC, id DESC
+        Presorted Key: created_at
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+        Buffers: shared hit=20
+        ->  Index Scan using idx_reports_status_created on reports  (cost=0.41..1388.77 rows=1009 width=198) (actual time=0.015..0.046 rows=52 loops=1)
+              Index Cond: (status = 'open'::text)
+              Buffers: shared hit=20
+Planning Time: 0.046 ms
+Execution Time: 0.087 ms
+
+===== GET /reports?status=open - middle page (after row 500)
+Limit  (cost=2.14..91.91 rows=51 width=198) (actual time=0.044..0.066 rows=51 loops=1)
+  Buffers: shared hit=21
+  ->  Incremental Sort  (cost=2.14..901.59 rows=511 width=198) (actual time=0.044..0.062 rows=51 loops=1)
+        Sort Key: created_at DESC, id DESC
+        Presorted Key: created_at
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+        Buffers: shared hit=21
+        ->  Index Scan using idx_reports_status_created on reports  (cost=0.41..878.59 rows=511 width=198) (actual time=0.014..0.042 rows=52 loops=1)
+              Index Cond: ((status = 'open'::text) AND (created_at <= '2026-09-16 08:00:40.676297+00'::timestamp with time zone))
+              Filter: (ROW(created_at, id) < ROW('2026-09-16 08:00:40.676297+00'::timestamp with time zone, 'bac6378f-93e2-4d17-9161-1bac98060bb2'::text))
+              Rows Removed by Filter: 1
+              Buffers: shared hit=21
+Planning Time: 0.084 ms
+Execution Time: 0.083 ms
+
+| query                                 | variant                     | execution (ms, median) | seq scan on a watched relation |
+|---------------------------------------|-----------------------------|------------------------|--------------------------------|
+| /public/map-items                     | before (pre-01.7)           | 19.814                 | yes (survey_parcels)           |
+| /public/map-items                     | after                       | 4.410                  | no                             |
+| /public/parcels/status?bbox           | before (pre-01.7)           | 18.046                 | yes (parcels, survey_parcels)  |
+| /public/parcels/status?bbox           | after                       | 1.380                  | no                             |
+| GET /surveys (busy user)              | first page (limit 50)       | 0.093                  | no                             |
+| GET /surveys (busy user)              | middle page (after row 500) | 0.117                  | no                             |
+| GET /surveys/:id/events (busy survey) | first page (limit 50)       | 0.104                  | no                             |
+| GET /surveys/:id/events (busy survey) | middle page (after row 500) | 0.110                  | no                             |
+| GET /reports                          | first page (limit 50)       | 0.044                  | no                             |
+| GET /reports                          | middle page (after row 500) | 0.052                  | no                             |
+| GET /reports?status=open              | first page (limit 50)       | 0.101                  | no                             |
+| GET /reports?status=open              | middle page (after row 500) | 0.095                  | no                             |
+
+Row counts before/after the run: {"surveys":309,"parcels":379,"links":485,"events":611,"reports":13} / {"surveys":309,"parcels":379,"links":485,"events":611,"reports":13}
