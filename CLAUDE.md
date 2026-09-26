@@ -27,7 +27,7 @@ Other top-level directories:
 |---------|-----------|
 | Mobile framework | React Native 0.81.5 + Expo 54 |
 | Mobile language | TypeScript 5.x (strict) |
-| Mobile navigation | React Navigation (native-stack + bottom-tabs) |
+| Mobile navigation | React Navigation (native-stack + bottom-tabs); `react-native-bottom-tabs` for the native iOS tab bar |
 | Mobile local DB | Expo SQLite (`cortege-local.db`) |
 | Mobile secure store | Expo SecureStore (tokens) |
 | API framework | NestJS 11 (Node 20+) |
@@ -155,9 +155,16 @@ The mobile app is designed to work without connectivity. All survey data is pers
 4. Retry backoff applies on failure (max `MAX_RETRY_COUNT = 8` retries)
 5. Operations that exceed the retry limit are marked `sync_blocked = 1`
 
-**State management** — custom hooks only, no Redux or Context API:
-- `useSurveySync` (`mobile/src/hooks/useSurveySync.ts`) — central orchestrator, consumed directly by `App.tsx`
-- Composed sub-hooks:
+**State management** — React contexts filled by one assembler, no Redux:
+- `AppStateProvider` (`mobile/src/state/AppStateProvider.tsx`) is the single assembler: it calls `useSurveySync` exactly once (the 01.5 single-sync guarantees depend on this) and publishes its memoised slices through five contexts in `mobile/src/state/`:
+  - session (`useSession`, plus a narrow `useAccessToken`)
+  - status (`useStatus`)
+  - sync actions (`useSyncActions`)
+  - surveys (`useSurveys`, plus an actions-only `useSurveyActions`)
+  - survey form (`useSurveyFormState`)
+  - A narrow nearby-parcels context (`useNearbyParcelsState`) is split out of the form context so keystrokes do not re-render Home
+- Never call `useSurveySync` anywhere else; read state through the context hooks. Action objects are stable (`useStableActions` / `useLatestCallback` in `mobile/src/state/useLatestCallback.ts`)
+- `useSurveySync` (`mobile/src/hooks/useSurveySync.ts`) — central orchestrator, composed of sub-hooks:
   - `useAuth0Session` — authentication state and token lifecycle
   - `useSurveySyncNetwork` — network sync operations
   - `useSurveySyncProfile` — profile sync
@@ -168,6 +175,17 @@ The mobile app is designed to work without connectivity. All survey data is pers
   - `useSurveyDraftPatcher` — incremental patch accumulation
   - `usePublicMapExplorer` — public map data fetching
   - `useGpsCapture` — device location capture
+
+**Navigation** (`mobile/src/navigation/`):
+- `AppNavigation.tsx` mounts the `NavigationContainer` and picks the native or JS tab tree; stacks live in `stacks/`, tab trees in `tabs/`
+- Typed through the global `ReactNavigation.RootParamList` (`navigation/types.ts`), so `useNavigation()` and `navigate` are checked without casts
+- Screens are mounted with `component={XRoute}`: memoised route components in `mobile/src/navigation/routes/` read only the contexts their screen shows. The navigator tree itself carries no data
+- 4 tabs: Accueil, Mes Relevés, Explorer, Compte. Search is the native search bar in the Mes Relevés header (no separate search tab); there is one survey stack
+- Tab bar rule (D-08): on iOS the native bar (`react-native-bottom-tabs`) is always used in Release builds; the JS bar (`@react-navigation/bottom-tabs`) is used on Android and in Expo Go. `EXPO_PUBLIC_ENABLE_NATIVE_TABS=false` is only honoured in development. Both libraries stay. Tab-bar hiding (e.g. on parcel selection) goes through `shouldHideTabBar` in `navigation/tab-bar.ts` for both trees
+
+**Text and i18n** (`mobile/src/i18n/`):
+- All user-facing text comes from the typed French catalogue `fr` (`mobile/src/i18n/fr/`, one module per screen or area)
+- Status-line texts are `StatusMessage` values, built only by catalogue functions; raw technical detail goes to `logStatusDetail` (debug console, dev builds only)
 
 **HTTP client** (`mobile/src/api/client.ts`):
 - Thin wrapper over `fetch` with Bearer token injection, timeout handling, and typed `ApiError`
@@ -223,8 +241,11 @@ Factor validation matrix: `docs/technical/ibp-validation-matrix-v1.md`
 
 | File | Purpose |
 |------|---------|
-| `mobile/src/App.tsx` | Root component; mounts `useSurveySync` and the navigation tree |
+| `mobile/App.tsx` | Root component; mounts `AppStateProvider`, the navigation tree and the session overlays (auth, owner conflict, profile setup) |
+| `mobile/src/state/AppStateProvider.tsx` | Single assembler: one `useSurveySync` call, fills the five state contexts |
 | `mobile/src/hooks/useSurveySync.ts` | Central sync + state orchestrator |
+| `mobile/src/navigation/AppNavigation.tsx` | Navigation container, native or JS tab tree |
+| `mobile/src/i18n/fr/index.ts` | Typed French catalogue (all user-facing text) |
 | `mobile/src/storage/db.ts` | SQLite schema, `initLocalDb`, constants |
 | `mobile/src/storage/surveys.ts` | Survey read/write helpers |
 | `mobile/src/storage/sync.ts` | Sync queue management |
