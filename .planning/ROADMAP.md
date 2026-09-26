@@ -321,14 +321,14 @@ Plans:
 ### Phase 2: Factor A Genus List & Data-Contract Corrections
 
 **Goal**: Factor A records the observed native genera as a list rather than a bare count, through contracts written down before any UI exists; surveys already recorded keep their scores; and the two stale spec sections that contradict shipped behaviour are corrected.
-**Depends on**: Phase 1, Phase 1.1 (the Factor A genus list must come from the ratified method version)
+**Depends on**: Phase 1, Phase 1.1 (the Factor A genus list must come from the ratified method version), Phase 1.8 (the Factor A rules, the CNPF genus list as an allowed set, and the sync contract types all belong in the `packages/ibp-domain` workspace that phase creates)
 **Requirements**: REQ-ML-contracts, REQ-DOC-form-spec
 **Success Criteria** (what must be TRUE):
 
   1. `docs/technical/data-contract-v1.md` defines Factor A as a list of observed native genera drawn from the closed CNPF regional list, with the genus count derived from it, replacing the single `native_genus_count` number (ADR-002, D-15). There is no species entity: recognition is genus-level only (D-01), and neither the recognition photo (D-13) nor the ecologist's acceptance or correction of a suggestion (D-14) is stored.
   2. `docs/technical/api-contract-v1.md` documents the Factor A genus-list shape in the survey payload under `/v1`, validated against the CNPF list, with standard error codes. No recognition endpoint exists — inference is on-device (ADR-002, D-06).
   3. A migration introduces the genus list and states explicitly what happens to surveys already recorded as a bare count, which cannot be decomposed into named genera; their Factor A score is unchanged. `npm run migrate:api` applies cleanly on an empty database and on a copy of existing data.
-  4. Factor A scoring derives from the genus list on both sides — `api/src/surveys/ibp-rules.service.ts` and `mobile/src/app/ibp-scoring.ts` — and the 17 reference cases in `docs/technical/ibp-validation-matrix-v1.md` still pass.
+  4. Factor A scoring derives from the genus list in `packages/ibp-domain` (Phase 1.8), to which both `IbpRulesService` and `mobile/src/app/ibp-scoring.ts` delegate; the CNPF genus list is one of the package's allowed sets and the genus-list payload shape is one of its sync contract types. The package's parity fixture and the 17 reference cases in `docs/technical/ibp-validation-matrix-v1.md` still pass.
   5. The genus list survives a round-trip through `POST /surveys/sync`: an E2E test replays the same payload twice and nothing is duplicated.
   6. `docs/specs/ibp-form-spec.md` §4 states that a survey may reference one or many parcels (`parcel_ids[]`), and §10.1 lists the shipped status enum `draft | submitted | synced | error | expired` with `submitted_at` and `deleted_at` — no `deleted` value, no `published_at`.
 
