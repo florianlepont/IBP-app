@@ -1,23 +1,8 @@
 import { useEffect } from "react"
-import {
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native"
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import {
-  brandColors,
-  brandRadius,
-  brandSemanticColors,
-  brandSpacing,
-  brandTypography,
-  ibpScoreTokens,
-} from "../app/brand-tokens"
+import { brandColors } from "../app/brand-tokens"
 import type { AuthUser } from "../app/types"
 import type { LocalSurvey } from "../storage/types"
 import type { SurveyStats } from "../app/types"
@@ -27,6 +12,9 @@ import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { DraftCard } from "../components/cards/DraftCard"
 import { ParcelNearbyCard } from "../components/cards/ParcelNearbyCard"
 import type { NearbyParcelsState } from "../hooks/useNearbyParcels"
+import { fr } from "../i18n"
+import { SectorScoreCard } from "./home/SectorScoreCard"
+import { styles } from "./home/styles"
 
 type HomeScreenProps = {
   currentUser: AuthUser | null
@@ -93,7 +81,7 @@ export function HomeScreen({
       <View style={styles.greeting}>
         <View>
           <Text style={styles.greetingTitle}>
-            {firstName ? `Bonjour, ${firstName}` : "Bonjour"}
+            {firstName ? fr.home.greetingWithName({ name: firstName }) : fr.home.greeting}
           </Text>
           <Text style={styles.greetingDate}>{formatTodayDate()}</Text>
         </View>
@@ -111,27 +99,27 @@ export function HomeScreen({
           icon={surveyStats.blocked > 0 ? "warning-outline" : "cloud-upload-outline"}
           title={
             surveyStats.blocked > 0
-              ? `${surveyStats.blocked} relevé${surveyStats.blocked > 1 ? "s" : ""} bloqué${surveyStats.blocked > 1 ? "s" : ""}`
-              : `${surveyStats.failed} relevé${surveyStats.failed > 1 ? "s" : ""} en erreur de sync`
+              ? fr.home.alerts.blocked({ count: surveyStats.blocked })
+              : fr.home.alerts.failed({ count: surveyStats.failed })
           }
-          message="Vérifiez votre connexion pour relancer la synchronisation."
+          message={fr.home.alerts.message}
           style={styles.notice}
         />
       ) : null}
 
       {/* ── Hero CTA ──────────────────────────────── */}
       <View style={styles.heroCta}>
-        <Text style={styles.heroEyebrow}>COMMENCER</Text>
-        <Text style={styles.heroTitle}>Nouveau relevé IBP</Text>
-        <Text style={styles.heroBody}>{"Localisez une parcelle et démarrez l'inventaire."}</Text>
+        <Text style={styles.heroEyebrow}>{fr.home.hero.eyebrow}</Text>
+        <Text style={styles.heroTitle}>{fr.home.hero.title}</Text>
+        <Text style={styles.heroBody}>{fr.home.hero.body}</Text>
         <AppButton
-          label="Démarrer un relevé"
+          label={fr.home.hero.button}
           leadingIcon="add"
           size="lg"
           variant="primary"
           onPress={onCreateSurvey}
           style={styles.heroButton}
-          labelStyle={{ color: brandColors.canvas }}
+          labelStyle={styles.heroButtonLabel}
         />
       </View>
 
@@ -139,8 +127,8 @@ export function HomeScreen({
       {drafts.length > 0 ? (
         <View style={styles.section}>
           <AppSectionHeader
-            title="Brouillons"
-            subtitle={`${drafts.length} relevé${drafts.length > 1 ? "s" : ""} en cours`}
+            title={fr.home.drafts.title}
+            subtitle={fr.home.drafts.subtitle({ count: drafts.length })}
             style={styles.sectionHeader}
           />
           <ScrollView
@@ -158,38 +146,31 @@ export function HomeScreen({
       {/* ── Parcelles proches ─────────────────────── */}
       <View style={styles.section}>
         <AppSectionHeader
-          title="Autour de vous"
+          title={fr.home.nearby.title}
           trailing={
-            <Pressable onPress={onNavigateToExplorer} hitSlop={8}>
-              <Text style={styles.trailingLink}>Voir carte ›</Text>
+            <Pressable
+              onPress={onNavigateToExplorer}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={fr.home.nearby.seeMapLabel}
+            >
+              <Text style={styles.trailingLink}>{fr.home.nearby.seeMap}</Text>
             </Pressable>
           }
           style={styles.sectionHeader}
         />
 
         {nearbyParcels.locationDenied ? (
-          <AppNotice
-            tone="info"
-            icon="location-outline"
-            message="Activez la localisation pour voir les parcelles proches."
-          />
+          <AppNotice tone="info" icon="location-outline" message={fr.home.nearby.locationDenied} />
         ) : nearbyParcels.error ? (
-          <AppNotice
-            tone="warning"
-            icon="wifi-outline"
-            message="Impossible de charger les parcelles. Vérifiez votre connexion."
-          />
+          <AppNotice tone="warning" icon="wifi-outline" message={fr.home.nearby.loadError} />
         ) : nearbyParcels.loading ? (
           <View style={styles.loadingRow}>
             <View style={styles.skeletonCard} />
             <View style={styles.skeletonCard} />
           </View>
         ) : nearbyParcels.parcels.length === 0 ? (
-          <AppNotice
-            tone="info"
-            icon="leaf-outline"
-            message="Aucune parcelle relevée dans un rayon de 2,5 km."
-          />
+          <AppNotice tone="info" icon="leaf-outline" message={fr.home.nearby.empty} />
         ) : (
           <View style={styles.parcelsList}>
             {nearbyParcels.parcels.map((parcel) => (
@@ -202,39 +183,13 @@ export function HomeScreen({
               />
             ))}
 
-            {/* Score secteur */}
             {nearbyParcels.sectorAvgScore != null ? (
-              <View style={styles.sectorCard}>
-                <View style={styles.sectorHeader}>
-                  <Text style={styles.sectorLabel}>SCORE IBP MOYEN DU SECTEUR</Text>
-                  <Text style={styles.sectorScore}>{nearbyParcels.sectorAvgScore} / 10</Text>
-                </View>
-                <View style={styles.scoreDotsRow}>
-                  {Array.from({ length: 10 }, (_, i) => {
-                    const filled = i < Math.round(nearbyParcels.sectorAvgScore ?? 0)
-                    const score = nearbyParcels.sectorAvgScore ?? 0
-                    const dotColor =
-                      score >= ibpScoreTokens.thresholds.high
-                        ? brandColors.moss
-                        : score >= ibpScoreTokens.thresholds.mid
-                          ? brandColors.ochre
-                          : brandColors.terracotta
-                    return (
-                      <View
-                        key={i}
-                        style={[
-                          styles.scoreDot,
-                          { backgroundColor: filled ? dotColor : brandColors.divider },
-                        ]}
-                      />
-                    )
-                  })}
-                </View>
-                <Text style={styles.sectorMeta}>
-                  {nearbyParcels.parcels.filter((p) => p.latest_ibp_total != null).length} relevés
-                  analysés · rayon ~2,5 km
-                </Text>
-              </View>
+              <SectorScoreCard
+                score={nearbyParcels.sectorAvgScore}
+                analysedCount={
+                  nearbyParcels.parcels.filter((p) => p.latest_ibp_total != null).length
+                }
+              />
             ) : null}
           </View>
         )}
@@ -242,168 +197,3 @@ export function HomeScreen({
     </ScrollView>
   )
 }
-
-const PAGE_H = 20
-
-const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: brandColors.canvas,
-  },
-  content: {
-    gap: 0,
-  },
-
-  // Greeting
-  greeting: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: PAGE_H,
-    marginBottom: 16,
-  },
-  greetingTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: brandColors.forest,
-    lineHeight: 32,
-  },
-  greetingDate: {
-    ...brandTypography.meta,
-    color: brandColors.textSecondary,
-    marginTop: 2,
-    textTransform: "capitalize",
-  },
-  avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: brandRadius.pill,
-    backgroundColor: brandColors.panelMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Notice
-  notice: {
-    marginHorizontal: PAGE_H,
-    marginBottom: 16,
-  },
-
-  // Hero CTA
-  heroCta: {
-    marginHorizontal: PAGE_H,
-    backgroundColor: brandColors.forest,
-    borderRadius: brandRadius.card,
-    padding: 24,
-    paddingBottom: 28,
-    gap: 8,
-    overflow: "hidden",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.15,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: 8 },
-      },
-      android: { elevation: 4 },
-    }),
-  },
-  heroEyebrow: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: brandColors.moss,
-    textTransform: "uppercase",
-  },
-  heroTitle: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: brandColors.canvas,
-    lineHeight: 30,
-  },
-  heroBody: {
-    ...brandTypography.sectionBody,
-    color: brandSemanticColors.heroBodyOnDark,
-    marginBottom: 4,
-  },
-  heroButton: {
-    backgroundColor: brandColors.moss,
-    marginTop: 4,
-  },
-
-  // Sections
-  section: {
-    marginTop: brandSpacing.xl + 4,
-  },
-  sectionHeader: {
-    paddingHorizontal: PAGE_H,
-    marginBottom: 14,
-  },
-  trailingLink: {
-    ...brandTypography.label,
-    color: brandColors.moss,
-  },
-
-  // Drafts
-  draftsScroll: {
-    paddingHorizontal: PAGE_H,
-    gap: 12,
-  },
-
-  // Parcels
-  parcelsList: {
-    paddingHorizontal: PAGE_H,
-    gap: 10,
-  },
-  loadingRow: {
-    paddingHorizontal: PAGE_H,
-    gap: 10,
-  },
-  skeletonCard: {
-    height: 72,
-    borderRadius: brandRadius.card,
-    backgroundColor: brandColors.panelMuted,
-  },
-
-  // Sector score card
-  sectorCard: {
-    backgroundColor: brandSemanticColors.surfaceSoft,
-    borderRadius: brandRadius.card,
-    borderWidth: 1,
-    borderColor: brandColors.divider,
-    padding: 16,
-    gap: 10,
-    marginTop: 4,
-  },
-  sectorHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sectorLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: brandColors.forest,
-    textTransform: "uppercase",
-    flex: 1,
-  },
-  sectorScore: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: brandColors.forest,
-  },
-  scoreDotsRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  scoreDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-  },
-  sectorMeta: {
-    ...brandTypography.meta,
-    color: brandColors.textSecondary,
-  },
-})

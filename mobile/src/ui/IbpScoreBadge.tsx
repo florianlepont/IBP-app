@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native"
 import { brandTypography, ibpScoreTokens } from "../app/brand-tokens"
+import { fr } from "../i18n"
 
 type IbpScoreBadgeProps = {
   score: number | null | undefined
@@ -26,9 +27,11 @@ export function IbpScoreBadge({ score, size = "md" }: IbpScoreBadgeProps) {
       ]}
     >
       <Text style={[styles.score, isSm ? styles.scoreSm : styles.scoreMd, { color: colors.text }]}>
-        {score != null ? String(score) : "—"}
+        {score != null ? String(score) : fr.components.ibpScoreBadge.noScore}
       </Text>
-      <Text style={[styles.denom, { color: colors.text }]}>/10</Text>
+      <Text style={[styles.denom, { color: colors.text }]}>
+        {fr.components.ibpScoreBadge.denominator}
+      </Text>
     </View>
   )
 }

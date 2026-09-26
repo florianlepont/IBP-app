@@ -14,6 +14,7 @@ import {
   brandRadius,
   brandTypography,
 } from "../app/brand-tokens"
+import { fr } from "../i18n"
 
 type AppButtonVariant = "primary" | "secondary" | "danger" | "dangerSoft"
 type AppButtonSize = "sm" | "md" | "lg"
@@ -60,7 +61,7 @@ export function AppButton({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label ?? "Action"}
+      accessibilityLabel={accessibilityLabel ?? label ?? fr.components.appButton.defaultLabel}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
       onPress={onPress}
