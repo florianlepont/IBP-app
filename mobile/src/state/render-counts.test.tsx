@@ -733,7 +733,7 @@ const EXPECTED: Record<ScenarioName, Counts> = {
     publicMap: 2,
     account: 1,
     settings: 1,
-    rows: 19,
+    rows: 10,
   },
   statusUpdate: {
     home: 0,
@@ -769,7 +769,7 @@ const EXPECTED: Record<ScenarioName, Counts> = {
     publicMap: 1,
     account: 0,
     settings: 0,
-    rows: 19,
+    rows: 10,
   },
   oneSurveyRefresh: {
     home: 1,
@@ -781,7 +781,7 @@ const EXPECTED: Record<ScenarioName, Counts> = {
     publicMap: 1,
     account: 0,
     settings: 0,
-    rows: 19,
+    rows: 10,
   },
 }
 
