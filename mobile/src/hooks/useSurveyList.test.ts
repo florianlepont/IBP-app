@@ -27,7 +27,7 @@ jest.mock("../app/survey-logic", () => ({
 }))
 
 import { act, cleanup, renderHook } from "@testing-library/react-native/pure"
-import { useSurveyList } from "./useSurveyList"
+import { shareUnchanged, useSurveyList } from "./useSurveyList"
 
 async function renderList() {
   return renderHook(() => useSurveyList())
@@ -105,6 +105,115 @@ describe("useSurveyList", () => {
       expect(mockListLocalSurveys).toHaveBeenCalled()
       expect(result.current.surveys).toEqual(rows)
       expect(mockComputeSurveyStats).toHaveBeenLastCalledWith(rows)
+    })
+
+    test("keeps the previous array and objects when a refresh returns equal rows (B6)", async () => {
+      mockListLocalSurveys.mockResolvedValueOnce([
+        { id: "s1", site_name: "A" },
+        { id: "s2", site_name: "B" },
+      ])
+      const { result } = await renderList()
+      await act(async () => {
+        await result.current.refreshLocalSurveys()
+      })
+      const first = result.current.surveys
+
+      mockListLocalSurveys.mockResolvedValueOnce([
+        { id: "s1", site_name: "A" },
+        { id: "s2", site_name: "B" },
+      ])
+      await act(async () => {
+        await result.current.refreshLocalSurveys()
+      })
+
+      expect(result.current.surveys).toBe(first)
+    })
+
+    test("replaces only the changed row object on refresh (B6)", async () => {
+      mockListLocalSurveys.mockResolvedValueOnce([
+        { id: "s1", site_name: "A" },
+        { id: "s2", site_name: "B" },
+      ])
+      const { result } = await renderList()
+      await act(async () => {
+        await result.current.refreshLocalSurveys()
+      })
+      const [firstS1, firstS2] = result.current.surveys
+
+      mockListLocalSurveys.mockResolvedValueOnce([
+        { id: "s1", site_name: "A" },
+        { id: "s2", site_name: "B renamed" },
+      ])
+      await act(async () => {
+        await result.current.refreshLocalSurveys()
+      })
+
+      expect(result.current.surveys[0]).toBe(firstS1)
+      expect(result.current.surveys[1]).not.toBe(firstS2)
+      expect(result.current.surveys[1]).toEqual({ id: "s2", site_name: "B renamed" })
+    })
+  })
+
+  // ─── shareUnchanged ───────────────────────────────────────────────────────
+
+  describe("shareUnchanged", () => {
+    type Row = { id: string; name: string; score: number | null }
+    const row = (id: string, name: string, score: number | null = 1): Row => ({ id, name, score })
+
+    test("returns the previous array when every row is shallow-equal", () => {
+      const prev = [row("a", "A"), row("b", "B")]
+      const next = [row("a", "A"), row("b", "B")]
+      expect(shareUnchanged(prev, next)).toBe(prev)
+    })
+
+    test("returns next as is when there is no previous row", () => {
+      const next = [row("a", "A")]
+      expect(shareUnchanged([], next)).toBe(next)
+      expect(shareUnchanged([row("a", "A")], [])).toEqual([])
+    })
+
+    test("gives a new object for the changed id only", () => {
+      const prev = [row("a", "A"), row("b", "B"), row("c", "C")]
+      const next = [row("a", "A"), row("b", "B2"), row("c", "C")]
+      const shared = shareUnchanged(prev, next)
+      expect(shared).not.toBe(prev)
+      expect(shared[0]).toBe(prev[0])
+      expect(shared[1]).toBe(next[1])
+      expect(shared[2]).toBe(prev[2])
+    })
+
+    test("treats a changed null or a new key as a change", () => {
+      const prev = [row("a", "A", null), row("b", "B")]
+      const next = [row("a", "A", 0), { ...row("b", "B"), extra: true } as Row]
+      const shared = shareUnchanged(prev, next)
+      expect(shared[0]).toBe(next[0])
+      expect(shared[1]).toBe(next[1])
+    })
+
+    test("handles a removed and an added row", () => {
+      const prev = [row("a", "A"), row("b", "B")]
+      const next = [row("a", "A"), row("c", "C")]
+      const shared = shareUnchanged(prev, next)
+      expect(shared).toHaveLength(2)
+      expect(shared[0]).toBe(prev[0])
+      expect(shared[1]).toBe(next[1])
+    })
+
+    test("reuses unchanged objects in a new array when the order changes", () => {
+      const prev = [row("a", "A"), row("b", "B")]
+      const next = [row("b", "B"), row("a", "A")]
+      const shared = shareUnchanged(prev, next)
+      expect(shared).not.toBe(prev)
+      expect(shared[0]).toBe(prev[1])
+      expect(shared[1]).toBe(prev[0])
+    })
+
+    test("returns a new array when a row is removed from the end", () => {
+      const prev = [row("a", "A"), row("b", "B")]
+      const shared = shareUnchanged(prev, [row("a", "A")])
+      expect(shared).not.toBe(prev)
+      expect(shared).toEqual([prev[0]])
+      expect(shared[0]).toBe(prev[0])
     })
   })
 
