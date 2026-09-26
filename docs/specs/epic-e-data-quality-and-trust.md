@@ -32,7 +32,15 @@ Users can search a survey using filters for site, parcel ID, year/version, date,
 
 As a user, I want to search a survey by site/parcel/date/status so I can find information quickly.
 
+Search lives in the « Mes Relevés » tab. There is no separate search tab: the app has four tabs (Accueil, Mes Relevés, Explorer, Compte).
+
 Acceptance criteria
+
+- On iPhone, search is the native search bar in the header of « Mes Relevés », visible under the title.
+
+- On Android (and in Expo Go), « Mes Relevés » shows an inline search field at the top of the list.
+
+- While a search is active, « Mes Relevés » shows only the matching surveys. Clearing or cancelling the search restores the full list.
 
 - A text search by site is available.
 
