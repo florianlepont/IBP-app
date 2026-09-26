@@ -928,7 +928,7 @@ Response `200`:
 
 ## 5) Public Map (Optional in V1)
 
-### GET /public/map-items?from=&to=&region=
+### GET /public/map-items?from=&to=&region=&bbox=
 
 Return anonymized public survey map items.
 
@@ -942,7 +942,18 @@ Query + formatting rules in V1:
 
 - `from` and `to` expect `YYYY-MM-DD`; invalid values are ignored (not rejected).
 - `region` filters by exact `region_version` match.
-- Results are ordered by `submitted_at DESC` and capped to `500` items.
+- `bbox` (optional, added in 01.9) is `minLng,minLat,maxLng,maxLat` in WGS84 degrees, for
+  example `bbox=-5.2,41.3,9.6,51.1`. It keeps only the surveys with at least one linked parcel
+  whose centroid lies inside the box (bounds included). It only narrows the public surveys:
+  the inclusion rules above still apply.
+  - A malformed `bbox` returns `400` with a fixed message that never echoes the input: not
+    exactly 4 comma-separated values, a value that is not a finite number, or a min that is not
+    below its max.
+  - A `bbox` longer than 128 characters returns `400` from request validation.
+  - An empty `bbox` is the same as no `bbox`.
+  - Without `bbox` the response is the same as before 01.9, so older app versions are
+    unaffected.
+- Results are ordered by `submitted_at DESC` and capped to `500` items, with or without `bbox`.
 - `display_location` is rounded to 2 decimals.
 - Surveys missing parcel-centroid coordinates are excluded.
 
