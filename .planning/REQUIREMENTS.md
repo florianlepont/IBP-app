@@ -73,7 +73,7 @@ Two carry open defects, fixed in Phase 7.
 Blocking prerequisites for `REQ-C-species-recognition`. Both exist because US-C9 is invisible to
 every binding contract (conflict-report warning 5).
 
-- [ ] **REQ-ML-adr** — An accepted ADR records the on-device ML approach: inference runtime, model and licence, on-device model size, measured latency and accuracy on real iOS and Android devices, offline-vs-online behaviour, and an explicit go/no-go for US-C9 in this milestone with a stated fallback. *(New)*
+- [x] **REQ-ML-adr** — An accepted ADR records the on-device ML approach: inference runtime, model and licence, on-device model size, measured latency and accuracy on real iOS and Android devices, offline-vs-online behaviour, and an explicit go/no-go for US-C9 in this milestone with a stated fallback. *(New)*
 - [ ] **REQ-ML-contracts** — `docs/technical/data-contract-v1.md` gains a species entity linked to a survey's Factor A (species, confidence score, suggestion outcome), `docs/technical/api-contract-v1.md` gains the species endpoint(s) under `/v1`, and a migration implements the schema. Species data round-trips through `POST /surveys/sync` idempotently. *(New)*
 
 ### INF — Infrastructure

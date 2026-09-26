@@ -29,7 +29,7 @@ in October rather than discovered in December.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR
+- [x] **Phase 1: Species Recognition — Approach Decision** - Measure on-device ML on real devices and ratify a go/no-go in an ADR (completed 2026-09-26)
 - [ ] **Phase 1.1: Reconcile the IBP method version** (INSERTED) - Establish whether the app still implements the current CNPF method, and what changes if not
 - [ ] **Phase 2: Species Contracts & Data-Contract Corrections** - Give species a data model, an API surface and a migration; correct the stale form spec
 - [ ] **Phase 3: Species Recognition for Factor A** - Photograph a tree, get a species suggestion, keep or reject it
@@ -52,7 +52,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The ADR states an explicit go/no-go for US-C9 in this milestone, and if it is a no-go, describes the fallback (manual species entry) and what moves to the next milestone.
   4. The ADR adds no recurring inference cost to the ~€346/yr budget, or states plainly what it would cost.
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 Plans:
 
 - [x] 01-01-PLAN.md — Spike scaffold, benchmark-device and field-photo asks, measurement document skeleton
@@ -60,7 +60,7 @@ Plans:
 - [x] 01-03-PLAN.md — On-device TFLite harness on real iOS and Android, proven with a stock model
 - [x] 01-04-PLAN.md — Fine-tune, export quantised .tflite, measure top-1/top-3 accuracy per genus
 - [x] 01-05-PLAN.md — Real-device latency against the 3 s budget and field-photograph validation
-- [ ] 01-06-PLAN.md — ADR-002 with the go / partial go / no-go for US-C9, ratified
+- [x] 01-06-PLAN.md — ADR-002 with the go / partial go / no-go for US-C9, ratified
 
 ### Phase 01.1: Reconcile the IBP method version — repo implements Fr v3.0, CNPF publishes FR v3.2 (INSERTED)
 
@@ -185,7 +185,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Species Recognition — Approach Decision | 5/6 | In Progress|  |
+| 1. Species Recognition — Approach Decision | 6/6 | Complete   | 2026-09-26 |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |

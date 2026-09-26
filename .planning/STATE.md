@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: 01-05 complete -- per-genus confidence calibration + real device latency measured on iPhone 15 Pro, GATE-MEASURE COMPLETE
-last_updated: "2026-09-26T12:36:34.404Z"
+stopped_at: Completed 01-06-PLAN.md -- ADR-002 Accepted, phase 1 closed (6/6 plans)
+last_updated: "2026-09-26T12:54:55.121Z"
 last_activity: 2026-09-26
-last_activity_desc: 01-05 complete -- calibration (Section 15) + real on-device latency (median ~90ms both network states, D-05 MET, D-06 checked) -- ready for plan 06's ADR
+last_activity_desc: "01-05 complete (calibration + real device latency, GATE-MEASURE: COMPLETE)"
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
-  percent: 0
+  completed_plans: 6
+  percent: 13
 ---
 
 # Project State
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04-iter3 | ~9-10h (2 sessions, corpus expansion+2 bug fixes) | 2 tasks | 1 files |
 | Phase 01-species-recognition-approach-decision P05 (partial: Task A) | ~2h | - tasks | - files |
 | Phase 01-species-recognition-approach-decision P05 (complete) | ~3.5h total | - tasks | - files |
+| Phase 01 P06 | ~2h | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,8 @@ Decisions table. Decisions affecting current work:
 - [Phase 01-04-iter4-complete]: Training finished (23.47h wall-clock: 5.80h head + 17.66h finetune, 20/20 epochs run). EarlyStopping on val_top3 did NOT fire despite genuine overfitting onset from epoch 15 (val_loss bottomed then rose while train loss kept falling) — a coarse, ceiling-bounded monitor metric missed what val_loss would have caught; flagged for a future iteration's EarlyStopping config, not re-run (D-19). This flips iteration 3's schedule-limited finding: the backbone/corpus combination is now saturated. Exported genus_classifier_v4.tflite (8.24MB, up from 6.13MB — plan 01-05 must re-time on device), 100% export parity. Evaluated on 26,557 test images: pooled top3 85.24%->88.25%, 32/34 genera improved. Decisive split: Île-de-France temperate genera (21, targeted) +4.93pp mean top-3 (21/21 positive) vs +1.65pp for untouched Mediterranean/other (11/13) — the targeted rebalance worked ~3x better where it was aimed. All 136 genus×season cells now clear n≥30 (previously 5 thin); Acer/Pinus/Prunus autumn resolved (82.40%/81.60%/95.35%, Pinus clearing D-02 in isolation). Still only Tamarix (96.88%) clears D-02 overall — no new partial-go. Promoted to canonical path after explicitly verifying the beat is on the targeted genera, not just the mean. Session survived a subscription rate-limit interruption mid-training with zero work lost — raw numbers were committed at each stage per explicit instruction.
 - [Phase 01-05]: Per-genus confidence calibration (D-04/D-12 amended) fit on validation split, reported on test split -- collapses old single-global-threshold per-genus accuracy spread (79.49%-97.23%) to 85.91%-91.92% around the 90% target, at a 0.59pp pooled coverage cost. Ulmus/Prunus/Populus/Fraxinus flagged as genera where 'strong' will rarely fire even after calibration.
 - [Phase 01-05]: Real on-device latency measured for the PROMOTED iteration-4 genus classifier on a real iPhone 15 Pro (Release build): median total 90.41ms online / 90.49ms airplane mode (D-05 3s budget MET, ~33x headroom). D-06 (offline, on-device-only) confirmed as a checked proof, not a code-inspection argument. GATE-MEASURE: COMPLETE.
+- [Phase 01]: ADR-002 Accepted: full go for US-C9 this milestone, all 34 CNPF genera suggested with per-genus calibrated confidence, none withheld (D-04 amended); no partial-go list, since the partial-go rule would have enabled only Tamarix.
+- [Phase 01]: D-07 amended at ratification: model bundled in the app binary (8.24MB), not downloaded separately -- the original download-to-stay-light premise assumed a large model; measured size invalidated it.
 
 ### Pending Todos
 
@@ -123,6 +126,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-26T12:36:34.400Z
-Stopped at: 01-04-PLAN.md iteration 4 — COMPLETE. genus_classifier_v4.tflite (EfficientNetB0, 8.24MB) promoted to the canonical path after beating iteration 3 on the Île-de-France temperate genera specifically (+4.93pp mean top-3, 21/21 positive). Measurement doc Sections 14.1-14.6 all written and committed. eval/GATE: GATE-MODEL PASS. Next: plan 01-05 (device latency, must re-time the larger 8.24MB model) and plan 01-06 (ADR) can proceed against this promoted model.
-Resume file: none — iteration 4 closed out; next work is plan 01-05/01-06
+Last session: 2026-09-26T12:54:55.117Z
+Stopped at: Completed 01-06-PLAN.md -- ADR-002 Accepted, phase 1 closed (6/6 plans)
+Resume file: None
