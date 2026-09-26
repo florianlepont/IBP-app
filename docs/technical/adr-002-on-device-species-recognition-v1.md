@@ -116,15 +116,12 @@ terms of that go are recorded as decisions below, each tracing to a measurement-
   this is a real, low-cost obligation, not zero, and Phase 3 must implement it before shipping.
   `01-RESEARCH.md` assumption A4 flagged this licence reading as a documented reading, not legal
   advice; it must be re-verified before the model ships, not re-derived from this ADR alone.
-- **The model is downloaded separately on first launch and not bundled in the binary (D-07),
-  served from the existing S3/MinIO object storage over TLS** — the locked default. **This is
-  explicitly re-opened as a question for the user at ratification, not silently re-decided here.**
-  D-07 chose a separate download specifically because the association assumed a large model would
-  otherwise bloat the app binary; at 8.24 MB, the model is well within the range many app binaries
-  already ship as bundled assets. Bundling would remove the download flow, the on-device cache-path
-  handling and the D-08 unavailable-state UI entirely; keeping the download preserves D-07/D-08 as
-  already designed and specified. See "Open question for ratification" below — this ADR does not
-  choose an answer, and Phase 3 should not start on either path until the user has.
+- **The model is bundled in the app binary, not downloaded separately on first launch (D-07,
+  amended at ratification 2026-09-26).** D-07's original wording chose a separate download
+  specifically because the association assumed a large model would otherwise bloat the app binary;
+  at 8.24 MB, that premise no longer holds, and the user chose to bundle instead once this was
+  re-opened at ratification. See "D-07 (model bundling) — resolved at ratification" below for the
+  reasoning and what it changes for Phase 3.
 - **Suggestions are presented most-likely-genus-first, with the remaining candidates listed
   underneath (D-11)** — this is a screen-design decision distinct from the D-02 top-3 evaluation
   metric; the two must not be conflated. The suggestion never applies itself; the ecologist always
@@ -164,29 +161,48 @@ floor (iPhone SE 2nd/3rd gen or iPhone 11 class). See "Confidence caps."
 
 ## Behaviour when the model is unavailable
 
-**When the model has not yet been downloaded, or fails to load, the app shows an explicit message
-and falls back to normal manual entry (D-08).** Silent fallback is rejected — the ecologist would
-conclude the feature is simply broken, not that it is temporarily unavailable. This behaviour was
-exercised and confirmed working on the real iPhone 15 Pro during both the plan 03 harness proof and
-the plan 05 measurement pass (measurement document Sections 7, 8): the explicit "Recognition
-unavailable" message rendered correctly before the model was seeded into the on-device cache, and
-the app stayed fully usable throughout. It was not separately exercised on Android or on a
-low-spec device.
+**Revised at ratification following the D-07 bundling decision above.** With the model bundled in
+the binary, the "not yet downloaded" case D-08 was originally written for disappears entirely —
+there is no first-launch download to wait on, and no network state to be in before the model is
+usable. What remains, and what D-08's underlying principle (never fail silently) still requires: **a
+model *load* can still fail** — a corrupted bundle asset, an out-of-memory condition, a native
+runtime error — and when it does, the app must show an explicit message and fall back to normal
+manual entry, exactly as D-08 always required, just without the "not yet downloaded" branch. Silent
+fallback is still rejected for the same reason: the ecologist would conclude the feature is broken,
+not that it degraded gracefully. The explicit-message-on-failure behaviour itself was exercised and
+confirmed working on the real iPhone 15 Pro during both the plan 03 harness proof and the plan 05
+measurement pass (measurement document Sections 7, 8) — against the pre-bundling download-based
+harness, so Phase 3 must re-confirm the same fail-closed message fires from a **load** failure of a
+bundled asset specifically, not assume the download-path test already covers it. Not separately
+exercised on Android or on a low-spec device.
 
 ## Model distribution integrity
 
-The downloaded model file is untrusted input to a native inference runtime, and must be treated as
-such by Phase 3. This ADR requires, as a precondition of shipping the download path:
+**Revised at ratification following the D-07 bundling decision above.** This section originally
+required checksum verification of a *downloaded* `.tflite` file against a manifest value, and TLS
+delivery from the object-storage endpoint — controls that exist specifically because a download
+path is untrusted network input to a native inference runtime. With the model bundled in the app
+binary, there is no download path: the model travels inside the same signed app bundle as the rest
+of the code, and the existing platform code-signing (iOS) and app-signing (Android) that already
+protects the whole binary against tampering in transit covers the bundled model file too — a
+separate checksum-against-a-manifest step would duplicate a guarantee the platform already gives.
+The requirement that survives, restated for the bundled path:
 
-- **Checksum verification** of the downloaded `.tflite` file against a manifest value, performed
-  before the file is ever passed to the native inference runtime.
-- **TLS delivery** from the existing object-storage endpoint (S3-compatible, MinIO locally,
-  configurable for AWS S3 in production per ADR-001), the same endpoint attachments already use.
-- **Fail closed to the D-08 explicit-message path** on checksum mismatch or load failure — never a
-  crash, never a silent retry loop that leaves the ecologist guessing.
+- **Fail closed to the D-08 explicit-message path** on model load failure — never a crash, never a
+  silent failure that leaves the ecologist guessing. This is the one part of the original control
+  that is not superseded by platform signing: a bundled file can still be corrupted, truncated by a
+  bad build, or fail to parse for reasons signing does not catch, and the app must degrade
+  explicitly, not silently, exactly as the "Behaviour when the model is unavailable" section above
+  now states.
+- **Build-time integrity, not runtime checksum verification, is now the relevant control.** Phase 3
+  should confirm the bundled model asset matches the expected build artefact as part of the mobile
+  build/release process (e.g. a build-time hash comparison against the promoted model file), so a
+  wrong or corrupted asset is caught before it reaches a store submission, not discovered by an
+  ecologist's load failure in the field.
 
-This is RESEARCH.md's security-domain control for this feature, and belongs here because Phase 3
-implements it directly from this ADR, not from a separate security review.
+The TLS-delivery and download-time checksum requirements are removed from this ADR because they no
+longer describe a real code path; they are not weakened, they are obsolete under the bundling
+decision.
 
 ## Cost
 
@@ -197,12 +213,12 @@ criterion 4 directly.
 
 Costs that are **not zero**, stated plainly rather than rounded away:
 
-- **Hosting the model file.** 8.24 MB stored on the object storage already paid for under the
-  existing budget — negligible against the existing bucket's cost profile.
-- **Egress on first launch, per install.** At 8.24 MB per download, even a generous 200-install
-  internal-only milestone (well above the association's actual observer count) is ~1.65 GB of total
-  egress — a trivial, one-off addition against an already-provisioned object-storage endpoint, not
-  a recurring per-survey cost.
+- **Distributing the model file.** Following the D-07 bundling decision at ratification (see
+  "D-07 (model bundling) — resolved at ratification" below), the model ships inside the app binary,
+  not from the object storage — there is no separate hosting or first-launch-egress cost against
+  the ~€346/yr budget at all. The 8.24 MB is instead a permanent increase to the app binary's own
+  size, distributed through the App Store / Play Store's own infrastructure at no cost to this
+  project's budget.
 - **One-off training/retraining effort.** ~56–57 hours of spike time were spent to reach the
   promoted model (measurement document Status block), the great majority unattended background
   compute. A future retraining pass (e.g. adding Tela Botanica or Wikimedia Commons imagery per
@@ -302,9 +318,12 @@ for the data contract to carry; and the D-15 Factor A data-model work — data c
 scoring on both sides, mobile screen, migration — which must complete before Phase 3 can use any of
 this. Phase 2 should also correct the stale ROADMAP wording noted above.
 
-**Phase 3 receives:** the model distribution and integrity requirements (checksum, TLS, fail-closed
-D-08 behaviour); the D-08 unavailable-state UI as already specified and confirmed working on real
-hardware; the D-11/D-12 presentation rules (most-likely-first, four-level plain-word confidence,
+**Phase 3 receives:** the D-07-bundled model distribution approach and its revised integrity
+requirement (build-time asset-hash verification, not a runtime download checksum — see "D-07 (model
+bundling) — resolved at ratification" and the revised "Model distribution integrity" section
+above); the fail-closed-on-load-failure D-08 behaviour, re-scoped to a load failure rather than a
+not-yet-downloaded state, still needing confirmation against the bundled path specifically; the
+D-11/D-12 presentation rules (most-likely-first, four-level plain-word confidence,
 exact wording left to Phase 3); the D-13 transient-photo rule; the CC-BY attribution obligation
 this ADR names above; and the integration cost already measured in Section 8 — four native-
 integration findings, all fixed once, that Phase 3 should budget as known, not rediscover: a missing
@@ -319,20 +338,23 @@ differently from the rest** — all 34 genera are suggested identically; only th
 will more often read medium, weak or very-weak. Phase 3 must not special-case these genera by
 withholding them; the calibrated label is the mechanism that already handles this honestly.
 
-## Open question for ratification
+## D-07 (model bundling) — resolved at ratification
 
-**D-07 (separate model download vs bundling in the binary) is re-opened here for the user's
-decision, not re-decided by this ADR.** D-07 was chosen when the model's size was unknown; it is
-now measured at 8.24 MB (Section 14.3) — small enough that many apps ship this as a bundled asset.
-Two paths, either legitimate:
-
-1. **Keep D-07/D-08 as designed:** download on first launch, over Wi-Fi, from the object-storage
-   endpoint; app stays lighter on the stores; the D-08 unavailable-state UI stays necessary.
-2. **Bundle the model in the binary:** removes the download flow, the on-device cache-path handling
-   and the D-08 unavailable-state UI entirely; the app binary grows by ~8.24 MB permanently.
-
-This ADR does not choose between them. The ratification checkpoint below asks the user to pick one
-before Phase 3 is planned, since Phase 3's implementation shape differs materially between the two.
+**D-07 was re-opened at ratification and resolved 2026-09-26: the model ships bundled in the app
+binary, not downloaded separately on first launch.** D-07's original choice (a separate first-launch
+download) was made when the model's size was unknown; it is now measured at 8.24 MB (Section 14.3),
+small enough that the original bloat concern does not apply. The user chose to bundle, for this
+milestone's specific circumstances: the MVP is internal-use only, so shipping a new app version to
+update the model is cheap under internal distribution (no store-review pressure at the volumes this
+milestone runs at); bundling removes the first-launch download, the on-device model cache, and the
+D-08 unavailable-state UI's not-yet-downloaded branch entirely; and an ecologist who installs the
+app just before going into the field cannot forget a download the way they could with a
+separate-download flow. This supersedes D-07's original wording (kept, not deleted, in
+`01-CONTEXT.md`'s amendment record) rather than the ADR quietly reinterpreting it — see that file's
+D-07 amendment for the full superseded/amended pair. Phase 3 implements bundling, not a download
+flow: the model ships as a bundled asset (e.g. via `expo-asset`, following the pattern
+`mobile/README-native.md` already establishes for native assets), copied or read directly from the
+app bundle rather than fetched from object storage at runtime.
 
 ## Confidence caps
 
