@@ -216,4 +216,16 @@ describe("ibp-api", () => {
       ],
     ])
   })
+
+  it("adds the bbox to the public map query only when it is given", async () => {
+    await fetchPublicMapItems("https://api.example.com", { bbox: "1,2,3,4" })
+    await fetchPublicMapItems("https://api.example.com", { bbox: "1,2,3,4", region: "ara" })
+    await fetchPublicMapItems("https://api.example.com", { bbox: "   " })
+
+    expect(mockApiRequest.mock.calls.map(([request]) => request.path)).toEqual([
+      "/public/map-items?bbox=1%2C2%2C3%2C4",
+      "/public/map-items?region=ARA&bbox=1%2C2%2C3%2C4",
+      "/public/map-items",
+    ])
+  })
 })
