@@ -59,9 +59,24 @@ returns a no-go. Spike code is throwaway by design and is not a deliverable.
   ADR-001 decision (DEC-006) and the photo is taken in a forest with no signal — a recognition
   path requiring connectivity would almost never be usable. This also satisfies the phase's
   no-recurring-cost criterion by construction.
-- **D-07:** The model is **downloaded separately on first launch**, not bundled in the binary. The
-  app stays light on the stores and the download happens over Wi-Fi before going into the field.
-  Cost: the app must handle a "model not present yet" state (D-08).
+- **D-07 (AMENDED 2026-09-26, at ADR-002's ratification):** **The model is bundled in the app
+  binary, not downloaded separately.** The original premise — that a separate download was needed
+  to keep the app light on the stores — assumed a large model; the spike measured the actual
+  trained model at 8.24 MB (`docs/technical/species-recognition-spike-measurements-v1.md` Section
+  14.3), well within the range many app binaries already ship as bundled assets. Re-opened as an
+  explicit question at ADR-002's ratification checkpoint rather than silently re-decided, the user
+  chose to bundle: this MVP is internal-only, so shipping a new app version to update the model is
+  cheap under internal distribution (no store-review-volume pressure); bundling removes the
+  first-launch download, the on-device model cache, and the D-08 unavailable-state UI's
+  not-yet-downloaded branch entirely; and an ecologist who installs the app just before going into
+  the field cannot forget a download the way they could with a separate-download flow. D-08's
+  behaviour is narrowed accordingly in `docs/technical/adr-002-on-device-species-recognition-v1.md`
+  ("Behaviour when the model is unavailable") — only a model *load* failure remains, not a
+  "not yet downloaded" state; D-08's own wording below is left as originally written since the
+  underlying principle (never fail silently) is unchanged, only which failure modes exist.
+  *Original wording (superseded):* The model is downloaded separately on first launch, not bundled
+  in the binary. The app stays light on the stores and the download happens over Wi-Fi before going
+  into the field. Cost: the app must handle a "model not present yet" state (D-08).
 - **D-08:** When the model is unavailable — not yet downloaded, or a load failure — the app shows
   an **explicit message and falls back to normal manual entry**. The ADR must state this
   behaviour; silent fallback was rejected because the ecologist would think the feature is broken.
