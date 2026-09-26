@@ -9,6 +9,7 @@ import {
   resolveSurveySyncDisplay,
   resolveSurveyWorkflowStatus,
 } from "../../app/survey-logic"
+import { fr } from "../../i18n"
 import { LocalSurvey } from "../../storage"
 import { AppButton } from "../../ui/AppButton"
 import { AppField } from "../../ui/AppField"
@@ -28,6 +29,10 @@ type DetailHeaderProps = {
   onRenameSurvey: (surveyId: string, nextSiteName: string) => Promise<void> | void
   onSubmitSurvey: (surveyId: string) => Promise<void>
 }
+
+const h = fr.surveyDetail.header
+const a11y = fr.surveyDetail.a11y
+const alerts = fr.surveyDetail.alerts
 
 const resolveSyncTone = (
   syncDisplay: ReturnType<typeof resolveSurveySyncDisplay>,
@@ -63,7 +68,7 @@ export function DetailHeader({
       return
     }
     if (!nextName) {
-      Alert.alert("Invalid name", "Survey name cannot be empty.")
+      Alert.alert(alerts.invalidNameTitle, alerts.invalidNameMessage)
       return
     }
     void onRenameSurvey(survey.id, nextName)
@@ -79,7 +84,10 @@ export function DetailHeader({
   const syncDisplayLabel = formatSurveySyncDisplayLabel(syncDisplay)
   const completionRate = Math.max(0, Math.min(survey.completion_rate, 100))
   const compressed = isHeroCompressed && !isRenamingSite
-  const compactHeroSummary = `${workflowStatusLabel} · ${syncDisplayLabel}`
+  const compactHeroSummary = h.compactSummary({
+    workflow: workflowStatusLabel,
+    sync: syncDisplayLabel,
+  })
   const submitCopy = resolveHeroSubmitCopy(submitState)
   const isSubmitReady = submitState === "ready"
 
@@ -90,25 +98,25 @@ export function DetailHeader({
         {isRenamingSite ? (
           <View style={styles.detailRenameRow}>
             <AppField
-              label="Survey name"
+              label={h.renameLabel}
               value={siteNameInput}
               onChangeText={setSiteNameInput}
               autoFocus
-              placeholder="Survey name"
+              placeholder={h.renamePlaceholder}
               placeholderTextColor="#D7E3C0"
               containerStyle={styles.detailRenameField}
               labelStyle={styles.detailRenameLabel}
               inputStyle={styles.detailRenameInput}
             />
             <AppButton
-              label="Save"
+              label={fr.common.actions.save}
               size="sm"
               onPress={handleSaveSiteRename}
               style={styles.detailRenameSaveButton}
               labelStyle={styles.detailRenameSaveButtonText}
             />
             <AppButton
-              label="Cancel"
+              label={fr.common.actions.cancel}
               variant="secondary"
               size="sm"
               onPress={() => {
@@ -121,7 +129,13 @@ export function DetailHeader({
           </View>
         ) : compressed ? (
           <View style={styles.detailHeroCompactHeader}>
-            <Pressable style={styles.detailHeroCompactCopy} onPress={startRename}>
+            <Pressable
+              style={styles.detailHeroCompactCopy}
+              onPress={startRename}
+              accessibilityRole="button"
+              accessibilityLabel={a11y.renameSurvey(activeSiteName)}
+              accessibilityState={{ disabled: !canEditSurvey }}
+            >
               <Text numberOfLines={1} style={styles.detailHeroCompactTitle}>
                 {activeSiteName}
               </Text>
@@ -137,8 +151,14 @@ export function DetailHeader({
           </View>
         ) : (
           <View style={styles.detailHeader}>
-            <Pressable style={styles.detailHeroCopy} onPress={startRename}>
-              <Text style={styles.detailHeroEyebrow}>Survey detail</Text>
+            <Pressable
+              style={styles.detailHeroCopy}
+              onPress={startRename}
+              accessibilityRole="button"
+              accessibilityLabel={a11y.renameSurvey(activeSiteName)}
+              accessibilityState={{ disabled: !canEditSurvey }}
+            >
+              <Text style={styles.detailHeroEyebrow}>{h.eyebrow}</Text>
               <Text style={styles.detailSurveyTitle}>{activeSiteName}</Text>
               <View style={styles.detailHeroStatusRow}>
                 <AppStatusChip
@@ -160,7 +180,7 @@ export function DetailHeader({
                   labelStyle={styles.detailHeroStatusPillText}
                 />
                 <AppStatusChip
-                  label={survey.visibility === "public" ? "Public" : "Private"}
+                  label={survey.visibility === "public" ? h.visibilityPublic : h.visibilityPrivate}
                   style={[styles.detailHeroStatusPill, styles.detailHeroStatusPillNeutral]}
                   labelStyle={styles.detailHeroStatusPillText}
                 />
@@ -183,8 +203,8 @@ export function DetailHeader({
             ]}
           >
             <View style={styles.detailHeroProgressHeader}>
-              <Text style={styles.detailHeroProgressLabel}>Completion rate</Text>
-              <Text style={styles.detailHeroProgressValue}>{completionRate}%</Text>
+              <Text style={styles.detailHeroProgressLabel}>{h.completionRate}</Text>
+              <Text style={styles.detailHeroProgressValue}>{h.percent(completionRate)}</Text>
             </View>
             <View style={styles.detailHeroProgressTrack}>
               <View
@@ -199,12 +219,12 @@ export function DetailHeader({
                 <View style={styles.heroMetaPill}>
                   <Ionicons name="time-outline" size={13} color="#D7E3C0" />
                   <Text style={styles.heroMetaText}>
-                    Updated {formatDateTime(survey.updated_at)}
+                    {h.updatedAt(formatDateTime(survey.updated_at))}
                   </Text>
                 </View>
                 <View style={styles.heroMetaPill}>
                   <Ionicons name="images-outline" size={13} color="#D7E3C0" />
-                  <Text style={styles.heroMetaText}>{attachmentCount} photo(s)</Text>
+                  <Text style={styles.heroMetaText}>{h.photoCount(attachmentCount)}</Text>
                 </View>
                 {survey.status !== "submitted" ? (
                   <View style={styles.heroMetaPill}>
@@ -222,9 +242,11 @@ export function DetailHeader({
             <Pressable
               style={styles.detailHeroSubmitButtonCompact}
               onPress={() => void onSubmitSurvey(survey.id)}
+              accessibilityRole="button"
+              accessibilityLabel={a11y.submitSurvey(activeSiteName)}
             >
               <Ionicons name="paper-plane-outline" size={15} color={brandColors.forest} />
-              <Text style={styles.detailHeroSubmitButtonText}>Submit survey</Text>
+              <Text style={styles.detailHeroSubmitButtonText}>{h.submitSurvey}</Text>
             </Pressable>
           ) : (
             <View
@@ -251,9 +273,11 @@ export function DetailHeader({
                   <Pressable
                     style={styles.detailHeroSubmitButtonInline}
                     onPress={() => void onSubmitSurvey(survey.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={a11y.submitSurvey(activeSiteName)}
                   >
                     <Ionicons name="paper-plane-outline" size={15} color={brandColors.forest} />
-                    <Text style={styles.detailHeroSubmitButtonText}>Submit</Text>
+                    <Text style={styles.detailHeroSubmitButtonText}>{h.submit}</Text>
                   </Pressable>
                 ) : (
                   <View style={styles.detailHeroSubmitPill}>

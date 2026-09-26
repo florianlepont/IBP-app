@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { NativeScrollEvent, NativeSyntheticEvent, ScrollView } from "react-native"
+import { shouldShowDevTools } from "../app/dev-tools"
 import {
   defaultVegetationStageForRegion,
   normalizeVegetationStageForRegion,
@@ -93,6 +94,9 @@ export function SurveyDetailScreen({
   const isHeroCompressedRef = useRef(false)
   const [isHeroCompressed, setIsHeroCompressed] = useState(false)
   const detail = surveyDetails[selectedSurvey.id]
+  // The Debug tab only exists in dev builds (D-06): a stale "debug" selection shows the summary.
+  const activeTab: SurveyDetailTab =
+    surveyDetailTab === "debug" && !shouldShowDevTools() ? "summary" : surveyDetailTab
   // Local survey state is the live source after user actions (submit / visibility toggle).
   const detailStatus = selectedSurvey.status
   const detailCreatedAt = detail?.created_at ?? selectedSurvey.created_at
@@ -216,19 +220,20 @@ export function SurveyDetailScreen({
       <MediaSection
         apiUrl={apiUrl}
         survey={selectedSurvey}
+        siteName={activeSiteName}
         attachments={selectedSurveyAttachments}
         displayLocation={detail?.display_location}
         canEditSurvey={canEditSurvey}
-        hidden={surveyDetailTab === "debug"}
+        hidden={activeTab === "debug"}
         onOpenParcels={handleOpenParcels}
         onTakePhoto={onTakePhoto}
         onPickPhoto={onPickPhoto}
         onDeleteAttachment={onDeleteAttachment}
       />
 
-      <DetailTabBar activeTab={surveyDetailTab} onSelectTab={setSurveyDetailTab} />
+      <DetailTabBar activeTab={activeTab} onSelectTab={setSurveyDetailTab} />
 
-      {surveyDetailTab === "summary" ? (
+      {activeTab === "summary" ? (
         <SummaryTab
           survey={selectedSurvey}
           canEditSurvey={canEditSurvey}
@@ -259,7 +264,7 @@ export function SurveyDetailScreen({
         </SummaryTab>
       ) : null}
 
-      {surveyDetailTab === "events" ? (
+      {activeTab === "events" ? (
         <EventsTab
           events={surveyEventList}
           isLoading={eventsLoadingSurveyId === selectedSurvey.id}
@@ -267,16 +272,16 @@ export function SurveyDetailScreen({
         />
       ) : null}
 
-      {surveyDetailTab === "debug" ? (
+      {activeTab === "debug" ? (
         <DebugTab
           survey={selectedSurvey}
           attachments={selectedSurveyAttachments}
+          events={surveyEventList}
           createdAt={detailCreatedAt}
           submittedAt={detail?.submitted_at ?? null}
           publishableOnPublicMap={
             detailStatus === "submitted" && selectedSurvey.visibility === "public"
           }
-          loadedEventCount={surveyEventList.length}
           onSimulateMissingAttachmentFile={onSimulateMissingAttachmentFile}
         />
       ) : null}

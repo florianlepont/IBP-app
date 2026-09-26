@@ -17,12 +17,17 @@ import { SurveyDetailResponse } from "../../app/types"
 import { IgnCadastreTileOverlay } from "../../components/IgnCadastreTileOverlay"
 import { ParcelOverlayPolygons } from "../../components/ParcelOverlayPolygons"
 import { useParcelStatuses } from "../../hooks/useParcelStatuses"
+import { fr } from "../../i18n"
 import { LocalAttachment, LocalSurvey } from "../../storage"
 import { isPhotoAttachment, resolveDisplayCoordinates } from "../survey-screen-helpers"
 import { AttachmentPhotoPreview } from "./AttachmentPhotoPreview"
 import { styles } from "./media.styles"
 
 type HeroMode = "map" | "photo"
+
+const media = fr.surveyDetail.media
+const alerts = fr.surveyDetail.alerts
+const a11y = fr.surveyDetail.a11y
 
 const DEFAULT_FRANCE_REGION: Region = {
   latitude: 46.603354,
@@ -34,6 +39,7 @@ const DEFAULT_FRANCE_REGION: Region = {
 type MediaSectionProps = {
   apiUrl: string
   survey: LocalSurvey
+  siteName: string
   attachments: LocalAttachment[]
   displayLocation: SurveyDetailResponse["display_location"] | undefined
   canEditSurvey: boolean
@@ -51,6 +57,7 @@ type MediaSectionProps = {
 export function MediaSection({
   apiUrl,
   survey,
+  siteName,
   attachments,
   displayLocation,
   canEditSurvey,
@@ -114,25 +121,25 @@ export function MediaSection({
 
   const handleAddPicture = (): void => {
     if (survey.status === "submitted") {
-      Alert.alert("Read-only survey", "This survey is submitted. Photo upload is disabled.")
+      Alert.alert(alerts.readOnlyTitle, alerts.uploadDisabled)
       return
     }
 
-    Alert.alert("Add picture", "Choose how to add a photo.", [
+    Alert.alert(alerts.addPhotoTitle, alerts.addPhotoMessage, [
       {
-        text: "Take photo",
+        text: alerts.takePhoto,
         onPress: () => {
           void onTakePhoto(survey.id)
         },
       },
       {
-        text: "Choose from gallery",
+        text: alerts.pickFromGallery,
         onPress: () => {
           void onPickPhoto(survey.id)
         },
       },
       {
-        text: "Cancel",
+        text: fr.common.actions.cancel,
         style: "cancel",
       },
     ])
@@ -140,20 +147,20 @@ export function MediaSection({
 
   const handleDeletePicture = (localAttachmentId: string): void => {
     if (survey.status === "submitted") {
-      Alert.alert("Read-only survey", "This survey is submitted. Photo deletion is disabled.")
+      Alert.alert(alerts.readOnlyTitle, alerts.deletionDisabled)
       return
     }
 
-    Alert.alert("Delete picture", "Remove this photo from the survey?", [
+    Alert.alert(alerts.deletePhotoTitle, alerts.deletePhotoMessage, [
       {
-        text: "Delete",
+        text: fr.common.actions.delete,
         style: "destructive",
         onPress: () => {
           void onDeleteAttachment(survey.id, localAttachmentId)
         },
       },
       {
-        text: "Cancel",
+        text: fr.common.actions.cancel,
         style: "cancel",
       },
     ])
@@ -166,8 +173,9 @@ export function MediaSection({
     const safeIndex = Math.max(0, Math.min(photoSlides.length - 1, nextIndex))
     setMediaPageIndex(safeIndex)
   }
+  const currentPhotoPosition = Math.min(mediaPageIndex, photoSlides.length - 1) + 1
   const currentPhotoAttachment = hasPhotoSlides
-    ? (photoSlides[Math.min(mediaPageIndex, photoSlides.length - 1)]?.attachment ?? null)
+    ? (photoSlides[currentPhotoPosition - 1]?.attachment ?? null)
     : null
   const marker = gpsCoordinates ? (
     <Marker coordinate={{ latitude: gpsCoordinates.lat, longitude: gpsCoordinates.lng }} />
@@ -203,12 +211,21 @@ export function MediaSection({
           <View style={styles.detailHeroOverlayBadge}>
             <Ionicons name="images-outline" size={13} color={brandColors.white} />
             <Text style={styles.detailHeroOverlayBadgeText}>
-              Photos {mediaPageIndex + 1}/{photoSlides.length}
+              {media.photosPage({ current: mediaPageIndex + 1, total: photoSlides.length })}
             </Text>
           </View>
         </View>
       ) : (
-        <Pressable style={styles.detailHeroMain} onPress={onOpenParcels} disabled={!canEditSurvey}>
+        <Pressable
+          style={styles.detailHeroMain}
+          onPress={onOpenParcels}
+          disabled={!canEditSurvey}
+          accessibilityRole="button"
+          accessibilityLabel={
+            canEditSurvey ? a11y.editParcels(siteName) : a11y.mapPreview(siteName)
+          }
+          accessibilityState={{ disabled: !canEditSurvey }}
+        >
           <MapView
             style={styles.detailHeroMap}
             initialRegion={mapPreviewRegion}
@@ -224,7 +241,7 @@ export function MediaSection({
           <View style={styles.detailHeroOverlayBadge}>
             <Ionicons name="map-outline" size={13} color={brandColors.white} />
             <Text style={styles.detailHeroOverlayBadgeText}>
-              {canEditSurvey ? "Tap map to edit parcels" : "Map preview"}
+              {canEditSurvey ? media.tapMapToEdit : media.mapPreview}
             </Text>
           </View>
         </Pressable>
@@ -234,6 +251,8 @@ export function MediaSection({
         <Pressable
           style={styles.detailHeroSwitchThumb}
           onPress={() => setHeroMode(heroMode === "map" ? "photo" : "map")}
+          accessibilityRole="button"
+          accessibilityLabel={heroMode === "map" ? a11y.showPhotos : a11y.showMap}
         >
           {heroMode === "map" ? (
             photoSlides[0] ? (
@@ -257,7 +276,7 @@ export function MediaSection({
           )}
           <View style={styles.detailHeroSwitchThumbLabel}>
             <Text style={styles.detailHeroSwitchThumbLabelText}>
-              {heroMode === "map" ? "Photos" : "Map"}
+              {heroMode === "map" ? media.switchToPhotos : media.switchToMap}
             </Text>
           </View>
         </Pressable>
@@ -265,13 +284,23 @@ export function MediaSection({
 
       {survey.status !== "submitted" ? (
         <View style={styles.detailHeroActions}>
-          <Pressable style={styles.detailHeroActionButton} onPress={handleAddPicture}>
+          <Pressable
+            style={styles.detailHeroActionButton}
+            onPress={handleAddPicture}
+            accessibilityRole="button"
+            accessibilityLabel={a11y.addPhoto}
+          >
             <Ionicons name="camera-outline" size={16} color={brandColors.white} />
           </Pressable>
           {heroMode === "photo" && currentPhotoAttachment ? (
             <Pressable
               style={[styles.detailHeroActionButton, styles.detailHeroActionButtonDanger]}
               onPress={() => handleDeletePicture(currentPhotoAttachment.id)}
+              accessibilityRole="button"
+              accessibilityLabel={a11y.deletePhoto({
+                position: currentPhotoPosition,
+                total: photoSlides.length,
+              })}
             >
               <Ionicons name="trash-outline" size={16} color={brandColors.white} />
             </Pressable>

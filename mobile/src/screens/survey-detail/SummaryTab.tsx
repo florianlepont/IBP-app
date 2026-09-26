@@ -3,6 +3,7 @@ import { Text, View } from "react-native"
 import { REGION_OPTIONS, VEGETATION_STAGE_OPTIONS_BY_REGION } from "../../app/constants"
 import { formatDateTime } from "../../app/formatters"
 import { RegionVersion, VegetationStage } from "../../app/types"
+import { fr } from "../../i18n"
 import { LocalSurvey } from "../../storage"
 import { AppButton } from "../../ui/AppButton"
 import { AppCard } from "../../ui/AppCard"
@@ -12,6 +13,8 @@ import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { AppStatusChip } from "../../ui/AppStatusChip"
 import { styles as sharedStyles } from "./styles"
 import { styles } from "./summary.styles"
+
+const t = fr.surveyDetail.summary
 
 type SummaryTabProps = {
   survey: LocalSurvey
@@ -54,8 +57,8 @@ export function SummaryTab({
         <AppNotice
           tone="success"
           icon="checkmark-done-circle-outline"
-          title="Survey submitted"
-          message="This record is now read-only."
+          title={t.submittedTitle}
+          message={t.submittedMessage}
           style={styles.submittedReadonlyBanner}
         />
       ) : null}
@@ -66,29 +69,27 @@ export function SummaryTab({
           padding={18}
           style={[styles.deadlineCard, isDraftNearDeadline ? styles.deadlineCardWarning : null]}
         >
-          <Text style={styles.deadlineLabel}>Submission window</Text>
+          <Text style={styles.deadlineLabel}>{t.windowLabel}</Text>
           <Text
             style={[styles.deadlineValue, isDraftNearDeadline ? styles.deadlineValueWarning : null]}
           >
             {remainingTime}
           </Text>
-          <Text style={sharedStyles.rowMeta}>Deadline: {formatDateTime(submissionDeadline)}</Text>
+          <Text style={sharedStyles.rowMeta}>{t.deadline(formatDateTime(submissionDeadline))}</Text>
           {isDraftNearDeadline ? (
-            <Text style={sharedStyles.warningText}>
-              Less than 24h left before survey expiration.
-            </Text>
+            <Text style={sharedStyles.warningText}>{t.nearDeadline}</Text>
           ) : null}
         </AppCard>
       ) : null}
 
       <AppCard variant="panelElevated" padding={18} style={styles.detailMetadataCard}>
         <AppSectionHeader
-          title="Context and parcels"
-          subtitle="Region version and vegetation stage used by the scoring rules."
+          title={t.contextTitle}
+          subtitle={t.contextSubtitle}
           trailing={
             canEditSurvey ? (
               <AppButton
-                label="Edit parcels"
+                label={t.editParcels}
                 variant="secondary"
                 size="sm"
                 leadingIcon="map-outline"
@@ -129,12 +130,12 @@ export function SummaryTab({
         ) : (
           <View style={styles.summaryRow}>
             <AppStatusChip
-              label={`Region: ${activeRegionLabel}`}
+              label={t.region(activeRegionLabel)}
               style={styles.summaryItem}
               labelStyle={styles.summaryItemLabel}
             />
             <AppStatusChip
-              label={`Vegetation: ${activeVegetationLabel}`}
+              label={t.vegetation(activeVegetationLabel)}
               style={styles.summaryItem}
               labelStyle={styles.summaryItemLabel}
             />

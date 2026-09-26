@@ -4,6 +4,7 @@ import { brandColors } from "../../app/brand-tokens"
 import { FACTOR_TITLES } from "../../app/constants"
 import { formatPoints } from "../../app/formatters"
 import { FactorKey } from "../../app/types"
+import { fr } from "../../i18n"
 import { AppCard } from "../../ui/AppCard"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { isFactorKey } from "../survey-screen-helpers"
@@ -24,6 +25,8 @@ const FACTOR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   J: "triangle-outline",
 }
 
+const f = fr.surveyDetail.factors
+
 type FactorsSectionProps = {
   scores: DisplayedScores | null
   factorEntries: Array<[string, DisplayedFactorResult]>
@@ -43,33 +46,30 @@ export function FactorsSection({
 }: FactorsSectionProps) {
   return (
     <AppCard variant="panelElevated" padding={18} style={styles.factorTilesCard}>
-      <AppSectionHeader
-        title="IBP scoring"
-        subtitle="Open factors to update observations and live scores."
-      />
-      {showLoadingHint ? <Text style={sharedStyles.rowMeta}>Loading factors...</Text> : null}
+      <AppSectionHeader title={f.title} subtitle={f.subtitle} />
+      {showLoadingHint ? <Text style={sharedStyles.rowMeta}>{f.loading}</Text> : null}
       {scores ? (
         <>
-          {useLocalDraftView ? (
-            <Text style={sharedStyles.rowMeta}>Showing local draft score from latest edits.</Text>
-          ) : null}
+          {useLocalDraftView ? <Text style={sharedStyles.rowMeta}>{f.localDraftHint}</Text> : null}
           <View style={styles.scoreHeroCard}>
-            <Text style={styles.scoreHeroLabel}>IBP total</Text>
+            <Text style={styles.scoreHeroLabel}>{f.ibpTotal}</Text>
             <Text style={styles.scoreHeroValue}>{formatPoints(scores.ibp_total)}</Text>
             <Text style={styles.scoreHeroMeta}>
-              P/G {formatPoints(scores.ibp_peuplement_gestion)} · C{" "}
-              {formatPoints(scores.ibp_contexte)}
+              {fr.surveyDetail.metric.split({
+                standTotal: formatPoints(scores.ibp_peuplement_gestion),
+                contextTotal: formatPoints(scores.ibp_contexte),
+              })}
             </Text>
           </View>
           <View style={styles.factorTotalsRow}>
             <View style={styles.factorTotalPill}>
               <Text style={styles.factorTotalText}>
-                P/G {formatPoints(scores.ibp_peuplement_gestion)}
+                {f.standTotal(formatPoints(scores.ibp_peuplement_gestion))}
               </Text>
             </View>
             <View style={styles.factorTotalPill}>
               <Text style={styles.factorTotalText}>
-                Context {formatPoints(scores.ibp_contexte)}
+                {f.contextTotal(formatPoints(scores.ibp_contexte))}
               </Text>
             </View>
           </View>
@@ -86,7 +86,7 @@ export function FactorsSection({
           </View>
         </>
       ) : (
-        <Text style={sharedStyles.rowMeta}>Canonical factors not loaded yet.</Text>
+        <Text style={sharedStyles.rowMeta}>{f.notLoaded}</Text>
       )}
     </AppCard>
   )
@@ -104,6 +104,9 @@ function FactorTile({
   onOpenFactor: (factor: FactorKey) => void
 }) {
   const factorCompleted = factor.selected_class !== NOT_FILLED_CLASS
+  const canOpen = canEditSurvey && isFactorKey(factorCode)
+  const title = isFactorKey(factorCode) ? FACTOR_TITLES[factorCode] : f.factorFallback(factorCode)
+  const classLabel = factorCompleted ? factor.selected_class : f.notFilled
   const statusColor = factorCompleted ? brandColors.forest : brandColors.textSecondary
 
   return (
@@ -111,12 +114,15 @@ function FactorTile({
       style={[
         styles.factorTile,
         factorCompleted ? styles.factorTileCompleted : styles.factorTilePending,
-        canEditSurvey && isFactorKey(factorCode) ? styles.factorTileEditable : null,
+        canOpen ? styles.factorTileEditable : null,
       ]}
       onPress={() => {
         if (!canEditSurvey || !isFactorKey(factorCode)) return
         onOpenFactor(factorCode)
       }}
+      accessibilityRole="button"
+      accessibilityLabel={fr.surveyDetail.a11y.openFactor({ title, value: classLabel })}
+      accessibilityState={{ disabled: !canOpen }}
     >
       <View style={styles.factorTileTopRow}>
         <View style={styles.factorTileIdentity}>
@@ -154,7 +160,7 @@ function FactorTile({
         </View>
       </View>
       <Text numberOfLines={2} style={styles.factorTileClass}>
-        {isFactorKey(factorCode) ? FACTOR_TITLES[factorCode] : `Factor ${factorCode}`}
+        {title}
       </Text>
       <Text
         style={[
@@ -162,10 +168,10 @@ function FactorTile({
           factorCompleted ? styles.factorTileClassCompleted : styles.factorTileClassPending,
         ]}
       >
-        {factor.selected_class}
+        {classLabel}
       </Text>
       {factor.warnings.length > 0 ? (
-        <Text style={styles.factorTileWarning}>Has warning</Text>
+        <Text style={styles.factorTileWarning}>{f.hasWarning}</Text>
       ) : null}
     </Pressable>
   )

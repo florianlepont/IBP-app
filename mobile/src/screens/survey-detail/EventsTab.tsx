@@ -1,9 +1,11 @@
 import { Text, View } from "react-native"
-import { formatDateTime, formatEventPayload } from "../../app/formatters"
+import { formatDateTime } from "../../app/formatters"
 import { SurveyEventItem } from "../../app/types"
+import { fr } from "../../i18n"
 import { AppButton } from "../../ui/AppButton"
 import { AppCard } from "../../ui/AppCard"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
+import { eventTypeLabel } from "./event-labels"
 import { styles as sharedStyles } from "./styles"
 import { styles } from "./tabs.styles"
 
@@ -13,16 +15,20 @@ type EventsTabProps = {
   onReload: () => void
 }
 
+const t = fr.surveyDetail.events
+
+// The survey history as French labels and dates. Raw payloads and ids stay in
+// the dev-only DebugTab (D-06).
 export function EventsTab({ events, isLoading, onReload }: EventsTabProps) {
   return (
     <View style={sharedStyles.detailSection}>
       <AppCard variant="panelElevated" padding={18} style={styles.eventsCard}>
         <AppSectionHeader
-          title="Survey events"
-          subtitle="Sync and workflow history for this record."
+          title={t.title}
+          subtitle={t.subtitle}
           trailing={
             <AppButton
-              label="Reload"
+              label={t.reload}
               variant="secondary"
               size="sm"
               leadingIcon="refresh-outline"
@@ -30,17 +36,14 @@ export function EventsTab({ events, isLoading, onReload }: EventsTabProps) {
             />
           }
         />
-        {isLoading ? <Text style={sharedStyles.rowMeta}>Loading events...</Text> : null}
+        {isLoading ? <Text style={sharedStyles.rowMeta}>{t.loading}</Text> : null}
         {events.length === 0 && !isLoading ? (
-          <Text style={sharedStyles.rowMeta}>No events loaded yet.</Text>
+          <Text style={sharedStyles.rowMeta}>{t.empty}</Text>
         ) : null}
         {events.map((event) => (
           <View key={event.id} style={styles.eventRow}>
-            <Text style={styles.eventTitle}>{event.event_type}</Text>
+            <Text style={styles.eventTitle}>{eventTypeLabel(event.event_type)}</Text>
             <Text style={sharedStyles.rowMeta}>{formatDateTime(event.created_at)}</Text>
-            {formatEventPayload(event.payload) ? (
-              <Text style={styles.eventPayload}>{formatEventPayload(event.payload)}</Text>
-            ) : null}
           </View>
         ))}
       </AppCard>

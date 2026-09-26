@@ -1,6 +1,8 @@
 import { Text, View } from "react-native"
 import { shouldShowDevTools } from "../../app/dev-tools"
-import { formatDateTime } from "../../app/formatters"
+import { formatDateTime, formatEventPayload } from "../../app/formatters"
+import { SurveyEventItem } from "../../app/types"
+import { fr } from "../../i18n"
 import { LocalAttachment, LocalSurvey } from "../../storage"
 import { AppButton } from "../../ui/AppButton"
 import { AppCard } from "../../ui/AppCard"
@@ -12,61 +14,82 @@ import { styles } from "./tabs.styles"
 type DebugTabProps = {
   survey: LocalSurvey
   attachments: LocalAttachment[]
+  events: SurveyEventItem[]
   createdAt: string
   submittedAt: string | null
   publishableOnPublicMap: boolean
-  loadedEventCount: number
   onSimulateMissingAttachmentFile?: (localAttachmentId: string) => Promise<void> | void
 }
 
+const t = fr.surveyDetail.debug
+
+// Technical field name and value pairs; names stay as in the data model.
+type Field = [name: string, value: string | number | null]
+
+function FieldRows({ fields }: { fields: Field[] }) {
+  return (
+    <>
+      {fields.map(([name, value]) => (
+        <Text key={name} style={sharedStyles.rowMeta}>
+          {t.field({ name, value: value === null ? t.none : String(value) })}
+        </Text>
+      ))}
+    </>
+  )
+}
+
+// Developer-only snapshot: ids, error codes, storage keys and raw event
+// payloads. Renders nothing outside dev builds (D-06, T-01.9-24).
 export function DebugTab({
   survey,
   attachments,
+  events,
   createdAt,
   submittedAt,
   publishableOnPublicMap,
-  loadedEventCount,
   onSimulateMissingAttachmentFile,
 }: DebugTabProps) {
-  const rowMeta = sharedStyles.rowMeta
+  if (!shouldShowDevTools()) return null
+
+  const surveyFields: Field[] = [
+    ["id", survey.id],
+    ["updated_at", survey.updated_at],
+    ["created_at", formatDateTime(createdAt)],
+    ["submitted_at", formatDateTime(submittedAt)],
+    ["public_map", publishableOnPublicMap ? t.yes : t.no],
+    ["completion_rate", survey.completion_rate],
+    ["events_loaded", events.length],
+    ["local_photos", attachments.length],
+    ["last_sync_error", survey.last_sync_error],
+    ["last_sync_error_code", survey.last_sync_error_code],
+    ["last_sync_error_at", survey.last_sync_error_at],
+  ]
 
   return (
     <View style={sharedStyles.detailSection}>
       <AppCard variant="panelElevated" padding={18} style={styles.debugCard}>
-        <AppSectionHeader
-          title="Debug snapshot"
-          subtitle="Local and synced state for this survey."
-        />
-        <Text style={rowMeta}>id: {survey.id}</Text>
-        <Text style={rowMeta}>updated: {survey.updated_at}</Text>
-        <Text style={rowMeta}>created: {formatDateTime(createdAt)}</Text>
-        <Text style={rowMeta}>submitted at: {formatDateTime(submittedAt)}</Text>
-        <Text style={rowMeta}>
-          publishable on public map: {publishableOnPublicMap ? "yes" : "no"}
-        </Text>
-        <Text style={rowMeta}>completion: {survey.completion_rate}%</Text>
-        <Text style={rowMeta}>history entries loaded: {loadedEventCount}</Text>
-        <Text style={rowMeta}>local photos: {attachments.length}</Text>
-        {survey.last_sync_error ? (
-          <Text style={rowMeta}>last error: {survey.last_sync_error}</Text>
-        ) : (
-          <Text style={rowMeta}>No sync error reported.</Text>
-        )}
-        {survey.last_sync_error_code ? (
-          <Text style={rowMeta}>error code: {survey.last_sync_error_code}</Text>
-        ) : null}
-        {survey.last_sync_error_at ? (
-          <Text style={rowMeta}>error at: {survey.last_sync_error_at}</Text>
-        ) : null}
+        <AppSectionHeader title={t.snapshotTitle} subtitle={t.snapshotSubtitle} />
+        <FieldRows fields={surveyFields} />
+        {survey.last_sync_error ? null : <Text style={sharedStyles.rowMeta}>{t.noSyncError}</Text>}
+      </AppCard>
+
+      <AppCard variant="panelElevated" padding={18} style={styles.debugCard}>
+        <AppSectionHeader title={t.eventsTitle} subtitle={t.eventsSubtitle} />
+        {events.map((event) => (
+          <View key={event.id} style={styles.eventRow}>
+            <Text style={styles.eventTitle}>{event.event_type}</Text>
+            <Text style={sharedStyles.rowMeta}>{formatDateTime(event.created_at)}</Text>
+            {formatEventPayload(event.payload) ? (
+              <Text style={styles.eventPayload}>{formatEventPayload(event.payload)}</Text>
+            ) : null}
+          </View>
+        ))}
       </AppCard>
 
       <View style={styles.debugAttachmentBlock}>
-        <AppSectionHeader
-          title="Image debug"
-          subtitle="Local attachment payloads and sync metadata."
-        />
+        <AppSectionHeader title={t.imagesTitle} subtitle={t.imagesSubtitle} />
         {attachments.length === 0 ? (
-          <Text style={rowMeta}>No local attachment found.</Text>
+          <Text style={sharedStyles.rowMeta}>{t.noAttachment}</Text>
         ) : (
           attachments.map((attachment, index) => (
             <AppCard
@@ -80,37 +103,38 @@ export function DebugTab({
                 imageStyle={styles.debugAttachmentPreview}
                 placeholderStyle={styles.debugAttachmentPreviewPlaceholder}
               />
-              {shouldShowDevTools() && onSimulateMissingAttachmentFile ? (
+              {onSimulateMissingAttachmentFile ? (
                 <AppButton
-                  label="Simuler un fichier manquant"
+                  label={t.simulateMissingFile}
                   leadingIcon="bug-outline"
                   variant="secondary"
                   onPress={() => void onSimulateMissingAttachmentFile(attachment.id)}
                 />
               ) : null}
-              <Text style={rowMeta}>#{index + 1}</Text>
-              <Text style={rowMeta}>id: {attachment.id}</Text>
-              <Text style={rowMeta}>survey_id: {attachment.survey_id}</Text>
-              <Text style={rowMeta}>local_uri: {attachment.local_uri}</Text>
-              <Text style={rowMeta}>file_state: {attachment.file_state}</Text>
-              <Text style={rowMeta}>mime_type: {attachment.mime_type}</Text>
-              <Text style={rowMeta}>
-                size: {attachment.size_bytes} bytes ({Math.round(attachment.size_bytes / 1024)} KB)
-              </Text>
-              <Text style={rowMeta}>sync_state: {attachment.sync_state}</Text>
-              <Text style={rowMeta}>
-                remote_attachment_id: {attachment.remote_attachment_id ?? "null"}
-              </Text>
-              <Text style={rowMeta}>storage_key: {attachment.storage_key ?? "null"}</Text>
-              <Text style={rowMeta}>upload_url: {attachment.upload_url ?? "null"}</Text>
-              <Text style={rowMeta}>confirm_url: {attachment.confirm_url ?? "null"}</Text>
-              <Text style={rowMeta}>updated_at: {attachment.updated_at}</Text>
-              <Text style={rowMeta}>
-                last_sync_error_code: {attachment.last_sync_error_code ?? "null"}
-              </Text>
-              <Text style={rowMeta}>last_sync_error: {attachment.last_sync_error ?? "null"}</Text>
-              <Text style={rowMeta}>
-                last_sync_error_at: {attachment.last_sync_error_at ?? "null"}
+              <Text style={sharedStyles.rowMeta}>{t.attachmentIndex(index + 1)}</Text>
+              <FieldRows
+                fields={[
+                  ["id", attachment.id],
+                  ["survey_id", attachment.survey_id],
+                  ["local_uri", attachment.local_uri],
+                  ["file_state", attachment.file_state],
+                  ["mime_type", attachment.mime_type],
+                  ["sync_state", attachment.sync_state],
+                  ["remote_attachment_id", attachment.remote_attachment_id ?? null],
+                  ["storage_key", attachment.storage_key ?? null],
+                  ["upload_url", attachment.upload_url ?? null],
+                  ["confirm_url", attachment.confirm_url ?? null],
+                  ["updated_at", attachment.updated_at],
+                  ["last_sync_error_code", attachment.last_sync_error_code ?? null],
+                  ["last_sync_error", attachment.last_sync_error ?? null],
+                  ["last_sync_error_at", attachment.last_sync_error_at ?? null],
+                ]}
+              />
+              <Text style={sharedStyles.rowMeta}>
+                {t.size({
+                  bytes: String(attachment.size_bytes),
+                  kilobytes: String(Math.round(attachment.size_bytes / 1024)),
+                })}
               </Text>
             </AppCard>
           ))

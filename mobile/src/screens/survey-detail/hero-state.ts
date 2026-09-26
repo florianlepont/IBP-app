@@ -1,4 +1,5 @@
 import { formatPoints } from "../../app/formatters"
+import { fr } from "../../i18n"
 import { LocalSurvey } from "../../storage"
 import { DisplayedScores } from "./useLocalDraftSummary"
 
@@ -17,6 +18,8 @@ export const resolveHeroSubmitState = (
 
 export type HeroMetric = { caption: string; value: string; meta: string }
 
+const m = fr.surveyDetail.metric
+
 export const resolveHeroMetric = (
   scores: DisplayedScores | null,
   useLocalDraftView: boolean,
@@ -24,45 +27,27 @@ export const resolveHeroMetric = (
 ): HeroMetric => {
   if (scores) {
     return {
-      caption: useLocalDraftView ? "Local draft score" : "IBP total",
+      caption: useLocalDraftView ? m.localDraftScore : m.ibpTotal,
       value: formatPoints(scores.ibp_total),
-      meta: `P/G ${formatPoints(scores.ibp_peuplement_gestion)} · C ${formatPoints(scores.ibp_contexte)}`,
+      meta: m.split({
+        standTotal: formatPoints(scores.ibp_peuplement_gestion),
+        contextTotal: formatPoints(scores.ibp_contexte),
+      }),
     }
   }
   return {
-    caption: "Factors ready",
-    value: completedFactorCount !== null ? `${completedFactorCount}/10` : "--",
-    meta: completedFactorCount !== null ? "Required factors completed" : "Submit readiness pending",
+    caption: m.factorsReady,
+    value: completedFactorCount !== null ? m.factorsCount(completedFactorCount) : m.unknown,
+    meta: completedFactorCount !== null ? m.requiredCompleted : m.readinessPending,
   }
 }
 
 export type HeroSubmitCopy = { heading: string; body: string; pill: string }
 
 export const resolveHeroSubmitCopy = (state: HeroSubmitState): HeroSubmitCopy => {
-  if (state === "ready") {
-    return {
-      heading: "Ready to submit",
-      body: "All required factors and required fields are complete.",
-      pill: "Ready",
-    }
-  }
-  if (state === "pending_sync") {
-    return {
-      heading: "Sync before submit",
-      body: "The survey is complete locally. Sync it before submission unlocks.",
-      pill: "Sync first",
-    }
-  }
-  if (state === "blocked") {
-    return {
-      heading: "Submission blocked",
-      body: "Resolve the sync issue before the submit action becomes available.",
-      pill: "Blocked",
-    }
-  }
-  return {
-    heading: "Submission locked",
-    body: "All 10 factors must be completed before submission is allowed.",
-    pill: "Locked",
-  }
+  const copy = fr.surveyDetail.submit
+  if (state === "ready") return copy.ready
+  if (state === "pending_sync") return copy.pendingSync
+  if (state === "blocked") return copy.blocked
+  return copy.progress
 }
