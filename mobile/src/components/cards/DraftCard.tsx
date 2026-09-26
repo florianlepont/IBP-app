@@ -14,9 +14,14 @@ type DraftCardProps = {
   onPress: () => void
 }
 
-function getAccentColor(survey: LocalSurvey): string {
+// completion_rate is an integer percentage, 0-100 (01.9 D-03).
+function clampRate(rate: number): number {
+  return Math.max(0, Math.min(100, Math.round(rate)))
+}
+
+function getAccentColor(survey: LocalSurvey, rate: number): string {
   if (survey.sync_blocked) return brandColors.terracotta
-  if (survey.completion_rate >= 1) return brandColors.moss
+  if (rate >= 100) return brandColors.moss
   return brandColors.ochre
 }
 
@@ -31,9 +36,10 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 export function DraftCard({ survey, onPress }: DraftCardProps) {
-  const accent = getAccentColor(survey)
-  const completedFactors = Math.round(survey.completion_rate * 10)
-  const progressWidth = `${Math.round(survey.completion_rate * 100)}%` as const
+  const rate = clampRate(survey.completion_rate)
+  const accent = getAccentColor(survey, rate)
+  const completedFactors = Math.round(rate / 10)
+  const progressWidth = `${rate}%` as const
 
   return (
     <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">

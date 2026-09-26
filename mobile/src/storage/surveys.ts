@@ -17,7 +17,7 @@ import {
 import {
   normalizeParcelIds,
   computeCompletionRate,
-  toSurveyQueuePayload,
+  computePayloadCompletion,
   isSurveyQueuePayload,
   isAttachmentQueuePayload,
   isAttachmentDeleteQueuePayload,
@@ -42,8 +42,8 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
 
   await runInTransaction(async (tx) => {
     await tx.runAsync(
-      `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO local_surveys (id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, payload_json, payload_completion, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         input.site_name,
@@ -56,6 +56,8 @@ export async function createLocalDraft(input: DraftInput): Promise<LocalSurvey> 
         null,
         0,
         JSON.stringify(payload),
+        // Precomputed so the list never parses payloads (01.9 D-03).
+        computePayloadCompletion(payload),
         now,
         now,
       ],
@@ -392,6 +394,7 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
            last_sync_error_at = NULL,
            sync_blocked = 0,
            payload_json = ?,
+           payload_completion = ?,
            updated_at = ?
        WHERE id = ?`,
       [
@@ -399,6 +402,8 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
         nextPayload.visibility === "public" ? "public" : "private",
         nextSyncVersion,
         JSON.stringify(nextPayload),
+        // Precomputed so the list never parses payloads (01.9 D-03).
+        computePayloadCompletion(nextPayload),
         now,
         input.survey_id,
       ],
@@ -426,23 +431,15 @@ export async function updateLocalDraft(input: UpdateDraftInput): Promise<LocalSu
 
 export async function listLocalSurveys(): Promise<LocalSurvey[]> {
   const db = await getDb()
-  const rows = await db.getAllAsync<
-    Omit<LocalSurvey, "completion_rate"> & {
-      payload_json: string | null
-    }
-  >(
-    `SELECT id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, created_at, updated_at, payload_json
+  // 01.9 D-03: completion was stored at write time (payload_completion) and
+  // "submitted = 100" is applied here in SQL, so the list never selects or
+  // parses payload_json.
+  return db.getAllAsync<LocalSurvey>(
+    `SELECT id, site_name, status, visibility, sync_version, sync_state, last_sync_error, last_sync_error_code, last_sync_error_at, sync_blocked, created_at, updated_at,
+       CASE WHEN status = 'submitted' THEN 100 ELSE payload_completion END AS completion_rate
      FROM local_surveys
      ORDER BY updated_at DESC`,
   )
-  return rows.map((row) => {
-    const payload = row.payload_json ? toSurveyQueuePayload(safeParseJson(row.payload_json)) : null
-    const { payload_json: _payloadJson, ...rest } = row
-    return {
-      ...rest,
-      completion_rate: computeCompletionRate(row.status, payload),
-    }
-  })
 }
 
 export async function listLocalAttachments(surveyId?: string): Promise<LocalAttachment[]> {

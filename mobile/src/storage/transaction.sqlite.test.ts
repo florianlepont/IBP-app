@@ -248,11 +248,11 @@ describe("deriveQueueOpType", () => {
 // runner in db.ts. They are deliberately named outside the "runInTransaction"
 // and "deriveQueueOpType" filter Task 1's verification uses.
 describe("initLocalDb schema (Task 2)", () => {
-  test("sets user_version to 1 and adds op_type, file_state and the queue indexes", async () => {
+  test("sets user_version to 2 and adds op_type, file_state and the queue indexes", async () => {
     const db = await getDb()
 
     const versionRow = await db.getFirstAsync<{ user_version: number }>(`PRAGMA user_version`)
-    expect(versionRow?.user_version).toBe(1)
+    expect(versionRow?.user_version).toBe(2)
 
     const queueColumns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_queue)`)
     expect(queueColumns.some((column) => column.name === "op_type")).toBe(true)

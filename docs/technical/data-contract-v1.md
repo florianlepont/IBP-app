@@ -70,6 +70,9 @@ Optional fields:
 - `sync_blocked` (boolean/integer flag, nullable) // local conflict guard
 - `deleted_at` (timestamp, nullable) // soft delete
 
+Local-only fields (mobile SQLite `local_surveys`, never sent to the server):
+- `payload_completion` (integer 0-100, `NOT NULL DEFAULT 0`) // completion of the stored payload, computed when `payload_json` is written (draft create, draft update, and pull insert/update) and backfilled from `payload_json` by SQLite migration 2 (`PRAGMA user_version` 2); an unparsable payload stores 0. The "submitted = 100" rule is status-based and is applied at read time (`CASE WHEN status = 'submitted' THEN 100 ELSE payload_completion END`), so listing surveys never parses a payload.
+
 ### 4) Attachment
 Photo or media file linked to a survey.
 
