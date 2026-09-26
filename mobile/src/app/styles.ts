@@ -1,14 +1,6 @@
 import { StyleSheet } from "react-native"
-import { brandColors } from "./brand-tokens"
 
 export const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: brandColors.canvas,
-  },
-  appLayout: {
-    flex: 1,
-  },
   tabScreenContainer: {
     flex: 1,
     position: "relative",

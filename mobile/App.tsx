@@ -1,249 +1,113 @@
-import { useEffect, useMemo, useState } from "react"
-import { Alert, StyleSheet, View } from "react-native"
+import { useState } from "react"
+import { StyleSheet, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
-import { initLocalDb } from "./src/storage/db"
-import { persistLegacyAttachmentFiles } from "./src/storage/attachments"
-import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
-import { styles } from "./src/app/styles"
-import { SurveyDetailTab } from "./src/app/types"
-import { useSurveyForm } from "./src/hooks/useSurveyForm"
-import { useSurveyList } from "./src/hooks/useSurveyList"
-import { usePublicMapExplorer } from "./src/hooks/usePublicMapExplorer"
-import { useSurveySync } from "./src/hooks/useSurveySync"
-import { useEditingDraft } from "./src/hooks/useEditingDraft"
-import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
-import { useGpsCapture } from "./src/hooks/useGpsCapture"
-import { useNearbyParcels } from "./src/hooks/useNearbyParcels"
-import { shouldShowDevTools } from "./src/app/dev-tools"
-import { loadStoredApiUrl, saveStoredApiUrl } from "./src/app/api-url-storage"
-import { DEFAULT_API_URL } from "./src/app/constants"
-import type { SurveyStats } from "./src/app/types"
-import { AuthGateScreen } from "./src/screens/AuthGateScreen"
-import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
-import { LocalDataOwnerConflictScreen } from "./src/screens/LocalDataOwnerConflictScreen"
+import { AuthenticatedAppNavigation } from "./src/app/AuthenticatedAppNavigation"
+import { brandColors } from "./src/app/brand-tokens"
 import { formatUnsyncedWorkSummary } from "./src/app/local-data-owner"
+import { AuthGateScreen } from "./src/screens/AuthGateScreen"
+import { LocalDataOwnerConflictScreen } from "./src/screens/LocalDataOwnerConflictScreen"
+import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
+import { AppStateProvider } from "./src/state/AppStateProvider"
+import { useSession } from "./src/state/session-context"
 
-export default function App() {
-  const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL)
+/**
+ * App shell: the navigation tree plus the three session overlays. All state
+ * lives in AppStateProvider (phase 01.9, D-01); this component reads only the
+ * session context, so a status update or a keystroke does not re-render it.
+ */
+function AppShell() {
+  const { state: session, actions } = useSession()
   const [profileSetupSkipped, setProfileSetupSkipped] = useState(false)
-  const [formMode, setFormMode] = useState<FormMode>("create")
-  const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
-  const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>("summary")
-
-  useEffect(() => {
-    if (!shouldShowDevTools()) return
-    void loadStoredApiUrl()
-      .then((stored) => {
-        if (stored) setApiUrl(stored)
-      })
-      .catch(() => undefined)
-  }, [])
-
-  const handleApiUrlChange = (value: string): void => {
-    setApiUrl(value)
-    void saveStoredApiUrl(value).catch(() => undefined)
-  }
-
-  const surveyForm = useSurveyForm()
-  const surveyList = useSurveyList()
-  const refreshLocalSurveys = surveyList.refreshLocalSurveys
-  const refreshLocalAttachments = surveyList.refreshLocalAttachments
-  const openSurvey = surveyList.openSurvey
-  const ownSurveyIds = useMemo(
-    () => surveyList.surveys.map((survey) => survey.id),
-    [surveyList.surveys],
-  )
-  const editingSurveyVisibility = useMemo(
-    () =>
-      editingSurveyId
-        ? (surveyList.surveys.find((survey) => survey.id === editingSurveyId)?.visibility ??
-          "private")
-        : "private",
-    [editingSurveyId, surveyList.surveys],
-  )
-
-  const closeSurveyDetailSelection = (): void => {
-    surveyList.closeSurvey()
-    setSurveyDetailTab("summary")
-  }
-
-  const surveySync = useSurveySync({
-    apiUrl,
-    surveys: surveyList.surveys,
-    selectedSurveyId: surveyList.selectedSurveyId,
-    surveyDetailTab,
-    editingSurveyId,
-    refreshLocalSurveys: surveyList.refreshLocalSurveys,
-    refreshLocalAttachments: surveyList.refreshLocalAttachments,
-    onCloseSurveyDetail: closeSurveyDetailSelection,
-    onStopEditing: () => {
-      setEditingSurveyId(null)
-      setFormMode("create")
-    },
-  })
-  const setStatus = surveySync.setStatus
-
-  const nearbyParcels = useNearbyParcels(apiUrl)
-
-  const surveyStats = useMemo((): SurveyStats => {
-    const surveys = surveyList.surveys
-    return {
-      total: surveys.length,
-      draft: surveys.filter((s) => s.status === "draft").length,
-      submitted: surveys.filter((s) => s.status === "submitted").length,
-      pending: surveys.filter((s) => s.sync_state === "pending").length,
-      synced: surveys.filter((s) => s.sync_state === "synced").length,
-      failed: surveys.filter((s) => s.sync_state === "failed").length,
-      blocked: surveys.filter((s) => s.sync_blocked).length,
-    }
-  }, [surveyList.surveys])
-
-  const publicMapExplorer = usePublicMapExplorer({
-    apiUrl,
-    onStatusChange: setStatus,
-  })
-
-  const editing = useEditingDraft({
-    editingSurveyId,
-    setEditingSurveyId,
-    editingSurveyVisibility,
-    setFormMode,
-    surveyForm,
-    surveyList,
-    onStatusChange: setStatus,
-    onCloseSurveyDetail: closeSurveyDetailSelection,
-  })
-
-  const draftPatcher = useSurveyDraftPatcher({
-    surveyList,
-    onStatusChange: setStatus,
-  })
-
-  const gpsCapture = useGpsCapture({
-    surveyForm,
-    onStatusChange: setStatus,
-    onAlert: (title, message) => Alert.alert(title, message),
-  })
-
-  useEffect(() => {
-    const bootstrap = async (): Promise<void> => {
-      await initLocalDb()
-      // Best-effort: rescue photos captured by older app versions from the
-      // OS-purgeable cache before the app starts using them (T-01.5-26). Must
-      // never block startup.
-      await persistLegacyAttachmentFiles().catch(() => undefined)
-      await refreshLocalSurveys()
-      await refreshLocalAttachments()
-    }
-
-    bootstrap().catch((error) => setStatus(`Init error: ${(error as Error).message}`))
-  }, [refreshLocalAttachments, refreshLocalSurveys, setStatus])
-
-  const handleOpenSurvey = (surveyId: string): void => {
-    openSurvey(surveyId)
-    setSurveyDetailTab("summary")
-    setStatus(`Survey ${surveyId} opened`)
-  }
 
   const needsProfileSetup =
     !profileSetupSkipped &&
-    surveySync.currentUser != null &&
-    !surveySync.currentUser.first_name &&
-    !surveySync.currentUser.last_name
+    session.currentUser != null &&
+    !session.currentUser.first_name &&
+    !session.currentUser.last_name
 
-  const showAuthOverlay = !surveySync.isAuthenticated
+  const showAuthOverlay = !session.isAuthenticated
   const showOwnerConflictOverlay =
-    surveySync.isAuthenticated && surveySync.localDataOwnerStatus === "conflict"
+    session.isAuthenticated && session.localDataOwnerStatus === "conflict"
   const showProfileSetupOverlay =
-    surveySync.isAuthenticated && needsProfileSetup && !showOwnerConflictOverlay
+    session.isAuthenticated && needsProfileSetup && !showOwnerConflictOverlay
 
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["left", "right"]}>
+        <View style={styles.appLayout}>
+          <AuthenticatedAppNavigation />
+        </View>
+      </SafeAreaView>
+
+      {/* Auth screens rendered as overlays — outside the navigation tree so the
+        NavigationContainer (and native tab bar) is always mounted and stable. */}
+      {showAuthOverlay && (
+        <View style={styles.overlay}>
+          <AuthGateScreen
+            apiUrl={session.apiUrl}
+            onApiUrlChange={actions.setApiUrl}
+            onLogin={actions.handleLogin}
+            onRegister={actions.handleRegister}
+            onForgotPassword={actions.handleForgotPassword}
+            sessionRestoring={session.sessionRestoring}
+            logoSource={require("./assets/logo-app.png")}
+            heroMartenSource={require("./assets/auth/marten.png")}
+          />
+        </View>
+      )}
+      {showOwnerConflictOverlay && (
+        <View style={styles.overlay}>
+          <LocalDataOwnerConflictScreen
+            foreignWorkSummary={formatUnsyncedWorkSummary(session.foreignWork)}
+            foreignOwnerEmail={session.foreignOwnerEmail}
+            onSwitchAccount={() => void actions.handleSwitchToOwnerAccount()}
+            onDiscard={() => void actions.handleDiscardForeignData()}
+            logoSource={require("./assets/logo-app.png")}
+          />
+        </View>
+      )}
+      {showProfileSetupOverlay && (
+        <View style={styles.overlay}>
+          <ProfileSetupScreen
+            saving={session.profileUpdating}
+            logoSource={require("./assets/logo-app.png")}
+            onSave={async (firstName, lastName) => {
+              await actions.handleUpdateProfile({
+                first_name: firstName,
+                last_name: lastName,
+                display_name: [firstName, lastName].filter(Boolean).join(" "),
+              })
+            }}
+            onSkip={() => setProfileSetupSkipped(true)}
+          />
+        </View>
+      )}
+    </View>
+  )
+}
+
+export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <View style={styles.container}>
-          <SafeAreaView style={styles.container} edges={["left", "right"]}>
-            <View style={styles.appLayout}>
-              <AuthenticatedAppNavigation
-                apiUrl={apiUrl}
-                formMode={formMode}
-                editingSurveyId={editingSurveyId}
-                surveyStats={surveyStats}
-                nearbyParcels={nearbyParcels}
-                onLoadNearbyParcels={nearbyParcels.load}
-                surveyDetailTab={surveyDetailTab}
-                setSurveyDetailTab={setSurveyDetailTab}
-                surveyForm={surveyForm}
-                surveyList={surveyList}
-                surveySync={surveySync}
-                publicMapExplorer={publicMapExplorer}
-                ownSurveyIds={ownSurveyIds}
-                onOpenCreateSurvey={editing.handleOpenCreateSurvey}
-                onOpenSurvey={handleOpenSurvey}
-                onStartEditSurvey={editing.handleStartEditSurvey}
-                onRenameSurvey={draftPatcher.handleRenameSurvey}
-                onUpdateRegionVersion={draftPatcher.handleUpdateSurveyRegionVersion}
-                onUpdateVegetationStage={draftPatcher.handleUpdateSurveyVegetationStage}
-                onSaveSurveyEdits={editing.handleSaveSurveyEdits}
-                onCreateDraft={editing.handleCreateDraft}
-                onCaptureGpsLocation={gpsCapture.handleCaptureGpsLocation}
-                onApiUrlChange={handleApiUrlChange}
-                onCloseSurveyDetailSelection={closeSurveyDetailSelection}
-              />
-            </View>
-          </SafeAreaView>
-
-          {/* Auth screens rendered as overlays — outside the navigation tree so the
-            NavigationContainer (and native tab bar) is always mounted and stable. */}
-          {showAuthOverlay && (
-            <View style={overlayStyles.fill}>
-              <AuthGateScreen
-                apiUrl={apiUrl}
-                onApiUrlChange={handleApiUrlChange}
-                onLogin={surveySync.handleLogin}
-                onRegister={surveySync.handleRegister}
-                onForgotPassword={surveySync.handleForgotPassword}
-                sessionRestoring={surveySync.sessionRestoring}
-                logoSource={require("./assets/logo-app.png")}
-                heroMartenSource={require("./assets/auth/marten.png")}
-              />
-            </View>
-          )}
-          {showOwnerConflictOverlay && (
-            <View style={overlayStyles.fill}>
-              <LocalDataOwnerConflictScreen
-                foreignWorkSummary={formatUnsyncedWorkSummary(surveySync.foreignWork)}
-                foreignOwnerEmail={surveySync.foreignOwnerEmail}
-                onSwitchAccount={() => void surveySync.handleSwitchToOwnerAccount()}
-                onDiscard={() => void surveySync.handleDiscardForeignData()}
-                logoSource={require("./assets/logo-app.png")}
-              />
-            </View>
-          )}
-          {showProfileSetupOverlay && (
-            <View style={overlayStyles.fill}>
-              <ProfileSetupScreen
-                saving={surveySync.profileUpdating}
-                logoSource={require("./assets/logo-app.png")}
-                onSave={async (firstName, lastName) => {
-                  await surveySync.handleUpdateProfile({
-                    first_name: firstName,
-                    last_name: lastName,
-                    display_name: [firstName, lastName].filter(Boolean).join(" "),
-                  })
-                }}
-                onSkip={() => setProfileSetupSkipped(true)}
-              />
-            </View>
-          )}
-        </View>
+        <AppStateProvider>
+          <AppShell />
+        </AppStateProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   )
 }
 
-const overlayStyles = StyleSheet.create({
-  fill: {
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: brandColors.canvas,
+  },
+  appLayout: {
+    flex: 1,
+  },
+  overlay: {
     ...StyleSheet.absoluteFill,
     zIndex: 100,
   },
