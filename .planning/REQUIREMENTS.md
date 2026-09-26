@@ -86,8 +86,8 @@ every binding contract (conflict-report warning 5).
 ### QA — Quality and Defects
 
 - [ ] **REQ-QA-ibp-version** — The IBP method version the app implements is established and ratified. The repo cites IBP Fr v3.0 (PDFs dated 2023-03-23); the CNPF's current publication is FR v3.2 (dated 2026-02-02). All ten factors are compared, every divergence is recorded against `ibp-rules.service.ts`, `ibp-scoring.ts` and the 17-case validation matrix, and a documented decision either migrates to v3.2 or stays on v3.0 for stated reasons. *(New — surfaced by Phase 1 research)*
-- [ ] **REQ-QA-sql-injection** — Account deletion in `api/src/users/users.service.ts` no longer builds SQL by string interpolation; all subqueries are fully parameterized. *(New — highest-severity item in `.planning/codebase/CONCERNS.md`)*
-- [ ] **REQ-QA-indexes** — The missing indexes exist: `attachments(survey_id, created_at)`, `survey_parcels(survey_id)`, `users(auth0_sub)`. *(New)*
+- [ ] **REQ-QA-sql-injection** — A lint rule rejects interpolating values into SQL strings. *(Re-scoped 2026-09-23: account deletion in `api/src/users/users.service.ts` interpolates only constant subqueries and binds the user id as `$1`, so there is no injection today; the requirement now prevents one from appearing)*
+- [ ] **REQ-QA-indexes** — `survey_events(actor_id)` is indexed, and the redundant `idx_users_auth0_sub` (duplicates the UNIQUE constraint), `idx_survey_parcels_survey_id` (duplicates the primary-key prefix) and `idx_surveys_parcel_id` are dropped. *(Re-scoped 2026-09-23: the three indexes originally listed already exist — migrations 003, 009 and 011)*
 - [ ] **REQ-QA-screen-tests** — The survey list, survey detail, survey form and map screens have tests covering sync-status, filter and error states. 9 of 12 screens have no coverage today. *(New)*
 - [ ] **REQ-QA-bug-a3-4** — Sign-up with an already-registered email shows a specific message inviting the user to log in, not a generic Auth0 error. *(New — `BUG-A3-4`, medium)*
 - [ ] **REQ-QA-bug-a6-2** — Password-reset email deliverability is closed as an **Auth0 tenant configuration** item (sender domain / DKIM), with the tenant change recorded. Explicitly **not** an SMTP fix. *(New — `BUG-A6-2`, re-scoped)*
@@ -103,6 +103,38 @@ every binding contract (conflict-report warning 5).
 - [ ] **REQ-FT-field-tests** — Field-test reports exist for Epics B, C and D in the form of `docs/user-tests/epic-a-access-and-security.md`, each case with a recorded outcome, including at least one full offline-survey-to-sync run on a real parcel verified for completeness and absence of duplicates. *(New — this is the milestone's success metric)*
 
 ---
+
+### AUD — Code Audit Remediation (2026-09)
+
+Source: `docs/audits/audit-2026-09-code-complet.md` (findings) and `docs/audits/plan-remediation-2026-09.md`
+(lots L1–L20). All twenty lots are in this milestone: the lots that threaten the core value — no data
+loss, no duplicates — or that expose accounts run first (Phases 1.2–1.5), the rest right after (Phases 1.6–1.9).
+
+- [x] **REQ-AUD-session-data-loss** — A token-refresh failure caused by the network, a timeout or an unknown error never deletes local surveys, photos or the sync queue; only an explicit refresh-token rejection ends the session, the queue survives re-login with the same account, and logout with unsynced work purges only after a confirmation that counts it. The 401 retry forces a token refresh. The pre-Auth0 session stubs are removed. *(Audit M-C1 — critical. Lot L1)*
+- [x] **REQ-AUD-rate-limit** — Rate limiting keys on the real client behind Caddy (`trust proxy` loopback, per-user tracker) with production limits that one syncing device cannot exhaust for everyone. *(Audit A-C1 — critical. Lot L2)*
+- [x] **REQ-AUD-debug-surface** — `DebugModule` and the HS256 test-token path are not loaded in production. *(Audit A-H4. Lot L2)*
+- [x] **REQ-AUD-identity** — Email-based account linking requires `email_verified === true`; first-login provisioning is race-free; a report does not expose the reporter to the reported surveyor; report reasons are length-bounded. *(Audit A-H1, A-M6. Lot L3)*
+- [x] **REQ-AUD-mobile-quick-fixes** — Developer tools are absent from production builds; the nearby-parcels bbox uses `minLng,minLat,maxLng,maxLat`. *(Audit M-H5, M-H3. Lot L4)*
+- [x] **REQ-AUD-ci-pipeline** — CI runs typecheck, path-filtered jobs, least-privilege permissions, timeouts, SHA-pinned actions, coverage with ratcheting thresholds, a dependency audit at `high` and a mobile build check (`expo-doctor`, `expo export`). *(Audit CI-1, CI-3–CI-6, T1. Lot L5)*
+- [x] **REQ-AUD-reproducible-image** — The API image installs from the root lockfile with `npm ci`, runs as non-root with a healthcheck, is tagged by commit SHA, and is pushed only from `main` under a deploy concurrency group. *(Audit CI-2. Lot L6)*
+- [x] **REQ-AUD-test-infra** — Mobile tests run real SQL on in-memory SQLite and test hooks with `renderHook`; `*.test.tsx` is collected; the E2E database is reset before each run. *(Audit T3–T5. Core of lot L7)*
+- [x] **REQ-AUD-sync-validation** — Sync operation payloads are validated by class DTOs; upsert ignores client `status`/`expires_at` and cannot overwrite a submitted survey; `parcel_ids` is bounded; deterministic database errors are fatal with generic messages. *(Audit A-H2, A-M2, A-M5. Lot L8)*
+- [x] **REQ-AUD-transactions** — Every multi-statement API write runs in one transaction with its event, the upsert is guarded on `sync_version`, concurrent submits on a parcel resolve to one success and one 409, and account deletion commits in the database before deleting the Auth0 user. *(Audit ARCH-3, A-M1, A-M7, A-M9. Lot L9)*
+- [x] **REQ-AUD-sync-engine** — The mobile queue drains single-flight, in batches of at most 100, marks a survey synced only when its queue is empty, honours the documented retry cap without counting network/5xx errors, times out every request, and never lets a pull overwrite pending or blocked local changes; autosave reschedules instead of skipping; new IDs are UUIDs. *(Audit M-H1, M-H4 and the mobile medium findings. Lot L11a)*
+- [x] **REQ-AUD-local-storage** — Multi-statement SQLite writes are transactional, the local schema is versioned with `PRAGMA user_version`, queue rows carry an explicit operation type, and the queue is indexed. *(Audit ARCH-3 mobile, ARCH-5. Lot L11b)*
+- [x] **REQ-AUD-photos** — Photos are resized and persisted in the document directory at capture, uploaded by streaming, network errors do not consume the retry cap, and a missing local file is surfaced instead of silently dropped. Attachments pulled from the server are displayable, and thumbnails render through `expo-image` from downsized sources. *(Audit M-H2 and the remote-attachment and image findings. Lot L12)*
+
+- [x] **REQ-AUD-offline-start** — A cold start with no network and valid stored credentials opens the signed-in app with the last known profile (cached locally) instead of the login overlay; the profile refreshes from `/me` when the API is reachable. *(Found while planning Phase 1.2: `isAuthenticated` depends on a successful `/me` call)*
+- [x] **REQ-AUD-changes-feed** — `/sync/changes` pages on a monotonic sequence and still accepts the old cursor; same-version replays with different content are conflicts; the per-poll re-send of event-less surveys is gone. *(Audit ARCH-6. Lot L10)*
+- [x] **REQ-AUD-object-storage** — One `StorageService` for surveys, attachments and users; profile pictures in object storage; storage keys contained; upload size enforced; MIME allow-list checked by own property. *(Audit A-H3, A-M3, A-M4. Lot L13)*
+- [x] **REQ-AUD-config** — Validated configuration schema, bounded `pg` pool with an error listener, strict CORS in production, Nest `Logger` everywhere, dead token secrets removed. *(Audit A-M8. Lot L14)*
+- [x] **REQ-AUD-surveys-split** — `SurveysService` split into repository, survey, events, parcels and public-map services; batched parcel writes; column-scoped ownership checks; cursor pagination; cached, fully timed-out IGN fetch. *(Audit ARCH-2 and API efficiency findings. Lot L15)*
+- [x] **REQ-AUD-db-tuning** — Public-surveys partial index, generated centroid columns with a btree index (no PostGIS), migration advisory lock, dead `auth_sessions` tables dropped. *(Audit efficiency findings, ARCH-7. Remainder of lot L16)*
+- [ ] **REQ-AUD-ibp-domain** — A shared `ibp-domain` workspace package holds the IBP rules and sync contract types used by both API and mobile, verified by one parity fixture. *(Audit ARCH-1, T6. Lot L17)*
+- [ ] **REQ-AUD-test-infra-rest** — The RS256 path of `AuthGuard` is tested against a local JWKS; the catch-all E2E suite is split by feature and uses random UUIDs. *(Audit T2, T5. Remainder of lot L7)*
+- [ ] **REQ-AUD-mobile-state** — Memoised contexts replace the prop funnel; the survey list is virtualised; completion is precomputed; screens are split under 400 lines; unused styles are removed; navigation is typed; the map requests by bbox and clusters markers. *(Audit ARCH-4 and mobile efficiency findings. Lot L18)*
+- [ ] **REQ-AUD-i18n-a11y** — Every user-facing string comes from a French i18n catalogue, status messages are user-facing, and interactive elements carry accessibility roles and labels. *(Audit i18n and accessibility findings. Lot L19)*
+- [ ] **REQ-AUD-hygiene** — Root package, tsconfig and unused dependencies cleaned up; `CLAUDE.md` and technical docs match the code; the audit links each finding to its closing PR. *(Audit ARCH-7, ARCH-8. Remainder of lot L20)*
 
 ## Cross-Cutting Business Rules
 
@@ -192,6 +224,30 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 | Requirement | Status | Phase | Role |
 |-------------|--------|-------|------|
 | REQ-ML-adr | New | Phase 1 | Build |
+| REQ-AUD-session-data-loss | New | Phase 1.2 | Build |
+| REQ-AUD-rate-limit | New | Phase 1.2 | Build |
+| REQ-AUD-debug-surface | New | Phase 1.2 | Build |
+| REQ-AUD-identity | New | Phase 1.2 | Build |
+| REQ-AUD-mobile-quick-fixes | New | Phase 1.2 | Build |
+| REQ-AUD-ci-pipeline | New | Phase 1.3 | Build |
+| REQ-AUD-reproducible-image | New | Phase 1.3 | Build |
+| REQ-AUD-test-infra | New | Phase 1.3 | Build |
+| REQ-AUD-sync-validation | New | Phase 1.4 | Build |
+| REQ-AUD-transactions | New | Phase 1.4 | Build |
+| REQ-AUD-sync-engine | New | Phase 1.5 | Build |
+| REQ-AUD-local-storage | New | Phase 1.5 | Build |
+| REQ-AUD-photos | New | Phase 1.5 | Build |
+| REQ-AUD-offline-start | New | Phase 1.5 | Build |
+| REQ-AUD-changes-feed | New | Phase 1.6 | Build |
+| REQ-AUD-object-storage | New | Phase 1.6 | Build |
+| REQ-AUD-config | New | Phase 1.7 | Build |
+| REQ-AUD-surveys-split | New | Phase 1.7 | Build |
+| REQ-AUD-db-tuning | New | Phase 1.7 | Build |
+| REQ-AUD-ibp-domain | New | Phase 1.8 | Build |
+| REQ-AUD-test-infra-rest | New | Phase 1.8 | Build |
+| REQ-AUD-mobile-state | New | Phase 1.9 | Build |
+| REQ-AUD-i18n-a11y | New | Phase 1.9 | Build |
+| REQ-AUD-hygiene | New | Phase 1.9 | Build |
 | REQ-ML-contracts | New | Phase 2 | Build |
 | REQ-DOC-form-spec | New | Phase 2 | Build |
 | REQ-C-species-recognition | New | Phase 3 | Build |
@@ -237,12 +293,12 @@ Every MVP requirement maps to exactly one phase. **Build** = the phase delivers 
 
 **Coverage:**
 
-- MVP requirements: **42** total
-- Mapped to phases: **42** ✓
+- MVP requirements: **66** total
+- Mapped to phases: **66** ✓
 - Unmapped: **0** ✓
-- Of which carry build work: **23** (19 are already built and are verified in Phase 7)
+- Of which carry build work: **47** (19 are already built and are verified in Phase 7)
 - Deferred to next milestone: 19 · Deferred to V2: 4
 
 ---
 *Requirements defined: 2026-09-22*
-*Last updated: 2026-09-22 after roadmap creation*
+*Last updated: 2026-09-23 — full code audit remediation inserted as Phases 1.2–1.9*

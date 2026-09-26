@@ -5,175 +5,208 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common"
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { randomUUID } from "crypto"
-import { rm } from "fs/promises"
-import { join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
-import { DatabaseService } from "../database/database.service"
-import { CadastreProviderService } from "./cadastre-provider.service"
-import { IbpRulesService } from "./ibp-rules.service"
-import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
+import { DatabaseService, Queryable } from "../database/database.service"
+import { StorageService } from "../storage/storage.service"
+import { IbpRulesService, IbpValidationResult } from "./ibp-rules.service"
+import { ParcelsService } from "./parcels.service"
+import { SurveyEventsService } from "./survey-events.service"
+import {
+  ListPage,
+  SurveyListFilters,
+  SurveyListItem,
+  SurveysRepository,
+} from "./surveys.repository"
 import {
   AttachmentRow,
-  ParcelRow,
-  SurveyEventRow,
   SurveyPatchBody,
   SurveyVisibilityPatchBody,
   SurveyRow,
   SurveyUpsertBody,
 } from "./surveys.types"
 import {
-  buildFallbackParcelGeometry,
-  buildParcelKey,
+  classifySameVersionContent,
+  getChangedSubmittedReadOnlyFields,
   getSubmittedReadOnlyFields,
-  normalizeCentroid,
   normalizeObservationYear,
   normalizeParcelId,
   normalizeParcelIds,
-  normalizeParcelHistoryLimit,
-  normalizeParcelPartToDigits,
-  normalizeParcelSection,
   normalizePreviousSurveyId,
-  normalizeSurveyStatusFilter,
   normalizeVersionNumber,
-  parseBbox,
-  parseParcelIdentifier,
-  toFiniteNumber,
+  SameVersionContent,
 } from "./surveys-normalize.utils"
+
+type UpsertResult = {
+  id: string
+  server_status: "synced"
+  updated_at: string
+  warnings?: string[]
+  factor_results?: SurveyRow["factor_results"]
+}
+
+// An upsert body after validation and scoring, shared by the fast path and the locked path.
+type PreparedUpsert = {
+  surveyId: string
+  syncVersion: number
+  siteName: string
+  draftValidation: IbpValidationResult
+  computedScores: NonNullable<IbpValidationResult["scores"]>
+  now: Date
+  expiresAt: string
+}
+
+function olderSyncVersionConflict(
+  surveyId: string,
+  serverSyncVersion: number,
+  clientSyncVersion: number,
+): ConflictException {
+  return new ConflictException({
+    code: "sync_version_conflict",
+    message: "Older sync_version received",
+    details: {
+      survey_id: surveyId,
+      server_sync_version: serverSyncVersion,
+      client_sync_version: clientSyncVersion,
+    },
+  })
+}
 
 @Injectable()
 export class SurveysService {
-  private readonly objectStorageMode: "local" | "minio"
-  private readonly s3Bucket: string
-  private readonly s3Client?: S3Client
-  private readonly uploadsRootDir: string
-  private readonly useIgnParcelWfs: boolean
-  private readonly ignParcelWfsUrl: string
-  private readonly ignParcelWfsTypeName: string
-  private readonly ignParcelWfsCount: number
-  private readonly ignParcelWfsTimeoutMs: number
-
   constructor(
     private readonly db: DatabaseService,
     private readonly ibpRules: IbpRulesService,
-    private readonly cadastreProvider: CadastreProviderService,
-  ) {
-    this.objectStorageMode =
-      (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-media"
-    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
+    private readonly storage: StorageService,
+    // D-07: the shared ownership lookup, parcel links and event writer (SurveysDataModule).
+    private readonly repository: SurveysRepository,
+    private readonly events: SurveyEventsService,
+    // D-07/D-10: parcel registration, display location and submit validation.
+    private readonly parcels: ParcelsService,
+  ) {}
 
-    if (this.objectStorageMode === "minio") {
-      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
-      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
-      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
-      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
-
-      this.s3Client = new S3Client({
-        endpoint,
-        region,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      })
-    }
-
-    this.useIgnParcelWfs =
-      (process.env.CADASTRE_PROVIDER ?? "synthetic").trim().toLowerCase() === "ign"
-    this.ignParcelWfsUrl = process.env.CADASTRE_IGN_WFS_URL ?? "https://data.geopf.fr/wfs/ows"
-    this.ignParcelWfsTypeName =
-      process.env.CADASTRE_IGN_WFS_TYPENAME ?? "CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle"
-    const countRaw = Number(process.env.CADASTRE_IGN_WFS_COUNT ?? 1200)
-    this.ignParcelWfsCount =
-      Number.isFinite(countRaw) && countRaw > 0 ? Math.min(3000, Math.trunc(countRaw)) : 1200
-    const timeoutRaw = Number(process.env.CADASTRE_PROVIDER_TIMEOUT_MS ?? 2500)
-    this.ignParcelWfsTimeoutMs =
-      Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.trunc(timeoutRaw) : 2500
-  }
-
+  // D-11: GET /surveys, keyset-paginated when page.limit is set; unpaginated otherwise.
   async listForUser(
     user: AuthenticatedUser,
-    input?: { status?: string; from?: string; to?: string; q?: string },
-  ): Promise<
-    Array<
-      Pick<
-        SurveyRow,
-        | "id"
-        | "site_name"
-        | "status"
-        | "visibility"
-        | "parcel_id"
-        | "observation_year"
-        | "version_number"
-        | "updated_at"
-        | "sync_version"
-      >
-    >
-  > {
-    const filters: string[] = ["user_id = $1", "deleted_at IS NULL"]
-    const values: unknown[] = [user.id]
-
-    const normalizedStatus = normalizeSurveyStatusFilter(input?.status)
-    if (normalizedStatus) {
-      values.push(normalizedStatus)
-      filters.push(`status = $${values.length}`)
-    }
-
-    const fromDate = normalizeDateInput(input?.from)
-    if (fromDate) {
-      values.push(fromDate)
-      filters.push(`updated_at::date >= $${values.length}::date`)
-    }
-
-    const toDate = normalizeDateInput(input?.to)
-    if (toDate) {
-      values.push(toDate)
-      filters.push(`updated_at::date <= $${values.length}::date`)
-    }
-
-    const query = input?.q?.trim()
-    if (query) {
-      values.push(`%${query}%`)
-      filters.push(`(site_name ILIKE $${values.length} OR parcel_id ILIKE $${values.length})`)
-    }
-
-    const result = await this.db.query<
-      Pick<
-        SurveyRow,
-        | "id"
-        | "site_name"
-        | "status"
-        | "visibility"
-        | "parcel_id"
-        | "observation_year"
-        | "version_number"
-        | "updated_at"
-        | "sync_version"
-      >
-    >(
-      `SELECT id, site_name, status, visibility, parcel_id, observation_year, version_number, updated_at::text, sync_version
-       FROM surveys
-       WHERE ${filters.join(" AND ")}
-       ORDER BY updated_at DESC`,
-      values,
-    )
-
-    return result.rows
+    input: SurveyListFilters | undefined,
+    page: ListPage = { limit: null, after: null },
+  ): Promise<{ items: SurveyListItem[]; next_cursor: string | null }> {
+    return this.repository.listForUser(this.db, user.id, input, page)
   }
 
-  async upsertForUser(
-    user: AuthenticatedUser,
-    body: SurveyUpsertBody,
-  ): Promise<{
-    id: string
-    server_status: "synced"
-    updated_at: string
-    warnings?: string[]
-    factor_results?: SurveyRow["factor_results"]
-  }> {
+  /**
+   * D-09: the upsert fast path. Statement A is an unlocked read of the row, its parcel ids and
+   * its xmin. Then:
+   * - no row for this user: one atomic CTE creates the survey, parcels, links and event;
+   * - a newer sync_version on a row that is not submitted: one atomic CTE updates the row,
+   *   guarded by xmin, sync_version and status, and diffs the links and writes the event;
+   * - the same sync_version: classified on the row just read; an identical replay (or a
+   *   visibility-only replay on a deleted row) answers without writing, a conflict is a 409;
+   * - anything else (a visibility-only write, a submitted survey, a write that affected 0 rows)
+   *   runs the locked transaction, upsertLocked.
+   * The explicit transaction of 01.4 D-06 becomes single-statement atomicity on the two fast
+   * writes; the invariant is unchanged: the row, its links and its event commit together or not
+   * at all. The fallback runs only when a statement affected 0 rows, never on an error (C-5):
+   * an error has written nothing and propagates.
+   */
+  async upsertForUser(user: AuthenticatedUser, body: SurveyUpsertBody): Promise<UpsertResult> {
+    const prepared = this.prepareUpsert(body)
+    const { surveyId, syncVersion, draftValidation } = prepared
+
+    const current = await this.repository.readForUpsert(this.db, surveyId, user.id)
+
+    if (!current) {
+      const selectedParcelIds = this.selectParcelIds(body, null, [])
+      const parcelId = selectedParcelIds[0] ?? null
+      const version = this.versionDefaults(body, null, parcelId, prepared.now)
+      const created = await this.repository.createSurveyAtomic(this.db, {
+        surveyId,
+        userId: user.id,
+        siteName: prepared.siteName,
+        visibility: body.visibility ?? "private",
+        parcelId,
+        parcelIds: selectedParcelIds,
+        observationYear: version.observationYear,
+        versionNumber: version.versionNumber,
+        previousSurveyId: version.previousSurveyId,
+        regionVersion: body.region_version ?? null,
+        vegetationStage: body.vegetation_stage ?? null,
+        factors: body.factors ?? {},
+        factorResults: draftValidation.factor_results ?? {},
+        scores: prepared.computedScores,
+        syncVersion,
+        now: prepared.now.toISOString(),
+        expiresAt: prepared.expiresAt,
+        eventPayload: this.upsertEventPayload(prepared),
+      })
+      if (created) {
+        return this.syncedResult(prepared, created.id, created.updated_at)
+      }
+      // 0 rows: the id exists (a concurrent create, or another user's survey id).
+      return this.upsertLocked(user, body, prepared)
+    }
+
+    const { cas_token: casToken, parcel_ids: existingParcelIds, ...existing } = current
+
+    if (syncVersion < existing.sync_version) {
+      throw olderSyncVersionConflict(surveyId, existing.sync_version, syncVersion)
+    }
+
+    if (syncVersion === existing.sync_version) {
+      const content = classifySameVersionContent(body, existing, existingParcelIds)
+      if (content === "visibility_only" && !existing.deleted_at && body.visibility) {
+        // The visibility write keeps its transaction (applyVisibilityChange + event).
+        return this.upsertLocked(user, body, prepared)
+      }
+      // Identical, conflict, or visibility-only on a deleted row: nothing is written.
+      return this.syncedResult(
+        prepared,
+        existing.id,
+        await this.resolveSameVersionUpsert(this.db, user.id, existing, body, syncVersion, content),
+      )
+    }
+
+    if (existing.status === "submitted") {
+      // The read-only rule and the restricted update keep the locked transaction.
+      return this.upsertLocked(user, body, prepared)
+    }
+
+    const selectedParcelIds = this.selectParcelIds(body, existing, existingParcelIds)
+    const parcelId = selectedParcelIds[0] ?? null
+    const version = this.versionDefaults(body, existing, parcelId, prepared.now)
+    const updated = await this.repository.updateSurveyIfUnchanged(
+      this.db,
+      {
+        surveyId,
+        userId: user.id,
+        siteName: prepared.siteName,
+        visibility: body.visibility ?? existing.visibility,
+        parcelId,
+        parcelIds: selectedParcelIds,
+        observationYear: version.observationYear,
+        versionNumber: version.versionNumber,
+        previousSurveyId: version.previousSurveyId,
+        regionVersion: body.region_version ?? existing.region_version,
+        vegetationStage: body.vegetation_stage ?? existing.vegetation_stage,
+        factors: body.factors ?? existing.factors ?? {},
+        factorResults: draftValidation.factor_results ?? existing.factor_results ?? {},
+        scores: prepared.computedScores,
+        syncVersion,
+        now: prepared.now.toISOString(),
+        expiresAt: prepared.expiresAt,
+        eventPayload: this.upsertEventPayload(prepared),
+      },
+      casToken,
+    )
+    if (updated) {
+      return this.syncedResult(prepared, updated.id, updated.updated_at)
+    }
+    // 0 rows: the row changed since statement A (xmin), or was submitted, or another request
+    // already stored this sync_version. The locked path decides on the fresh row.
+    return this.upsertLocked(user, body, prepared)
+  }
+
+  // Request validation and scoring, before any statement (unchanged from the pre-D-09 upsert).
+  private prepareUpsert(body: SurveyUpsertBody): PreparedUpsert {
     if (!body.id) {
       throw new BadRequestException("id is required")
     }
@@ -200,19 +233,332 @@ export class SurveysService {
     }
 
     const now = new Date()
-    const expiresAt =
-      body.expires_at ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    const computedScores = draftValidation.scores ?? {
-      ibp_peuplement_gestion: 0,
-      ibp_contexte: 0,
-      ibp_total: 0,
+    return {
+      surveyId: body.id,
+      syncVersion: body.sync_version,
+      siteName: body.site_name,
+      draftValidation,
+      computedScores: draftValidation.scores ?? {
+        ibp_peuplement_gestion: 0,
+        ibp_contexte: 0,
+        ibp_total: 0,
+      },
+      now,
+      // D-03: expires_at is computed server-side at creation and never moved by an upsert; the
+      // client-sent value (kept on the DTO for compatibility) is never read here.
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    }
+  }
+
+  private syncedResult(prepared: PreparedUpsert, id: string, updatedAt: string): UpsertResult {
+    return {
+      id,
+      server_status: "synced" as const,
+      updated_at: updatedAt,
+      warnings: prepared.draftValidation.warnings,
+      factor_results: prepared.draftValidation.factor_results ?? undefined,
+    }
+  }
+
+  private upsertEventPayload(prepared: PreparedUpsert): Record<string, unknown> {
+    return {
+      sync_version: prepared.syncVersion,
+      site_name: prepared.siteName,
+      warnings: prepared.draftValidation.warnings,
+    }
+  }
+
+  /**
+   * The locked upsert (01.4 D-06), the D-09 fallback: one transaction that reads the row with
+   * FOR UPDATE and decides on it. It covers a create whose id already exists (the same user's
+   * concurrent create continues as an update; another user's id is survey_id_conflict), the
+   * same-version visibility write, the submitted read-only rule, and any fast write that missed.
+   */
+  private async upsertLocked(
+    user: AuthenticatedUser,
+    body: SurveyUpsertBody,
+    prepared: PreparedUpsert,
+  ): Promise<UpsertResult> {
+    const { surveyId, syncVersion, siteName, draftValidation, computedScores, now } = prepared
+
+    return this.db.transaction(async (db) => {
+      let existing = await this.repository.findOwned(db, surveyId, user.id, {
+        activeOnly: false,
+        forUpdate: true,
+        columns: "full",
+      })
+
+      if (!existing) {
+        const selectedParcelIds = await this.resolveSelectedParcelIds(db, body, null, [])
+        const parcelId = selectedParcelIds[0] ?? null
+        const { observationYear, versionNumber, previousSurveyId } = await this.resolveVersionInfo(
+          db,
+          body,
+          null,
+          parcelId,
+          now,
+        )
+
+        const createdAt = now.toISOString()
+        const insertResult = await db.query<{ id: string; updated_at: string }>(
+          `INSERT INTO surveys (
+            id, user_id, site_name, status, visibility, parcel_id, observation_year, version_number, previous_survey_id, region_version, vegetation_stage,
+            factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+            $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20
+          )
+          ON CONFLICT (id) DO NOTHING
+          RETURNING id, updated_at::text`,
+          [
+            surveyId,
+            user.id,
+            siteName,
+            // D-03: a client can never submit through upsert; new surveys are
+            // always created as draft.
+            "draft",
+            body.visibility ?? "private",
+            parcelId,
+            observationYear,
+            versionNumber,
+            previousSurveyId,
+            body.region_version ?? null,
+            body.vegetation_stage ?? null,
+            JSON.stringify(body.factors ?? {}),
+            JSON.stringify(draftValidation.factor_results ?? {}),
+            JSON.stringify(computedScores),
+            JSON.stringify({}),
+            createdAt,
+            createdAt,
+            null,
+            prepared.expiresAt,
+            syncVersion,
+          ],
+        )
+
+        if (insertResult.rows[0]) {
+          await this.repository.syncSurveyParcels(db, surveyId, selectedParcelIds)
+
+          await this.events.insert(
+            db,
+            surveyId,
+            user.id,
+            "created",
+            this.upsertEventPayload(prepared),
+          )
+
+          return this.syncedResult(
+            prepared,
+            insertResult.rows[0].id,
+            insertResult.rows[0].updated_at,
+          )
+        }
+
+        // A concurrent create committed first: re-read under lock and either
+        // continue through the existing-row path below (same user) or reject
+        // as a survey id owned by someone else (T-01.4-15).
+        existing = await this.lockedReRead(db, surveyId, user.id, "survey_id_conflict")
+      }
+
+      const existingParcelIds = await this.repository.getSurveyParcelIds(db, existing.id)
+
+      if (syncVersion < existing.sync_version) {
+        throw olderSyncVersionConflict(surveyId, existing.sync_version, syncVersion)
+      }
+
+      if (syncVersion === existing.sync_version) {
+        // D-04/D-16: same version is an idempotent replay only when the
+        // content matches by value; a visibility-only difference is applied
+        // last-writer-wins, any read-only difference is a 409.
+        const content = classifySameVersionContent(body, existing, existingParcelIds)
+        return this.syncedResult(
+          prepared,
+          existing.id,
+          await this.resolveSameVersionUpsert(db, user.id, existing, body, syncVersion, content),
+        )
+      }
+
+      // D-04/D-13: a submitted survey's observation fields are read-only by
+      // value. Identical resends (including today's installed apps replaying
+      // status/expires_at) are accepted and only touch visibility/sync_version;
+      // any actual change to a read-only field is rejected — never falls
+      // through to ensureParcelIds/syncSurveyParcels or rewrites factors,
+      // factor_results or scores.
+      if (existing.status === "submitted") {
+        const changedFields = getChangedSubmittedReadOnlyFields(body, existing, existingParcelIds)
+        if (changedFields.length > 0) {
+          throw new ConflictException({
+            code: "survey_submitted_read_only",
+            message: "Submitted survey fields are read-only",
+            details: { survey_id: surveyId, fields: changedFields },
+          })
+        }
+
+        const restrictedUpdateResult = await db.query<{ id: string; updated_at: string }>(
+          `UPDATE surveys
+           SET visibility = $3,
+               sync_version = $4,
+               updated_at = $5
+           WHERE id = $1 AND user_id = $2 AND sync_version < $4
+           RETURNING id, updated_at::text`,
+          [
+            surveyId,
+            user.id,
+            body.visibility ?? existing.visibility,
+            syncVersion,
+            now.toISOString(),
+          ],
+        )
+
+        if (!restrictedUpdateResult.rows[0]) {
+          return this.settleMissedLockedWrite(db, user, body, prepared)
+        }
+
+        await this.events.insert(
+          db,
+          surveyId,
+          user.id,
+          "updated",
+          this.upsertEventPayload(prepared),
+        )
+
+        return this.syncedResult(
+          prepared,
+          restrictedUpdateResult.rows[0].id,
+          restrictedUpdateResult.rows[0].updated_at,
+        )
+      }
+
+      const selectedParcelIds = await this.resolveSelectedParcelIds(
+        db,
+        body,
+        existing,
+        existingParcelIds,
+      )
+      const parcelId = selectedParcelIds[0] ?? null
+      const { observationYear, versionNumber, previousSurveyId } = await this.resolveVersionInfo(
+        db,
+        body,
+        existing,
+        parcelId,
+        now,
+      )
+
+      const updateResult = await db.query<{ id: string; updated_at: string }>(
+        `UPDATE surveys
+         SET site_name = $3,
+             visibility = $4,
+             parcel_id = $5,
+             observation_year = $6,
+             version_number = $7,
+             previous_survey_id = $8,
+             region_version = $9,
+             vegetation_stage = $10,
+             factors = $11::jsonb,
+             factor_results = $12::jsonb,
+             scores = $13::jsonb,
+             location = $14::jsonb,
+             sync_version = $15,
+             updated_at = $16
+         WHERE id = $1 AND user_id = $2 AND sync_version < $15
+         RETURNING id, updated_at::text`,
+        [
+          surveyId,
+          user.id,
+          siteName,
+          body.visibility ?? existing.visibility,
+          parcelId,
+          observationYear,
+          versionNumber,
+          previousSurveyId,
+          body.region_version ?? existing.region_version,
+          body.vegetation_stage ?? existing.vegetation_stage,
+          JSON.stringify(body.factors ?? existing.factors ?? {}),
+          JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
+          JSON.stringify(computedScores),
+          JSON.stringify({}),
+          syncVersion,
+          now.toISOString(),
+        ],
+      )
+
+      if (!updateResult.rows[0]) {
+        // Zero rows updated: another request already advanced sync_version (T-01.4-11).
+        return this.settleMissedLockedWrite(db, user, body, prepared)
+      }
+
+      await this.repository.syncSurveyParcels(db, surveyId, selectedParcelIds)
+
+      await this.events.insert(db, surveyId, user.id, "updated", this.upsertEventPayload(prepared))
+
+      return this.syncedResult(prepared, updateResult.rows[0].id, updateResult.rows[0].updated_at)
+    })
+  }
+
+  // The locked re-read after a write inside upsertLocked affected 0 rows. A missing row is
+  // survey_id_conflict after a create race (another user's id, T-01.4-15) and 404 otherwise.
+  private async lockedReRead(
+    db: Queryable,
+    surveyId: string,
+    userId: string,
+    whenMissing: "survey_id_conflict" | "not_found",
+  ): Promise<SurveyRow> {
+    const reRead = await this.repository.findOwned(db, surveyId, userId, {
+      activeOnly: false,
+      forUpdate: true,
+      columns: "full",
+    })
+    if (reRead) {
+      return reRead
+    }
+    if (whenMissing === "survey_id_conflict") {
+      throw new ConflictException({
+        code: "survey_id_conflict",
+        message: "Survey id already exists",
+        details: { survey_id: surveyId },
+      })
+    }
+    throw new NotFoundException("Survey not found")
+  }
+
+  // A guarded UPDATE inside upsertLocked affected 0 rows: re-read under lock and decide
+  // idempotent replay (same version, D-04/D-16 content rule) versus conflict (T-01.4-11).
+  private async settleMissedLockedWrite(
+    db: Queryable,
+    user: AuthenticatedUser,
+    body: SurveyUpsertBody,
+    prepared: PreparedUpsert,
+  ): Promise<UpsertResult> {
+    const { surveyId, syncVersion } = prepared
+    const reRead = await this.lockedReRead(db, surveyId, user.id, "not_found")
+
+    if (reRead.sync_version === syncVersion) {
+      const content = classifySameVersionContent(
+        body,
+        reRead,
+        await this.repository.getSurveyParcelIds(db, reRead.id),
+      )
+      return this.syncedResult(
+        prepared,
+        reRead.id,
+        await this.resolveSameVersionUpsert(db, user.id, reRead, body, syncVersion, content),
+      )
     }
 
-    const existing = await this.getSurveyForUser(body.id, user.id, false)
+    throw olderSyncVersionConflict(surveyId, reRead.sync_version, syncVersion)
+  }
+
+  // The parcel selection of an upsert, normalised and de-duplicated in body order: the body's
+  // parcel_ids when present, else its legacy parcel_id, else the stored links, else the stored
+  // legacy parcel_id. Pure; ensureParcelIds returns exactly this list after registering it.
+  private selectParcelIds(
+    body: SurveyUpsertBody,
+    existing: SurveyRow | null,
+    existingParcelIds: string[],
+  ): string[] {
     const hasParcelIdsInput = Array.isArray(body.parcel_ids)
     const normalizedParcelIdsFromBody = normalizeParcelIds(body.parcel_ids)
     const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
-    const existingParcelIds = existing ? await this.getSurveyParcelIds(existing.id) : []
 
     let selectedParcelIds = normalizedParcelIdsFromBody
     if (!hasParcelIdsInput) {
@@ -225,148 +571,60 @@ export class SurveysService {
       }
     }
 
-    selectedParcelIds = await this.ensureParcelIds(selectedParcelIds)
-    const parcelId = selectedParcelIds[0] ?? null
+    return normalizeParcelIds(selectedParcelIds)
+  }
+
+  private async resolveSelectedParcelIds(
+    db: Queryable,
+    body: SurveyUpsertBody,
+    existing: SurveyRow | null,
+    existingParcelIds: string[],
+  ): Promise<string[]> {
+    return this.parcels.ensureParcelIds(db, this.selectParcelIds(body, existing, existingParcelIds))
+  }
+
+  // The version fields an upsert resolves without the database. versionNumber is null when
+  // neither the body nor the stored row has one; the caller then derives the parcel's next
+  // version (resolveVersionInfo here, the same subquery inside the D-09 statements).
+  private versionDefaults(
+    body: SurveyUpsertBody,
+    existing: SurveyRow | null,
+    parcelId: string | null,
+    now: Date,
+  ): {
+    observationYear: number | null
+    versionNumber: number | null
+    previousSurveyId: string | null
+  } {
     const observationYear =
       normalizeObservationYear(body.observation_year) ??
       existing?.observation_year ??
       (parcelId ? now.getUTCFullYear() : null)
-    const versionNumberRaw =
-      normalizeVersionNumber(body.version_number) ?? existing?.version_number ?? null
     const versionNumber =
-      versionNumberRaw ?? (parcelId ? await this.getDefaultVersionNumber(parcelId, body.id) : null)
+      normalizeVersionNumber(body.version_number) ?? existing?.version_number ?? null
     const previousSurveyId =
       normalizePreviousSurveyId(body.previous_survey_id) ?? existing?.previous_survey_id ?? null
 
-    if (!existing) {
-      const createdAt = now.toISOString()
-      const insertResult = await this.db.query<{ id: string; updated_at: string }>(
-        `INSERT INTO surveys (
-          id, user_id, site_name, status, visibility, parcel_id, observation_year, version_number, previous_survey_id, region_version, vegetation_stage,
-          factors, factor_results, scores, location, created_at, updated_at, submitted_at, expires_at, sync_version
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-          $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20
-        )
-        RETURNING id, updated_at::text`,
-        [
-          body.id,
-          user.id,
-          body.site_name,
-          body.status ?? "draft",
-          body.visibility ?? "private",
-          parcelId,
-          observationYear,
-          versionNumber,
-          previousSurveyId,
-          body.region_version ?? null,
-          body.vegetation_stage ?? null,
-          JSON.stringify(body.factors ?? {}),
-          JSON.stringify(draftValidation.factor_results ?? {}),
-          JSON.stringify(computedScores),
-          JSON.stringify({}),
-          createdAt,
-          createdAt,
-          null,
-          expiresAt,
-          body.sync_version,
-        ],
-      )
-      await this.syncSurveyParcels(body.id, selectedParcelIds)
+    return { observationYear, versionNumber, previousSurveyId }
+  }
 
-      await this.insertEvent(body.id, user.id, "created", {
-        sync_version: body.sync_version,
-        site_name: body.site_name,
-        warnings: draftValidation.warnings,
-      })
+  private async resolveVersionInfo(
+    db: Queryable,
+    body: SurveyUpsertBody,
+    existing: SurveyRow | null,
+    parcelId: string | null,
+    now: Date,
+  ): Promise<{
+    observationYear: number | null
+    versionNumber: number | null
+    previousSurveyId: string | null
+  }> {
+    const defaults = this.versionDefaults(body, existing, parcelId, now)
+    const versionNumber =
+      defaults.versionNumber ??
+      (parcelId ? await this.parcels.getDefaultVersionNumber(db, parcelId, body.id) : null)
 
-      return {
-        id: insertResult.rows[0].id,
-        server_status: "synced",
-        updated_at: insertResult.rows[0].updated_at,
-        warnings: draftValidation.warnings,
-        factor_results: draftValidation.factor_results ?? undefined,
-      }
-    }
-
-    if (body.sync_version < existing.sync_version) {
-      throw new ConflictException({
-        code: "sync_version_conflict",
-        message: "Older sync_version received",
-        details: {
-          survey_id: body.id,
-          server_sync_version: existing.sync_version,
-          client_sync_version: body.sync_version,
-        },
-      })
-    }
-
-    if (body.sync_version === existing.sync_version) {
-      return {
-        id: existing.id,
-        server_status: "synced",
-        updated_at: existing.updated_at,
-        warnings: draftValidation.warnings,
-        factor_results: draftValidation.factor_results ?? undefined,
-      }
-    }
-
-    const updateResult = await this.db.query<{ id: string; updated_at: string }>(
-      `UPDATE surveys
-       SET site_name = $3,
-           status = $4,
-           visibility = $5,
-           parcel_id = $6,
-           observation_year = $7,
-           version_number = $8,
-           previous_survey_id = $9,
-           region_version = $10,
-           vegetation_stage = $11,
-           factors = $12::jsonb,
-           factor_results = $13::jsonb,
-           scores = $14::jsonb,
-           location = $15::jsonb,
-           expires_at = $16,
-           sync_version = $17,
-           updated_at = $18
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, updated_at::text`,
-      [
-        body.id,
-        user.id,
-        body.site_name,
-        body.status ?? existing.status,
-        body.visibility ?? existing.visibility,
-        parcelId,
-        observationYear,
-        versionNumber,
-        previousSurveyId,
-        body.region_version ?? existing.region_version,
-        body.vegetation_stage ?? existing.vegetation_stage,
-        JSON.stringify(body.factors ?? existing.factors ?? {}),
-        JSON.stringify(draftValidation.factor_results ?? existing.factor_results ?? {}),
-        JSON.stringify(computedScores),
-        JSON.stringify({}),
-        expiresAt,
-        body.sync_version,
-        now.toISOString(),
-      ],
-    )
-    await this.syncSurveyParcels(body.id, selectedParcelIds)
-
-    await this.insertEvent(body.id, user.id, "updated", {
-      sync_version: body.sync_version,
-      site_name: body.site_name,
-      warnings: draftValidation.warnings,
-    })
-
-    return {
-      id: updateResult.rows[0].id,
-      server_status: "synced",
-      updated_at: updateResult.rows[0].updated_at,
-      warnings: draftValidation.warnings,
-      factor_results: draftValidation.factor_results ?? undefined,
-    }
+    return { ...defaults, versionNumber }
   }
 
   async patchSurvey(
@@ -374,135 +632,141 @@ export class SurveysService {
     surveyId: string,
     body: SurveyPatchBody,
   ): Promise<{ id: string; updated_at: string }> {
-    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id)
-    const forbiddenPostSubmitFields = getSubmittedReadOnlyFields(body)
-
-    if (existing.status === "submitted" && forbiddenPostSubmitFields.length > 0) {
-      throw new UnprocessableEntityException({
-        code: "submitted_read_only_fields",
-        message: "submitted survey is read-only for observation fields",
-        forbidden_fields: forbiddenPostSubmitFields,
+    return this.db.transaction(async (db) => {
+      const existing = await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+        activeOnly: true,
+        columns: "full",
       })
-    }
+      const forbiddenPostSubmitFields = getSubmittedReadOnlyFields(body)
 
-    if (body.factors) {
-      const check = this.ibpRules.validateDraft(
-        body.factors,
-        body.region_version ?? existing.region_version,
-        body.vegetation_stage ?? existing.vegetation_stage,
-      )
-      if (!check.ok) {
+      if (existing.status === "submitted" && forbiddenPostSubmitFields.length > 0) {
         throw new UnprocessableEntityException({
-          message: "IBP factor validation failed",
-          errors: check.errors,
-          warnings: check.warnings,
+          code: "submitted_read_only_fields",
+          message: "submitted survey is read-only for observation fields",
+          forbidden_fields: forbiddenPostSubmitFields,
         })
       }
-      if (check.scores) {
-        body.scores = check.scores
-      }
-      if (check.factor_results) {
-        const mutableBody = body as SurveyPatchBody & {
-          factor_results?: SurveyRow["factor_results"]
+
+      if (body.factors) {
+        const check = this.ibpRules.validateDraft(
+          body.factors,
+          body.region_version ?? existing.region_version,
+          body.vegetation_stage ?? existing.vegetation_stage,
+        )
+        if (!check.ok) {
+          throw new UnprocessableEntityException({
+            message: "IBP factor validation failed",
+            errors: check.errors,
+            warnings: check.warnings,
+          })
         }
-        mutableBody.factor_results = check.factor_results
+        if (check.scores) {
+          body.scores = check.scores
+        }
+        if (check.factor_results) {
+          const mutableBody = body as SurveyPatchBody & {
+            factor_results?: SurveyRow["factor_results"]
+          }
+          mutableBody.factor_results = check.factor_results
+        }
       }
-    }
 
-    const hasParcelIdsPatch = Object.prototype.hasOwnProperty.call(body, "parcel_ids")
-    const hasLegacyParcelIdPatch = Object.prototype.hasOwnProperty.call(body, "parcel_id")
-    const normalizedParcelIdsFromPatch = normalizeParcelIds(body.parcel_ids)
-    const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
-    const currentParcelIds = await this.getSurveyParcelIds(existing.id)
+      const hasParcelIdsPatch = Object.prototype.hasOwnProperty.call(body, "parcel_ids")
+      const hasLegacyParcelIdPatch = Object.prototype.hasOwnProperty.call(body, "parcel_id")
+      const normalizedParcelIdsFromPatch = normalizeParcelIds(body.parcel_ids)
+      const normalizedLegacyParcelId = normalizeParcelId(body.parcel_id)
+      const currentParcelIds = await this.repository.getSurveyParcelIds(db, existing.id)
 
-    let targetParcelIds =
-      currentParcelIds.length > 0
-        ? currentParcelIds
-        : existing.parcel_id
-          ? [existing.parcel_id]
-          : []
-    if (hasParcelIdsPatch) {
-      targetParcelIds = normalizedParcelIdsFromPatch
-    } else if (hasLegacyParcelIdPatch) {
-      targetParcelIds = normalizedLegacyParcelId ? [normalizedLegacyParcelId] : []
-    }
+      let targetParcelIds =
+        currentParcelIds.length > 0
+          ? currentParcelIds
+          : existing.parcel_id
+            ? [existing.parcel_id]
+            : []
+      if (hasParcelIdsPatch) {
+        targetParcelIds = normalizedParcelIdsFromPatch
+      } else if (hasLegacyParcelIdPatch) {
+        targetParcelIds = normalizedLegacyParcelId ? [normalizedLegacyParcelId] : []
+      }
 
-    const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch
-    targetParcelIds = await this.ensureParcelIds(targetParcelIds)
-    const parcelIdForPatch = targetParcelIds[0] ?? null
-    const observationYearForPatch =
-      normalizeObservationYear(body.observation_year) ??
-      (parcelIdForPatch && !existing.observation_year ? new Date().getUTCFullYear() : null)
-    const versionNumberForPatch =
-      normalizeVersionNumber(body.version_number) ??
-      (parcelIdForPatch && !existing.version_number
-        ? await this.getDefaultVersionNumber(parcelIdForPatch, surveyId)
-        : null)
-    const hasPreviousSurveyId = Object.prototype.hasOwnProperty.call(body, "previous_survey_id")
-    const previousSurveyIdForPatch = hasPreviousSurveyId
-      ? normalizePreviousSurveyId(body.previous_survey_id)
-      : null
+      const shouldUpdateParcels = hasParcelIdsPatch || hasLegacyParcelIdPatch
+      targetParcelIds = await this.parcels.ensureParcelIds(db, targetParcelIds)
+      const parcelIdForPatch = targetParcelIds[0] ?? null
+      const observationYearForPatch =
+        normalizeObservationYear(body.observation_year) ??
+        (parcelIdForPatch && !existing.observation_year ? new Date().getUTCFullYear() : null)
+      const versionNumberForPatch =
+        normalizeVersionNumber(body.version_number) ??
+        (parcelIdForPatch && !existing.version_number
+          ? await this.parcels.getDefaultVersionNumber(db, parcelIdForPatch, surveyId)
+          : null)
+      const hasPreviousSurveyId = Object.prototype.hasOwnProperty.call(body, "previous_survey_id")
+      const previousSurveyIdForPatch = hasPreviousSurveyId
+        ? normalizePreviousSurveyId(body.previous_survey_id)
+        : null
 
-    const result = await this.db.query<{ id: string; updated_at: string }>(
-      `UPDATE surveys
-       SET site_name = COALESCE($3, site_name),
-           visibility = COALESCE($4, visibility),
-           parcel_id = CASE WHEN $14::boolean THEN $5 ELSE parcel_id END,
-           observation_year = COALESCE($6, observation_year),
-           version_number = COALESCE($7, version_number),
-           previous_survey_id = COALESCE($8, previous_survey_id),
-           region_version = COALESCE($9, region_version),
-           vegetation_stage = COALESCE($10, vegetation_stage),
-           factors = COALESCE($11::jsonb, factors),
-           factor_results = COALESCE($12::jsonb, factor_results),
-           scores = COALESCE($13::jsonb, scores),
-           location = '{}'::jsonb,
-           updated_at = NOW()
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, updated_at::text`,
-      [
-        surveyId,
-        user.id,
-        body.site_name ?? null,
-        body.visibility ?? null,
-        parcelIdForPatch,
-        observationYearForPatch,
-        versionNumberForPatch,
-        previousSurveyIdForPatch,
-        body.region_version ?? null,
-        body.vegetation_stage ?? null,
-        body.factors ? JSON.stringify(body.factors) : null,
-        (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] }).factor_results
-          ? JSON.stringify(
-              (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] })
-                .factor_results,
-            )
-          : null,
-        body.scores ? JSON.stringify(body.scores) : null,
-        shouldUpdateParcels,
-      ],
-    )
+      const result = await db.query<{ id: string; updated_at: string }>(
+        `UPDATE surveys
+         SET site_name = COALESCE($3, site_name),
+             visibility = COALESCE($4, visibility),
+             parcel_id = CASE WHEN $14::boolean THEN $5 ELSE parcel_id END,
+             observation_year = COALESCE($6, observation_year),
+             version_number = COALESCE($7, version_number),
+             previous_survey_id = COALESCE($8, previous_survey_id),
+             region_version = COALESCE($9, region_version),
+             vegetation_stage = COALESCE($10, vegetation_stage),
+             factors = COALESCE($11::jsonb, factors),
+             factor_results = COALESCE($12::jsonb, factor_results),
+             scores = COALESCE($13::jsonb, scores),
+             location = '{}'::jsonb,
+             updated_at = NOW()
+         WHERE id = $1 AND user_id = $2
+         RETURNING id, updated_at::text`,
+        [
+          surveyId,
+          user.id,
+          body.site_name ?? null,
+          body.visibility ?? null,
+          parcelIdForPatch,
+          observationYearForPatch,
+          versionNumberForPatch,
+          previousSurveyIdForPatch,
+          body.region_version ?? null,
+          body.vegetation_stage ?? null,
+          body.factors ? JSON.stringify(body.factors) : null,
+          (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] })
+            .factor_results
+            ? JSON.stringify(
+                (body as SurveyPatchBody & { factor_results?: SurveyRow["factor_results"] })
+                  .factor_results,
+              )
+            : null,
+          body.scores ? JSON.stringify(body.scores) : null,
+          shouldUpdateParcels,
+        ],
+      )
 
-    if (!result.rows[0]) {
-      throw new NotFoundException("Survey not found")
-    }
+      if (!result.rows[0]) {
+        throw new NotFoundException("Survey not found")
+      }
 
-    await this.insertEvent(surveyId, user.id, "updated", {
-      changed_fields: Object.keys(body),
-    })
-
-    if (shouldUpdateParcels) {
-      await this.syncSurveyParcels(surveyId, targetParcelIds)
-    }
-
-    if (body.visibility && body.visibility !== existing.visibility) {
-      await this.insertEvent(surveyId, user.id, "visibility_changed", {
-        from: existing.visibility,
-        to: body.visibility,
+      await this.events.insert(db, surveyId, user.id, "updated", {
+        changed_fields: Object.keys(body),
       })
-    }
 
-    return result.rows[0]
+      if (shouldUpdateParcels) {
+        await this.repository.syncSurveyParcels(db, surveyId, targetParcelIds)
+      }
+
+      if (body.visibility && body.visibility !== existing.visibility) {
+        await this.events.insert(db, surveyId, user.id, "visibility_changed", {
+          from: existing.visibility,
+          to: body.visibility,
+        })
+      }
+
+      return result.rows[0]
+    })
   }
 
   async patchSurveyVisibility(
@@ -513,17 +777,41 @@ export class SurveysService {
     if (body.visibility !== "private" && body.visibility !== "public") {
       throw new BadRequestException("visibility must be private or public")
     }
+    const visibility = body.visibility
 
-    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id)
-    if (existing.visibility === body.visibility) {
-      return {
-        id: existing.id,
-        visibility: existing.visibility,
-        updated_at: existing.updated_at,
+    return this.db.transaction(async (db) => {
+      // "full", not "ownership": the no-op answer returns updated_at, which is not an
+      // ownership column (D-07).
+      const existing = await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+        activeOnly: true,
+        columns: "full",
+      })
+      if (existing.visibility === visibility) {
+        return {
+          id: existing.id,
+          visibility: existing.visibility,
+          updated_at: existing.updated_at,
+        }
       }
-    }
 
-    const result = await this.db.query<{
+      return this.applyVisibilityChange(db, user.id, surveyId, existing.visibility, visibility)
+    })
+  }
+
+  /**
+   * The visibility_update write: new visibility, updated_at = NOW() and a
+   * visibility_changed event, in the caller's transaction. sync_version is not
+   * touched. Shared by patchSurveyVisibility and the same-version upsert path
+   * so both apply visibility the same way (D-16 amended 2026-09-25).
+   */
+  private async applyVisibilityChange(
+    db: Queryable,
+    userId: string,
+    surveyId: string,
+    from: "private" | "public",
+    to: "private" | "public",
+  ): Promise<{ id: string; visibility: "private" | "public"; updated_at: string }> {
+    const result = await db.query<{
       id: string
       visibility: "private" | "public"
       updated_at: string
@@ -534,19 +822,62 @@ export class SurveysService {
        WHERE id = $1
          AND user_id = $2
        RETURNING id, visibility, updated_at::text`,
-      [surveyId, user.id, body.visibility],
+      [surveyId, userId, to],
     )
 
     if (!result.rows[0]) {
       throw new NotFoundException("Survey not found")
     }
 
-    await this.insertEvent(surveyId, user.id, "visibility_changed", {
-      from: existing.visibility,
+    await this.events.insert(db, surveyId, userId, "visibility_changed", {
+      from,
       to: result.rows[0].visibility,
     })
 
     return result.rows[0]
+  }
+
+  /**
+   * Resolve an upsert whose sync_version equals the stored one (D-04, D-16
+   * amended 2026-09-25) and return the updated_at to answer with.
+   * - conflict: 409 sync_version_conflict, nothing written.
+   * - visibility_only: applied like visibility_update. A soft-deleted row is
+   *   left untouched (patchSurveyVisibility refuses deleted surveys) and the
+   *   replay is still answered synced, never 404.
+   * - identical: idempotent replay, nothing written.
+   */
+  private async resolveSameVersionUpsert(
+    db: Queryable,
+    userId: string,
+    row: SurveyRow,
+    body: SurveyUpsertBody,
+    syncVersion: number,
+    content: SameVersionContent,
+  ): Promise<string> {
+    if (content === "conflict") {
+      throw new ConflictException({
+        code: "sync_version_conflict",
+        message: "Same sync_version with different content",
+        details: {
+          survey_id: row.id,
+          server_sync_version: row.sync_version,
+          client_sync_version: syncVersion,
+        },
+      })
+    }
+
+    if (content === "visibility_only" && !row.deleted_at && body.visibility) {
+      const applied = await this.applyVisibilityChange(
+        db,
+        userId,
+        row.id,
+        row.visibility,
+        body.visibility,
+      )
+      return applied.updated_at
+    }
+
+    return row.updated_at
   }
 
   async getSurveyById(
@@ -576,9 +907,12 @@ export class SurveysService {
       | "sync_version"
     > & { display_location: { lat: number; lng: number } | null }
   > {
-    const survey = await this.getSurveyForUserOrThrow(surveyId, user.id)
-    const parcelIds = await this.getSurveyParcelIds(survey.id)
-    const displayLocation = await this.computeSurveyDisplayLocation(survey.id, survey.parcel_id)
+    const survey = await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "full",
+    })
+    const parcelIds = await this.repository.getSurveyParcelIds(this.db, survey.id)
+    const displayLocation = await this.parcels.displayLocation(this.db, survey.id, survey.parcel_id)
 
     return {
       id: survey.id,
@@ -614,82 +948,164 @@ export class SurveysService {
     scores: Record<string, number>
     warnings?: string[]
   }> {
-    const existing = await this.getSurveyForUserOrThrow(surveyId, user.id)
+    type SubmitOutcome =
+      | {
+          kind: "submitted"
+          result: {
+            id: string
+            status: "submitted"
+            submitted_at: string
+            scores: Record<string, number>
+            warnings?: string[]
+          }
+        }
+      | { kind: "rejected"; error: UnprocessableEntityException }
 
-    const validation = this.ibpRules.validateSubmit({
-      region_version: existing.region_version,
-      vegetation_stage: existing.vegetation_stage,
-      expires_at: existing.expires_at,
-      factors: existing.factors,
-    })
-    const parcelValidation = await this.validateParcelSubmit(existing)
-
-    if (parcelValidation.versionConflict) {
-      throw new ConflictException({
-        code: "parcel_version_conflict",
-        message: "Parcel version conflict",
-        details: {
-          parcel_id: existing.parcel_id,
-          expected_version_number: parcelValidation.versionConflict.expectedVersionNumber,
-          client_version_number: existing.version_number,
-        },
-      })
-    }
-
-    if (!validation.ok || !validation.scores || parcelValidation.errors.length > 0) {
-      const isExpired = validation.issues.some((issue) => issue.code === "survey_expired")
-      if (isExpired && existing.status !== "expired") {
-        await this.db.query(
-          `UPDATE surveys
-           SET status = 'expired',
-               updated_at = NOW()
-           WHERE id = $1 AND user_id = $2`,
-          [surveyId, user.id],
-        )
-        await this.insertEvent(surveyId, user.id, "expired", {
-          reason: "submit_after_deadline",
-          expires_at: existing.expires_at,
+    try {
+      const outcome: SubmitOutcome = await this.db.transaction(async (db) => {
+        const existing = await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+          activeOnly: true,
+          forUpdate: true,
+          columns: "full",
         })
+
+        const validation = this.ibpRules.validateSubmit({
+          region_version: existing.region_version,
+          vegetation_stage: existing.vegetation_stage,
+          expires_at: existing.expires_at,
+          factors: existing.factors,
+        })
+
+        // D-08/T-01.4-12: lock the affected parcels in a consistent (sorted)
+        // order before resolving the submit version, so two concurrent
+        // submits on the same parcel serialise instead of racing.
+        const surveyParcelIds = await this.repository.getSurveyParcelIds(db, existing.id)
+        const parcelIdsToLock =
+          surveyParcelIds.length > 0
+            ? surveyParcelIds
+            : existing.parcel_id
+              ? [existing.parcel_id]
+              : []
+        if (parcelIdsToLock.length > 0) {
+          const sortedParcelIds = [...parcelIdsToLock].sort()
+          await db.query(
+            `SELECT parcel_id
+             FROM parcels
+             WHERE parcel_id = ANY($1::text[])
+             ORDER BY parcel_id
+             FOR UPDATE`,
+            [sortedParcelIds],
+          )
+        }
+
+        const parcelValidation = await this.parcels.validateParcelSubmit(
+          db,
+          existing,
+          surveyParcelIds,
+        )
+
+        if (parcelValidation.versionConflict) {
+          throw new ConflictException({
+            code: "parcel_version_conflict",
+            message: "Parcel version conflict",
+            details: {
+              parcel_id: existing.parcel_id,
+              expected_version_number: parcelValidation.versionConflict.expectedVersionNumber,
+              client_version_number: existing.version_number,
+            },
+          })
+        }
+
+        if (!validation.ok || !validation.scores || parcelValidation.errors.length > 0) {
+          const isExpired = validation.issues.some((issue) => issue.code === "survey_expired")
+          if (isExpired && existing.status !== "expired") {
+            // This write must commit even though the request is rejected
+            // below, so we return a discriminated outcome instead of
+            // throwing (which would roll it back).
+            await db.query(
+              `UPDATE surveys
+               SET status = 'expired',
+                   updated_at = NOW()
+               WHERE id = $1 AND user_id = $2`,
+              [surveyId, user.id],
+            )
+            await this.events.insert(db, surveyId, user.id, "expired", {
+              reason: "submit_after_deadline",
+              expires_at: existing.expires_at,
+            })
+          }
+
+          return {
+            kind: "rejected",
+            error: new UnprocessableEntityException({
+              code: parcelValidation.code,
+              message: "Survey cannot be submitted",
+              errors: [...validation.errors, ...parcelValidation.errors],
+              warnings: validation.warnings,
+            }),
+          }
+        }
+
+        const result = await db.query<{
+          id: string
+          status: "submitted"
+          submitted_at: string
+        }>(
+          `UPDATE surveys
+           SET status = 'submitted',
+               submitted_at = NOW(),
+               factor_results = $3::jsonb,
+               scores = $4::jsonb,
+               updated_at = NOW()
+           WHERE id = $1 AND user_id = $2
+           RETURNING id, status, submitted_at::text`,
+          [
+            surveyId,
+            user.id,
+            JSON.stringify(validation.factor_results ?? {}),
+            JSON.stringify(validation.scores),
+          ],
+        )
+
+        if (!result.rows[0]) {
+          throw new NotFoundException("Survey not found")
+        }
+
+        await this.events.insert(db, surveyId, user.id, "submitted", {
+          scores: validation.scores,
+          warnings: validation.warnings,
+        })
+
+        return {
+          kind: "submitted",
+          result: {
+            ...result.rows[0],
+            scores: validation.scores,
+            warnings: validation.warnings,
+          },
+        }
+      })
+
+      if (outcome.kind === "rejected") {
+        throw outcome.error
       }
 
-      throw new UnprocessableEntityException({
-        code: parcelValidation.code,
-        message: "Survey cannot be submitted",
-        errors: [...validation.errors, ...parcelValidation.errors],
-        warnings: validation.warnings,
-      })
-    }
-
-    const result = await this.db.query<{ id: string; status: "submitted"; submitted_at: string }>(
-      `UPDATE surveys
-       SET status = 'submitted',
-           submitted_at = NOW(),
-           factor_results = $3::jsonb,
-           scores = $4::jsonb,
-           updated_at = NOW()
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, status, submitted_at::text`,
-      [
-        surveyId,
-        user.id,
-        JSON.stringify(validation.factor_results ?? {}),
-        JSON.stringify(validation.scores),
-      ],
-    )
-
-    if (!result.rows[0]) {
-      throw new NotFoundException("Survey not found")
-    }
-
-    await this.insertEvent(surveyId, user.id, "submitted", {
-      scores: validation.scores,
-      warnings: validation.warnings,
-    })
-
-    return {
-      ...result.rows[0],
-      scores: validation.scores,
-      warnings: validation.warnings,
+      return outcome.result
+    } catch (error: unknown) {
+      // D-14: no UNIQUE(parcel_id, version_number) constraint exists in this
+      // phase, so the sorted FOR UPDATE lock above is the primary guard; a
+      // residual 23505 is still mapped to 409 as defence in depth. Every
+      // other error (including the ConflictException/UnprocessableEntityException
+      // thrown above) is rethrown untouched (RESEARCH Pitfall 3).
+      const pgError = error as { code?: string }
+      if (pgError && typeof pgError === "object" && pgError.code === "23505") {
+        throw new ConflictException({
+          code: "parcel_version_conflict",
+          message: "Parcel version conflict",
+          details: { survey_id: surveyId },
+        })
+      }
+      throw error
     }
   }
 
@@ -703,7 +1119,11 @@ export class SurveysService {
     already_deleted: boolean
     missing: boolean
   }> {
-    const existing = await this.getSurveyForUser(surveyId, user.id, false)
+    // D-07: delete reads only id and deleted_at.
+    const existing = await this.repository.findOwned(this.db, surveyId, user.id, {
+      activeOnly: false,
+      columns: "ownership",
+    })
     if (!existing) {
       if (options?.allowMissing) {
         return { id: surveyId, deleted_at: null, already_deleted: false, missing: true }
@@ -720,851 +1140,56 @@ export class SurveysService {
       }
     }
 
-    const attachmentsResult = await this.db.query<Pick<AttachmentRow, "id" | "storage_key">>(
-      `SELECT id, storage_key
-       FROM attachments
-       WHERE survey_id = $1
-         AND deleted_at IS NULL`,
-      [surveyId],
-    )
+    const { deletedAt, storageKeys } = await this.db.transaction(async (db) => {
+      const attachmentsResult = await db.query<Pick<AttachmentRow, "id" | "storage_key">>(
+        `SELECT id, storage_key
+         FROM attachments
+         WHERE survey_id = $1
+           AND deleted_at IS NULL`,
+        [surveyId],
+      )
 
-    await this.db.query(
-      `UPDATE attachments
-       SET deleted_at = NOW()
-       WHERE survey_id = $1
-         AND deleted_at IS NULL`,
-      [surveyId],
-    )
+      await db.query(
+        `UPDATE attachments
+         SET deleted_at = NOW()
+         WHERE survey_id = $1
+           AND deleted_at IS NULL`,
+        [surveyId],
+      )
 
-    for (const attachment of attachmentsResult.rows) {
-      await this.cleanupAttachmentStorage(attachment.storage_key)
-    }
+      const deletedSurvey = await db.query<{ id: string; deleted_at: string }>(
+        `UPDATE surveys
+         SET deleted_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1
+           AND user_id = $2
+           AND deleted_at IS NULL
+         RETURNING id, deleted_at::text`,
+        [surveyId, user.id],
+      )
 
-    const deletedSurvey = await this.db.query<{ id: string; deleted_at: string }>(
-      `UPDATE surveys
-       SET deleted_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $1
-         AND user_id = $2
-         AND deleted_at IS NULL
-       RETURNING id, deleted_at::text`,
-      [surveyId, user.id],
-    )
+      await this.events.insert(db, surveyId, user.id, "deleted", {
+        attachment_count_deleted: attachmentsResult.rows.length,
+      })
 
-    const deletedAt = deletedSurvey.rows[0]?.deleted_at ?? existing.deleted_at ?? null
-
-    await this.insertEvent(surveyId, user.id, "deleted", {
-      attachment_count_deleted: attachmentsResult.rows.length,
+      return {
+        deletedAt: deletedSurvey.rows[0]?.deleted_at ?? existing.deleted_at ?? null,
+        storageKeys: attachmentsResult.rows.map((row) => row.storage_key),
+      }
     })
+
+    // D-07: object-storage cleanup is best-effort and runs only after commit.
+    // StorageService.deleteObject never throws, so a storage failure cannot
+    // undo the committed deletion.
+    for (const storageKey of storageKeys) {
+      await this.storage.deleteObject(storageKey)
+    }
 
     return {
       id: surveyId,
       deleted_at: deletedAt,
       already_deleted: false,
       missing: false,
-    }
-  }
-
-  async getEvents(user: AuthenticatedUser, surveyId: string): Promise<{ items: SurveyEventRow[] }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
-
-    const events = await this.db.query<SurveyEventRow>(
-      `SELECT id, survey_id, actor_id, event_type, payload, created_at::text
-       FROM survey_events
-       WHERE survey_id = $1
-       ORDER BY created_at DESC`,
-      [surveyId],
-    )
-
-    return { items: events.rows }
-  }
-
-  async getPublicMapItems(input?: { from?: string; to?: string; region?: string }): Promise<{
-    items: Array<{
-      survey_id: string
-      display_location: { lat: number; lng: number }
-      survey_date: string
-      region_code: string
-      ibp_total: number
-    }>
-  }> {
-    const filters: string[] = [
-      `deleted_at IS NULL`,
-      `visibility = 'public'`,
-      `status = 'submitted'`,
-      `submitted_at IS NOT NULL`,
-    ]
-    const values: unknown[] = []
-
-    const fromDate = normalizeDateInput(input?.from)
-    if (fromDate) {
-      values.push(fromDate)
-      filters.push(`submitted_at::date >= $${values.length}::date`)
-    }
-
-    const toDate = normalizeDateInput(input?.to)
-    if (toDate) {
-      values.push(toDate)
-      filters.push(`submitted_at::date <= $${values.length}::date`)
-    }
-
-    if (input?.region && input.region.trim().length > 0) {
-      values.push(input.region.trim())
-      filters.push(`region_version = $${values.length}`)
-    }
-
-    const result = await this.db.query<PublicMapDbRow>(
-      `SELECT
-         s.id,
-         s.region_version,
-         s.scores,
-         s.submitted_at::text,
-         AVG((p.centroid ->> 'lat')::double precision) AS parcel_centroid_lat,
-         AVG((p.centroid ->> 'lng')::double precision) AS parcel_centroid_lng
-       FROM surveys s
-       LEFT JOIN survey_parcels sp
-         ON sp.survey_id = s.id
-       LEFT JOIN parcels p
-         ON p.parcel_id = sp.parcel_id
-       WHERE ${filters.map((filter) => `s.${filter}`).join(" AND ")}
-       GROUP BY s.id, s.region_version, s.scores, s.submitted_at
-       ORDER BY s.submitted_at DESC
-       LIMIT 500`,
-      values,
-    )
-
-    const items = result.rows
-      .map((row) => toPublicMapItem(row))
-      .filter(
-        (
-          item,
-        ): item is {
-          survey_id: string
-          display_location: { lat: number; lng: number }
-          survey_date: string
-          region_code: string
-          ibp_total: number
-        } => Boolean(item),
-      )
-
-    return { items }
-  }
-
-  async getPublicParcelStatuses(input?: { bbox?: string; zoom?: string; year?: string }): Promise<{
-    items: Array<{
-      parcel_id: string
-      study_status: "studied" | "not_studied"
-      latest_submitted_survey_id: string | null
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-      geometry?: Record<string, unknown>
-    }>
-  }> {
-    const zoom = toFiniteNumber(input?.zoom)
-    if (zoom !== null && zoom < 15) {
-      return { items: [] }
-    }
-
-    const bbox = parseBbox(input?.bbox)
-    const year = normalizeObservationYear(input?.year)
-    if (this.useIgnParcelWfs && bbox) {
-      const ignItems = await this.resolvePublicParcelStatusesFromIgnWfs(bbox, year)
-      if (ignItems.length > 0) {
-        return { items: ignItems }
-      }
-    }
-
-    const values: unknown[] = [year]
-    const bboxFilters: string[] = []
-
-    if (bbox) {
-      values.push(bbox.minLng, bbox.maxLng, bbox.minLat, bbox.maxLat)
-      bboxFilters.push(
-        `(p.centroid ->> 'lng')::double precision BETWEEN $2::double precision AND $3::double precision`,
-      )
-      bboxFilters.push(
-        `(p.centroid ->> 'lat')::double precision BETWEEN $4::double precision AND $5::double precision`,
-      )
-    }
-
-    const result = await this.db.query<{
-      parcel_id: string
-      study_status: "studied" | "not_studied"
-      latest_submitted_survey_id: string | null
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-      geometry: Record<string, unknown>
-      centroid: Record<string, unknown>
-    }>(
-      `WITH latest_public AS (
-         SELECT
-           sp.parcel_id,
-           s.id,
-           s.observation_year,
-           s.version_number,
-           s.submitted_at,
-           s.scores,
-           ROW_NUMBER() OVER (
-             PARTITION BY sp.parcel_id
-             ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
-           ) AS rank_in_parcel
-         FROM surveys s
-         JOIN survey_parcels sp
-           ON sp.survey_id = s.id
-         WHERE s.deleted_at IS NULL
-           AND s.status = 'submitted'
-           AND s.visibility = 'public'
-           AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
-       )
-       SELECT
-         p.parcel_id,
-         p.geometry,
-         p.centroid,
-         CASE WHEN lp.parcel_id IS NULL THEN 'not_studied' ELSE 'studied' END AS study_status,
-         lp.id AS latest_submitted_survey_id,
-         lp.observation_year AS latest_observation_year,
-         (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
-       FROM parcels p
-       LEFT JOIN latest_public lp
-         ON lp.parcel_id = p.parcel_id
-        AND lp.rank_in_parcel = 1
-       ${bboxFilters.length ? `WHERE ${bboxFilters.join(" AND ")}` : ""}
-       ORDER BY p.parcel_id ASC
-       LIMIT 1000`,
-      values,
-    )
-
-    const seenParcelIds = new Set<string>()
-    const items = result.rows
-      .map((row) => {
-        const centroid = normalizeCentroid(row.centroid)
-        const geometry =
-          row.geometry && Object.keys(row.geometry).length > 0
-            ? row.geometry
-            : centroid
-              ? buildFallbackParcelGeometry(centroid)
-              : undefined
-        return {
-          parcel_id: row.parcel_id,
-          study_status: row.study_status,
-          latest_submitted_survey_id: row.latest_submitted_survey_id,
-          latest_observation_year: row.latest_observation_year,
-          latest_ibp_total: row.latest_ibp_total,
-          geometry,
-        }
-      })
-      .filter((item) => {
-        if (seenParcelIds.has(item.parcel_id)) {
-          return false
-        }
-        seenParcelIds.add(item.parcel_id)
-        return true
-      })
-
-    return {
-      items,
-    }
-  }
-
-  private async resolvePublicParcelStatusesFromIgnWfs(
-    bbox: { minLng: number; minLat: number; maxLng: number; maxLat: number },
-    year: number | null,
-  ): Promise<
-    Array<{
-      parcel_id: string
-      study_status: "studied" | "not_studied"
-      latest_submitted_survey_id: string | null
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-      geometry?: Record<string, unknown>
-    }>
-  > {
-    try {
-      const url = new URL(this.ignParcelWfsUrl)
-      url.searchParams.set("service", "WFS")
-      url.searchParams.set("version", "2.0.0")
-      url.searchParams.set("request", "GetFeature")
-      url.searchParams.set("typeNames", this.ignParcelWfsTypeName)
-      url.searchParams.set(
-        "bbox",
-        `${bbox.minLng.toFixed(6)},${bbox.minLat.toFixed(6)},${bbox.maxLng.toFixed(6)},${bbox.maxLat.toFixed(6)},EPSG:4326`,
-      )
-      url.searchParams.set("outputFormat", "application/json")
-      url.searchParams.set("count", String(this.ignParcelWfsCount))
-
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), this.ignParcelWfsTimeoutMs)
-      const response = await fetch(url, {
-        method: "GET",
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-        },
-      }).finally(() => clearTimeout(timeout))
-
-      if (!response.ok) {
-        return []
-      }
-
-      const payloadRaw = await response.json()
-      const payload =
-        payloadRaw && typeof payloadRaw === "object" ? (payloadRaw as Record<string, unknown>) : {}
-      const featuresRaw = Array.isArray(payload.features) ? payload.features : []
-      if (featuresRaw.length === 0) {
-        return []
-      }
-
-      const latestResult = await this.db.query<{
-        parcel_id: string
-        commune_code: string
-        section: string
-        number: string
-        latest_submitted_survey_id: string
-        latest_observation_year: number | null
-        latest_ibp_total: number | null
-      }>(
-        `WITH latest_public AS (
-           SELECT
-             sp.parcel_id,
-             s.id,
-             s.observation_year,
-             s.version_number,
-             s.submitted_at,
-             s.scores,
-             ROW_NUMBER() OVER (
-               PARTITION BY sp.parcel_id
-               ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
-             ) AS rank_in_parcel
-           FROM surveys s
-           JOIN survey_parcels sp
-             ON sp.survey_id = s.id
-           WHERE s.deleted_at IS NULL
-             AND s.status = 'submitted'
-             AND s.visibility = 'public'
-             AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
-         )
-         SELECT
-           p.parcel_id,
-           p.commune_code,
-           p.section,
-           p.number,
-           lp.id::text AS latest_submitted_survey_id,
-           lp.observation_year AS latest_observation_year,
-           (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
-         FROM latest_public lp
-         JOIN parcels p
-           ON p.parcel_id = lp.parcel_id
-         WHERE lp.rank_in_parcel = 1`,
-        [year],
-      )
-
-      const studiedByParcelKey = new Map<
-        string,
-        {
-          latest_submitted_survey_id: string
-          latest_observation_year: number | null
-          latest_ibp_total: number | null
-        }
-      >()
-      for (const row of latestResult.rows) {
-        const key = buildParcelKey(row.commune_code, row.section, row.number)
-        studiedByParcelKey.set(key, {
-          latest_submitted_survey_id: row.latest_submitted_survey_id,
-          latest_observation_year: row.latest_observation_year,
-          latest_ibp_total: row.latest_ibp_total,
-        })
-      }
-
-      const items: Array<{
-        parcel_id: string
-        study_status: "studied" | "not_studied"
-        latest_submitted_survey_id: string | null
-        latest_observation_year: number | null
-        latest_ibp_total: number | null
-        geometry?: Record<string, unknown>
-      }> = []
-      const seen = new Set<string>()
-
-      for (const featureRaw of featuresRaw) {
-        const feature =
-          featureRaw && typeof featureRaw === "object"
-            ? (featureRaw as Record<string, unknown>)
-            : {}
-        const propertiesRaw = feature.properties
-        const properties =
-          propertiesRaw && typeof propertiesRaw === "object" && !Array.isArray(propertiesRaw)
-            ? (propertiesRaw as Record<string, unknown>)
-            : {}
-        const geometryRaw = feature.geometry
-        const geometry =
-          geometryRaw && typeof geometryRaw === "object" && !Array.isArray(geometryRaw)
-            ? (geometryRaw as Record<string, unknown>)
-            : {}
-        const geometryType = typeof geometry.type === "string" ? geometry.type : ""
-        if (
-          (geometryType !== "Polygon" && geometryType !== "MultiPolygon") ||
-          !Array.isArray(geometry.coordinates)
-        ) {
-          continue
-        }
-
-        const communeCode = normalizeParcelPartToDigits(properties.code_insee, 5)
-        const section = normalizeParcelSection(properties.section)
-        const number = normalizeParcelPartToDigits(properties.numero, 4)
-        if (!communeCode || !section || !number) {
-          continue
-        }
-
-        const parcelKey = buildParcelKey(communeCode, section, number)
-        if (seen.has(parcelKey)) {
-          continue
-        }
-        seen.add(parcelKey)
-
-        const idu = typeof properties.idu === "string" ? properties.idu.trim().toUpperCase() : ""
-        const parcelId = idu.length > 0 ? idu : `${communeCode}${section}${number}`
-        const studied = studiedByParcelKey.get(parcelKey)
-        items.push({
-          parcel_id: parcelId,
-          study_status: studied ? "studied" : "not_studied",
-          latest_submitted_survey_id: studied?.latest_submitted_survey_id ?? null,
-          latest_observation_year: studied?.latest_observation_year ?? null,
-          latest_ibp_total: studied?.latest_ibp_total ?? null,
-          geometry,
-        })
-      }
-
-      return items
-    } catch {
-      return []
-    }
-  }
-
-  async resolveParcelByCoordinates(input?: { lat?: string; lng?: string }): Promise<{
-    parcel: {
-      parcel_id: string
-      commune_code: string
-      section: string
-      number: string
-      centroid: { lat: number; lng: number }
-    }
-  }> {
-    const lat = toFiniteNumber(input?.lat)
-    const lng = toFiniteNumber(input?.lng)
-    if (lat === null || lng === null) {
-      throw new BadRequestException("lat and lng query parameters are required")
-    }
-
-    const parcel = await this.resolveParcelFromCoordinates(lat, lng)
-    if (!parcel) {
-      throw new UnprocessableEntityException({
-        code: "parcel_invalid",
-        message: "Parcel could not be resolved from coordinates",
-      })
-    }
-
-    const centroid = normalizeCentroid(parcel.centroid)
-    if (!centroid) {
-      throw new UnprocessableEntityException({
-        code: "parcel_invalid",
-        message: "Resolved parcel has invalid centroid metadata",
-      })
-    }
-
-    return {
-      parcel: {
-        parcel_id: parcel.parcel_id,
-        commune_code: parcel.commune_code,
-        section: parcel.section,
-        number: parcel.number,
-        centroid,
-      },
-    }
-  }
-
-  async getParcelSurveyHistory(
-    user: AuthenticatedUser,
-    parcelIdRaw: string,
-    limitRaw?: string,
-  ): Promise<{
-    parcel_id: string
-    items: Array<{
-      survey_id: string
-      observation_year: number | null
-      version_number: number | null
-      scores: Record<string, unknown>
-      factor_results: Record<string, unknown>
-      submitted_at: string
-    }>
-  }> {
-    const parcelId = normalizeParcelId(parcelIdRaw)
-    if (!parcelId) {
-      throw new BadRequestException("parcel_id is required")
-    }
-
-    const limit = normalizeParcelHistoryLimit(limitRaw)
-    const result = await this.db.query<{
-      survey_id: string
-      observation_year: number | null
-      version_number: number | null
-      scores: Record<string, unknown>
-      factor_results: Record<string, unknown>
-      submitted_at: string
-    }>(
-      `SELECT
-         s.id AS survey_id,
-         s.observation_year,
-         s.version_number,
-         s.scores,
-         s.factor_results,
-         s.submitted_at::text
-       FROM surveys s
-       JOIN survey_parcels sp
-         ON sp.survey_id = s.id
-       WHERE sp.parcel_id = $1
-         AND s.deleted_at IS NULL
-         AND s.status = 'submitted'
-         AND s.submitted_at IS NOT NULL
-         AND (s.visibility = 'public' OR s.user_id = $2)
-       ORDER BY s.observation_year ASC NULLS LAST, s.version_number ASC NULLS LAST, s.submitted_at ASC
-       LIMIT $3`,
-      [parcelId, user.id, limit],
-    )
-
-    return {
-      parcel_id: parcelId,
-      items: result.rows,
-    }
-  }
-
-  private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {
-    const survey = await this.getSurveyForUser(surveyId, userId, true)
-    if (!survey) {
-      throw new NotFoundException("Survey not found")
-    }
-    return survey
-  }
-
-  private async getSurveyForUser(
-    surveyId: string,
-    userId: string,
-    activeOnly: boolean,
-  ): Promise<SurveyRow | null> {
-    const where = activeOnly ? "AND deleted_at IS NULL" : ""
-    const result = await this.db.query<SurveyRow>(
-      `SELECT *
-       FROM surveys
-       WHERE id = $1 AND user_id = $2 ${where}`,
-      [surveyId, userId],
-    )
-    return result.rows[0] ?? null
-  }
-
-  private async insertEvent(
-    surveyId: string,
-    actorId: string,
-    eventType: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await this.db.query(
-      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
-    )
-  }
-
-  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
-    if (this.objectStorageMode === "minio") {
-      if (this.s3Client) {
-        await this.s3Client
-          .send(
-            new DeleteObjectCommand({
-              Bucket: this.s3Bucket,
-              Key: storageKey,
-            }),
-          )
-          .catch(() => undefined)
-      }
-      return
-    }
-
-    const storagePath = join(this.uploadsRootDir, storageKey)
-    await rm(storagePath, { force: true }).catch(() => undefined)
-  }
-
-  private async getSurveyParcelIds(surveyId: string): Promise<string[]> {
-    try {
-      const result = await this.db.query<{ parcel_id: string }>(
-        `SELECT parcel_id
-         FROM survey_parcels
-         WHERE survey_id = $1
-         ORDER BY parcel_id ASC`,
-        [surveyId],
-      )
-      return result.rows.map((row) => row.parcel_id)
-    } catch (error) {
-      const message = (error as Error).message ?? ""
-      if (message.toLowerCase().includes("survey_parcels")) {
-        return []
-      }
-      throw error
-    }
-  }
-
-  private async syncSurveyParcels(surveyId: string, parcelIds: string[]): Promise<void> {
-    const normalized = normalizeParcelIds(parcelIds)
-    try {
-      await this.db.query(`DELETE FROM survey_parcels WHERE survey_id = $1`, [surveyId])
-      if (normalized.length === 0) {
-        return
-      }
-      await this.db.query(
-        `INSERT INTO survey_parcels (survey_id, parcel_id)
-         SELECT $1, unnest($2::text[])
-         ON CONFLICT (survey_id, parcel_id) DO NOTHING`,
-        [surveyId, normalized],
-      )
-    } catch (error) {
-      const message = (error as Error).message ?? ""
-      if (message.toLowerCase().includes("survey_parcels")) {
-        return
-      }
-      throw error
-    }
-  }
-
-  private async computeSurveyDisplayLocation(
-    surveyId: string,
-    fallbackParcelId?: string | null,
-  ): Promise<{ lat: number; lng: number } | null> {
-    const fromMany = await this.db.query<{ lat: number | null; lng: number | null }>(
-      `SELECT
-         AVG((p.centroid ->> 'lat')::double precision) AS lat,
-         AVG((p.centroid ->> 'lng')::double precision) AS lng
-       FROM survey_parcels sp
-       JOIN parcels p
-         ON p.parcel_id = sp.parcel_id
-       WHERE sp.survey_id = $1`,
-      [surveyId],
-    )
-    const centroidMany = normalizeCentroid({
-      lat: fromMany.rows[0]?.lat,
-      lng: fromMany.rows[0]?.lng,
-    })
-    if (centroidMany) {
-      return centroidMany
-    }
-
-    const parcelId = normalizeParcelId(fallbackParcelId)
-    if (!parcelId) {
-      return null
-    }
-
-    const fallback = await this.db.query<{ centroid: Record<string, unknown> }>(
-      `SELECT centroid
-       FROM parcels
-       WHERE parcel_id = $1`,
-      [parcelId],
-    )
-    if (!fallback.rows[0]?.centroid) {
-      return null
-    }
-    return normalizeCentroid(fallback.rows[0].centroid)
-  }
-
-  private async ensureParcelIds(parcelIds: string[]): Promise<string[]> {
-    if (parcelIds.length === 0) {
-      return []
-    }
-
-    const output: string[] = []
-    const seen = new Set<string>()
-    for (const raw of parcelIds) {
-      const normalized = normalizeParcelId(raw)
-      if (!normalized || seen.has(normalized)) {
-        continue
-      }
-      const ensured = await this.ensureParcelById(normalized)
-      if (!seen.has(ensured.parcel_id)) {
-        seen.add(ensured.parcel_id)
-        output.push(ensured.parcel_id)
-      }
-    }
-
-    return output
-  }
-
-  private async resolveParcelFromCoordinates(lat: number, lng: number): Promise<ParcelRow | null> {
-    const resolved = await this.cadastreProvider.resolveFromPoint(lat, lng)
-    if (!resolved) {
-      return null
-    }
-
-    const result = await this.db.query<ParcelRow>(
-      `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
-       ON CONFLICT (parcel_id) DO UPDATE
-         SET centroid = COALESCE(NULLIF(parcels.centroid, '{}'::jsonb), EXCLUDED.centroid),
-             geometry = COALESCE(NULLIF(parcels.geometry, '{}'::jsonb), EXCLUDED.geometry),
-             source = COALESCE(parcels.source, EXCLUDED.source),
-             updated_at = NOW()
-       RETURNING
-         id::text,
-         parcel_id,
-         commune_code,
-         section,
-         number,
-         geometry,
-         centroid,
-         area_m2,
-         source,
-         created_at::text,
-         updated_at::text`,
-      [
-        randomUUID(),
-        resolved.parcel_id,
-        resolved.commune_code,
-        resolved.section,
-        resolved.number,
-        JSON.stringify(resolved.geometry ?? {}),
-        JSON.stringify(resolved.centroid),
-        resolved.source,
-      ],
-    )
-
-    return result.rows[0] ?? null
-  }
-
-  private async ensureParcelById(parcelId: string): Promise<ParcelRow> {
-    const existing = await this.db.query<ParcelRow>(
-      `SELECT
-         id::text,
-         parcel_id,
-         commune_code,
-         section,
-         number,
-         geometry,
-         centroid,
-         area_m2,
-         source,
-         created_at::text,
-         updated_at::text
-       FROM parcels
-       WHERE parcel_id = $1`,
-      [parcelId],
-    )
-    if (existing.rows[0]) {
-      return existing.rows[0]
-    }
-
-    const parsed = parseParcelIdentifier(parcelId)
-    const inserted = await this.db.query<ParcelRow>(
-      `INSERT INTO parcels (id, parcel_id, commune_code, section, number, geometry, centroid, source)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
-       ON CONFLICT (parcel_id) DO UPDATE
-         SET updated_at = NOW()
-       RETURNING
-         id::text,
-         parcel_id,
-         commune_code,
-         section,
-         number,
-         geometry,
-         centroid,
-         area_m2,
-         source,
-         created_at::text,
-         updated_at::text`,
-      [
-        randomUUID(),
-        parcelId,
-        parsed.communeCode,
-        parsed.section,
-        parsed.number,
-        JSON.stringify({}),
-        JSON.stringify({}),
-        "manual",
-      ],
-    )
-
-    return inserted.rows[0]
-  }
-
-  private async getDefaultVersionNumber(
-    parcelId: string,
-    surveyIdToExclude?: string,
-  ): Promise<number> {
-    const result = await this.db.query<{ next_version: number }>(
-      `SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
-       FROM surveys s
-       JOIN survey_parcels sp
-         ON sp.survey_id = s.id
-       WHERE sp.parcel_id = $1
-         AND s.deleted_at IS NULL
-         AND s.status = 'submitted'
-         AND ($2::text IS NULL OR s.id <> $2)`,
-      [parcelId, surveyIdToExclude ?? null],
-    )
-    return result.rows[0]?.next_version ?? 1
-  }
-
-  private async validateParcelSubmit(survey: SurveyRow): Promise<{
-    code?: "parcel_required" | "parcel_invalid"
-    errors: string[]
-    versionConflict?: { expectedVersionNumber: number }
-  }> {
-    const errors: string[] = []
-    const observationYear = survey.observation_year
-    const versionNumber = survey.version_number
-    const surveyParcelIds = await this.getSurveyParcelIds(survey.id)
-    const parcelIds =
-      surveyParcelIds.length > 0 ? surveyParcelIds : survey.parcel_id ? [survey.parcel_id] : []
-
-    if (parcelIds.length === 0) {
-      errors.push("parcel_ids is required for submit")
-    }
-    if (!observationYear) {
-      errors.push("observation_year is required for submit")
-    }
-    if (!versionNumber) {
-      errors.push("version_number is required for submit")
-    }
-
-    if (errors.length > 0 || parcelIds.length === 0 || !observationYear || !versionNumber) {
-      return {
-        code: "parcel_required",
-        errors,
-      }
-    }
-
-    const parcelExists = await this.db.query<{ parcel_id: string }>(
-      `SELECT parcel_id
-       FROM parcels
-       WHERE parcel_id = ANY($1::text[])`,
-      [parcelIds],
-    )
-
-    if (parcelExists.rows.length !== parcelIds.length) {
-      return {
-        code: "parcel_invalid",
-        errors: ["one or more parcel_ids do not exist in parcel registry"],
-      }
-    }
-
-    for (const parcelId of parcelIds) {
-      const expectedVersionNumber = await this.getDefaultVersionNumber(parcelId, survey.id)
-      if (versionNumber !== expectedVersionNumber) {
-        return {
-          errors: [],
-          versionConflict: {
-            expectedVersionNumber,
-          },
-        }
-      }
-    }
-
-    return {
-      errors: [],
     }
   }
 }

@@ -41,18 +41,6 @@ export type CreateAttachmentBody = {
   metadata?: Record<string, unknown>
 }
 
-export type SyncOperation = {
-  client_ref?: string
-  entity?: "survey" | "attachment"
-  action?: "upsert" | "create" | "delete" | "visibility_update"
-  survey_id?: string
-  payload?: unknown
-}
-
-export type SyncBatchBody = {
-  operations?: SyncOperation[]
-}
-
 type JsonObject = Record<string, unknown>
 
 export type FactorCanonical = {
@@ -128,6 +116,10 @@ export type SyncOperationResult = {
 }
 
 export type SyncChangeEvent = SurveyEventRow
+
+// Internal row of the changes-feed query: the feed position travels as text (xid8 and bigint
+// can exceed Number.MAX_SAFE_INTEGER) and is stripped before the response.
+export type SyncChangeEventRow = SyncChangeEvent & { xid8: string; seq: string }
 
 export type SyncChangeSurvey = Pick<
   SurveyRow,

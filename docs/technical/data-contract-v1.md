@@ -12,6 +12,7 @@ Define the shared data model between mobile app, backend API, and database for t
 - Backend is the source of truth for business validation.
 - Sync operations must be idempotent.
 - Cadastral parcel identifiers (`parcel_id`/`parcel_ids[]`) are canonicalized server-side.
+- Survey and attachment ids are client- or server-chosen text that must match `^[A-Za-z0-9_-]{1,128}$` (UUIDs today, `survey-<ms>` in early mobile builds), because they become storage key segments.
 
 ## Entities
 
@@ -27,7 +28,7 @@ Required fields:
 - `last_name` (string)
 - `display_name` (string)
 - `profile_picture_url` (string, nullable)
-- `profile_picture_storage_key` (string, nullable) // local storage key for uploaded picture
+- `profile_picture_storage_key` (string, nullable) // object storage key for the uploaded picture (`profiles/{user_id}/avatar{ext}`), read and written through `StorageService` (MinIO/S3 bucket, or the local uploads directory in local mode)
 - `profile_picture_mime_type` (string, nullable)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
@@ -75,9 +76,9 @@ Photo or media file linked to a survey.
 Required fields:
 - `id` (uuid)
 - `survey_id` (uuid)
-- `storage_key` (string) // object storage key/path
+- `storage_key` (string) // object storage key built by the server: `surveys/{survey_id}/{attachment_id}{ext}`
 - `mime_type` (string)
-- `size_bytes` (integer)
+- `size_bytes` (integer) // must equal the uploaded byte length; a mismatch at confirm is rejected (`422 attachment_size_mismatch`)
 - `created_at` (timestamp)
 
 Optional fields:
@@ -95,9 +96,21 @@ Required fields:
 - `id` (uuid)
 - `survey_id` (uuid)
 - `actor_id` (uuid, nullable for system events)
-- `event_type` (enum: `created` | `updated` | `submitted` | `synced` | `sync_failed` | `expired` | `visibility_changed` | `deleted` | `reported` | `attachment_created` | `attachment_uploaded` | `attachment_deleted`)
+- `event_type` (enum: `created` | `updated` | `submitted` | `synced` | `sync_failed` | `expired` | `visibility_changed` | `deleted` | `reported` | `attachment_created` | `attachment_uploaded` | `attachment_deleted` | `backfilled`)
 - `payload` (jsonb, nullable)
 - `created_at` (timestamp)
+- `seq` (bigint, identity) // insertion order; backfilled in `(created_at, id)` order by migration 014
+- `xid8` (xid8, `DEFAULT pg_current_xact_id()`) // id of the transaction that wrote the event
+
+Indexes:
+- unique (`xid8`, `seq`) // changes-feed order
+- (`actor_id`) where `actor_id IS NOT NULL` // `idx_survey_events_actor_id`, migration 015
+
+Rules:
+- `seq` and `xid8` always come from the column defaults; inserts never name them.
+- `GET /v1/sync/changes` returns events with `xid8 < pg_snapshot_xmin(pg_current_snapshot())`, paged by (`xid8`, `seq`); see `sync-conflict-resolution-v1.md`, "Changes Feed Ordering".
+- `backfilled` events (`actor_id` NULL, payload `{"reason":"migration_014"}`) were inserted once by migration 014 for owned surveys that had no event.
+- `xid8` values belong to the cluster that wrote them: after a logical dump/restore, run `UPDATE survey_events SET xid8 = pg_current_xact_id();` before starting the API (see `sync-conflict-resolution-v1.md`, "Database restore").
 
 ### 6) Sync Operation (Mobile Queue)
 Tracks local operations waiting for server acknowledgment.
@@ -131,6 +144,10 @@ Required fields:
 - `reviewed_at` (timestamp, nullable)
 - `reviewed_by` (uuid, nullable)
 
+Indexes:
+- (`status`, `created_at DESC`) // `idx_reports_status_created`, status-filtered list
+- (`created_at DESC`, `id DESC`) // `idx_reports_created_id`, migration 015, unfiltered keyset list
+
 ### 8) Public Map Item (Read Model, Optional in V1)
 Anonymized representation used by community map surfaces.
 
@@ -159,6 +176,14 @@ Optional fields:
 - `area_m2` (number, nullable)
 - `source` (string, nullable) // cadastre provider name/version
 
+Generated columns (migration 015, `GENERATED ALWAYS AS … STORED`, never written by the API):
+- `centroid_lat` (double precision, nullable) // `centroid.lat` when it is a plain decimal (number or numeric string, no exponent, at most 3 integer digits) within -90..90
+- `centroid_lng` (double precision, nullable) // `centroid.lng` when it is a plain decimal within -180..180
+- Both are NULL when the centroid is missing, non-numeric or out of range; PostgreSQL recomputes them on every `centroid` update.
+
+Indexes:
+- btree (`centroid_lat`, `centroid_lng`) // `idx_parcels_centroid_lat_lng`, bbox lookups (no PostGIS)
+
 ### 10) Parcel Study Status (Read Model, V1.1 Addendum)
 High-zoom map layer showing whether a parcel is already studied.
 
@@ -181,6 +206,12 @@ Rules:
 - (`survey_id`, `parcel_id`) is unique.
 - One survey can reference multiple parcels.
 - `surveys.parcel_id` remains as optional compatibility pointer to primary parcel.
+- Lookups by `survey_id` use the primary key (`survey_id`, `parcel_id`); lookups by `parcel_id` use `idx_survey_parcels_parcel_id`.
+
+### 10.2) Index notes (migration 015)
+- `idx_surveys_public_submitted` on `surveys (submitted_at DESC)` where `status = 'submitted' AND visibility = 'public' AND deleted_at IS NULL` serves the public community routes.
+- Dropped as redundant: `idx_users_auth0_sub` (duplicate of the unique constraint `users_auth0_sub_key`), `idx_surveys_parcel_id` (prefix of `idx_surveys_parcel_year_version`) and `idx_survey_parcels_survey_id` (prefix of `survey_parcels_pkey`).
+- `auth_sessions` is dropped again with `DROP TABLE IF EXISTS … CASCADE` as a safety net (migration 011 already removed it).
 
 ### 11) Analytics Region Snapshot (V2 Addendum, Out of MVP)
 Aggregated IBP metrics by region and period for Explore insights.

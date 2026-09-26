@@ -82,7 +82,7 @@ pod install
 |----------|-------------|
 | `PORT` | HTTP port (default: 3000) |
 | `POSTGRES_HOST/PORT/USER/PASSWORD/DB` | PostgreSQL connection |
-| `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET` | JWT secrets |
+| `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONNECTION_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`, `PG_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `AUTH0_HTTP_TIMEOUT_MS` | Optional pool and timeouts (defaults: 10, 30000, 5000, 10000, 60000, 5000) |
 | `OBJECT_STORAGE_MODE` | `local` or `minio` |
 | `OBJECT_STORAGE_BUCKET/ENDPOINT/REGION/ACCESS_KEY/SECRET_KEY` | S3-compatible storage config |
 | `ATTACHMENTS_UPLOAD_DIR` | Local upload path (when mode = local) |
@@ -90,7 +90,7 @@ pod install
 | `EMAIL_CHANGE_CONFIRM_URL_TEMPLATE` | Email confirmation URL template |
 | `AUTH0_DOMAIN`, `AUTH0_PUBLIC_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 backend validation settings |
 | `CADASTRE_PROVIDER` | `synthetic` (offline) or `ign` (real parcels) |
-| `CORS_ORIGIN` | Allowed origin for CORS |
+| `CORS_ORIGIN` | Required in production: `none` (no browser origin) or a comma-separated origin list; startup refuses otherwise |
 
 ### Mobile (`mobile/.env`)
 
@@ -117,6 +117,8 @@ npm run test:unit
 npm run test:e2e
 npm run format:check
 ```
+
+`npm run test:e2e` runs against a separate `ibp_test` database (settings in `api/.env.test.example`, override with a gitignored `api/.env.test`), created on the docker-compose Postgres if missing and wiped before every run; it refuses any database whose name does not end in `_test`, so the dev database `ibp` is never touched.
 
 Coverage helpers:
 

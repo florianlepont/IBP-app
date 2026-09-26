@@ -3,6 +3,7 @@ import { Alert, Platform, ScrollView, StyleSheet, Text, View } from "react-nativ
 import { useHeaderHeight } from "@react-navigation/elements"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
+import { shouldShowDevTools } from "../app/dev-tools"
 import { useAppBottomTabBarHeight } from "../app/useAppBottomTabBarHeight"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
@@ -216,27 +217,29 @@ export function SettingsScreen({
       </AppCard>
 
       {/* Zone 3 — Outils développeur (repliée par défaut) */}
-      <AppCollapsibleSection title="Outils développeur" badge="DEV">
-        <AppField
-          label="URL de l'API"
-          value={apiUrl}
-          onChangeText={onApiUrlChange}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <AppButton
-          label="Vider la base IBP"
-          variant="dangerSoft"
-          leadingIcon="bug-outline"
-          onPress={confirmDebugResetIbpData}
-        />
-        <AppButton
-          label="Vider la base utilisateur"
-          variant="dangerSoft"
-          leadingIcon="bug-outline"
-          onPress={confirmDebugResetUserData}
-        />
-      </AppCollapsibleSection>
+      {shouldShowDevTools() ? (
+        <AppCollapsibleSection title="Outils développeur" badge="DEV">
+          <AppField
+            label="URL de l'API"
+            value={apiUrl}
+            onChangeText={onApiUrlChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <AppButton
+            label="Vider la base IBP"
+            variant="dangerSoft"
+            leadingIcon="bug-outline"
+            onPress={confirmDebugResetIbpData}
+          />
+          <AppButton
+            label="Vider la base utilisateur"
+            variant="dangerSoft"
+            leadingIcon="bug-outline"
+            onPress={confirmDebugResetUserData}
+          />
+        </AppCollapsibleSection>
+      ) : null}
     </ScrollView>
   )
 }

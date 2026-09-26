@@ -89,7 +89,7 @@ npm run format:check          # Prettier check (used in CI)
 
 # Testing
 npm run test:unit             # unit tests for api + mobile
-npm run test:e2e              # E2E tests for API (requires running DB)
+npm run test:e2e              # E2E tests for API (requires running DB; uses the separate ibp_test database)
 npm run test                  # unit + E2E
 npm run test:coverage:api     # coverage report for API
 npm run test:coverage:mobile  # coverage report for mobile
@@ -184,6 +184,7 @@ The mobile app is designed to work without connectivity. All survey data is pers
 | `users` | `api/src/users/` | Profile CRUD, profile picture upload, account deletion |
 | `surveys` | `api/src/surveys/` | Survey CRUD, sync endpoint, IBP validation, parcel linkage, attachments, public map |
 | `database` | `api/src/database/` | `DatabaseService` (pg Pool wrapper) |
+| `storage` | `api/src/storage/` | StorageService: single owner of object storage (S3/MinIO or local), key builder, size and MIME checks |
 | `reports` | `api/src/reports/` | Moderation/report endpoints |
 | `debug` | `api/src/debug/` | Dev-only data reset endpoints |
 | `common` | `api/src/common/` | Shared utilities and types |
@@ -237,6 +238,7 @@ Factor validation matrix: `docs/technical/ibp-validation-matrix-v1.md`
 | `api/src/surveys/ibp-rules.service.ts` | Server-side IBP scoring rules |
 | `api/src/surveys/surveys-sync.service.ts` | Batch sync handler |
 | `api/src/database/database.service.ts` | pg pool wrapper |
+| `api/src/storage/storage.service.ts` | Single object storage owner (S3 client, keys, presign, local mode) |
 | `api/migrations/` | Ordered SQL migration files |
 | `docs/technical/technical-architecture-v1.md` | Architecture reference |
 | `docs/technical/api-contract-v1.md` | API endpoint specifications |
@@ -260,6 +262,7 @@ Factor validation matrix: `docs/technical/ibp-validation-matrix-v1.md`
 - Run with: `npm run test:e2e`
 - Config: `api/jest.config.js`
 - Notable suites: `auth-profile.e2e-spec.ts`, `surveys-idempotency.e2e-spec.ts`
+- Target a dedicated `*_test` database (`api/.env.test.example`, default `ibp_test`); globalSetup drops and re-migrates it before each run and refuses any other database name
 
 ### Before committing
 
@@ -280,14 +283,14 @@ npm run format:check
 |----------|-------------|
 | `PORT` | HTTP port (default: 3000) |
 | `POSTGRES_HOST/PORT/USER/PASSWORD/DB` | PostgreSQL connection |
-| `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET` | JWT secrets |
+| `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONNECTION_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`, `PG_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `AUTH0_HTTP_TIMEOUT_MS` | Optional pool and timeouts (defaults: 10, 30000, 5000, 10000, 60000, 5000) |
 | `AUTH0_DOMAIN`, `AUTH0_PUBLIC_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 backend config |
 | `OBJECT_STORAGE_MODE` | `local` or `minio` |
 | `OBJECT_STORAGE_BUCKET/ENDPOINT/REGION/ACCESS_KEY/SECRET_KEY` | S3 config |
 | `ATTACHMENTS_UPLOAD_DIR` | Local upload dir (when mode = local) |
 | `SMTP_ENABLED`, `SMTP_HOST/PORT/USER/PASSWORD/FROM` | Email config |
 | `CADASTRE_PROVIDER` | `synthetic` (offline) or `ign` (real IGN parcels) |
-| `CORS_ORIGIN` | Allowed CORS origin |
+| `CORS_ORIGIN` | Required in production: `none` (no browser origin) or a comma-separated origin list; startup refuses otherwise |
 
 ### Mobile (`mobile/.env`)
 
@@ -317,6 +320,7 @@ npm run format:check
 
 - `ci.yml` publishes `ghcr.io/florianlepont/cortege:latest` (linux/amd64) on `main` pushes touching `api/**`
 - A systemd timer on the VPS polls the registry every 5 minutes and restarts the stack when the digest changes
+- `infra/vps/update-stack.sh` runs the new image's configuration check before restarting; on failure the previous API keeps serving
 - The host's Caddy serves `cortege.algernon.ovh` and `cortege-files.algernon.ovh`; the stack publishes on the loopback only
 - Attachment URLs are presigned, so `OBJECT_STORAGE_ENDPOINT` must be the public name clients call
 - Runtime secrets live in `/home/ubuntu/cortege.env` on the VPS

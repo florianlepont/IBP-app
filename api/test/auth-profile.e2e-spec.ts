@@ -1,13 +1,21 @@
 import "dotenv/config"
+import { existsSync } from "fs"
+import { join } from "path"
 import { INestApplication } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
 import request = require("supertest")
 import { AppModule } from "../src/app.module"
+import { AuthGuard } from "../src/auth/auth.guard"
 import { DatabaseService } from "../src/database/database.service"
+import { StorageService } from "../src/storage/storage.service"
+
+// MinIO-only assertions run in the CI MinIO job; they are skipped in local mode.
+const itMinio = process.env.OBJECT_STORAGE_MODE === "minio" ? it : it.skip
 
 describe("Auth + profile (e2e)", () => {
   let app: INestApplication
   let db: DatabaseService
+  let storage: StorageService
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,7 +26,52 @@ describe("Auth + profile (e2e)", () => {
     app.setGlobalPrefix("v1")
     await app.init()
     db = app.get(DatabaseService)
+    storage = moduleFixture.get(StorageService)
   })
+
+  const pngStub = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])
+  const jpegStub = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
+  let emailCounter = 0
+
+  async function login(prefix: string): Promise<{ email: string; accessToken: string }> {
+    emailCounter += 1
+    const email = `e2e-${prefix}-${Date.now()}-${emailCounter}@ibp.local`
+    const response = await request(app.getHttpServer())
+      .post("/v1/debug/test-token")
+      .send({ email })
+      .expect(201)
+    return { email, accessToken: response.body.access_token as string }
+  }
+
+  function uploadPicture(
+    accessToken: string,
+    body: Buffer,
+    contentType: string,
+    filename: string,
+  ): request.Test {
+    return request(app.getHttpServer())
+      .put("/v1/me/profile-picture")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .attach("file", body, { filename, contentType })
+  }
+
+  type PictureColumns = {
+    profile_picture_url: string | null
+    profile_picture_storage_key: string | null
+    profile_picture_mime_type: string | null
+  }
+
+  async function pictureColumns(email: string): Promise<PictureColumns> {
+    const result = await db.query<PictureColumns>(
+      `SELECT profile_picture_url, profile_picture_storage_key, profile_picture_mime_type
+       FROM users
+       WHERE email = $1`,
+      [email],
+    )
+    const row = result.rows[0]
+    if (!row) throw new Error(`user ${email} not found`)
+    return row
+  }
 
   afterAll(async () => {
     if (app) {
@@ -83,6 +136,86 @@ describe("Auth + profile (e2e)", () => {
       .get("/v1/me/profile-picture")
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(404)
+  })
+
+  it("rejects unsupported picture types with 400", async () => {
+    const { email, accessToken } = await login("avatar-mime")
+
+    await uploadPicture(accessToken, pngStub, "image/gif", "avatar.gif").expect(400)
+    await uploadPicture(accessToken, pngStub, "constructor", "avatar.png").expect(400)
+
+    const columns = await pictureColumns(email)
+    expect(columns.profile_picture_storage_key).toBeNull()
+  })
+
+  it("a missing stored picture reads as no picture", async () => {
+    const { email, accessToken } = await login("avatar-missing")
+
+    await uploadPicture(accessToken, pngStub, "image/png", "avatar.png").expect(200)
+    const { profile_picture_storage_key: key } = await pictureColumns(email)
+    expect(typeof key).toBe("string")
+
+    await storage.deleteObject(key as string)
+    expect(await storage.headObject(key as string)).toBeNull()
+
+    const me = await request(app.getHttpServer())
+      .get("/v1/me")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200)
+    expect(me.body.profile_picture_url).toBeNull()
+
+    await request(app.getHttpServer())
+      .get("/v1/me/profile-picture")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(404)
+
+    expect(await pictureColumns(email)).toEqual({
+      profile_picture_url: null,
+      profile_picture_storage_key: null,
+      profile_picture_mime_type: null,
+    })
+
+    const meAgain = await request(app.getHttpServer())
+      .get("/v1/me")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200)
+    expect(meAgain.body.profile_picture_url).toBeNull()
+  })
+
+  it("replacing a picture removes the old object", async () => {
+    const { email, accessToken } = await login("avatar-replace")
+
+    await uploadPicture(accessToken, pngStub, "image/png", "avatar.png").expect(200)
+    const oldKey = (await pictureColumns(email)).profile_picture_storage_key as string
+
+    await uploadPicture(accessToken, jpegStub, "image/jpeg", "avatar.jpg").expect(200)
+    const newColumns = await pictureColumns(email)
+    const newKey = newColumns.profile_picture_storage_key as string
+
+    expect(newKey).not.toBe(oldKey)
+    expect(newColumns.profile_picture_mime_type).toBe("image/jpeg")
+    expect(await storage.headObject(oldKey)).toBeNull()
+    expect(await storage.headObject(newKey)).not.toBeNull()
+
+    const picture = await request(app.getHttpServer())
+      .get("/v1/me/profile-picture")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200)
+    expect(String(picture.headers["content-type"] ?? "")).toContain("image/jpeg")
+    expect(Buffer.compare(picture.body as Buffer, jpegStub)).toBe(0)
+  })
+
+  itMinio("stores the picture in the bucket, not on local disk", async () => {
+    const { email, accessToken } = await login("avatar-minio")
+
+    await uploadPicture(accessToken, pngStub, "image/png", "avatar.png").expect(200)
+    const key = (await pictureColumns(email)).profile_picture_storage_key as string
+
+    const head = await storage.headObject(key)
+    expect(head?.contentLength).toBe(pngStub.length)
+    expect(existsSync(join(process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads", key))).toBe(
+      false,
+    )
   })
 
   it("deletes the account, anonymises submitted surveys, and rejects the old token afterwards", async () => {
@@ -161,5 +294,134 @@ describe("Auth + profile (e2e)", () => {
       .get("/v1/me")
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(401)
+  })
+})
+
+describe("first-login provisioning (e2e)", () => {
+  let app: INestApplication
+  let db: DatabaseService
+  let guard: AuthGuard
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile()
+
+    app = moduleFixture.createNestApplication()
+    app.setGlobalPrefix("v1")
+    await app.init()
+    db = app.get(DatabaseService)
+    guard = app.get(AuthGuard)
+  })
+
+  afterAll(async () => {
+    if (app) {
+      await app.close()
+    }
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  function invoke(payload: Record<string, unknown>, rawToken = "raw-token") {
+    return (
+      guard as unknown as {
+        getOrProvisionUser: (
+          payload: Record<string, unknown>,
+          rawToken: string,
+        ) => Promise<{ id: string; auth0_sub: string }>
+      }
+    ).getOrProvisionUser(payload, rawToken)
+  }
+
+  function mockFetchUserInfo(userInfo: Record<string, unknown>) {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => userInfo,
+    } as Response)
+  }
+
+  it("converges 5 concurrent first logins for the same sub on exactly one user row", async () => {
+    const sub = `auth0|race-${Date.now()}`
+    const email = `e2e-race-${Date.now()}@ibp.local`
+    mockFetchUserInfo({ email, email_verified: true })
+
+    const results = await Promise.all(Array.from({ length: 5 }, () => invoke({ sub })))
+    const ids = new Set(results.map((r) => r.id))
+    expect(ids.size).toBe(1)
+
+    const count = await db.query<{ count: string }>(
+      `SELECT count(*)::text FROM users WHERE auth0_sub = $1`,
+      [sub],
+    )
+    expect(count.rows[0].count).toBe("1")
+  })
+
+  it("refuses to link an unverified email to an existing account and leaves auth0_sub unchanged", async () => {
+    const email = `e2e-unverified-${Date.now()}@ibp.local`
+    await request(app.getHttpServer()).post("/v1/debug/test-token").send({ email }).expect(201)
+
+    const before = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(before.rows[0].auth0_sub).toBe(`test|${email}`)
+
+    mockFetchUserInfo({ email, email_verified: false })
+    const newSub = `auth0|unverified-${Date.now()}`
+
+    await expect(invoke({ sub: newSub })).rejects.toThrow()
+
+    const after = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(after.rows[0].auth0_sub).toBe(`test|${email}`)
+  })
+
+  it("links a verified email to an existing unlinked (pre-Auth0) account and sets auth0_sub", async () => {
+    const email = `e2e-verified-${Date.now()}@ibp.local`
+    const login = await request(app.getHttpServer())
+      .post("/v1/debug/test-token")
+      .send({ email })
+      .expect(201)
+    const existingUser = await db
+      .query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])
+      .then((r) => r.rows[0])
+    expect(login.status).toBe(201)
+    // Only an account not yet linked to an Auth0 identity may be linked (WR-03).
+    await db.query(`UPDATE users SET auth0_sub = NULL WHERE id = $1`, [existingUser.id])
+
+    mockFetchUserInfo({ email, email_verified: true })
+    const newSub = `auth0|verified-${Date.now()}`
+
+    const result = await invoke({ sub: newSub })
+    expect(result.id).toBe(existingUser.id)
+
+    const after = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(after.rows[0].auth0_sub).toBe(newSub)
+  })
+
+  it("never re-points an account already linked to another sub, even with a verified email (WR-03)", async () => {
+    const email = `e2e-verified-linked-${Date.now()}@ibp.local`
+    await request(app.getHttpServer()).post("/v1/debug/test-token").send({ email }).expect(201)
+
+    mockFetchUserInfo({ email, email_verified: true })
+    const newSub = `google-oauth2|verified-${Date.now()}`
+
+    await expect(invoke({ sub: newSub })).rejects.toMatchObject({
+      status: 403,
+      response: { code: "email_already_linked" },
+    })
+
+    const after = await db.query<{ auth0_sub: string }>(
+      `SELECT auth0_sub FROM users WHERE email = $1`,
+      [email],
+    )
+    expect(after.rows[0].auth0_sub).toBe(`test|${email}`)
   })
 })

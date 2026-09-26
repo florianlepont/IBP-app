@@ -1,152 +1,43 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
 import {
-  CreateBucketCommand,
-  DeleteObjectCommand,
-  HeadBucketCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common"
 import { randomUUID } from "crypto"
-import { mkdir, rm, writeFile } from "fs/promises"
-import { dirname, join } from "path"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService } from "../database/database.service"
-import { extensionFromMime, isAllowedMimeType } from "../common/file.utils"
-import { AttachmentRow, CreateAttachmentBody, SurveyRow } from "./surveys.types"
+import { isAllowedMimeType } from "../common/file.utils"
+import { DOWNLOAD_URL_TTL_SECONDS, StorageService } from "../storage/storage.service"
+import { SurveyEventsService } from "./survey-events.service"
+import { SurveysRepository } from "./surveys.repository"
+import { AttachmentRow, CreateAttachmentBody } from "./surveys.types"
+
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 @Injectable()
 export class SurveysAttachmentsService {
-  private readonly objectStorageMode: "local" | "minio"
-  private readonly s3Bucket: string
-  private readonly s3Client?: S3Client
-  private s3BucketReady = false
-  private readonly uploadsRootDir: string
-
-  constructor(private readonly db: DatabaseService) {
-    this.objectStorageMode =
-      (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-media"
-    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
-
-    if (this.objectStorageMode === "minio") {
-      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
-      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
-      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
-      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
-
-      this.s3Client = new S3Client({
-        endpoint,
-        region,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      })
-    }
-  }
-
-  private async getSurveyForUserOrThrow(surveyId: string, userId: string): Promise<SurveyRow> {
-    const survey = await this.getSurveyForUser(surveyId, userId, true)
-    if (!survey) {
-      throw new NotFoundException("Survey not found")
-    }
-    return survey
-  }
-
-  private async getSurveyForUser(
-    surveyId: string,
-    userId: string,
-    activeOnly: boolean,
-  ): Promise<SurveyRow | null> {
-    const where = activeOnly ? "AND deleted_at IS NULL" : ""
-    const result = await this.db.query<SurveyRow>(
-      `SELECT *
-       FROM surveys
-       WHERE id = $1 AND user_id = $2 ${where}`,
-      [surveyId, userId],
-    )
-    return result.rows[0] ?? null
-  }
-
-  private async insertEvent(
-    surveyId: string,
-    actorId: string,
-    eventType: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await this.db.query(
-      `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [randomUUID(), surveyId, actorId, eventType, JSON.stringify(payload)],
-    )
-  }
+  // D-05: every read, write, delete and presign goes through StorageService.
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly storage: StorageService,
+    // D-07: ownership checks read only the ownership columns; events use the single writer.
+    private readonly repository: SurveysRepository,
+    private readonly events: SurveyEventsService,
+  ) {}
 
   private buildConfirmUrl(surveyId: string, attachmentId: string, uploadToken: string): string {
     const token = encodeURIComponent(uploadToken)
     return `/surveys/${surveyId}/attachments/${attachmentId}/upload?token=${token}`
   }
 
-  private async buildUploadUrl(
-    storageKey: string,
-    mimeType: string,
-    fallbackUrl: string,
-  ): Promise<string> {
-    if (this.objectStorageMode !== "minio" || !this.s3Client) {
-      return fallbackUrl
-    }
-
-    await this.ensureS3Bucket()
-
-    const command = new PutObjectCommand({
-      Bucket: this.s3Bucket,
-      Key: storageKey,
-      ContentType: mimeType,
+  // D-08: the refusal shared by both modes when the stored bytes differ from size_bytes.
+  private sizeMismatch(): UnprocessableEntityException {
+    return new UnprocessableEntityException({
+      code: "attachment_size_mismatch",
+      message: "Uploaded file size does not match declared size",
     })
-
-    return getSignedUrl(this.s3Client, command, { expiresIn: 15 * 60 })
-  }
-
-  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
-    if (this.objectStorageMode === "minio") {
-      if (this.s3Client) {
-        await this.s3Client
-          .send(
-            new DeleteObjectCommand({
-              Bucket: this.s3Bucket,
-              Key: storageKey,
-            }),
-          )
-          .catch(() => undefined)
-      }
-      return
-    }
-
-    const storagePath = join(this.uploadsRootDir, storageKey)
-    await rm(storagePath, { force: true }).catch(() => undefined)
-  }
-
-  private async ensureS3Bucket(): Promise<void> {
-    if (this.s3BucketReady || !this.s3Client) return
-
-    try {
-      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }))
-      this.s3BucketReady = true
-      return
-    } catch {
-      // Bucket might not exist yet.
-    }
-
-    try {
-      await this.s3Client.send(new CreateBucketCommand({ Bucket: this.s3Bucket }))
-      this.s3BucketReady = true
-    } catch {
-      // If created concurrently by another request/process, verify it exists now.
-      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }))
-      this.s3BucketReady = true
-    }
   }
 
   async createAttachment(
@@ -159,17 +50,6 @@ export class SurveysAttachmentsService {
     upload_url: string
     confirm_url: string
   }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
-
-    const countResult = await this.db.query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
-      [surveyId],
-    )
-    const currentCount = parseInt(countResult.rows[0]?.count ?? "0", 10)
-    if (currentCount >= 10) {
-      throw new BadRequestException("Survey already has the maximum of 10 attachments")
-    }
-
     if (!body?.mime_type || typeof body.mime_type !== "string") {
       throw new BadRequestException("mime_type is required")
     }
@@ -178,7 +58,7 @@ export class SurveysAttachmentsService {
       throw new BadRequestException("size_bytes must be a positive integer")
     }
 
-    if ((body.size_bytes ?? 0) > 25 * 1024 * 1024) {
+    if ((body.size_bytes ?? 0) > MAX_ATTACHMENT_BYTES) {
       throw new BadRequestException("size_bytes exceeds V1 max size (25MB)")
     }
 
@@ -188,31 +68,53 @@ export class SurveysAttachmentsService {
 
     const attachmentId = randomUUID()
     const uploadToken = randomUUID()
-    const extension = extensionFromMime(body.mime_type)
-    const storageKey = `surveys/${surveyId}/${attachmentId}${extension}`
+    // D-14: the key is built only by StorageService, from safe ids.
+    const storageKey = this.storage.buildAttachmentKey(surveyId, attachmentId, body.mime_type)
     const confirmUrl = this.buildConfirmUrl(surveyId, attachmentId, uploadToken)
-    const uploadUrl = await this.buildUploadUrl(storageKey, body.mime_type, confirmUrl)
+    // D-08: the presigned PUT signs Content-Length = size_bytes. Local mode uploads through
+    // the API route, which checks the size itself.
+    const uploadUrl =
+      this.storage.mode === "minio"
+        ? await this.storage.presignPut(storageKey, body.mime_type, body.size_bytes as number)
+        : confirmUrl
 
-    await this.db.query(
-      `INSERT INTO attachments (id, survey_id, storage_key, mime_type, size_bytes, captured_at, metadata, upload_token, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW())`,
-      [
-        attachmentId,
-        surveyId,
-        storageKey,
-        body.mime_type,
-        body.size_bytes,
-        body.captured_at ?? null,
-        JSON.stringify(body.metadata ?? {}),
-        uploadToken,
-      ],
-    )
+    await this.db.transaction(async (db) => {
+      await this.repository.findOwnedOrThrow(db, surveyId, user.id, {
+        activeOnly: true,
+        forUpdate: true,
+        columns: "ownership",
+      })
 
-    await this.insertEvent(surveyId, user.id, "attachment_created", {
-      attachment_id: attachmentId,
-      storage_key: storageKey,
-      mime_type: body.mime_type,
-      size_bytes: body.size_bytes,
+      const countResult = await db.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM attachments WHERE survey_id = $1 AND deleted_at IS NULL`,
+        [surveyId],
+      )
+      const currentCount = parseInt(countResult.rows[0]?.count ?? "0", 10)
+      if (currentCount >= 10) {
+        throw new BadRequestException("Survey already has the maximum of 10 attachments")
+      }
+
+      await db.query(
+        `INSERT INTO attachments (id, survey_id, storage_key, mime_type, size_bytes, captured_at, metadata, upload_token, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW())`,
+        [
+          attachmentId,
+          surveyId,
+          storageKey,
+          body.mime_type,
+          body.size_bytes,
+          body.captured_at ?? null,
+          JSON.stringify(body.metadata ?? {}),
+          uploadToken,
+        ],
+      )
+
+      await this.events.insert(db, surveyId, user.id, "attachment_created", {
+        attachment_id: attachmentId,
+        storage_key: storageKey,
+        mime_type: body.mime_type,
+        size_bytes: body.size_bytes,
+      })
     })
 
     return {
@@ -234,7 +136,10 @@ export class SurveysAttachmentsService {
       throw new BadRequestException("upload token is required")
     }
 
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const existing = await this.db.query<AttachmentRow>(
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
@@ -258,49 +163,57 @@ export class SurveysAttachmentsService {
       }
     }
 
-    if (this.objectStorageMode === "minio") {
-      if (!this.s3Client) {
-        throw new BadRequestException("object storage client is not configured")
-      }
-      // In MinIO mode, file upload is done directly via presigned URL.
-      // Here we only confirm object existence before marking uploaded.
-      try {
-        await this.s3Client.send(
-          new HeadObjectCommand({
-            Bucket: this.s3Bucket,
-            Key: existing.rows[0].storage_key,
-          }),
-        )
-      } catch {
+    const attachment = existing.rows[0]
+    const declaredSize = Number(attachment.size_bytes)
+
+    if (this.storage.mode === "minio") {
+      // In MinIO mode, the file is uploaded directly via the presigned URL. Here we check the
+      // stored object before marking it uploaded (D-08: its size must match size_bytes).
+      const head = await this.storage.headObject(attachment.storage_key)
+      if (!head) {
         throw new BadRequestException("uploaded object not found in storage")
+      }
+      if (head.contentLength !== declaredSize) {
+        await this.storage.deleteObject(attachment.storage_key)
+        throw this.sizeMismatch()
       }
     } else {
       if (!file?.buffer || file.buffer.length === 0) {
         throw new BadRequestException("file is required")
       }
 
-      if (file.buffer.length > 25 * 1024 * 1024) {
+      if (file.buffer.length > MAX_ATTACHMENT_BYTES) {
         throw new BadRequestException("file exceeds V1 max size (25MB)")
       }
 
-      const storagePath = join(this.uploadsRootDir, existing.rows[0].storage_key)
-      await mkdir(dirname(storagePath), { recursive: true })
-      await writeFile(storagePath, file.buffer)
+      if (file.buffer.length !== declaredSize) {
+        throw this.sizeMismatch()
+      }
+
+      await this.storage.putObject(
+        attachment.storage_key,
+        file.buffer,
+        attachment.mime_type ?? "application/octet-stream",
+      )
     }
 
-    const updated = await this.db.query<{ id: string; uploaded_at: string }>(
-      `UPDATE attachments
-       SET uploaded_at = NOW()
-       WHERE id = $1 AND survey_id = $2
-       RETURNING id, uploaded_at::text`,
-      [attachmentId, surveyId],
-    )
+    const updated = await this.db.transaction(async (db) => {
+      const result = await db.query<{ id: string; uploaded_at: string }>(
+        `UPDATE attachments
+         SET uploaded_at = NOW()
+         WHERE id = $1 AND survey_id = $2
+         RETURNING id, uploaded_at::text`,
+        [attachmentId, surveyId],
+      )
 
-    await this.insertEvent(surveyId, user.id, "attachment_uploaded", {
-      attachment_id: attachmentId,
-      storage_key: existing.rows[0].storage_key,
-      object_storage_mode: this.objectStorageMode,
-      bytes_written: file?.buffer?.length ?? null,
+      await this.events.insert(db, surveyId, user.id, "attachment_uploaded", {
+        attachment_id: attachmentId,
+        storage_key: attachment.storage_key,
+        object_storage_mode: this.storage.mode,
+        bytes_written: file?.buffer?.length ?? null,
+      })
+
+      return result
     })
 
     return {
@@ -315,7 +228,10 @@ export class SurveysAttachmentsService {
     attachmentId: string,
     options?: { allowMissing?: boolean },
   ): Promise<{ survey_id: string; attachment_id: string; missing: boolean; deleted: boolean }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const existing = await this.db.query<AttachmentRow>(
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, captured_at::text, metadata, upload_token, uploaded_at::text, deleted_at::text
@@ -336,19 +252,21 @@ export class SurveysAttachmentsService {
       throw new NotFoundException("Attachment not found")
     }
 
-    await this.db.query(
-      `UPDATE attachments
-       SET deleted_at = NOW()
-       WHERE id = $1 AND survey_id = $2`,
-      [attachmentId, surveyId],
-    )
+    await this.db.transaction(async (db) => {
+      await db.query(
+        `UPDATE attachments
+         SET deleted_at = NOW()
+         WHERE id = $1 AND survey_id = $2`,
+        [attachmentId, surveyId],
+      )
 
-    await this.cleanupAttachmentStorage(existing.rows[0].storage_key)
-
-    await this.insertEvent(surveyId, user.id, "attachment_deleted", {
-      attachment_id: attachmentId,
-      storage_key: existing.rows[0].storage_key,
+      await this.events.insert(db, surveyId, user.id, "attachment_deleted", {
+        attachment_id: attachmentId,
+        storage_key: existing.rows[0].storage_key,
+      })
     })
+
+    await this.storage.deleteObject(existing.rows[0].storage_key)
 
     return {
       survey_id: surveyId,
@@ -375,7 +293,10 @@ export class SurveysAttachmentsService {
       >
     >
   }> {
-    await this.getSurveyForUserOrThrow(surveyId, user.id)
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
 
     const result = await this.db.query<
       Pick<
@@ -392,10 +313,109 @@ export class SurveysAttachmentsService {
       `SELECT id, survey_id, storage_key, mime_type, size_bytes, created_at::text, uploaded_at::text
        FROM attachments
        WHERE survey_id = $1 AND deleted_at IS NULL
-       ORDER BY created_at DESC`,
+       ORDER BY attachments.created_at DESC, attachments.id DESC`,
       [surveyId],
     )
 
     return { items: result.rows }
+  }
+
+  private async getUploadedAttachmentOrThrow(
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<Pick<AttachmentRow, "id" | "storage_key" | "mime_type" | "uploaded_at">> {
+    const result = await this.db.query<
+      Pick<AttachmentRow, "id" | "storage_key" | "mime_type" | "uploaded_at">
+    >(
+      `SELECT id, storage_key, mime_type, uploaded_at::text
+       FROM attachments
+       WHERE id = $1 AND survey_id = $2 AND deleted_at IS NULL`,
+      [attachmentId, surveyId],
+    )
+
+    const attachment = result.rows[0]
+    if (!attachment) {
+      throw new NotFoundException("Attachment not found")
+    }
+
+    if (!attachment.uploaded_at) {
+      throw new ConflictException({
+        code: "attachment_not_uploaded",
+        message: "Attachment has not been uploaded yet",
+      })
+    }
+
+    return attachment
+  }
+
+  private async buildDownloadUrl(
+    storageKey: string,
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<{ url: string; requires_auth: boolean }> {
+    if (this.storage.mode === "minio") {
+      return { url: await this.storage.presignGet(storageKey), requires_auth: false }
+    }
+
+    return {
+      url: `/surveys/${surveyId}/attachments/${attachmentId}/content`,
+      requires_auth: true,
+    }
+  }
+
+  async getAttachmentDownload(
+    user: AuthenticatedUser,
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<{ url: string; expires_at: string; requires_auth: boolean }> {
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
+
+    const attachment = await this.getUploadedAttachmentOrThrow(surveyId, attachmentId)
+    const { url, requires_auth } = await this.buildDownloadUrl(
+      attachment.storage_key,
+      surveyId,
+      attachmentId,
+    )
+
+    return {
+      url,
+      expires_at: new Date(Date.now() + DOWNLOAD_URL_TTL_SECONDS * 1000).toISOString(),
+      requires_auth,
+    }
+  }
+
+  async getAttachmentContent(
+    user: AuthenticatedUser,
+    surveyId: string,
+    attachmentId: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    await this.repository.findOwnedOrThrow(this.db, surveyId, user.id, {
+      activeOnly: true,
+      columns: "ownership",
+    })
+
+    if (this.storage.mode !== "local") {
+      throw new NotFoundException("Attachment content not found")
+    }
+
+    const attachment = await this.getUploadedAttachmentOrThrow(surveyId, attachmentId)
+
+    // D-07: StorageService refuses keys that resolve outside the upload root (400); the
+    // content route keeps answering 404 for them, as for a missing file.
+    const buffer = await this.storage.getObject(attachment.storage_key).catch((err: unknown) => {
+      if (err instanceof BadRequestException) return null
+      throw err
+    })
+    if (!buffer) {
+      throw new NotFoundException("Attachment content not found")
+    }
+
+    return {
+      buffer,
+      mimeType: attachment.mime_type ?? "application/octet-stream",
+    }
   }
 }

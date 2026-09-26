@@ -16,6 +16,13 @@ type UseEditingDraftParams = {
   onCloseSurveyDetail: () => void
 }
 
+type PendingAutosaveRequest = {
+  surveyId: string
+  input: UseEditingDraftParams["surveyForm"]["draftInput"]
+  visibility: "private" | "public"
+  signature: string
+}
+
 export function useEditingDraft({
   editingSurveyId,
   setEditingSurveyId,
@@ -29,11 +36,52 @@ export function useEditingDraft({
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autosaveInFlightRef = useRef(false)
   const autosaveSignatureRef = useRef("")
+  const pendingAutosaveRef = useRef<PendingAutosaveRequest | null>(null)
+  const editingSurveyIdRef = useRef(editingSurveyId)
+  editingSurveyIdRef.current = editingSurveyId
   const createDraftBootstrappingRef = useRef(false)
   const refreshLocalSurveys = surveyList.refreshLocalSurveys
   const refreshLocalAttachments = surveyList.refreshLocalAttachments
   const setSelectedSurveyId = surveyList.setSelectedSurveyId
   const surveys = surveyList.surveys
+
+  // Reassigned every render so it always closes over the latest
+  // onStatusChange/refreshLocalSurveys, without retriggering the debounce
+  // effect below whenever those identities change.
+  const runAutosaveRef = useRef<((request: PendingAutosaveRequest) => Promise<void>) | undefined>(
+    undefined,
+  )
+  runAutosaveRef.current = async (request: PendingAutosaveRequest): Promise<void> => {
+    if (autosaveInFlightRef.current) {
+      // A save is already writing: keep only the latest request, don't drop it.
+      pendingAutosaveRef.current = request
+      return
+    }
+    autosaveInFlightRef.current = true
+
+    try {
+      await updateLocalDraft({
+        survey_id: request.surveyId,
+        ...request.input,
+        visibility: request.visibility,
+      })
+      await refreshLocalSurveys()
+      autosaveSignatureRef.current = request.signature
+    } catch (error) {
+      onStatusChange(`Autosave error: ${(error as Error).message}`)
+    } finally {
+      autosaveInFlightRef.current = false
+      const pending = pendingAutosaveRef.current
+      pendingAutosaveRef.current = null
+      if (
+        pending &&
+        pending.signature !== autosaveSignatureRef.current &&
+        pending.surveyId === editingSurveyIdRef.current
+      ) {
+        void runAutosaveRef.current?.(pending)
+      }
+    }
+  }
 
   useEffect(() => {
     if (!editingSurveyId) {
@@ -41,6 +89,7 @@ export function useEditingDraft({
         clearTimeout(autosaveTimerRef.current)
         autosaveTimerRef.current = null
       }
+      pendingAutosaveRef.current = null
       return
     }
 
@@ -55,26 +104,12 @@ export function useEditingDraft({
     }
 
     autosaveTimerRef.current = setTimeout(() => {
-      if (autosaveInFlightRef.current) {
-        return
-      }
-      autosaveInFlightRef.current = true
-
-      void (async () => {
-        try {
-          await updateLocalDraft({
-            survey_id: editingSurveyId,
-            ...surveyForm.draftInput,
-            visibility: editingSurveyVisibility,
-          })
-          await refreshLocalSurveys()
-          autosaveSignatureRef.current = draftSignature
-        } catch (error) {
-          onStatusChange(`Autosave error: ${(error as Error).message}`)
-        } finally {
-          autosaveInFlightRef.current = false
-        }
-      })()
+      void runAutosaveRef.current?.({
+        surveyId: editingSurveyId,
+        input: surveyForm.draftInput,
+        visibility: editingSurveyVisibility,
+        signature: draftSignature,
+      })
     }, 900)
 
     return () => {
@@ -83,19 +118,14 @@ export function useEditingDraft({
         autosaveTimerRef.current = null
       }
     }
-  }, [
-    editingSurveyId,
-    editingSurveyVisibility,
-    onStatusChange,
-    refreshLocalSurveys,
-    surveyForm.draftInput,
-  ])
+  }, [editingSurveyId, editingSurveyVisibility, surveyForm.draftInput])
 
   const handleOpenCreateSurvey = (): void => {
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
     }
+    pendingAutosaveRef.current = null
     autosaveSignatureRef.current = ""
     setEditingSurveyId(null)
     setFormMode("create")
@@ -146,6 +176,7 @@ export function useEditingDraft({
 
         await refreshLocalSurveys()
         await refreshLocalAttachments()
+        pendingAutosaveRef.current = null
         autosaveSignatureRef.current = ""
         setEditingSurveyId(null)
         setFormMode("create")
@@ -217,6 +248,7 @@ export function useEditingDraft({
 
       await refreshLocalSurveys()
       await refreshLocalAttachments()
+      pendingAutosaveRef.current = null
       autosaveSignatureRef.current = ""
       setEditingSurveyId(null)
       setFormMode("create")

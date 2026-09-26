@@ -1,9 +1,38 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common"
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
+import { appConfigOf } from "../config/app-config"
+import { AppConfig } from "../config/config.types"
+import { isKnownDefaultSecret } from "../config/production-rules"
 
 @Injectable()
 export class Auth0ManagementService {
+  private readonly logger = new Logger(Auth0ManagementService.name)
+  private readonly nodeEnv: AppConfig["nodeEnv"]
+  private readonly auth0: AppConfig["auth0"]
   private cachedToken: string | null = null
   private tokenExpiresAt = 0
+
+  constructor(config: ConfigService) {
+    const app = appConfigOf(config)
+    this.nodeEnv = app.nodeEnv
+    this.auth0 = app.auth0
+    // D-02: missing management credentials are only a warning; account deletion and email
+    // change on the Auth0 side then fail exactly as they did before this phase.
+    if (
+      app.isProduction &&
+      (isKnownDefaultSecret(app.auth0.mgmtClientId) ||
+        isKnownDefaultSecret(app.auth0.mgmtClientSecret))
+    ) {
+      this.logger.warn(
+        "AUTH0_MGMT_CLIENT_ID / AUTH0_MGMT_CLIENT_SECRET absent : la suppression de compte côté Auth0 est désactivée",
+      )
+    }
+  }
 
   private getManagementConfig(): {
     domain: string
@@ -11,9 +40,9 @@ export class Auth0ManagementService {
     managementClientSecret: string
   } {
     return {
-      domain: process.env.AUTH0_DOMAIN ?? "",
-      managementClientId: process.env.AUTH0_MGMT_CLIENT_ID ?? "",
-      managementClientSecret: process.env.AUTH0_MGMT_CLIENT_SECRET ?? "",
+      domain: this.auth0.domain,
+      managementClientId: this.auth0.mgmtClientId,
+      managementClientSecret: this.auth0.mgmtClientSecret,
     }
   }
 
@@ -83,7 +112,7 @@ export class Auth0ManagementService {
   }
 
   async deleteUser(auth0Sub: string): Promise<void> {
-    if (process.env.NODE_ENV === "test") {
+    if (this.nodeEnv === "test") {
       return
     }
 
@@ -108,8 +137,8 @@ export class Auth0ManagementService {
   }
 
   async sendPasswordResetEmail(email: string): Promise<void> {
-    const domain = process.env.AUTH0_DOMAIN ?? ""
-    const appClientId = process.env.AUTH0_APP_CLIENT_ID ?? ""
+    const domain = this.auth0.domain
+    const appClientId = this.auth0.appClientId
 
     const response = await fetch(`https://${domain}/dbconnections/change_password`, {
       method: "POST",

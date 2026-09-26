@@ -3,6 +3,7 @@ import {
   computeRegionZoom,
   areRegionsNearlyEqual,
   computeRegionBbox,
+  buildBboxAroundPoint,
 } from "./map-viewport"
 
 describe("buildFocusedMapRegion", () => {
@@ -138,5 +139,26 @@ describe("computeRegionBbox", () => {
     const [minLng, , maxLng] = bbox.split(",").map(Number)
     expect(minLng).toBeGreaterThanOrEqual(-180)
     expect(maxLng).toBeLessThanOrEqual(180)
+  })
+})
+
+describe("buildBboxAroundPoint", () => {
+  test("returns minLng,minLat,maxLng,maxLat around a center point", () => {
+    expect(buildBboxAroundPoint({ lat: 46, lng: 2 }, 0.025)).toBe(
+      "1.975000,45.975000,2.025000,46.025000",
+    )
+  })
+
+  test("clamps max values near the north-east edge of the world", () => {
+    expect(buildBboxAroundPoint({ lat: 89.99, lng: 179.99 }, 0.025)).toBe(
+      "179.965000,89.965000,180.000000,90.000000",
+    )
+  })
+
+  test("clamps min values near the south-west edge of the world", () => {
+    const bbox = buildBboxAroundPoint({ lat: -89.99, lng: -179.99 }, 0.025)
+    const [minLng, minLat] = bbox.split(",").map(Number)
+    expect(minLng).toBe(-180)
+    expect(minLat).toBe(-90)
   })
 })

@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Species Recognition — Approach Decision
+current_phase: 01.8
+current_phase_name: audit-remediation track
 status: executing
-stopped_at: Completed 01-06-PLAN.md -- ADR-002 Accepted, phase 1 closed (6/6 plans)
-last_updated: "2026-09-26T12:54:55.121Z"
+stopped_at: Phase 1 closed (ADR-002 Accepted); branch merged with the audit-remediation track
+last_updated: "2026-09-26T13:23:15.713Z"
 last_activity: 2026-09-26
-last_activity_desc: "01-05 complete (calibration + real device latency, GATE-MEASURE: COMPLETE)"
+last_activity_desc: Phase 1 closed (ADR-002 Accepted; verification passed with one accepted Android deviation), branch merged with origin/main
 progress:
-  total_phases: 8
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
-  percent: 13
+  total_phases: 16
+  completed_phases: 7
+  total_plans: 95
+  completed_plans: 63
+  percent: 44
 ---
 
 # Project State
@@ -24,22 +24,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** An ecologist can complete a full IBP survey offline on a real parcel and have it reach the server intact on reconnection — no data loss, no duplicates.
-**Current focus:** Phase 1 — Species Recognition — Approach Decision
+**Current focus:** Two parallel tracks. **Audit-remediation track** — Phase 1.8 next, Phase 1.9 planned. **Species-recognition track** — Phase 1 closed 2026-09-26 (ADR-002 Accepted); Phase 1.1 (IBP method version) is next and must precede Phase 2, which builds the Factor A genus list.
 
 ## Current Position
 
-Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
-Plan: 6 of 6
-Status: Ready to execute (plan 06 — ADR ratification)
-Last activity: 2026-09-26 — 01-05 complete (calibration + real device latency, GATE-MEASURE: COMPLETE)
+Phase: 01.8 (audit-remediation track) — Phase 1 closed on the species-recognition track
+Plan: Not started
+Status: Ready to execute
+Last activity: 2026-09-26 — Phase 1 closed (ADR-002 Accepted; verification passed with one accepted Android deviation), branch merged with origin/main
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 13%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 56
 - Average duration: —
 - Total execution time: 0 hours
 
@@ -47,7 +47,12 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01.2 | 9 | - | - |
+| 01.3 | 7 | - | - |
+| 01.4 | 6 | - | - |
+| 01.5 | 12 | - | - |
+| 01.6 | 9 | - | - |
+| 01.7 | 13 | - | - |
 
 **Recent Trend:**
 
@@ -64,6 +69,15 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-species-recognition-approach-decision P05 (partial: Task A) | ~2h | - tasks | - files |
 | Phase 01-species-recognition-approach-decision P05 (complete) | ~3.5h total | - tasks | - files |
 | Phase 01 P06 | ~2h | 3 tasks | 6 files |
+| Phase 01.2 P01 | 45min | 3 tasks | 13 files |
+| Phase 01.2 P02 | 55min | 2 tasks | 9 files |
+| Phase 01.2 P03 | 55min | 3 tasks | 9 files |
+| Phase 01.2 P04 | 12min | 2 tasks | 8 files |
+| Phase 01.2 P05 | 8min | 2 tasks | 4 files |
+| Phase 01.2 P06 | 22min | 2 tasks | 8 files |
+| Phase 01.2 P07 | 10min | 2 tasks | 8 files |
+| Phase 01.2 P08 | 21min | 2 tasks | 6 files |
+| Phase 01.2 P09 | 37min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -98,22 +112,47 @@ Decisions table. Decisions affecting current work:
 - [Phase 01-05]: Real on-device latency measured for the PROMOTED iteration-4 genus classifier on a real iPhone 15 Pro (Release build): median total 90.41ms online / 90.49ms airplane mode (D-05 3s budget MET, ~33x headroom). D-06 (offline, on-device-only) confirmed as a checked proof, not a code-inspection argument. GATE-MEASURE: COMPLETE.
 - [Phase 01]: ADR-002 Accepted: full go for US-C9 this milestone, all 34 CNPF genera suggested with per-genus calibrated confidence, none withheld (D-04 amended); no partial-go list, since the partial-go rule would have enabled only Tamarix.
 - [Phase 01]: D-07 amended at ratification: model bundled in the app binary (8.24MB), not downloaded separately -- the original download-to-stay-light premise assumed a large model; measured size invalidated it.
+- [2026-09-25] **Owner device checks are delegated to Claude for the audit phases (1.6–1.9).** The owner no longer tests on the phone. Each phase gate replays the owner steps against the built API (MinIO mode through the pinned `pgsty/minio` image, plus the debug test-token) with a committed simulation script, and records the results in VALIDATION.md. Only checks that genuinely need a phone UI go back to the owner, and they must be explicitly justified.
+- [Phase 01.2]: Tracker key = SHA-256(bearer token) when present, else client IP; trust proxy defaults to loopback
+- [Phase 01.2]: Production default raised 10/min shared to 600/min per client (60/min /sync, 240/min uploads) plus a 3000/min per-IP ceiling against token rotation
+- [Phase 01.2]: Email linking requires email_verified===true; unverified emails refuse to link and never write auth0_sub
+- [Phase 01.2]: First-login provisioning uses INSERT ... ON CONFLICT (auth0_sub) with a 23505 re-select fallback for race-free user creation
+- [Phase 01.2]: Reported survey events carry only {report_id}; reporter identity and reason stay in the moderator-only reports table, with migration 013 scrubbing historic rows
+- [Phase 01.2]: sessionOwner (Auth0 sub+email) exposed from useAuth0Session for the D-04 local-data owner check in later plans
+- [Phase 01.2]: buildBboxAroundPoint shares map-viewport's formatBbox helper with computeRegionBbox (D-12)
+- [Phase 01.2]: shouldShowDevTools(isDev = __DEV__) gates the Settings dev-tools section and the App.tsx stored API URL override (D-11)
+- [Phase 01.2]: DebugModule and the HS256 test-token path load only when NODE_ENV !== "production" (isDebugSurfaceEnabled); no new env var, so CI's NODE_ENV=test setup is unchanged
+- [Phase 01.2]: clearSurveySessionState no longer purges local data on session end (D-02); AUTH_TEMPORARILY_UNAVAILABLE keeps the session as retry-later in sync/pull/report; pre-Auth0 stubs removed from useAuth0Session and every caller
+- [Phase 01.2]: resolveLocalDataOwnership implements the D-04 owner decision table (adopt/match/purge-and-adopt/conflict/unknown-session) as a pure function; useLocalDataOwner's syncAllowed is default-deny (true only when status is ok)
+- [Phase 01.2]: local_meta keys session_owner_sub/session_owner_email persist the D-04 owner marker; clearLocalIbpData also forgets them
+- [Phase 01.2]: syncAllowed gates every automatic/manual sync and pull path in useSurveySyncNetwork (runSync, maybeAutoSync, handlePullChanges); handleReportSurvey stays ungated since it carries no local survey data
+- [Phase 01.2]: handleLogout now counts unsynced work and purges only after an explicit destructive confirmation (D-03); performDeleteAccount purges via the same performLogoutAndPurge helper without the unsynced-work alert
+- [Phase 01.2]: LocalDataOwnerConflictScreen (French) blocks the app with exactly two choices when localDataOwnerStatus is conflict; App.tsx keeps it mutually exclusive with the profile-setup overlay
+- [Phase 01.2]: Device verification: steps 1-5 confirmed on real hardware (offline session keep, revoked refresh token, logout with unsynced work, other-account conflict, dev tools absent in release build); steps 6-7 (nearby-parcels list, production rate limiting) carried over as they require field conditions / a live deploy
 
 ### Pending Todos
 
-None yet.
+- Malformed legacy sync cursor returns 500 (from the phase 01.6 verification, 2026-09-25): `parseSyncChangesCursor` in `api/src/surveys/surveys-normalize.utils.ts` (~465-475) accepts `2024-02-30T00:00:00Z|x` or `2024-01-01 12:00:00 junk|x`, and the Postgres `::timestamptz` cast then fails with 22007/22008, which nothing maps to 400. This predates phase 01.6, and installed apps never send such cursors. Fix it in phase 01.7: validate strictly or map 22007/22008 to 400. That also makes `sync-conflict-resolution-v1.md:84` and `api-contract-v1.md:770` true.
+- Switch local and VPS MinIO image (2026-09-25): upstream MinIO is archived; `quay.io/minio/minio` answers 401 and Docker Hub `minio/minio` is gone. `infra/docker-compose.yml` and `infra/docker-compose.vps.yml` still use `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`, which works only while cached, so a fresh host or a `docker image prune` breaks storage. The owner chose the `pgsty/minio` fork, already used by CI since phase 01.6. Move both compose files to it (pinned by digest) and check that the existing `/data` volume starts on the VPS.
+- Investigate iOS Release build navigation (2026-09-25): `npx expo run:ios --device --configuration Release` shows the JS tab bar instead of the native liquid-glass one, and "Mes relevés" does not work. The dev build also shows a non-glass bar; first check `mobile/.env` for a leftover `EXPO_PUBLIC_ENABLE_NATIVE_TABS=false`. Then re-run the offline cold-start device check (phase 01.5 criterion 7) on a working Release build.
+
+- Verify nearby-parcels list on device near known parcels (carried over from Phase 01.2-09 step 6; automated coverage exists in `useNearbyParcels.test.ts` / `map-viewport.test.ts`)
+- After API deploy: check Caddy/API logs for 429 bursts under concurrent sync; set `TRUST_PROXY=loopback,uniquelocal` in `/home/ubuntu/cortege.env` if unauthenticated requests share one bucket (carried over from Phase 01.2-09 step 7)
 
 ### Blockers/Concerns
 
 - **Phase 1 is a real go/no-go.** On-device species recognition has no stack, architecture or contract coverage anywhere in the document set. If the spike returns a no-go, Phases 2 and 3 fall away and REQ-C-species-recognition moves to the next milestone.
-- **Schedule.** The published plan put MVP finalization at September 2026 (today) with field tests October–December. Phases 1–3 are unstarted unknowns; the December field-test window is at risk.
-- **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): string-interpolated SQL in `users.service.ts`, 9 of 12 screens untested, missing indexes — all scheduled in Phases 6 and 7.
+- **Schedule.** The published plan put MVP finalization at September 2026 (today) with field tests October–December. Phases 1–3 are unstarted unknowns, and the audit remediation (Phases 1.2–1.9) adds roughly 60 developer-days; the December field-test window is at risk. Only 1.2, 1.4, 1.5 and 1.6 gate Phase 7.
+- **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): 9 of 12 screens untested (Phase 7). The "string-interpolated SQL" and "missing indexes" concerns were re-checked on 2026-09-23 against the code and are re-scoped in Phase 6 — no injection exists and the three indexes already exist.
+- **Critical data-loss defect in the shipped app** (audit M-C1): a token-refresh failure offline wipes every unsynced survey. Phase 1.2 fixes it; a corrective mobile release should follow before any further field use.
 - **Next-milestone prerequisite:** Epics E and G need a back-office / CMS surface that no spec or architecture doc defines.
 - **Still open for plan 06's ADR:** no lower-spec real iOS device (iPhone SE/11-class, not a flagship) and no real Android device have ever been used in this phase -- every latency figure (plan 03's stock model, plan 05's promoted genus classifier) is from the same flagship iPhone 15 Pro, a ceiling not the D-18 representative floor. D-06 (offline, on-device-only) IS now confirmed on real hardware (plan 05: online/airplane medians differ by 0.08ms) -- this part is resolved.
 
 ### Roadmap Evolution
 
 - Phase 01.1 inserted after Phase 1: Reconcile the IBP method version — repo implements Fr v3.0, CNPF publishes FR v3.2 (URGENT)
+- Phases 01.2–01.5 inserted after Phase 1 from the 2026-09 code audit (URGENT): stop field data loss and account exposure; CI and test safety net; API sync integrity; mobile sync engine reliability. Phase 7 now depends on 1.2, 1.4 and 1.5.
+- Phases 01.6–01.9 inserted after Phase 1 to close the rest of the 2026-09 code audit (lots L10, L13–L20 and the remainders of L7, L16, L20): sync feed and object storage; API configuration, service split and database tuning; shared IBP domain package and test completeness; mobile state architecture, i18n, accessibility and hygiene
 
 ## Deferred Items
 

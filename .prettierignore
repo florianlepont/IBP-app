@@ -9,3 +9,7 @@ ios
 
 # Species-recognition spike (Phase 1) is throwaway — never held to format:check
 spike/
+
+# GSD planning state is written by tooling, not maintained by hand — formatting
+# it produces churn on every ingest and phase without any benefit.
+.planning

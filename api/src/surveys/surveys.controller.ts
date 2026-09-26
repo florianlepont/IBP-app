@@ -9,16 +9,24 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common"
 import { FileInterceptor } from "@nestjs/platform-express"
+import { Throttle } from "@nestjs/throttler"
 import { memoryStorage } from "multer"
+import { Response } from "express"
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
+import { UPLOAD_THROTTLE } from "../common/rate-limit.config"
+import { SafeIdPipe } from "../common/safe-id.pipe"
 import { SurveysService } from "./surveys.service"
+import { decodeEventListCursor, SurveyEventsService } from "./survey-events.service"
+import { decodeListCursor, parseListLimit } from "./list-cursor"
 import { SurveysAttachmentsService } from "./surveys-attachments.service"
 import { SurveyUpsertDto } from "./dtos/survey-upsert.dto"
 import { SurveyPatchDto } from "./dtos/survey-patch.dto"
@@ -31,6 +39,7 @@ export class SurveysController {
   constructor(
     private readonly surveysService: SurveysService,
     private readonly attachmentsService: SurveysAttachmentsService,
+    private readonly surveyEvents: SurveyEventsService,
   ) {}
 
   @Get()
@@ -40,9 +49,13 @@ export class SurveysController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("q") q?: string,
+    // D-11 / D-18 (C-4): individual query strings, not a class DTO, so unknown parameters are
+    // still ignored as before.
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
   ) {
-    const items = await this.surveysService.listForUser(user, { status, from, to, q })
-    return { items, next_cursor: null }
+    const page = { limit: parseListLimit(limit), after: decodeListCursor(cursor) }
+    return this.surveysService.listForUser(user, { status, from, to, q }, page)
   }
 
   @Post()
@@ -51,14 +64,14 @@ export class SurveysController {
   }
 
   @Get(":id")
-  async getById(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  async getById(@CurrentUser() user: AuthenticatedUser, @Param("id", SafeIdPipe) id: string) {
     return this.surveysService.getSurveyById(user, id)
   }
 
   @Patch(":id")
   async patch(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @Param("id", SafeIdPipe) id: string,
     @Body() body: SurveyPatchDto,
   ) {
     return this.surveysService.patchSurvey(user, id, body)
@@ -67,38 +80,65 @@ export class SurveysController {
   @Patch(":id/visibility")
   async patchVisibility(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @Param("id", SafeIdPipe) id: string,
     @Body() body: SurveyVisibilityPatchDto,
   ) {
     return this.surveysService.patchSurveyVisibility(user, id, body)
   }
 
   @Post(":id/submit")
-  async submit(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  async submit(@CurrentUser() user: AuthenticatedUser, @Param("id", SafeIdPipe) id: string) {
     return this.surveysService.submitSurvey(user, id)
   }
 
   @Delete(":id")
   @HttpCode(204)
-  async deleteSurvey(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  async deleteSurvey(@CurrentUser() user: AuthenticatedUser, @Param("id", SafeIdPipe) id: string) {
     await this.surveysService.deleteSurvey(user, id, { allowMissing: true })
   }
 
   @Post(":id/attachments")
+  @Throttle(UPLOAD_THROTTLE)
   async createAttachment(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @Param("id", SafeIdPipe) id: string,
     @Body() body: CreateAttachmentDto,
   ) {
     return this.attachmentsService.createAttachment(user, id, body)
   }
 
   @Get(":id/attachments")
-  async listAttachments(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  async listAttachments(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", SafeIdPipe) id: string,
+  ) {
     return this.attachmentsService.listAttachments(user, id)
   }
 
+  @Get(":id/attachments/:attachmentId/download-url")
+  async getAttachmentDownloadUrl(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", SafeIdPipe) id: string,
+    @Param("attachmentId", SafeIdPipe) attachmentId: string,
+  ) {
+    return this.attachmentsService.getAttachmentDownload(user, id, attachmentId)
+  }
+
+  @Get(":id/attachments/:attachmentId/content")
+  async getAttachmentContent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", SafeIdPipe) id: string,
+    @Param("attachmentId", SafeIdPipe) attachmentId: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const content = await this.attachmentsService.getAttachmentContent(user, id, attachmentId)
+    response.setHeader("Content-Type", content.mimeType)
+    response.setHeader("Cache-Control", "private, max-age=300")
+    return new StreamableFile(content.buffer)
+  }
+
   @Put(":id/attachments/:attachmentId/upload")
+  @Throttle(UPLOAD_THROTTLE)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),
@@ -107,8 +147,8 @@ export class SurveysController {
   )
   async uploadAttachment(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
-    @Param("attachmentId") attachmentId: string,
+    @Param("id", SafeIdPipe) id: string,
+    @Param("attachmentId", SafeIdPipe) attachmentId: string,
     @Query("token") token?: string,
     @UploadedFile()
     file?: { buffer: Buffer; mimetype?: string; size?: number; originalname?: string },
@@ -120,14 +160,21 @@ export class SurveysController {
   @HttpCode(204)
   async deleteAttachment(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
-    @Param("attachmentId") attachmentId: string,
+    @Param("id", SafeIdPipe) id: string,
+    @Param("attachmentId", SafeIdPipe) attachmentId: string,
   ) {
     await this.attachmentsService.deleteAttachment(user, id, attachmentId)
   }
 
   @Get(":id/events")
-  async events(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.surveysService.getEvents(user, id)
+  async events(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", SafeIdPipe) id: string,
+    // D-11 / D-18 (C-4): optional; installed apps send neither and get every event.
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
+  ) {
+    const page = { limit: parseListLimit(limit), after: decodeEventListCursor(cursor) }
+    return this.surveyEvents.listForSurvey(user, id, page)
   }
 }

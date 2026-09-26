@@ -3,6 +3,7 @@ import { Alert, StyleSheet, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
 import { initLocalDb } from "./src/storage/db"
+import { persistLegacyAttachmentFiles } from "./src/storage/attachments"
 import { AuthenticatedAppNavigation, FormMode } from "./src/app/AuthenticatedAppNavigation"
 import { styles } from "./src/app/styles"
 import { SurveyDetailTab } from "./src/app/types"
@@ -14,11 +15,14 @@ import { useEditingDraft } from "./src/hooks/useEditingDraft"
 import { useSurveyDraftPatcher } from "./src/hooks/useSurveyDraftPatcher"
 import { useGpsCapture } from "./src/hooks/useGpsCapture"
 import { useNearbyParcels } from "./src/hooks/useNearbyParcels"
+import { shouldShowDevTools } from "./src/app/dev-tools"
 import { loadStoredApiUrl, saveStoredApiUrl } from "./src/app/api-url-storage"
 import { DEFAULT_API_URL } from "./src/app/constants"
 import type { SurveyStats } from "./src/app/types"
 import { AuthGateScreen } from "./src/screens/AuthGateScreen"
 import { ProfileSetupScreen } from "./src/screens/ProfileSetupScreen"
+import { LocalDataOwnerConflictScreen } from "./src/screens/LocalDataOwnerConflictScreen"
+import { formatUnsyncedWorkSummary } from "./src/app/local-data-owner"
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(() => process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL)
@@ -28,6 +32,7 @@ export default function App() {
   const [surveyDetailTab, setSurveyDetailTab] = useState<SurveyDetailTab>("summary")
 
   useEffect(() => {
+    if (!shouldShowDevTools()) return
     void loadStoredApiUrl()
       .then((stored) => {
         if (stored) setApiUrl(stored)
@@ -124,6 +129,10 @@ export default function App() {
   useEffect(() => {
     const bootstrap = async (): Promise<void> => {
       await initLocalDb()
+      // Best-effort: rescue photos captured by older app versions from the
+      // OS-purgeable cache before the app starts using them (T-01.5-26). Must
+      // never block startup.
+      await persistLegacyAttachmentFiles().catch(() => undefined)
       await refreshLocalSurveys()
       await refreshLocalAttachments()
     }
@@ -144,7 +153,10 @@ export default function App() {
     !surveySync.currentUser.last_name
 
   const showAuthOverlay = !surveySync.isAuthenticated
-  const showProfileSetupOverlay = surveySync.isAuthenticated && needsProfileSetup
+  const showOwnerConflictOverlay =
+    surveySync.isAuthenticated && surveySync.localDataOwnerStatus === "conflict"
+  const showProfileSetupOverlay =
+    surveySync.isAuthenticated && needsProfileSetup && !showOwnerConflictOverlay
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -194,6 +206,17 @@ export default function App() {
                 sessionRestoring={surveySync.sessionRestoring}
                 logoSource={require("./assets/logo-app.png")}
                 heroMartenSource={require("./assets/auth/marten.png")}
+              />
+            </View>
+          )}
+          {showOwnerConflictOverlay && (
+            <View style={overlayStyles.fill}>
+              <LocalDataOwnerConflictScreen
+                foreignWorkSummary={formatUnsyncedWorkSummary(surveySync.foreignWork)}
+                foreignOwnerEmail={surveySync.foreignOwnerEmail}
+                onSwitchAccount={() => void surveySync.handleSwitchToOwnerAccount()}
+                onDiscard={() => void surveySync.handleDiscardForeignData()}
+                logoSource={require("./assets/logo-app.png")}
               />
             </View>
           )}

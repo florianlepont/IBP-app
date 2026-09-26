@@ -13,9 +13,9 @@ services:
       - ibp_postgres_data:/var/lib/postgresql/data
 
   minio:
-    # Docker Hub no longer serves minio/minio publicly; quay.io is MinIO's
-    # other official registry.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # Upstream MinIO images are no longer served (quay.io answers 401, Docker Hub
+    # minio/minio is gone): same maintained fork as CI, pinned by digest.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     container_name: ibp-minio
     restart: unless-stopped
     environment:

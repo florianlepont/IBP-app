@@ -1,17 +1,20 @@
 # V1 API Contract
 
 ## Status
+
 Accepted for V1 baseline (validated on 2026-03-08, non-exhaustive by design). V1.1 parcel/history extension proposed on 2026-03-10. Auth section updated on 2026-04-06 to reflect Auth0 delegation. `/me` endpoints updated to match implementation. `DELETE /me` added (US-A7).
 
 Base path: `/v1`
 
 ## Principles
+
 - JSON request/response format
 - Bearer token authentication for protected endpoints
 - Idempotent survey upsert via (`id`, `sync_version`)
 - UTC timestamps in ISO-8601 format
 
 ## Entity Coverage (Data Contract -> API)
+
 - `User`: covered
 - `Auth Session`: covered
 - `Survey`: covered
@@ -26,24 +29,42 @@ Base path: `/v1`
 Authentication is fully delegated to **Auth0**. The backend does not expose login, register, refresh, or logout endpoints. All token issuance and session lifecycle (access token, refresh token, rotation, revocation) are handled by Auth0.
 
 ### How it works
+
 1. The mobile app authenticates via Auth0 (Universal Login, social providers, or email/password).
 2. Auth0 issues a signed JWT access token (RS256).
 3. The mobile sends this token as `Authorization: Bearer <token>` on every API request.
 4. The backend's `AuthGuard` validates the JWT against Auth0's JWKS endpoint (`/.well-known/jwks.json`).
-5. On first login, the backend auto-provisions a DB user record from Auth0's `/userinfo` endpoint. If a user with the same email already exists, the Auth0 `sub` is linked to that record.
+5. On first login, the backend auto-provisions a DB user record from Auth0's `/userinfo` endpoint (race-free: concurrent first requests for the same `sub` all resolve to the same user).
+   - If `/userinfo` reports `email_verified: true` and a user with the same email exists **and is not yet linked** to any Auth0 identity (`auth0_sub IS NULL`, e.g. a pre-Auth0 account), the Auth0 `sub` is linked to that record.
+   - An account already linked to another `sub` is never re-pointed, and an unverified (or missing) email is never linked to an existing account. In both cases the request is refused with **403**, not 401 (the token is valid; this is a policy refusal):
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "code": "email_already_linked",
+  "message": "This email address already belongs to another account"
+}
+```
+
+Clients must match on `code`, must **not** refresh the token and retry on this 403, and should tell the user to sign in with the method used to create the account. Every other authentication failure (missing, expired or invalid token) remains **401**.
 
 ### Logout
+
 Handled client-side: the mobile clears its local token storage. Token revocation (refresh token) is performed directly against Auth0.
 
 ### Social / SSO providers
+
 Supported providers (Apple, Google, etc.) are configured in the Auth0 tenant. No backend changes are needed to add or remove providers.
 
 ## 1.1) User Profile
 
 ### GET /me
+
 Get current authenticated user profile.
 
 Response `200`:
+
 ```json
 {
   "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
@@ -57,15 +78,20 @@ Response `200`:
 }
 ```
 
+- `profile_picture_url` is `null` when the user has no picture, and also when a picture is recorded but its stored object can no longer be found (the app then shows its initials fallback, with no error). If the object store cannot be reached, the stored URL is returned unchanged.
+
 ### PATCH /me
+
 Partially update editable profile fields.
 Editable fields in V1: `first_name`, `last_name`, `display_name`, `profile_picture_url`.
 
 Notes:
+
 - `email` is **not** editable via this endpoint. Use `PATCH /me/email` instead.
 - Setting `profile_picture_url` to `null` removes the profile picture URL.
 
 Request:
+
 ```json
 {
   "first_name": "Florian",
@@ -76,6 +102,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "0f5f57bb-4c0f-4adb-97b9-faf7a1e33b9a",
@@ -90,9 +117,11 @@ Response `200`:
 ```
 
 ### PATCH /me/email
+
 Change the authenticated user's email address.
 
 Request:
+
 ```json
 {
   "email": "florian@example.com"
@@ -102,6 +131,7 @@ Request:
 Response `204`.
 
 Rules:
+
 - New email must differ from current email (`400` otherwise).
 - Email is updated on Auth0 first (triggers a verification email), then in the DB.
 - If the DB update fails with a uniqueness conflict, the Auth0 change is rolled back.
@@ -109,18 +139,27 @@ Rules:
 - Returns `400` with code `Email already taken` if the email conflicts in the DB.
 
 ### POST /me/password-reset
+
 Trigger a password reset email for the authenticated user (email/password accounts only).
 
 Response `204`.
 
 Notes:
+
 - Sends a secure reset link to the user's current email via Auth0's password reset flow.
 - No-op for users authenticated exclusively via social providers (no password set).
 
 ### PUT /me/profile-picture
+
 Upload user profile picture (`multipart/form-data`, field name: `file`).
 
+Rules:
+
+- Max size 10MB. Accepted types: `image/jpeg`, `image/jpg`, `image/png`, `image/heic`, `image/webp`. Any other type (for example `image/gif`) gets `400 Unsupported profile picture type`, never a `500`.
+- The picture is stored in object storage (the MinIO/S3 bucket in production, the local uploads directory in local mode) under the key `profiles/{user_id}/avatar{ext}`. Replacing a picture deletes the previous object after the database update.
+
 Response `200`:
+
 ```json
 {
   "profile_picture_url": "/me/profile-picture?v=1741525200",
@@ -140,21 +179,30 @@ Response `200`:
 ```
 
 ### GET /me/profile-picture
+
 Download current authenticated user profile picture.
 
-Response `200`: binary image stream.
+Response `200`: binary image stream, with the stored `Content-Type` and `Cache-Control: private, max-age=60`.
+
+Rules:
+
+- The API streams the bytes itself and requires `Authorization: Bearer <token>`; it never redirects to a presigned URL (installed apps send the Bearer header to this route).
+- `404` when the user has no picture. `404` also when a picture is recorded but its stored object is missing: the server then clears the stale `profile_picture_*` columns, so the next `GET /me` returns `profile_picture_url: null`.
 
 ### DELETE /me/profile-picture
+
 Remove current authenticated user profile picture.
 
 Response `204`.
 
 ### DELETE /me
+
 Permanently delete the authenticated user's account.
 
 Response `204`.
 
 Rules:
+
 - Immediate and irreversible — no grace period.
 - The user is deleted from Auth0 (`DELETE /api/v2/users/{auth0_sub}`). Requires M2M token with `delete:users` scope.
 - All personal identity data (name, email, profile picture) is deleted from the DB.
@@ -167,9 +215,11 @@ Rules:
 ## 2) Surveys
 
 ### POST /surveys
+
 Create or update one survey (idempotent upsert).
 
 Request:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -198,13 +248,53 @@ Request:
 Map centering metadata stays client-local. Server map display is derived from linked parcel centroids (`display_location`).
 
 V1.1 addendum fields:
+
 - `parcel_ids`: French cadastral parcel identifiers (at least one required at submit).
 - `parcel_id`: compatibility primary parcel pointer.
 - `observation_year`: integer year used for longitudinal history.
 - `version_number`: integer (`>=1`) for parcel-level survey versioning.
 - `previous_survey_id`: optional link to previous survey version on same parcel.
 
+**`status` and `expires_at` (V1.2 hardening):** both fields are accepted for backward
+compatibility with installed apps but are always ignored by the server. A survey is always
+created with `status: "draft"`; status changes only through `POST /surveys/{id}/submit`
+(`submitted`/`expired`). `expires_at` is set by the server at creation time (`created_at` + 7
+days) and is never moved by an upsert.
+
+**Submitted surveys are read-only by value (V1.2 hardening):** an upsert that changes the
+*value* of `site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`,
+`previous_survey_id`, `region_version`, `vegetation_stage` or `factors` on a survey whose
+status is `submitted` is rejected with `409 survey_submitted_read_only` and
+`details.fields` listing the changed field names. Resending identical values (including a
+resync of a pulled survey) is accepted and only refreshes `visibility`/`sync_version`;
+`scores` is excluded from this comparison (it is recomputed server-side).
+
+**Same `sync_version` (phase 01.6):** an upsert that carries the `sync_version` the server
+already stored is compared by value with the stored survey on the same read-only fields
+(`site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`,
+`previous_survey_id`, `region_version`, `vegetation_stage`, `factors`) plus `visibility`;
+`scores`, `status` and `expires_at` are excluded. Identical values are an idempotent replay
+(`synced`, nothing written). When only `visibility` differs, it is applied last-writer-wins
+like `PATCH /surveys/{id}/visibility` (new `updated_at`, one `visibility_changed` event) and
+the answer is `synced`. Any read-only difference is rejected with `409 sync_version_conflict`
+("Same sync_version with different content", `details.server_sync_version` /
+`client_sync_version`) and nothing is written. This check runs before the submitted-survey
+rule above, so a same-version resend that changes a submitted survey also gets
+`sync_version_conflict`. Of two concurrent upserts at the same new `sync_version` with
+different content, one is `synced` and the other gets `409 sync_version_conflict`. A lower
+`sync_version` than the stored one is always `409 sync_version_conflict` ("Older sync_version
+received").
+
+**Identifiers (phase 01.6):** survey ids (`id`, and the `{id}` path parameter of every
+`/surveys/{id}` route) and attachment ids (`{attachment_id}` path parameters,
+`attachment_id` in `/sync` payloads) must match `^[A-Za-z0-9_-]{1,128}$`. This accepts every
+id format installed apps have generated (`survey-<ms>`, UUIDs). An unsafe path parameter
+gets `400 Invalid identifier` (the rejected value is never echoed), an unsafe body `id` a
+normal `400` validation error, and an unsafe id in `POST /sync` a per-operation
+`fatal_error` `invalid_sync_operation` (`400`).
+
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -215,10 +305,41 @@ Response `200`:
 }
 ```
 
-### GET /surveys?status=&from=&to=&q=
-List current user surveys with filters.
+### List pagination (`limit`, `cursor`)
+
+`GET /surveys`, `GET /surveys/{id}/events` and `GET /reports` accept two optional query
+parameters:
+
+- `limit`: an integer from 1 to 100. Without it the list is not paginated: every row comes back,
+  in the documented order, with `next_cursor: null`, exactly as before pagination existed.
+- `cursor`: the opaque `next_cursor` of the previous page (`v1:` followed by base64url). Clients
+  must send it back verbatim, never parse or build it. It is only valid for the same list and
+  the same filters.
+
+With `limit`, the response holds at most `limit` items. `next_cursor` is set when more rows
+follow, and `null` on the last page. Walking the pages returns every row exactly once, in the
+unpaginated order. Pages use keyset pagination: rows written after the first page with a newer
+timestamp are not added to later pages.
+
+A cursor never widens the caller's scope: a cursor replayed by another user still lists only that
+user's rows (or answers `404` / `403`, as the route does without a cursor).
+
+Errors (the rejected value is never echoed):
+
+- `400 Invalid limit`: `limit` is not an integer from 1 to 100 (for example `0`, `101`, `abc`).
+- `400 Invalid cursor`: `cursor` is malformed or was not issued by this list.
+
+Unknown query parameters are ignored, as before.
+
+### GET /surveys?status=&from=&to=&q=&limit=&cursor=
+
+List current user surveys with filters, most recently updated first (`updated_at` descending,
+then `id` descending). `limit` and `cursor` are optional; see
+[List pagination](#list-pagination-limit-cursor). Without `limit`, `next_cursor` is always
+`null`.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -238,9 +359,11 @@ Response `200`:
 ```
 
 ### GET /surveys/{id}
+
 Get one survey with full payload.
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -271,14 +394,17 @@ Response `200`:
 ```
 
 ### PATCH /surveys/{id}
+
 Partially update survey fields.
 
 Lifecycle rule in V1:
+
 - While `status=draft`, business fields are editable (`site_name`, parcel linkage, region/stage, factors, visibility).
 - While `status=submitted`, observation payload is read-only.
 - For `submitted`, only publication visibility changes are allowed (use dedicated endpoint below).
 
 Request:
+
 ```json
 {
   "site_name": "Foret de Rambouillet - Secteur Nord",
@@ -295,6 +421,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -306,9 +433,11 @@ For submitted surveys, patching non-publication fields must return `422`
 with a business error (example: `submitted_read_only_fields`).
 
 ### PATCH /surveys/{id}/visibility
+
 Toggle publication visibility for a survey (`private` <-> `public`).
 
 Request:
+
 ```json
 {
   "visibility": "public"
@@ -316,6 +445,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -325,6 +455,7 @@ Response `200`:
 ```
 
 Rules:
+
 - Allowed for survey owner (and moderators/admins where applicable by auth policy).
 - Allowed in both `draft` and `submitted` states.
 - Must write an audit event: `visibility_changed` with `{ from, to }`.
@@ -332,13 +463,16 @@ Rules:
 - Mobile offline mode may queue this as `survey.visibility_update` inside `POST /sync`.
 
 ### POST /surveys/{id}/submit
+
 Attempt submission transition (`draft` -> `submitted`) with server-side checks.
 Blocking checks include:
+
 - all required IBP factors complete and valid
 - survey not expired
 - parcel linkage complete and valid (`parcel_ids[]`, `observation_year`, `version_number`)
 
 Response `200`:
+
 ```json
 {
   "id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -355,18 +489,32 @@ Response `200`:
 
 If parcel linkage is missing/invalid, API returns `422` with error code `parcel_required` or `parcel_invalid`.
 
+**Concurrent submits (V1.2 hardening):** submits on the same parcel are serialised by a
+row lock; the loser of a race gets `409 parcel_version_conflict` with
+`details.parcel_id`/`details.expected_version_number` instead of a duplicate version or a
+`500`.
+
 ### DELETE /surveys/{id}
+
 Soft-delete a survey.
 
 Response `204`.
 
 Notes:
+
 - Idempotent in V1: returns `204` even if survey was already deleted or not found.
 
-### GET /surveys/{id}/events
-Get survey audit trail events.
+### GET /surveys/{id}/events?limit=&cursor=
+
+Get survey audit trail events, newest first (`created_at` descending, then the event's insertion
+order). `limit` and `cursor` are optional; see [List pagination](#list-pagination-limit-cursor).
+Without them every event is returned, as before.
+
+The response now also carries `next_cursor` (`null` without `limit` and on the last page). The
+item fields are unchanged.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -375,16 +523,19 @@ Response `200`:
       "event_type": "submitted",
       "created_at": "2026-03-08T12:20:00Z"
     }
-  ]
+  ],
+  "next_cursor": null
 }
 ```
 
 ## 2.1) Attachments
 
 ### POST /surveys/{id}/attachments
+
 Create an attachment record and return an upload target URL.
 
 Request:
+
 ```json
 {
   "mime_type": "image/jpeg",
@@ -398,25 +549,32 @@ Request:
 ```
 
 Response `201`:
+
 ```json
 {
   "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
   "storage_key": "surveys/2f3d8a59/photo-1.jpg",
-  "upload_url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+  "upload_url": "https://minio.local/ibp-media/surveys/.../photo-1.jpg?X-Amz-...",
   "confirm_url": "/surveys/2f3d8a59-7c53-4fdf-8df4-8e2325b6172c/attachments/6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0/upload?token=generated-token"
 }
 ```
 
 Rules:
+
 - `size_bytes` must be a positive integer and <= 25MB in V1
+- `size_bytes` must be the exact byte length of the file the client uploads.
 - `upload_url` is the generated upload target for binary data
+- In MinIO/S3 mode, `upload_url` is a presigned PUT (valid 15 minutes) that signs `Content-Type = mime_type` and `Content-Length = size_bytes`. Clients must send exactly `size_bytes` bytes; the store refuses a body of any other length (`403`).
 - `confirm_url` must be called after upload to mark `uploaded_at`
 - In local mode, `upload_url` can be the same API upload endpoint as `confirm_url`
+- The storage key is built by the server as `surveys/{survey_id}/{attachment_id}{ext}` from validated ids only.
 
 ### GET /surveys/{id}/attachments
+
 List non-deleted attachments for one survey.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -433,14 +591,52 @@ Response `200`:
 }
 ```
 
+### GET /surveys/{id}/attachments/{attachment_id}/download-url
+
+Get a short-lived, mode-independent URL to fetch the attachment's stored bytes. Only the survey owner may call this.
+
+Response `200`:
+
+```json
+{
+  "url": "https://minio.local/ibp-media/surveys/.../photo-1.jpg?X-Amz-...",
+  "expires_at": "2026-03-09T09:17:00Z",
+  "requires_auth": false
+}
+```
+
+Rules:
+
+- The URL is valid for 5 minutes (`expires_at`).
+- In MinIO/S3 mode, `url` is a presigned GET for the object and `requires_auth` is `false`. Clients must not send the bearer token to this URL — it is a plain, unauthenticated GET.
+- In local storage mode, `url` is the relative path of `GET /surveys/{id}/attachments/{attachment_id}/content` and `requires_auth` is `true`. Clients must call it with `Authorization: Bearer <token>`.
+- `404` if the survey does not exist, is not owned by the caller, is deleted, or the attachment does not exist or is deleted.
+- `409` with `{ "code": "attachment_not_uploaded" }` if the attachment record exists but has not been uploaded yet.
+- `401` if no bearer token is provided.
+
+### GET /surveys/{id}/attachments/{attachment_id}/content
+
+Stream the stored bytes of an uploaded attachment. Local storage mode only — this route always returns `404` when `OBJECT_STORAGE_MODE=minio`, since the presigned URL from `download-url` serves the bytes directly in that mode.
+
+Response `200`: binary body with `Content-Type` set to the attachment's stored MIME type.
+
+Rules:
+
+- Requires `Authorization: Bearer <token>`; `401` with no token.
+- Same ownership, deletion and upload-state rules as `download-url`: `404` for another user's survey, a deleted survey/attachment or an unknown id; `409` with `{ "code": "attachment_not_uploaded" }` if not yet uploaded.
+- The server resolves `storage_key` against the local uploads directory and refuses to serve any path that escapes it: such a key, like a missing file, answers `404`.
+
 ### PUT /surveys/{id}/attachments/{attachment_id}/upload?token=
+
 Consume the upload target with a real file upload and mark attachment as uploaded.
 
 Request:
+
 - Content type: `multipart/form-data`
 - Field: `file` (binary image payload)
 
 Response `200`:
+
 ```json
 {
   "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
@@ -448,7 +644,13 @@ Response `200`:
 }
 ```
 
+Rules:
+
+- In MinIO/S3 mode this call confirms the object already uploaded to the presigned `upload_url` (no file part is needed). `400 uploaded object not found in storage` if nothing was uploaded.
+- The stored size is compared with the declared `size_bytes`, in both modes. On a mismatch the API answers `422` with `{ "code": "attachment_size_mismatch", "message": "Uploaded file size does not match declared size" }`: in MinIO/S3 mode the object is deleted, in local mode the file is never written. `uploaded_at` stays `null` and no `attachment_uploaded` event is recorded. The client must re-create the attachment with the real size.
+
 ### DELETE /surveys/{id}/attachments/{attachment_id}
+
 Remove attachment link (and optionally underlying object).
 
 Response `204`.
@@ -456,9 +658,11 @@ Response `204`.
 ## 3) Sync (Batch, Recommended)
 
 ### POST /sync
+
 Submit multiple operations in one request.
 
 Request:
+
 ```json
 {
   "operations": [
@@ -496,6 +700,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "results": [
@@ -518,7 +723,7 @@ Response `200`:
       "data": {
         "attachment_id": "6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0",
         "storage_key": "surveys/2f3d8a59/photo-1.jpg",
-        "upload_url": "https://minio.local/ibp-surveys/surveys/.../photo-1.jpg?X-Amz-...",
+        "upload_url": "https://minio.local/ibp-media/surveys/.../photo-1.jpg?X-Amz-...",
         "confirm_url": "/surveys/2f3d8a59-7c53-4fdf-8df4-8e2325b6172c/attachments/6e0417dc-ecdb-4435-aadf-8e11b7f5f2f0/upload?token=generated-token"
       }
     },
@@ -551,8 +756,10 @@ Response `200`:
 ```
 
 Rules:
-- Batch size max in V1: `100` operations.
-- Each operation is processed independently.
+
+- Batch size max in V1: `100` operations, minimum `1`. The whole request is rejected (`400`) if `operations` is empty, exceeds `100`, or the request body carries any field other than `operations`.
+- Each operation's envelope (`entity`, `action`, `survey_id`, `client_ref`) and its `payload` are validated independently by a class DTO before the operation runs. A bad operation never aborts the batch: it yields its own `fatal_error` result with `error.code: "invalid_sync_operation"`, `error.http_status: 400` and `error.details.fields` listing the offending property names (never values or raw constraint text); every other operation in the batch is still processed.
+- Unknown fields inside an operation's `payload` are silently stripped, never rejected — this keeps installed apps and older local-queue fixtures syncing across app updates. Type or format violations on fields the DTO does know about (e.g. `sync_version` sent as a string) are still fatal.
 - Supported operation set in V1:
   - `survey.upsert`
   - `survey.delete`
@@ -568,24 +775,42 @@ Rules:
   - `rate_limited`
   - `network_gateway_error`
   - `transient_upstream_error`
+- Database data/constraint errors (PostgreSQL SQLSTATE classes `22` and `23`, e.g. a check-constraint or foreign-key violation) always return `fatal_error` with `error.code: "invalid_operation"` and a fixed generic message — never retried, and no SQL detail (constraint names, column values) ever reaches the client.
 - `client_ref` is echoed back for local queue reconciliation.
 - `attachment.delete` requires:
   - `survey_id` in operation envelope
   - `attachment_id` inside `payload`
 - For idempotency in sync path, deleting a missing attachment can still return `synced` with `missing=true`.
+- `parcel_ids` (on `survey.upsert` payloads, and on the REST `POST /surveys` / `PATCH /surveys/{id}` bodies) is bounded at `50` entries; each entry must match `^[0-9A-Z]{1,32}$` (case-insensitive) — the pattern accepts both synthetic cadastral IDs and the 14-character IGN `idu` values the server itself generates. A batch entry over the limit or containing a malformed ID is rejected the same way as any other invalid payload (`invalid_sync_operation`, `400`); on the REST routes it is a normal `400` validation error.
+- `status` and `expires_at` on a `survey.upsert` payload are accepted for compatibility with installed apps and always ignored: status changes only through `POST /surveys/{id}/submit`, and `expires_at` is computed server-side at creation (`created_at` + 7 days), never moved by an upsert (D-03).
+- An upsert on a `submitted` survey that changes the value of `site_name`, `parcel_id`/`parcel_ids`, `observation_year`, `version_number`, `previous_survey_id`, `region_version`, `vegetation_stage` or `factors` returns `fatal_error` with `error.code: "survey_submitted_read_only"`, `error.http_status: 409` and `error.details.fields` listing the changed field names. Resending identical values (a pulled-survey replay) is `synced` and only refreshes `visibility`/`sync_version`; `scores` is excluded from the comparison since it is recomputed server-side (D-04, D-13).
+- An upsert with the same `sync_version` the server already stored follows the same-version rule of `POST /surveys`: identical read-only fields and visibility are `synced`; a visibility-only difference is applied last-writer-wins like `survey.visibility_update` and answered `synced`; any read-only difference returns `fatal_error` with `error.code: "sync_version_conflict"`, `error.http_status: 409`, `error.message: "Same sync_version with different content"` and `server_sync_version`/`client_sync_version` in `error.details`. The client keeps its local data (Case B in `sync-conflict-resolution-v1.md`).
+- `survey_id`, the `survey.delete` payload `id`, the `survey.upsert` payload `id` and the `attachment.delete` payload `attachment_id` must match `^[A-Za-z0-9_-]{1,128}$`; otherwise that operation alone fails with `invalid_sync_operation` (`400`).
+- `attachment.create` results carry the same presigned `upload_url` as the REST route: it signs `Content-Length = size_bytes`, and confirming an object of another size answers `422 attachment_size_mismatch`.
 
 ### GET /sync/changes?cursor=&limit=
+
 Fetch user-scoped incremental changes for downsync (server -> mobile).
 
 Query params:
-- `cursor` (optional): opaque cursor from previous response (`{timestamp}|{event_id}`)
+
+- `cursor` (optional): opaque cursor from the previous response's `cursor_out`. Current format `v2:<xid8>:<seq>`. Clients must store it and send it back verbatim, never parse or build it.
 - `limit` (optional): default `50`, max `200`
 
+Rules:
+
+- Events are returned only once their writing transaction has finished (`xid8 < pg_snapshot_xmin(pg_current_snapshot())`), ordered and paged by `(xid8, seq)`, so an event committed late is never skipped. A long-running writing transaction anywhere on the database cluster can delay new events; it never makes the feed skip one. See `sync-conflict-resolution-v1.md`, "Changes Feed Ordering".
+- Legacy cursors issued before phase 01.6, in the form `<created_at>|<event or survey id>`, are still accepted: the server resumes after the user's last event at or before that point. When nothing new is available it answers with the equivalent `v2:` cursor, so installed apps switch format without an update.
+- `cursor_out` is the cursor of the last returned event. With no new event it echoes the incoming cursor (or its `v2:` translation), and it is `null` when no cursor was sent.
+- A malformed cursor, or a `v2:` cursor with out-of-range values, gets `400 Invalid sync cursor`. A `v2:` cursor ahead of the server's current transaction id (after a database restore) restarts the feed from the beginning.
+- Surveys that never had an event are not re-sent on every poll any more; every survey has at least one event.
+
 Response `200`:
+
 ```json
 {
-  "cursor_in": "2026-03-09T10:12:00.123+00|d4f...",
-  "cursor_out": "2026-03-09T10:20:31.991+00|8ac...",
+  "cursor_in": "v2:48213:1057",
+  "cursor_out": "v2:48297:1063",
   "has_more": false,
   "events": [
     {
@@ -626,9 +851,11 @@ Response `200`:
 ## 4) Reports
 
 ### POST /reports
+
 Report suspicious survey content.
 
 Request:
+
 ```json
 {
   "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
@@ -637,6 +864,7 @@ Request:
 ```
 
 Response `201`:
+
 ```json
 {
   "id": "e81fbbab-06a8-49a0-87f8-e9b7f0c8dca5",
@@ -644,13 +872,44 @@ Response `201`:
 }
 ```
 
-### GET /reports?status=open
-List reports (moderator/admin).
+`reason` is required, trimmed, and at most 2000 characters (400 if longer). The survey owner's
+`GET /surveys/{id}/events` feed shows a `reported` event without the reporter's identity or reason;
+that data is kept only in the `reports` table, visible to moderators/admins.
+
+### GET /reports?status=open&limit=&cursor=
+
+List reports (moderator/admin), newest first (`created_at` descending, then `id` descending).
+`status` (`open` or `reviewed`) is optional. `limit` and `cursor` are optional; see
+[List pagination](#list-pagination-limit-cursor). Without `limit` every matching report is
+returned with `next_cursor: null`, as before. The role check applies to every page (`403`
+otherwise).
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "e81fbbab-06a8-49a0-87f8-e9b7f0c8dca5",
+      "survey_id": "2f3d8a59-7c53-4fdf-8df4-8e2325b6172c",
+      "reporter_user_id": "0b1f7f0e-9d9c-4d2a-9a36-3b3a4c1f2e10",
+      "reason": "Inappropriate photo",
+      "status": "open",
+      "created_at": "2026-03-08 12:30:00.123456+00",
+      "reviewed_at": null,
+      "reviewed_by": null
+    }
+  ],
+  "next_cursor": "v1:eyJ0IjoiMjAyNi0wMy0wOCAxMjozMDowMC4xMjM0NTYrMDAiLCJpIjoiZTgxZmJiYWItMDZhOC00OWEwLTg3ZjgtZTliN2YwYzhkY2E1In0"
+}
+```
 
 ### PATCH /reports/{id}
+
 Review a report (moderator/admin).
 
 Request:
+
 ```json
 {
   "status": "reviewed"
@@ -658,6 +917,7 @@ Request:
 ```
 
 Response `200`:
+
 ```json
 {
   "id": "e81fbbab-06a8-49a0-87f8-e9b7f0c8dca5",
@@ -669,14 +929,17 @@ Response `200`:
 ## 5) Public Map (Optional in V1)
 
 ### GET /public/map-items?from=&to=&region=
+
 Return anonymized public survey map items.
 
 Inclusion rules in V1:
+
 - `visibility = public`
 - survey is not deleted
 - survey is considered publishable (recommended policy: `status=submitted`)
 
 Query + formatting rules in V1:
+
 - `from` and `to` expect `YYYY-MM-DD`; invalid values are ignored (not rejected).
 - `region` filters by exact `region_version` match.
 - Results are ordered by `submitted_at DESC` and capped to `500` items.
@@ -684,6 +947,7 @@ Query + formatting rules in V1:
 - Surveys missing parcel-centroid coordinates are excluded.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -699,14 +963,17 @@ Response `200`:
 ```
 
 ### GET /public/parcels/status?bbox=&zoom=&year=
+
 Return parcel study status for high zoom map rendering.
 
 Rules:
+
 - Endpoint is enabled only from configured zoom threshold (for example `zoom >= 15`).
 - Output excludes personal data.
 - `study_status` is derived from submitted surveys history.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -722,9 +989,11 @@ Response `200`:
 ```
 
 ### GET /parcels/resolve?lat=&lng=
+
 Resolve a cadastral parcel candidate from coordinates.
 
 Response `200`:
+
 ```json
 {
   "parcel": {
@@ -738,9 +1007,11 @@ Response `200`:
 ```
 
 ### GET /parcels/{parcel_id}/surveys/history?limit=
+
 Return longitudinal survey history for one parcel.
 
 Response `200`:
+
 ```json
 {
   "parcel_id": "75101AB0123",
@@ -776,9 +1047,11 @@ Response `200`:
 ## 6) Analytics (V2 Addendum, Out of MVP)
 
 ### GET /analytics/regions?year_from=&year_to=
+
 Return aggregated IBP metrics by region.
 
 Response `200`:
+
 ```json
 {
   "items": [
@@ -798,9 +1071,11 @@ Response `200`:
 ```
 
 ### GET /analytics/factors/distribution?region=&year_from=&year_to=
+
 Return factor distribution analytics (A..J) for selected scope.
 
 Response `200`:
+
 ```json
 {
   "region_code": "ACA",
@@ -816,9 +1091,11 @@ Response `200`:
 ```
 
 ### GET /analytics/parcels/trends?parcel_id=
+
 Return score trend for one parcel over years/versions.
 
 Response `200`:
+
 ```json
 {
   "parcel_id": "75101AB0123",
@@ -830,6 +1107,7 @@ Response `200`:
 ```
 
 ## Standard Error Codes
+
 - `400` validation error
 - `401` unauthorized
 - `403` forbidden
@@ -840,6 +1118,13 @@ Response `200`:
 - `500` internal server error
 
 Common business error codes (non-exhaustive):
+
 - `parcel_required`
 - `parcel_invalid`
-- `parcel_version_conflict`
+- `parcel_version_conflict` — a submit lost a race against another submit on the same parcel; `error.details.parcel_id`/`expected_version_number` identify the conflict.
+- `survey_submitted_read_only` — an upsert changed the value of a read-only field on a `submitted` survey; `error.details.fields` lists the changed field names (identical values and `scores` are always accepted).
+- `survey_id_conflict` — an upsert's `id` already exists and is owned by another user.
+- `invalid_sync_operation` — a `/v1/sync` operation's envelope or payload failed class DTO validation; `error.details.fields` lists the offending property names.
+- `sync_version_conflict` (`409`) — an upsert carried an older `sync_version` than the stored one, or the same `sync_version` with different read-only content; `error.details` carries `survey_id`, `server_sync_version` and `client_sync_version`.
+- `attachment_size_mismatch` (`422`) — the uploaded attachment's size differs from the declared `size_bytes`; the object is deleted (or never written) and the attachment stays unconfirmed.
+- `invalid_operation` — a deterministic PostgreSQL data/constraint error (SQLSTATE class `22`/`23`) was raised while processing the request; the message is intentionally generic and carries no SQL detail.

@@ -14,11 +14,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common"
 import { FileInterceptor } from "@nestjs/platform-express"
+import { Throttle } from "@nestjs/throttler"
 import { memoryStorage } from "multer"
 import { Response } from "express"
 import { AuthGuard } from "../auth/auth.guard"
 import { CurrentUser } from "../auth/current-user.decorator"
 import { AuthenticatedUser } from "../auth/auth.types"
+import { UPLOAD_THROTTLE } from "../common/rate-limit.config"
 import { UsersService } from "./users.service"
 import { PatchMeDto } from "./dtos/patch-me.dto"
 import { ChangeEmailDto } from "./dtos/change-email.dto"
@@ -51,6 +53,7 @@ export class UsersController {
   }
 
   @Put("me/profile-picture")
+  @Throttle(UPLOAD_THROTTLE)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),

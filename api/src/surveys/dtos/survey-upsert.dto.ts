@@ -1,8 +1,21 @@
-import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString } from "class-validator"
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+} from "class-validator"
+import { SAFE_ID_PATTERN } from "../../common/safe-id"
+import { MAX_PARCEL_IDS, PARCEL_ID_PATTERN } from "./parcel-id.constants"
 
 export class SurveyUpsertDto {
+  // D-14: the id can become a storage key segment, so it must be a safe id.
   @IsOptional()
   @IsString()
+  @Matches(SAFE_ID_PATTERN)
   id?: string
 
   @IsOptional()
@@ -23,11 +36,14 @@ export class SurveyUpsertDto {
 
   @IsOptional()
   @IsString()
+  @Matches(PARCEL_ID_PATTERN)
   parcel_id?: string
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_PARCEL_IDS)
   @IsString({ each: true })
+  @Matches(PARCEL_ID_PATTERN, { each: true })
   parcel_ids?: string[]
 
   @IsOptional()

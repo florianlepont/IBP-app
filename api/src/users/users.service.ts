@@ -1,11 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { mkdir, readFile, rm, writeFile } from "fs/promises"
-import { dirname, join } from "path"
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common"
 import { AuthenticatedUser } from "../auth/auth.types"
 import { Auth0ManagementService } from "../auth/auth0-management.service"
-import { extensionFromMime } from "../common/file.utils"
+import { isAllowedMimeType } from "../common/file.utils"
 import { DatabaseService } from "../database/database.service"
+import { StorageService } from "../storage/storage.service"
 
 const PROFILE_PICTURE_MAX_BYTES = 10 * 1024 * 1024
 
@@ -44,44 +42,28 @@ export type PatchMeBody = {
 
 @Injectable()
 export class UsersService {
-  private readonly objectStorageMode: "local" | "minio"
-  private readonly s3Bucket: string
-  private readonly s3Client?: S3Client
-  private readonly uploadsRootDir: string
+  private readonly logger = new Logger(UsersService.name)
 
+  // D-05: profile pictures are read, written and deleted only through StorageService, so in
+  // minio mode they live in the bucket and survive a container restart.
   constructor(
     private readonly db: DatabaseService,
     private readonly auth0Management: Auth0ManagementService,
-  ) {
-    this.objectStorageMode =
-      (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    this.s3Bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-surveys"
-    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
-
-    if (this.objectStorageMode === "minio") {
-      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
-      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
-      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
-      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
-
-      this.s3Client = new S3Client({
-        endpoint,
-        region,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      })
-    }
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async getMe(userId: string): Promise<MeResponse> {
     const row = await this.findUserMeRow(userId)
     if (!row) {
       throw new NotFoundException("User not found")
     }
-    return this.toMeResponse(row)
+    const response = this.toMeResponse(row)
+    const storageKey = row.profile_picture_storage_key
+    if (storageKey && !(await this.pictureObjectExists(row.id, storageKey))) {
+      // D-06: a stored picture that can no longer be found reads as "no picture".
+      response.profile_picture_url = null
+    }
+    return response
   }
 
   async patchMe(user: AuthenticatedUser, body: PatchMeBody): Promise<MeResponse> {
@@ -133,27 +115,20 @@ export class UsersService {
       throw new BadRequestException("file exceeds V1 max size (10MB)")
     }
 
+    // D-09/D-15: own-property allow-list check, so image/gif or a prototype key such as
+    // "constructor" answers 400 instead of reaching the key builder.
     const mimeType = (file.mimetype ?? "").trim().toLowerCase()
-    if (!mimeType.startsWith("image/")) {
-      throw new BadRequestException("profile picture must be an image")
+    if (!isAllowedMimeType(mimeType)) {
+      throw new BadRequestException("Unsupported profile picture type")
     }
-
-    const extension = extensionFromMime(mimeType)
-    const storageKey = `profiles/${user.id}/avatar${extension}`
-    const storagePath = this.storagePathForKey(storageKey)
-    await mkdir(dirname(storagePath), { recursive: true })
-    await writeFile(storagePath, file.buffer)
 
     const current = await this.findUserMeRow(user.id)
     if (!current) {
       throw new NotFoundException("User not found")
     }
 
-    if (current.profile_picture_storage_key && current.profile_picture_storage_key !== storageKey) {
-      await rm(this.storagePathForKey(current.profile_picture_storage_key), { force: true }).catch(
-        () => undefined,
-      )
-    }
+    const storageKey = this.storage.buildProfilePictureKey(user.id, mimeType)
+    await this.storage.putObject(storageKey, file.buffer, mimeType)
 
     const pictureUrl = `/me/profile-picture?v=${Date.now()}`
     const result = await this.db.query<UserMeRow>(
@@ -181,6 +156,12 @@ export class UsersService {
       throw new NotFoundException("User not found")
     }
 
+    // The previous object goes only after the row points at the new one.
+    const previousKey = current.profile_picture_storage_key
+    if (previousKey && previousKey !== storageKey) {
+      await this.storage.deleteObject(previousKey)
+    }
+
     return {
       profile_picture_url: pictureUrl,
       user: this.toMeResponse(updated),
@@ -200,10 +181,23 @@ export class UsersService {
       throw new NotFoundException("Profile picture not found")
     }
 
-    const storagePath = this.storagePathForKey(row.profile_picture_storage_key)
-    const buffer = await readFile(storagePath).catch(() => null)
+    const storageKey = row.profile_picture_storage_key
+    const buffer = await this.storage.getObject(storageKey)
     if (!buffer) {
-      throw new NotFoundException("Profile picture file not found")
+      // D-06: the object is gone (e.g. a picture written to ephemeral disk before this
+      // phase). Clear the stale columns so /me reports no picture from now on. The key
+      // condition keeps a concurrent new upload intact.
+      await this.db.query(
+        `UPDATE users
+         SET profile_picture_url = NULL,
+             profile_picture_storage_key = NULL,
+             profile_picture_mime_type = NULL,
+             updated_at = NOW()
+         WHERE id = $1
+           AND profile_picture_storage_key = $2`,
+        [user.id, storageKey],
+      )
+      throw new NotFoundException("Profile picture not found")
     }
 
     return {
@@ -216,12 +210,6 @@ export class UsersService {
     const current = await this.findUserMeRow(user.id)
     if (!current) {
       throw new NotFoundException("User not found")
-    }
-
-    if (current.profile_picture_storage_key) {
-      await rm(this.storagePathForKey(current.profile_picture_storage_key), { force: true }).catch(
-        () => undefined,
-      )
     }
 
     const result = await this.db.query<UserMeRow>(
@@ -249,6 +237,11 @@ export class UsersService {
       throw new NotFoundException("User not found")
     }
 
+    // Storage cleanup runs only after the DB no longer references the object.
+    if (current.profile_picture_storage_key) {
+      await this.storage.deleteObject(current.profile_picture_storage_key)
+    }
+
     return this.toMeResponse(updated)
   }
 
@@ -258,10 +251,6 @@ export class UsersService {
       throw new NotFoundException("User not found")
     }
 
-    await this.auth0Management.deleteUser(user.auth0_sub)
-
-    const client = await this.db.connect()
-    const storageKeysToDelete: string[] = []
     // Surveys to retain = submitted/synced (not soft-deleted).
     // Identified once at the start of the transaction so subsequent UPDATEs
     // (which nullify user_id) cannot affect the predicate.
@@ -276,20 +265,23 @@ export class UsersService {
       SELECT id FROM surveys WHERE user_id = $1
     `
 
-    try {
-      await client.query("BEGIN")
+    // A-M9: the local account (surveys, events, attachments, user row) is
+    // fully committed before Auth0 is ever touched, so a DB failure never
+    // leaves an orphaned Auth0 user with no local account.
+    const storageKeysToDelete = await this.db.transaction(async (db) => {
+      const keysToDelete: string[] = []
 
       // 1. Collect storage keys of draft attachments BEFORE any modification.
-      const attachmentKeys = await client.query<AttachmentStorageRow>(
+      const attachmentKeys = await db.query<AttachmentStorageRow>(
         `SELECT a.storage_key
          FROM attachments a
          WHERE a.survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
-      storageKeysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
+      keysToDelete.push(...attachmentKeys.rows.map((row) => row.storage_key))
 
       // 2. Anonymise retained surveys: nullify actor on their events, then nullify user_id.
-      await client.query(
+      await db.query(
         `UPDATE survey_events
          SET actor_id = NULL
          WHERE actor_id = $1
@@ -297,7 +289,7 @@ export class UsersService {
         [user.id],
       )
 
-      await client.query(
+      await db.query(
         `UPDATE surveys
          SET user_id = NULL
          WHERE id IN (${retainedSurveySubquery})`,
@@ -305,36 +297,40 @@ export class UsersService {
       )
 
       // 3. Delete draft surveys and their dependents (user_id still set on drafts at this point).
-      await client.query(
+      await db.query(
         `DELETE FROM attachments
          WHERE survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
-      await client.query(
+      await db.query(
         `DELETE FROM survey_events
          WHERE survey_id IN (${draftSurveySubquery})`,
         [user.id],
       )
-      await client.query(`DELETE FROM surveys WHERE user_id = $1`, [user.id])
+      await db.query(`DELETE FROM surveys WHERE user_id = $1`, [user.id])
 
       // 4. Delete the user row.
-      await client.query(`DELETE FROM users WHERE id = $1`, [user.id])
-      await client.query("COMMIT")
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
-    }
+      await db.query(`DELETE FROM users WHERE id = $1`, [user.id])
 
-    if (current.profile_picture_storage_key) {
-      await rm(this.storagePathForKey(current.profile_picture_storage_key), { force: true }).catch(
-        () => undefined,
+      return keysToDelete
+    })
+
+    try {
+      await this.auth0Management.deleteUser(user.auth0_sub)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `Auth0 user deletion failed after local account deletion (user_id=${user.id}, auth0_sub=${user.auth0_sub}): ${message}`,
       )
     }
 
+    // Best-effort storage cleanup, after the commit (deleteObject never throws).
+    if (current.profile_picture_storage_key) {
+      await this.storage.deleteObject(current.profile_picture_storage_key)
+    }
+
     for (const storageKey of storageKeysToDelete) {
-      await this.cleanupAttachmentStorage(storageKey)
+      await this.storage.deleteObject(storageKey)
     }
   }
 
@@ -388,26 +384,20 @@ export class UsersService {
     }
   }
 
-  private storagePathForKey(storageKey: string): string {
-    return join(this.uploadsRootDir, storageKey)
-  }
-
-  private async cleanupAttachmentStorage(storageKey: string): Promise<void> {
-    if (this.objectStorageMode === "minio") {
-      if (this.s3Client) {
-        await this.s3Client
-          .send(
-            new DeleteObjectCommand({
-              Bucket: this.s3Bucket,
-              Key: storageKey,
-            }),
-          )
-          .catch(() => undefined)
-      }
-      return
+  // One HEAD per /me. Only a confirmed missing object hides the picture: any other storage
+  // error (store unreachable, 5xx) is logged and the stored URL is kept, so /me still
+  // answers 200.
+  private async pictureObjectExists(userId: string, storageKey: string): Promise<boolean> {
+    try {
+      return (await this.storage.headObject(storageKey)) !== null
+    } catch (error) {
+      const name = error instanceof Error ? error.name : typeof error
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(
+        `Profile picture check failed, keeping stored url (user_id=${userId}): ${name}: ${message}`,
+      )
+      return true
     }
-
-    await rm(this.storagePathForKey(storageKey), { force: true }).catch(() => undefined)
   }
 
   private toMeResponse(row: UserMeRow): MeResponse {

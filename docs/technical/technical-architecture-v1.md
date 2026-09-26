@@ -16,7 +16,7 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Mobile app (iOS/Android)
 - Backend API
 - Relational database
-- Object storage for photos
+- Object storage for photos and profile pictures
 - External services (maps/geocoding, donation provider)
 - Cadastral parcel service/layer (France)
 - Optional public read model for map surfaces
@@ -55,8 +55,10 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 - Role-based access for moderation endpoints
 
 ### 4) Object Storage
-- Survey media files (photos)
-- Optional signed URLs for controlled access
+- Survey media files (photos) and user profile pictures
+- One API service, `StorageService` (`api/src/storage/`), owns object storage: the single S3 client, the bucket (default `ibp-media`), key building, presigned PUT/GET, put, head, get and delete. MinIO/S3 in production (`OBJECT_STORAGE_MODE=minio`), the local uploads directory in development (`local`, with every resolved path contained under the upload root).
+- Storage keys are built only from ids that match `^[A-Za-z0-9_-]{1,128}$` (checked at routes, DTOs and again in the key builder) and from an allow-listed MIME type.
+- Attachments are served through short-lived presigned GET URLs; profile pictures are streamed by the API (`GET /me/profile-picture`, Bearer auth).
 
 ### 5) Optional Public Map Read Model
 - Materialized/read table for public map payloads
@@ -101,10 +103,11 @@ Define a simple, scalable, and pragmatic architecture to deliver a reliable IBP 
 3. Mobile updates local profile cache
 
 ### E) Attachment Upload
-1. Mobile requests attachment creation (`POST /surveys/{id}/attachments`)
-2. API returns `attachment_id`, `storage_key`, and signed `upload_url`
+1. Mobile requests attachment creation (`POST /surveys/{id}/attachments`) with the file's exact `size_bytes`
+2. API returns `attachment_id`, `storage_key`, and signed `upload_url`; in MinIO/S3 mode the presigned PUT signs `Content-Length = size_bytes`, so the store refuses a body of another length
 3. Mobile uploads file to object storage
-4. Survey references attachment in subsequent sync payloads
+4. Mobile calls `confirm_url`; the API compares the stored size with `size_bytes` and answers `422 attachment_size_mismatch` (object deleted, attachment left unconfirmed) on a difference, otherwise sets `uploaded_at`
+5. Survey references attachment in subsequent sync payloads
 
 ### F) Report and Moderation
 1. User creates report (`POST /reports`)

@@ -208,6 +208,26 @@ export async function fetchPublicParcelStatuses(
   })
 }
 
+export type AttachmentDownloadUrlResponse = {
+  url: string
+  expires_at: string
+  requires_auth: boolean
+}
+
+export async function getAttachmentDownloadUrl(
+  apiUrl: string,
+  accessToken: string,
+  surveyId: string,
+  attachmentId: string,
+): Promise<AttachmentDownloadUrlResponse> {
+  return apiRequest<AttachmentDownloadUrlResponse>({
+    baseUrl: apiUrl,
+    path: `/surveys/${encodeURIComponent(surveyId)}/attachments/${encodeURIComponent(attachmentId)}/download-url`,
+    method: "GET",
+    token: accessToken,
+  })
+}
+
 export async function createSurveyReport(
   apiUrl: string,
   accessToken: string,

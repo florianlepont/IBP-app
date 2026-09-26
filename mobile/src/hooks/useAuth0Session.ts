@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import * as Network from "expo-network"
 import Auth0 from "react-native-auth0"
 import { ApiError } from "../api/client"
 import { getMyProfile } from "../api/ibp-api"
@@ -9,14 +10,42 @@ import {
   buildApiTokenRejectedMessage,
   buildAuth0UnauthorizedMessage,
 } from "../app/auth0-config"
+import { extractIdTokenClaims, IdTokenClaims } from "../app/id-token"
 import { AuthUser } from "../app/types"
+import { clearCachedProfile, loadCachedProfile, saveCachedProfile } from "../storage/profile-cache"
+import {
+  AUTH_REQUIRED_ERROR,
+  AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
+  classifyCredentialsError,
+  EMAIL_ALREADY_LINKED_MESSAGE,
+  isEmailAlreadyLinkedError,
+} from "./auth-errors"
 import { OperationScope, OperationState } from "./operation-status"
+import { isOnlineNetworkState } from "./survey-sync/utils"
 
-export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED"
+export { AUTH_REQUIRED_ERROR, AUTH_TEMPORARILY_UNAVAILABLE_ERROR } from "./auth-errors"
+
+// D-13: while the profile comes from the cache, retry GET /me when the
+// network comes back online and periodically while online, until it
+// succeeds once and stops (T-01.5-14: never hammer /me).
+const PROFILE_REFRESH_INTERVAL_MS = 60_000
+
 function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 401
   if (error instanceof Error) return /401|unauthorized|auth_required/i.test(error.message)
   return false
+}
+
+// Any exception here means "unknown" — treat it as offline, the safe side:
+// a genuine session-ending error (e.g. RENEW_FAILED) is retried later rather
+// than incorrectly ending the session (D-01a).
+async function isDeviceOnline(): Promise<boolean> {
+  try {
+    const state = await Network.getNetworkStateAsync()
+    return isOnlineNetworkState(state)
+  } catch {
+    return false
+  }
 }
 
 function extractLoginErrorMessage(error: unknown): string {
@@ -55,7 +84,10 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
   const [sessionRestoring, setSessionRestoring] = useState(true)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState("Not logged in")
+  const [sessionOwner, setSessionOwner] = useState<IdTokenClaims | null>(null)
+  const [profileFromCache, setProfileFromCache] = useState(false)
   const auth0Ref = useRef<Auth0 | null>(null)
+  const profileRefreshInFlightRef = useRef(false)
 
   const apiUrlRef = useRef(apiUrl)
   apiUrlRef.current = apiUrl
@@ -78,47 +110,99 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     setSessionRestoring(false)
     setCurrentUser(null)
     setProfile("Not logged in")
+    setSessionOwner(null)
+    setProfileFromCache(false)
+    void clearCachedProfile()
     await onSessionCleared?.()
   }, [onSessionCleared])
 
-  const getValidAccessToken = useCallback(async (): Promise<string | null> => {
-    try {
-      const credentials = await getAuth0().credentialsManager.getCredentials()
-      if (credentials?.accessToken) {
-        setAccessToken(credentials.accessToken)
-        return credentials.accessToken
-      }
-      return null
-    } catch {
-      return null
-    }
-  }, [getAuth0])
+  // WR-04: the API refused to provision this identity (its email belongs to
+  // another account). Drop the stored credentials so no heartbeat keeps
+  // calling the API with them, and tell the user why.
+  const endRefusedSession = useCallback(async (): Promise<string> => {
+    await getAuth0()
+      .credentialsManager.clearCredentials()
+      .catch(() => undefined)
+    await clearSession()
+    reportStatus("auth", "error", EMAIL_ALREADY_LINKED_MESSAGE)
+    return EMAIL_ALREADY_LINKED_MESSAGE
+  }, [clearSession, getAuth0, reportStatus])
 
+  // Never returns null and never calls clearSession: a network/timeout/unknown
+  // error means "retry later", only a genuine refresh-token rejection ends the
+  // session (thrown as AUTH_REQUIRED, handled by the caller).
+  // Also returns the `sub` of the account the token belongs to, so D-04 sync
+  // paths can check it against the local-data owner right before sending.
+  const getValidCredentials = useCallback(
+    async (options?: {
+      forceRefresh?: boolean
+    }): Promise<{ accessToken: string; sub: string | null }> => {
+      const forceRefresh = options?.forceRefresh ?? false
+
+      let credentials
+      try {
+        const credentialsManager = getAuth0().credentialsManager
+        credentials = forceRefresh
+          ? await credentialsManager.getCredentials(undefined, undefined, undefined, true)
+          : await credentialsManager.getCredentials()
+      } catch (error) {
+        const kind = classifyCredentialsError(error, {
+          phase: "refresh",
+          isOnline: await isDeviceOnline(),
+        })
+        throw new Error(
+          kind === "session-ended" ? AUTH_REQUIRED_ERROR : AUTH_TEMPORARILY_UNAVAILABLE_ERROR,
+        )
+      }
+
+      if (!credentials?.accessToken) {
+        throw new Error(AUTH_TEMPORARILY_UNAVAILABLE_ERROR)
+      }
+
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setAccessToken(credentials.accessToken)
+      setSessionOwner(claims)
+      return { accessToken: credentials.accessToken, sub: claims?.sub ?? null }
+    },
+    [getAuth0],
+  )
+
+  const getValidAccessToken = useCallback(
+    async (options?: { forceRefresh?: boolean }): Promise<string> =>
+      (await getValidCredentials(options)).accessToken,
+    [getValidCredentials],
+  )
+
+  // `operation` receives the token and the `sub` of the account it belongs to.
   const withAuthRetry = useCallback(
-    async <T>(operation: (token: string) => Promise<T>): Promise<T> => {
-      const token = await getValidAccessToken()
-      if (!token) throw new Error(AUTH_REQUIRED_ERROR)
+    async <T>(operation: (token: string, tokenSub: string | null) => Promise<T>): Promise<T> => {
+      const credentials = await getValidCredentials()
 
       try {
-        return await operation(token)
+        return await operation(credentials.accessToken, credentials.sub)
       } catch (error) {
         if (!isUnauthorizedError(error)) throw error
 
-        // Force a fresh token on 401
-        const refreshed = await getValidAccessToken()
-        if (!refreshed) throw new Error(AUTH_REQUIRED_ERROR)
-        return operation(refreshed)
+        // Force a fresh token on 401 instead of reusing the (still-cached) one.
+        const refreshed = await getValidCredentials({ forceRefresh: true })
+        return operation(refreshed.accessToken, refreshed.sub)
       }
     },
-    [getValidAccessToken],
+    [getValidCredentials],
   )
 
   const handleLoadMyProfile = useCallback(
     async (options?: { silent?: boolean }): Promise<AuthUser | null> => {
       const silent = options?.silent ?? false
       try {
-        const user = await withAuthRetry((token) => getMyProfile(apiUrl, token))
+        let tokenSubForCache: string | null = null
+        const user = await withAuthRetry((token, tokenSub) => {
+          tokenSubForCache = tokenSub
+          return getMyProfile(apiUrl, token)
+        })
         setProfileFromUser(user)
+        setProfileFromCache(false)
+        if (tokenSubForCache) void saveCachedProfile(tokenSubForCache, user)
         if (!silent) reportStatus("profile", "success", "Profile loaded")
         return user
       } catch (error) {
@@ -142,7 +226,6 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
     const restore = async (): Promise<void> => {
       try {
         if (active) setSessionRestoring(true)
-        // DEV ONLY: slow down session restore to test the loading screen
         const auth0 = getAuth0()
         const hasCredentials = await auth0.credentialsManager.hasValidCredentials()
         if (!hasCredentials) {
@@ -160,6 +243,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         }
 
         setAccessToken(credentials.accessToken)
+        const sessionOwner = extractIdTokenClaims(credentials.idToken)
+        setSessionOwner(sessionOwner)
 
         const user = await getMyProfile(apiUrlRef.current, credentials.accessToken).catch(
           () => null,
@@ -167,6 +252,21 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         if (!active) return
 
         if (!user) {
+          const cached = sessionOwner?.sub ? await loadCachedProfile(sessionOwner.sub) : null
+          if (!active) return
+
+          if (cached) {
+            setProfileFromUser(cached)
+            setProfileFromCache(true)
+            reportStatus(
+              "session",
+              "success",
+              "Session restaurée hors ligne (dernier profil connu)",
+            )
+            setSessionRestoring(false)
+            return
+          }
+
           reportStatus(
             "session",
             "success",
@@ -177,12 +277,32 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
         }
 
         setProfileFromUser(user)
+        setProfileFromCache(false)
+        if (sessionOwner?.sub) void saveCachedProfile(sessionOwner.sub, user)
         reportStatus("session", "success", "Session restored")
         setSessionRestoring(false)
       } catch (error) {
         if (!active) return
-        await clearSession().catch(() => undefined)
-        reportStatus("session", "error", `Session restore error: ${(error as Error).message}`)
+
+        const kind = classifyCredentialsError(error, {
+          phase: "restore",
+          isOnline: await isDeviceOnline(),
+        })
+
+        if (kind === "session-ended") {
+          await clearSession().catch(() => undefined)
+          reportStatus(
+            "session",
+            "error",
+            "Session expirée : reconnectez-vous. Vos relevés locaux sont conservés.",
+          )
+        } else {
+          reportStatus(
+            "session",
+            "idle",
+            "Session non restaurée (réseau indisponible). Vos relevés locaux sont conservés.",
+          )
+        }
         setSessionRestoring(false)
       }
     }
@@ -204,11 +324,16 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setSessionOwner(claims)
 
       let user: AuthUser
       try {
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
+        if (isEmailAlreadyLinkedError(error)) {
+          return await endRefusedSession()
+        }
         if (error instanceof ApiError && error.status === 401) {
           const msg = buildApiTokenRejectedMessage(apiUrl)
           reportStatus("auth", "error", msg)
@@ -218,6 +343,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
 
       setProfileFromUser(user)
+      setProfileFromCache(false)
+      if (claims?.sub) void saveCachedProfile(claims.sub, user)
       reportStatus("auth", "success", "Logged in")
       return null
     } catch (error) {
@@ -236,7 +363,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       reportStatus("auth", "error", msg)
       return msg
     }
-  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+  }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleRegister = useCallback(async (): Promise<string | null> => {
     try {
@@ -250,11 +377,16 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setSessionOwner(claims)
 
       let user: AuthUser
       try {
         user = await getMyProfile(apiUrl, credentials.accessToken)
       } catch (error) {
+        if (isEmailAlreadyLinkedError(error)) {
+          return await endRefusedSession()
+        }
         if (error instanceof ApiError && error.status === 401) {
           const msg = buildApiTokenRejectedMessage(apiUrl)
           reportStatus("auth", "error", msg)
@@ -264,6 +396,8 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       }
 
       setProfileFromUser(user)
+      setProfileFromCache(false)
+      if (claims?.sub) void saveCachedProfile(claims.sub, user)
       reportStatus("auth", "success", "Logged in")
       return null
     } catch (error) {
@@ -281,7 +415,7 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       reportStatus("auth", "error", msg)
       return msg
     }
-  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+  }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleForgotPassword = useCallback(async (): Promise<void> => {
     try {
@@ -293,16 +427,28 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
       // If the user ended up logging in during the reset flow, treat it as a login
       await auth0.credentialsManager.saveCredentials(credentials)
       setAccessToken(credentials.accessToken)
-      const user = await getMyProfile(apiUrl, credentials.accessToken).catch(() => null)
+      const claims = extractIdTokenClaims(credentials.idToken)
+      setSessionOwner(claims)
+      let refused = false
+      const user = await getMyProfile(apiUrl, credentials.accessToken).catch((error: unknown) => {
+        refused = isEmailAlreadyLinkedError(error)
+        return null
+      })
+      if (refused) {
+        await endRefusedSession()
+        return
+      }
       if (user) {
         setProfileFromUser(user)
+        setProfileFromCache(false)
+        if (claims?.sub) void saveCachedProfile(claims.sub, user)
         reportStatus("auth", "success", "Logged in")
       }
     } catch {
       // Cancellation and errors are silent: the user just wanted to reset their password
       reportStatus("auth", "idle", "")
     }
-  }, [apiUrl, getAuth0, reportStatus, setProfileFromUser])
+  }, [apiUrl, endRefusedSession, getAuth0, reportStatus, setProfileFromUser])
 
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
@@ -318,34 +464,70 @@ export function useAuth0Session({ apiUrl, reportStatus, onSessionCleared }: UseA
 
   const refreshSessionTokens = useCallback(async (): Promise<{
     accessToken: string
-    refreshToken: string
   } | null> => {
-    const token = await getValidAccessToken()
-    if (!token) return null
-    return { accessToken: token, refreshToken: "" }
+    try {
+      const token = await getValidAccessToken({ forceRefresh: true })
+      return { accessToken: token }
+    } catch (error) {
+      if (error instanceof Error && error.message === AUTH_REQUIRED_ERROR) return null
+      throw error
+    }
   }, [getValidAccessToken])
+
+  // D-13: while the currently-shown profile came from the cache, retry GET
+  // /me as soon as the network comes back and periodically while online, and
+  // replace the cached profile once it succeeds. Stops (effect cleanup runs)
+  // once handleLoadMyProfile succeeds and flips profileFromCache to false.
+  useEffect(() => {
+    if (!profileFromCache) {
+      return
+    }
+
+    const attemptRefresh = async (): Promise<void> => {
+      if (profileRefreshInFlightRef.current) return
+      profileRefreshInFlightRef.current = true
+      try {
+        await handleLoadMyProfile({ silent: true })
+      } finally {
+        profileRefreshInFlightRef.current = false
+      }
+    }
+
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (isOnlineNetworkState(state)) {
+        void attemptRefresh()
+      }
+    })
+
+    const intervalId = setInterval(() => {
+      void (async () => {
+        if (await isDeviceOnline()) {
+          void attemptRefresh()
+        }
+      })()
+    }, PROFILE_REFRESH_INTERVAL_MS)
+
+    return () => {
+      subscription.remove()
+      clearInterval(intervalId)
+    }
+  }, [profileFromCache, handleLoadMyProfile])
 
   return {
     accessToken,
-    refreshToken: "", // Managed internally by Auth0 CredentialsManager
     sessionRestoring,
     currentUser,
     profile,
+    sessionOwner,
     isAuthenticated: Boolean(currentUser),
-    pendingEmailVerification: null,
-    devVerificationToken: null,
     setProfileFromUser,
     clearSession,
     refreshSessionTokens,
-    ensureAccessToken: getValidAccessToken,
     withAuthRetry,
     handleLoadMyProfile,
     handleLogin,
     handleRegister,
     handleForgotPassword,
     handleLogout,
-    handleCancelEmailVerification: async () => undefined,
-    handleVerifyEmail: async (_token: string) => undefined,
-    handleResendVerification: async () => undefined,
   }
 }

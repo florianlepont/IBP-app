@@ -10,6 +10,7 @@ import {
   deleteMyProfilePicture,
   fetchPublicMapItems,
   fetchPublicParcelStatuses,
+  getAttachmentDownloadUrl,
   getMyProfile,
   loadSurveyDetail,
   loadSurveyEvents,
@@ -145,6 +146,21 @@ describe("ibp-api", () => {
         {
           baseUrl: "https://api.example.com",
           path: "/surveys/survey-1/events",
+          method: "GET",
+          token: "access-token",
+        },
+      ],
+    ])
+  })
+
+  it("builds an attachment download-url request with encoded ids", async () => {
+    await getAttachmentDownloadUrl("https://api.example.com", "access-token", "s 1", "a/1")
+
+    expect(mockApiRequest.mock.calls).toEqual([
+      [
+        {
+          baseUrl: "https://api.example.com",
+          path: "/surveys/s%201/attachments/a%2F1/download-url",
           method: "GET",
           token: "access-token",
         },

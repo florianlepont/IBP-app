@@ -79,37 +79,57 @@ export async function apiRequest<T>(options: ApiRequestOptions): Promise<T> {
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  let response: Response
-  try {
-    response = await fetch(`${baseUrl}${options.path}`, {
-      method,
-      headers,
-      body,
-      signal: controller.signal,
-    })
-  } catch (error) {
-    const errorName = (error as { name?: string } | null)?.name
-    if (errorName === "AbortError") {
-      throw new ApiError(408, `Request timeout after ${timeoutMs}ms`, null)
+  // The timeout must cover reading the response body too (D-07/D-15): a
+  // stalled body read (e.g. a connection that accepted the request but
+  // never finishes streaming the response) would otherwise hang past
+  // `timeoutMs` because `clearTimeout` used to run right after `fetch`
+  // resolved, before the body was ever read. One timer spans the whole
+  // request+parse window and is only cleared once, in the outer `finally`.
+  let timeoutId!: ReturnType<typeof setTimeout>
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort()
+      reject(new ApiError(408, `Request timeout after ${timeoutMs}ms`, null))
+    }, timeoutMs)
+  })
+
+  async function run(): Promise<T> {
+    let response: Response
+    try {
+      response = await fetch(`${baseUrl}${options.path}`, {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+      })
+    } catch (error) {
+      const errorName = (error as { name?: string } | null)?.name
+      if (errorName === "AbortError") {
+        throw new ApiError(408, `Request timeout after ${timeoutMs}ms`, null)
+      }
+      throw error
     }
-    throw error
+
+    const parsedBody = await parseResponseBody(response)
+
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        errorMessageForStatus(response.status, parsedBody),
+        parsedBody,
+      )
+    }
+
+    if (options.expectJson === false) {
+      return undefined as T
+    }
+
+    return parsedBody as T
+  }
+
+  try {
+    return await Promise.race([run(), timeoutPromise])
   } finally {
     clearTimeout(timeoutId)
   }
-
-  const parsedBody = await parseResponseBody(response)
-  if (!response.ok) {
-    throw new ApiError(
-      response.status,
-      errorMessageForStatus(response.status, parsedBody),
-      parsedBody,
-    )
-  }
-
-  if (options.expectJson === false) {
-    return undefined as T
-  }
-
-  return parsedBody as T
 }
