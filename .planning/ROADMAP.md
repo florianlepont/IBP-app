@@ -85,11 +85,14 @@ Plans:
 
 **Why this exists**: surfaced by the Phase 1 research (`01-RESEARCH.md`), which recovered the Factor A genus list from the current official CNPF PDF and found it was v3.2, three years newer than the v3.0 this repo cites. If the method moved, the app computes outdated scores — which matters more than any single feature in this milestone.
 
-**Plans**: TBD
+**Plans**: 4 plans (wave 1: 01–03 in parallel; wave 2: 04)
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 01.1 to break down)
+- [ ] 01.1-01-PLAN.md — Factor-by-factor comparison doc (v3.0 as implemented vs FR v3.2) with API/mobile/matrix impact per difference
+- [ ] 01.1-02-PLAN.md — ADR-003: migrate to v3.2 in phase 01.8, treatment of recorded surveys, version dispatch, CH-1..CH-12; phase-1 doc cross-refs and page fixes
+- [ ] 01.1-03-PLAN.md — Citation files say "implemented v3.0, target v3.2 (ADR-003)"; validation matrix v3.2 impact and target cases
+- [ ] 01.1-04-PLAN.md — Index the new docs, ROADMAP input line for 01.8, phase gate and 01.1-VALIDATION.md
 
 ### Phase 01.2: Stop field data loss and account exposure (INSERTED)
 
