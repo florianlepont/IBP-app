@@ -13,17 +13,18 @@ module.exports = {
   ],
   coverageDirectory: '<rootDir>/coverage/unit',
   coverageReporters: ['text', 'text-summary', 'json-summary', 'lcov'],
-  // Ratchet (phase 01.3, D-09; raised in phases 01.4, 01.5 and 01.6): floor of values measured on 2026-09-25. Raise these when
+  // Ratchet (phase 01.3, D-09; raised in phases 01.4, 01.5, 01.6 and 01.7): floor of values measured on 2026-09-26. Raise these when
   // coverage improves; never lower them. Regenerate with node scripts/coverage-by-directory.js api.
   coverageThreshold: {
-    global: { statements: 66, branches: 62, functions: 20, lines: 63 },
-    './src/auth/': { statements: 76, branches: 67, functions: 62, lines: 77 },
-    './src/common/': { statements: 88, branches: 90, functions: 60, lines: 87 },
-    './src/database/': { statements: 88, branches: 100, functions: 57, lines: 85 },
-    './src/debug/': { statements: 71, branches: 47, functions: 38, lines: 72 },
-    './src/reports/': { statements: 36, branches: 0, functions: 0, lines: 32 },
-    './src/storage/': { statements: 99, branches: 94, functions: 100, lines: 100 },
-    './src/surveys/': { statements: 56, branches: 41, functions: 51, lines: 56 },
-    './src/users/': { statements: 74, branches: 56, functions: 51, lines: 74 },
+    global: { statements: 70, branches: 66, functions: 50, lines: 66 },
+    './src/auth/': { statements: 87, branches: 78, functions: 82, lines: 89 },
+    './src/common/': { statements: 88, branches: 90, functions: 60, lines: 88 },
+    './src/config/': { statements: 96, branches: 94, functions: 96, lines: 96 },
+    './src/database/': { statements: 90, branches: 100, functions: 62, lines: 89 },
+    './src/debug/': { statements: 74, branches: 52, functions: 42, lines: 76 },
+    './src/reports/': { statements: 64, branches: 52, functions: 35, lines: 62 },
+    './src/storage/': { statements: 99, branches: 97, functions: 100, lines: 100 },
+    './src/surveys/': { statements: 81, branches: 67, functions: 79, lines: 82 },
+    './src/users/': { statements: 74, branches: 67, functions: 51, lines: 74 },
   },
 };

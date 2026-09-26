@@ -1,12 +1,13 @@
 import { ForbiddenException } from "@nestjs/common"
 import { DebugService } from "../src/debug/debug.service"
+import { buildTestConfigService } from "./config-helper"
 
 type MockClient = {
   query: jest.Mock
   release: jest.Mock
 }
 
-function buildService(queryImpl?: (sql: string) => Promise<unknown>) {
+function buildService(queryImpl?: (sql: string) => Promise<unknown>, resetEnabled = true) {
   const client: MockClient = {
     query: jest.fn((sql: string) => queryImpl?.(sql)),
     release: jest.fn(),
@@ -16,23 +17,22 @@ function buildService(queryImpl?: (sql: string) => Promise<unknown>) {
   }
 
   return {
-    service: new DebugService(db as never),
+    service: new DebugService(
+      db as never,
+      buildTestConfigService({ DEBUG_DATA_RESET_ENABLED: resetEnabled ? "true" : "false" }),
+    ),
     db,
     client,
   }
 }
 
 describe("DebugService", () => {
-  const originalFlag = process.env.DEBUG_DATA_RESET_ENABLED
-
   afterEach(() => {
-    process.env.DEBUG_DATA_RESET_ENABLED = originalFlag
     jest.clearAllMocks()
   })
 
-  it("blocks reset calls when debug reset is disabled", async () => {
-    process.env.DEBUG_DATA_RESET_ENABLED = "false"
-    const { service, db } = buildService()
+  it("blocks reset calls when debug.dataResetEnabled is false", async () => {
+    const { service, db } = buildService(undefined, false)
 
     await expect(service.resetIbpData()).rejects.toBeInstanceOf(ForbiddenException)
     await expect(service.resetUserData()).rejects.toBeInstanceOf(ForbiddenException)
@@ -40,7 +40,6 @@ describe("DebugService", () => {
   })
 
   it("deletes IBP data in order and returns deleted counts", async () => {
-    process.env.DEBUG_DATA_RESET_ENABLED = "true"
     const { service, client } = buildService(async (sql) => {
       if (sql === "DELETE FROM survey_events") return { rowCount: 4 }
       if (sql === "DELETE FROM attachments") return { rowCount: 3 }
@@ -64,7 +63,6 @@ describe("DebugService", () => {
   })
 
   it("deletes user data in order and returns deleted counts", async () => {
-    process.env.DEBUG_DATA_RESET_ENABLED = "true"
     const { service, client } = buildService(async (sql) => {
       if (sql === "DELETE FROM survey_events") return { rowCount: 8 }
       if (sql === "DELETE FROM attachments") return { rowCount: 7 }
@@ -91,7 +89,6 @@ describe("DebugService", () => {
   })
 
   it("rolls back and releases the client when a reset query fails", async () => {
-    process.env.DEBUG_DATA_RESET_ENABLED = "true"
     const error = new Error("delete failed")
     const { service, client } = buildService(async (sql) => {
       if (sql === "DELETE FROM attachments") {

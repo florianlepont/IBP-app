@@ -284,16 +284,29 @@ export class SurveysSyncService {
       // Legacy `<created_at>|<id>` cursors (D-13, C-6). The id may be a survey id (the removed
       // fallback emitted those), so translate with `<=` rather than an exact match: resume after
       // the last event at or before that point, or from the beginning if there is none.
-      const translated = await this.db.query<{ xid8: string; seq: string }>(
-        `SELECT e.xid8::text AS xid8, e.seq::text AS seq
-         FROM survey_events e
-         JOIN surveys s ON s.id = e.survey_id
-         WHERE s.user_id = $1
-           AND (e.created_at, e.id) <= ($2::timestamptz, $3)
-         ORDER BY e.xid8 DESC, e.seq DESC
-         LIMIT 1`,
-        [userId, parsedCursor.timestamp, parsedCursor.eventId],
-      )
+      let translated: { rows: Array<{ xid8: string; seq: string }> }
+      try {
+        translated = await this.db.query<{ xid8: string; seq: string }>(
+          `SELECT e.xid8::text AS xid8, e.seq::text AS seq
+           FROM survey_events e
+           JOIN surveys s ON s.id = e.survey_id
+           WHERE s.user_id = $1
+             AND (e.created_at, e.id) <= ($2::timestamptz, $3)
+           ORDER BY e.xid8 DESC, e.seq DESC
+           LIMIT 1`,
+          [userId, parsedCursor.timestamp, parsedCursor.eventId],
+        )
+      } catch (error) {
+        // D-12 backstop for the 01.6 malformed-legacy-cursor todo: the strict parser
+        // (isStrictTimestamp) is the first line of defence; if a timestamp it accepted is still
+        // refused by the `$2::timestamptz` cast, the client sent a bad cursor, so answer 400
+        // instead of 500. Every other error (a statement timeout, a lost connection) is rethrown
+        // untouched so it stays retryable.
+        if (isTimestampCastError(error)) {
+          throw badRequest("Invalid sync cursor")
+        }
+        throw error
+      }
       return translated.rows[0] ?? FEED_START
     }
 
@@ -389,6 +402,21 @@ const FEED_START = { xid8: "0", seq: "0" } as const
 
 function badRequest(message: string): BadRequestException {
   return new BadRequestException(message)
+}
+
+// SQLSTATEs a `::timestamptz` cast raises on bad input: 22007 invalid_datetime_format,
+// 22008 datetime_field_overflow, 22009 invalid_time_zone_displacement_value.
+const TIMESTAMP_CAST_SQLSTATES = new Set(["22007", "22008", "22009"])
+
+function isTimestampCastError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    !(error instanceof HttpException) &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string" &&
+    TIMESTAMP_CAST_SQLSTATES.has((error as { code: string }).code)
+  )
 }
 
 function isHttpException(error: unknown): error is HttpException {

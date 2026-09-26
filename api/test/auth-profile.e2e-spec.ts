@@ -311,7 +311,7 @@ describe("first-login provisioning (e2e)", () => {
     app.setGlobalPrefix("v1")
     await app.init()
     db = app.get(DatabaseService)
-    guard = new AuthGuard(db)
+    guard = app.get(AuthGuard)
   })
 
   afterAll(async () => {

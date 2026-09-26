@@ -1,8 +1,23 @@
-import { BadRequestException, InternalServerErrorException } from "@nestjs/common"
+import { BadRequestException, InternalServerErrorException, Logger } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import { Auth0ManagementService } from "../src/auth/auth0-management.service"
+import { buildTestConfig, buildTestConfigService } from "./config-helper"
+
+const AUTH0_TEST_ENV = {
+  AUTH0_DOMAIN: "tenant.example.auth0.com",
+  AUTH0_MGMT_CLIENT_ID: "test-mgmt-client-id",
+  AUTH0_MGMT_CLIENT_SECRET: "test-mgmt-client-secret",
+  AUTH0_APP_CLIENT_ID: "test-app-client-id",
+}
+
+/** Same config as the tests, but with nodeEnv production (buildTestConfig forces test). */
+function productionConfigService(overrides: Record<string, string | undefined>): ConfigService {
+  const app = buildTestConfig({ ...AUTH0_TEST_ENV, ...overrides })
+  return new ConfigService({ app: { ...app, nodeEnv: "production", isProduction: true } })
+}
 
 function buildService() {
-  const service = new Auth0ManagementService()
+  const service = new Auth0ManagementService(buildTestConfigService(AUTH0_TEST_ENV))
   // Reset token cache
   ;(service as unknown as Record<string, unknown>).cachedToken = null
   ;(service as unknown as Record<string, unknown>).tokenExpiresAt = 0
@@ -19,26 +34,55 @@ function mockTokenFetch() {
 
 describe("Auth0ManagementService", () => {
   let originalFetch: typeof global.fetch
-  let originalEnv: NodeJS.ProcessEnv
-
-  beforeAll(() => {
-    originalEnv = { ...process.env }
-  })
 
   beforeEach(() => {
     originalFetch = global.fetch
-    process.env.AUTH0_DOMAIN = "tenant.example.auth0.com"
-    process.env.AUTH0_MGMT_CLIENT_ID = "test-mgmt-client-id"
-    process.env.AUTH0_MGMT_CLIENT_SECRET = "test-mgmt-client-secret"
-    process.env.AUTH0_APP_CLIENT_ID = "test-app-client-id"
   })
 
   afterEach(() => {
     global.fetch = originalFetch
-    process.env.AUTH0_DOMAIN = originalEnv.AUTH0_DOMAIN
-    process.env.AUTH0_MGMT_CLIENT_ID = originalEnv.AUTH0_MGMT_CLIENT_ID
-    process.env.AUTH0_MGMT_CLIENT_SECRET = originalEnv.AUTH0_MGMT_CLIENT_SECRET
-    process.env.AUTH0_APP_CLIENT_ID = originalEnv.AUTH0_APP_CLIENT_ID
+    jest.restoreAllMocks()
+  })
+
+  describe("startup warning (D-02)", () => {
+    it("warns once in production when AUTH0_MGMT_CLIENT_SECRET is empty, without throwing", () => {
+      const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+
+      expect(
+        () => new Auth0ManagementService(productionConfigService({ AUTH0_MGMT_CLIENT_SECRET: "" })),
+      ).not.toThrow()
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      const message = String(warn.mock.calls[0][0])
+      expect(message).toContain("AUTH0_MGMT_CLIENT_ID")
+      expect(message).toContain("AUTH0_MGMT_CLIENT_SECRET")
+    })
+
+    it("warns in production when AUTH0_MGMT_CLIENT_ID is a placeholder", () => {
+      const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+
+      new Auth0ManagementService(productionConfigService({ AUTH0_MGMT_CLIENT_ID: "change-me" }))
+
+      expect(warn).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not warn in production when both values are set", () => {
+      const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+
+      new Auth0ManagementService(productionConfigService({}))
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it("does not warn outside production, even when the values are empty", () => {
+      const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+
+      new Auth0ManagementService(
+        buildTestConfigService({ AUTH0_MGMT_CLIENT_ID: "", AUTH0_MGMT_CLIENT_SECRET: "" }),
+      )
+
+      expect(warn).not.toHaveBeenCalled()
+    })
   })
 
   describe("getManagementToken caching", () => {

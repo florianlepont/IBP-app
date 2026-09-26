@@ -25,6 +25,8 @@ import { AuthenticatedUser } from "../auth/auth.types"
 import { UPLOAD_THROTTLE } from "../common/rate-limit.config"
 import { SafeIdPipe } from "../common/safe-id.pipe"
 import { SurveysService } from "./surveys.service"
+import { decodeEventListCursor, SurveyEventsService } from "./survey-events.service"
+import { decodeListCursor, parseListLimit } from "./list-cursor"
 import { SurveysAttachmentsService } from "./surveys-attachments.service"
 import { SurveyUpsertDto } from "./dtos/survey-upsert.dto"
 import { SurveyPatchDto } from "./dtos/survey-patch.dto"
@@ -37,6 +39,7 @@ export class SurveysController {
   constructor(
     private readonly surveysService: SurveysService,
     private readonly attachmentsService: SurveysAttachmentsService,
+    private readonly surveyEvents: SurveyEventsService,
   ) {}
 
   @Get()
@@ -46,9 +49,13 @@ export class SurveysController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("q") q?: string,
+    // D-11 / D-18 (C-4): individual query strings, not a class DTO, so unknown parameters are
+    // still ignored as before.
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
   ) {
-    const items = await this.surveysService.listForUser(user, { status, from, to, q })
-    return { items, next_cursor: null }
+    const page = { limit: parseListLimit(limit), after: decodeListCursor(cursor) }
+    return this.surveysService.listForUser(user, { status, from, to, q }, page)
   }
 
   @Post()
@@ -160,7 +167,14 @@ export class SurveysController {
   }
 
   @Get(":id/events")
-  async events(@CurrentUser() user: AuthenticatedUser, @Param("id", SafeIdPipe) id: string) {
-    return this.surveysService.getEvents(user, id)
+  async events(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", SafeIdPipe) id: string,
+    // D-11 / D-18 (C-4): optional; installed apps send neither and get every event.
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
+  ) {
+    const page = { limit: parseListLimit(limit), after: decodeEventListCursor(cursor) }
+    return this.surveyEvents.listForSurvey(user, id, page)
   }
 }

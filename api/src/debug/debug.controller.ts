@@ -1,22 +1,32 @@
 import { Body, Controller, ForbiddenException, Post, UseGuards } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import * as jwt from "jsonwebtoken"
 import { AdminGuard } from "../auth/admin.guard"
 import { AuthGuard } from "../auth/auth.guard"
+import { appConfigOf } from "../config/app-config"
+import { NodeEnv } from "../config/config.types"
 import { DatabaseService } from "../database/database.service"
 import { DebugService } from "./debug.service"
+import { getTestTokenSecret } from "./test-token-secret"
 
 @Controller("debug")
 export class DebugController {
+  private readonly nodeEnv: NodeEnv
+
   constructor(
     private readonly debugService: DebugService,
     private readonly db: DatabaseService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.nodeEnv = appConfigOf(config).nodeEnv
+  }
 
   @Post("test-token")
   async getTestToken(@Body() body: { email: string }): Promise<{ access_token: string }> {
-    if (process.env.NODE_ENV !== "test") throw new ForbiddenException()
-    const secret = process.env.ACCESS_TOKEN_SECRET
-    if (!secret) throw new ForbiddenException("ACCESS_TOKEN_SECRET not set")
+    if (this.nodeEnv !== "test") throw new ForbiddenException()
+    // D-04: the same per-process secret the AuthGuard test branch verifies with.
+    const secret = getTestTokenSecret(this.nodeEnv)
+    if (!secret) throw new ForbiddenException()
 
     const email = body.email
     let user = await this.db

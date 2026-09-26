@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
@@ -13,6 +14,7 @@ import { mkdir, readFile, rm, stat, writeFile } from "fs/promises"
 import { dirname, isAbsolute, resolve, sep } from "path"
 import { extensionFromMime, isAllowedMimeType } from "../common/file.utils"
 import { isSafeId } from "../common/safe-id"
+import { appConfigOf } from "../config/app-config"
 
 export const DOWNLOAD_URL_TTL_SECONDS = 300
 export const UPLOAD_URL_TTL_SECONDS = 15 * 60
@@ -34,7 +36,7 @@ function isFileNotFound(err: unknown): boolean {
 }
 
 // D-05: the single owner of stored files (survey attachments and profile pictures), in
-// MinIO/S3 or local mode. Configuration comes from the existing environment variables only.
+// MinIO/S3 or local mode. Configuration comes from ConfigService (the existing variables).
 @Injectable()
 export class StorageService {
   readonly mode: StorageMode
@@ -43,26 +45,22 @@ export class StorageService {
   private readonly s3Client?: S3Client
   private bucketReady = false
 
-  constructor() {
-    this.mode = (process.env.OBJECT_STORAGE_MODE ?? "local") === "minio" ? "minio" : "local"
-    // D-05: one default bucket for every stored file (users.service.ts used to default to
-    // ibp-surveys while the survey services defaulted to ibp-media).
-    this.bucket = process.env.OBJECT_STORAGE_BUCKET ?? "ibp-media"
-    this.uploadsRootDir = process.env.ATTACHMENTS_UPLOAD_DIR ?? "/tmp/ibp-uploads"
+  constructor(config: ConfigService) {
+    // D-01: values and defaults come from the validated config (app-config.ts). D-05: one
+    // default bucket (ibp-media) for every stored file.
+    const storage = appConfigOf(config).storage
+    this.mode = storage.mode
+    this.bucket = storage.bucket
+    this.uploadsRootDir = storage.uploadsDir
 
     if (this.mode === "minio") {
-      const endpoint = process.env.OBJECT_STORAGE_ENDPOINT ?? "http://localhost:9000"
-      const region = process.env.OBJECT_STORAGE_REGION ?? "us-east-1"
-      const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY ?? "minio"
-      const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_KEY ?? "minio123"
-
       this.s3Client = new S3Client({
-        endpoint,
-        region,
+        endpoint: storage.endpoint,
+        region: storage.region,
         forcePathStyle: true,
         credentials: {
-          accessKeyId,
-          secretAccessKey,
+          accessKeyId: storage.accessKey,
+          secretAccessKey: storage.secretKey,
         },
       })
     }

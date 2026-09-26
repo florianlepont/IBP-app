@@ -4,7 +4,9 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common"
+import { SurveyEventsService } from "../src/surveys/survey-events.service"
 import { SurveysAttachmentsService } from "../src/surveys/surveys-attachments.service"
+import { SurveysRepository } from "../src/surveys/surveys.repository"
 
 const AUTH_USER = {
   id: "user-1",
@@ -62,7 +64,11 @@ function buildService(mode: "local" | "minio") {
     transaction: jest.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
   }
   const storage = buildStorage(mode)
-  const service = new SurveysAttachmentsService(db as never, storage as never)
+  // D-07: real repository and events service over the mocked db, so the ownership lookup and
+  // event inserts still reach db/tx.query as before.
+  const repository = new SurveysRepository()
+  const events = new SurveyEventsService(db as never, repository)
+  const service = new SurveysAttachmentsService(db as never, storage as never, repository, events)
   return { service, db, tx, storage }
 }
 

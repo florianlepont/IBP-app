@@ -27,11 +27,10 @@ services:
       start_period: 60s
 
   minio:
-    # Docker Hub no longer serves minio/minio publicly — pulls fail with
-    # "repository does not exist". quay.io is MinIO's other official
-    # registry. Pinned rather than :latest because MinIO ships breaking
-    # changes in point releases.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # Upstream MinIO OSS is archived (quay.io answers 401, Docker Hub minio/minio
+    # is gone): pgsty/minio is the maintained fork CI already uses, pinned by
+    # digest. Backup before changing it: infra/vps/README.md, MinIO section.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     container_name: cortege-minio
     restart: unless-stopped
     mem_limit: 384m
