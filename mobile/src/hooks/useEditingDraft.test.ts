@@ -1,10 +1,11 @@
 /**
  * Tests for useEditingDraft — survey draft editing + autosave hook.
  *
- * Strategy: spy on React.useRef / React.useEffect so the hook can be called
- * directly without a renderer, without replacing the React module (which would
- * conflict with other tests that use react-test-renderer). Spies are restored
- * after each test so they never leak to other test suites.
+ * Strategy: render the real hook with renderHook from
+ * @testing-library/react-native/pure (see render-hook-smoke.test.ts). The hook
+ * holds no React state of its own: its callbacks only call the mocked setters,
+ * so they are called directly. The autosave timer an editing render schedules
+ * is cleared when cleanup() unmounts the hook.
  */
 
 jest.mock("react-native", () => ({
@@ -17,7 +18,7 @@ jest.mock("../storage/surveys", () => ({
   updateLocalDraft: jest.fn(),
 }))
 
-import React from "react"
+import { cleanup, renderHook } from "@testing-library/react-native/pure"
 import { createLocalDraft, getLocalSurveyDraft, updateLocalDraft } from "../storage"
 import { useEditingDraft } from "./useEditingDraft"
 
@@ -40,8 +41,6 @@ function makeDraftSurvey(overrides: Record<string, unknown> = {}) {
 }
 
 describe("useEditingDraft", () => {
-  let useRefSpy: jest.SpyInstance
-  let useEffectSpy: jest.SpyInstance
   let setEditingSurveyId: jest.Mock
   let setFormMode: jest.Mock
   let onStatusChange: jest.Mock
@@ -60,28 +59,23 @@ describe("useEditingDraft", () => {
     setSelectedSurveyId: jest.Mock
   }
 
-  function useBuildHook(editingSurveyId: string | null = null) {
-    return useEditingDraft({
+  async function buildHook(editingSurveyId: string | null = null) {
+    const params = {
       editingSurveyId,
       setEditingSurveyId,
-      editingSurveyVisibility: "private",
+      editingSurveyVisibility: "private" as const,
       setFormMode,
       surveyForm: surveyForm as never,
       surveyList: surveyList as never,
       onStatusChange,
       onCloseSurveyDetail,
-    })
+    }
+    const { result } = await renderHook(() => useEditingDraft(params))
+    return result.current
   }
 
   beforeEach(() => {
     jest.clearAllMocks()
-    // Spy on React hooks so the hook can be called outside a component context.
-    // Using spyOn (not jest.mock) avoids replacing the module and prevents
-    // interference with react-test-renderer used in other test files.
-    useRefSpy = jest
-      .spyOn(React, "useRef")
-      .mockImplementation((initial: unknown) => ({ current: initial }))
-    useEffectSpy = jest.spyOn(React, "useEffect").mockImplementation(() => undefined)
 
     setEditingSurveyId = jest.fn()
     setFormMode = jest.fn()
@@ -125,17 +119,16 @@ describe("useEditingDraft", () => {
     mockGetLocalSurveyDraft.mockResolvedValue(null)
   })
 
-  afterEach(() => {
-    useRefSpy.mockRestore()
-    useEffectSpy.mockRestore()
+  afterEach(async () => {
+    await cleanup()
     jest.clearAllTimers()
   })
 
   // ─── handleOpenCreateSurvey ───────────────────────────────────────────────
 
   describe("handleOpenCreateSurvey", () => {
-    test("resets survey form and closes survey detail", () => {
-      const { handleOpenCreateSurvey } = useBuildHook()
+    test("resets survey form and closes survey detail", async () => {
+      const { handleOpenCreateSurvey } = await buildHook()
 
       handleOpenCreateSurvey()
 
@@ -145,7 +138,7 @@ describe("useEditingDraft", () => {
     })
 
     test("creates a new local draft asynchronously", async () => {
-      const { handleOpenCreateSurvey } = useBuildHook()
+      const { handleOpenCreateSurvey } = await buildHook()
 
       handleOpenCreateSurvey()
       await new Promise((resolve) => setImmediate(resolve))
@@ -158,7 +151,7 @@ describe("useEditingDraft", () => {
     })
 
     test("does not start a second draft if bootstrapping is already in progress", async () => {
-      const { handleOpenCreateSurvey } = useBuildHook()
+      const { handleOpenCreateSurvey } = await buildHook()
 
       handleOpenCreateSurvey()
       handleOpenCreateSurvey() // second call before first resolves
@@ -169,7 +162,7 @@ describe("useEditingDraft", () => {
 
     test("reports bootstrap error via onStatusChange", async () => {
       mockCreateLocalDraft.mockRejectedValue(new Error("DB full"))
-      const { handleOpenCreateSurvey } = useBuildHook()
+      const { handleOpenCreateSurvey } = await buildHook()
 
       handleOpenCreateSurvey()
       await new Promise((resolve) => setImmediate(resolve))
@@ -183,7 +176,7 @@ describe("useEditingDraft", () => {
   describe("handleCreateDraft", () => {
     test("calls updateLocalDraft when editingSurveyId is set", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "public" }]
-      const { handleCreateDraft } = useBuildHook(TEST_SURVEY_ID)
+      const { handleCreateDraft } = await buildHook(TEST_SURVEY_ID)
 
       const result = await handleCreateDraft()
 
@@ -196,7 +189,7 @@ describe("useEditingDraft", () => {
 
     test("falls back to private visibility when survey not in list", async () => {
       surveyList.surveys = []
-      const { handleCreateDraft } = useBuildHook(TEST_SURVEY_ID)
+      const { handleCreateDraft } = await buildHook(TEST_SURVEY_ID)
 
       await handleCreateDraft()
 
@@ -206,7 +199,7 @@ describe("useEditingDraft", () => {
     })
 
     test("calls createLocalDraft when no editingSurveyId", async () => {
-      const { handleCreateDraft } = useBuildHook(null)
+      const { handleCreateDraft } = await buildHook(null)
 
       const result = await handleCreateDraft()
 
@@ -217,7 +210,7 @@ describe("useEditingDraft", () => {
 
     test("returns false and reports error on exception", async () => {
       mockCreateLocalDraft.mockRejectedValue(new Error("Write failed"))
-      const { handleCreateDraft } = useBuildHook(null)
+      const { handleCreateDraft } = await buildHook(null)
 
       const result = await handleCreateDraft()
 
@@ -231,7 +224,7 @@ describe("useEditingDraft", () => {
   describe("handleStartEditSurvey", () => {
     test("returns false for submitted surveys without touching storage", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "submitted" }]
-      const { handleStartEditSurvey } = useBuildHook()
+      const { handleStartEditSurvey } = await buildHook()
 
       const result = await handleStartEditSurvey(TEST_SURVEY_ID)
 
@@ -245,7 +238,7 @@ describe("useEditingDraft", () => {
     test("returns false when draft is not found locally", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft" }]
       mockGetLocalSurveyDraft.mockResolvedValue(null)
-      const { handleStartEditSurvey } = useBuildHook()
+      const { handleStartEditSurvey } = await buildHook()
 
       const result = await handleStartEditSurvey(TEST_SURVEY_ID)
 
@@ -256,7 +249,7 @@ describe("useEditingDraft", () => {
     test("applies draft to form and enters edit mode on success", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft" }]
       mockGetLocalSurveyDraft.mockResolvedValue(makeDraftSurvey())
-      const { handleStartEditSurvey } = useBuildHook()
+      const { handleStartEditSurvey } = await buildHook()
 
       const result = await handleStartEditSurvey(TEST_SURVEY_ID)
 
@@ -270,7 +263,7 @@ describe("useEditingDraft", () => {
     test("returns false and reports error on storage exception", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft" }]
       mockGetLocalSurveyDraft.mockRejectedValue(new Error("Read error"))
-      const { handleStartEditSurvey } = useBuildHook()
+      const { handleStartEditSurvey } = await buildHook()
 
       const result = await handleStartEditSurvey(TEST_SURVEY_ID)
 
@@ -283,7 +276,7 @@ describe("useEditingDraft", () => {
 
   describe("handleSaveSurveyEdits", () => {
     test("returns false when no editingSurveyId is set", async () => {
-      const { handleSaveSurveyEdits } = useBuildHook(null)
+      const { handleSaveSurveyEdits } = await buildHook(null)
 
       const result = await handleSaveSurveyEdits()
 
@@ -293,7 +286,7 @@ describe("useEditingDraft", () => {
 
     test("calls updateLocalDraft and resets editing state", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
-      const { handleSaveSurveyEdits } = useBuildHook(TEST_SURVEY_ID)
+      const { handleSaveSurveyEdits } = await buildHook(TEST_SURVEY_ID)
 
       const result = await handleSaveSurveyEdits()
 
@@ -307,7 +300,7 @@ describe("useEditingDraft", () => {
 
     test("refreshes surveys and attachments after save", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
-      const { handleSaveSurveyEdits } = useBuildHook(TEST_SURVEY_ID)
+      const { handleSaveSurveyEdits } = await buildHook(TEST_SURVEY_ID)
 
       await handleSaveSurveyEdits()
 
@@ -318,7 +311,7 @@ describe("useEditingDraft", () => {
     test("returns false and reports error on save exception", async () => {
       surveyList.surveys = [{ id: TEST_SURVEY_ID, status: "draft", visibility: "private" }]
       mockUpdateLocalDraft.mockRejectedValue(new Error("Save failed"))
-      const { handleSaveSurveyEdits } = useBuildHook(TEST_SURVEY_ID)
+      const { handleSaveSurveyEdits } = await buildHook(TEST_SURVEY_ID)
 
       const result = await handleSaveSurveyEdits()
 
