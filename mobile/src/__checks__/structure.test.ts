@@ -8,6 +8,7 @@ type Literal = { file: string; line: number; kind: string; text: string }
 type StatusLeak = { file: string; line: number; text: string }
 
 type StructureReport = {
+  DEFAULT_PATHS: string[]
   collectFiles: (paths: string[], baseDir: string) => string[]
   findUnusedStyleKeys: (files: string[]) => UnusedStyleKey[]
   findLongFiles: (files: string[], maxLines?: number) => LongFile[]
@@ -24,8 +25,8 @@ const MOBILE_ROOT = path.resolve(__dirname, "../..")
 const BASELINE = {
   unusedStyleKeys: 301,
   longFiles: 10,
-  literals: 552,
-  statusIdLeaks: 0,
+  literals: 635,
+  statusIdLeaks: 66,
 }
 
 let fixtureRoot = ""
@@ -56,7 +57,7 @@ describe("findUnusedStyleKeys", () => {
       [
         'import { StyleSheet, View } from "react-native"',
         "export function Plain() {",
-        "  return <View style={[styles.a, styles[\"c\"]]} />",
+        '  return <View style={[styles.a, styles["c"]]} />',
         "}",
         "const styles = StyleSheet.create({ a: {}, b: {}, c: {} })",
       ].join("\n"),
@@ -217,8 +218,8 @@ describe("findStatusIdLeaks", () => {
   })
 })
 
-describe("structure ratchet on mobile/src", () => {
-  const files = report.collectFiles(["src"], MOBILE_ROOT)
+describe("structure ratchet on mobile/src and App.tsx", () => {
+  const files = report.collectFiles(report.DEFAULT_PATHS, MOBILE_ROOT)
 
   it("never exceeds the 01.9-04 baseline", () => {
     const counts = {
