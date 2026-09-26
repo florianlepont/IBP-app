@@ -6,26 +6,18 @@ import { SurveyListScreen } from "../../screens/SurveyListScreen"
 import { useSurveys } from "../../state/surveys-context"
 import { useSyncActions } from "../../state/sync-actions-context"
 import { useLatestCallback } from "../../state/useLatestCallback"
+import { useSurveysStackConfig } from "../stacks/surveys-stack-config"
 import type { SurveyListRouteProps } from "../types"
-
-type SurveyListRouteConfig = {
-  /** The surveys stack runs inside the native (iOS) tab bar. */
-  useNativeNav?: boolean
-  /** This stack is the dedicated iOS "Recherche" tab. */
-  searchEntry?: boolean
-}
 
 /**
  * Survey list route (phase 01.9-18, D-01): the surveys context and the sync
  * actions. It also owns the native header search bar (options and text sync),
  * so the surveys stack navigator does not subscribe to the surveys context.
- * The two booleans are static navigator configuration, not data.
+ * The two stack booleans (native nav, search entry) are static navigator
+ * configuration read from SurveysStackConfigContext, not data.
  */
-export const SurveyListRoute = memo(function SurveyListRoute({
-  navigation,
-  useNativeNav = false,
-  searchEntry = false,
-}: SurveyListRouteProps & SurveyListRouteConfig) {
+export const SurveyListRoute = memo(function SurveyListRoute({ navigation }: SurveyListRouteProps) {
+  const { useNativeNav, searchEntry } = useSurveysStackConfig()
   const { state, actions } = useSurveys()
   const syncActions = useSyncActions()
 

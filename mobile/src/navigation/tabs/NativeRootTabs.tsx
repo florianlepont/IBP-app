@@ -28,6 +28,15 @@ function getNativeTabNavigator(): TabNavigatorLike {
   return nativeBottomTabsModule.createNativeBottomTabNavigator<RootTabParamList>() as TabNavigatorLike
 }
 
+// The two surveys stacks differ only by their static configuration.
+function NativeSurveysTab() {
+  return <SurveysTabNavigator useNativeNav />
+}
+
+function NativeSearchTab() {
+  return <SurveysTabNavigator useNativeNav searchEntry />
+}
+
 /** The native (iOS) tab bar from react-native-bottom-tabs. */
 export function NativeRootTabs() {
   const deps = useTabListenerDeps()
@@ -41,25 +50,30 @@ export function NativeRootTabs() {
 
   return (
     <NativeTab.Navigator screenOptions={nativeTabScreenOptions} minimizeBehavior="automatic">
-      <NativeTab.Screen name="home">{() => <HomeTabNavigator />}</NativeTab.Screen>
-      <NativeTab.Screen name="surveys" listeners={makeSurveysTabListeners(deps)}>
-        {() => <SurveysTabNavigator useNativeNav />}
-      </NativeTab.Screen>
+      <NativeTab.Screen name="home" component={HomeTabNavigator} />
+      <NativeTab.Screen
+        name="surveys"
+        listeners={makeSurveysTabListeners(deps)}
+        component={NativeSurveysTab}
+      />
       {Platform.OS === "ios" ? (
         <NativeTab.Screen
           name="search"
           options={{ role: "search" as const }}
           listeners={makeSurveysTabListeners(deps)}
-        >
-          {() => <SurveysTabNavigator useNativeNav searchEntry />}
-        </NativeTab.Screen>
+          component={NativeSearchTab}
+        />
       ) : null}
-      <NativeTab.Screen name="publicMap" listeners={makePublicMapTabListeners(deps)}>
-        {() => <PublicMapTabNavigator />}
-      </NativeTab.Screen>
-      <NativeTab.Screen name="account" listeners={makeAccountTabListeners(deps)}>
-        {() => <AccountTabNavigator />}
-      </NativeTab.Screen>
+      <NativeTab.Screen
+        name="publicMap"
+        listeners={makePublicMapTabListeners(deps)}
+        component={PublicMapTabNavigator}
+      />
+      <NativeTab.Screen
+        name="account"
+        listeners={makeAccountTabListeners(deps)}
+        component={AccountTabNavigator}
+      />
     </NativeTab.Navigator>
   )
 }

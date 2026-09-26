@@ -1,10 +1,14 @@
 import { Pressable, View } from "react-native"
-import { createNativeStackNavigator } from "@react-navigation/native-stack"
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+  type NativeStackScreenProps,
+} from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors } from "../../app/brand-tokens"
-import { styles } from "../../app/styles"
 import { AccountRoute } from "../routes/AccountRoute"
 import { SettingsRoute } from "../routes/SettingsRoute"
+import { styles } from "../styles"
 import type { AccountStackParamList } from "../types"
 import { baseStackScreenOptions } from "./stack-options"
 
@@ -29,6 +33,18 @@ function HeaderIconButton({
   )
 }
 
+function accountHomeOptions({
+  navigation,
+}: NativeStackScreenProps<AccountStackParamList, "accountHome">): NativeStackNavigationOptions {
+  return {
+    title: "Compte",
+    headerLargeTitle: false,
+    headerRight: () => (
+      <HeaderIconButton icon="settings-outline" onPress={() => navigation.navigate("settings")} />
+    ),
+  }
+}
+
 export function AccountTabNavigator() {
   return (
     <View style={styles.tabScreenContainer}>
@@ -40,22 +56,14 @@ export function AccountTabNavigator() {
       >
         <AccountStack.Screen
           name="accountHome"
-          options={({ navigation }) => ({
-            title: "Compte",
-            headerLargeTitle: false,
-            headerRight: () => (
-              <HeaderIconButton
-                icon="settings-outline"
-                onPress={() => navigation.navigate("settings")}
-              />
-            ),
-          })}
-        >
-          {(props) => <AccountRoute {...props} />}
-        </AccountStack.Screen>
-        <AccountStack.Screen name="settings" options={{ title: "Paramètres" }}>
-          {(props) => <SettingsRoute {...props} />}
-        </AccountStack.Screen>
+          options={accountHomeOptions}
+          component={AccountRoute}
+        />
+        <AccountStack.Screen
+          name="settings"
+          options={{ title: "Paramètres" }}
+          component={SettingsRoute}
+        />
       </AccountStack.Navigator>
     </View>
   )

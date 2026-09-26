@@ -22,9 +22,7 @@ export function JsRootTabs() {
 
   return (
     <JsTab.Navigator screenOptions={jsTabScreenOptions}>
-      <JsTab.Screen name="home" options={{ headerShown: false }}>
-        {() => <HomeTabNavigator />}
-      </JsTab.Screen>
+      <JsTab.Screen name="home" options={{ headerShown: false }} component={HomeTabNavigator} />
       <JsTab.Screen
         name="surveys"
         options={({ route }) => ({
@@ -36,23 +34,20 @@ export function JsRootTabs() {
               : undefined,
         })}
         listeners={makeSurveysTabListeners(deps)}
-      >
-        {() => <SurveysTabNavigator />}
-      </JsTab.Screen>
+        component={SurveysTabNavigator}
+      />
       <JsTab.Screen
         name="publicMap"
         options={{ headerShown: false }}
         listeners={makePublicMapTabListeners(deps)}
-      >
-        {() => <PublicMapTabNavigator />}
-      </JsTab.Screen>
+        component={PublicMapTabNavigator}
+      />
       <JsTab.Screen
         name="account"
         options={{ headerShown: false }}
         listeners={makeAccountTabListeners(deps)}
-      >
-        {() => <AccountTabNavigator />}
-      </JsTab.Screen>
+        component={AccountTabNavigator}
+      />
     </JsTab.Navigator>
   )
 }
