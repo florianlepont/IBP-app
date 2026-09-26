@@ -8,6 +8,9 @@ import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppStatusChip } from "../ui/AppStatusChip"
+import { fr } from "../i18n"
+
+const t = fr.factorDetail
 
 type FactorDetailScreenProps = {
   factor: FactorKey
@@ -30,35 +33,33 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
             <Text style={detailStyles.heroFactorBadgeText}>{factor}</Text>
           </View>
           <Text style={detailStyles.heroProgressText}>
-            {filled}/{total} fields
+            {t.fieldsProgress({ filledCount: filled, totalCount: total })}
           </Text>
         </View>
         <Text style={detailStyles.heroTitle}>{FACTOR_TITLES[factor]}</Text>
         <Text style={detailStyles.heroBody}>{HELP_BY_FACTOR[factor]}</Text>
         <View style={detailStyles.heroScoreRow}>
           <View style={detailStyles.heroScoreCard}>
-            <Text style={detailStyles.heroScoreLabel}>Retained score</Text>
+            <Text style={detailStyles.heroScoreLabel}>{t.retainedScore}</Text>
             <Text style={detailStyles.heroScoreValue}>
-              {retainedScore ? `${retainedScore.score} pts` : "Pending"}
+              {retainedScore ? t.scorePoints({ scoreCount: retainedScore.score }) : t.pending}
             </Text>
           </View>
           <Text style={detailStyles.heroScoreMeta}>
-            {retainedScore
-              ? retainedScore.selected_class
-              : "Complete every required field to compute the score"}
+            {retainedScore ? retainedScore.selected_class : t.scoreHint}
           </Text>
         </View>
       </View>
 
       <AppCard variant="panelElevated" padding={18} style={detailStyles.panel}>
         <AppSectionHeader
-          title="Observations"
-          subtitle="Inputs update the draft immediately and recompute the retained score as you type."
+          title={t.observationsTitle}
+          subtitle={t.observationsSubtitle}
           trailing={
             retainedScore ? (
               <AppStatusChip label={retainedScore.selected_class} tone="success" />
             ) : (
-              <AppStatusChip label="Pending" tone="warning" />
+              <AppStatusChip label={t.pending} tone="warning" />
             )
           }
           titleStyle={detailStyles.panelTitle}
@@ -68,11 +69,15 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
           {fields.map((field) => (
             <AppField
               key={`${factor}-${field.label}`}
-              label={`${humanizeFieldLabel(field.label)}${field.required ? " *" : ""}`}
+              label={
+                field.required
+                  ? t.requiredField({ label: humanizeFieldLabel(field.label) })
+                  : humanizeFieldLabel(field.label)
+              }
               value={field.value}
               onChangeText={field.onChange}
               keyboardType="numeric"
-              placeholder="Enter a numeric value"
+              placeholder={t.numericPlaceholder}
               error={field.error}
               containerStyle={detailStyles.fieldBlock}
               labelStyle={detailStyles.fieldLabel}
@@ -86,12 +91,13 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
         <Pressable
           style={detailStyles.panelToggle}
           onPress={() => setCaptureHelpExpanded((current) => !current)}
+          accessibilityRole="button"
+          accessibilityLabel={t.captureToggle}
+          accessibilityState={{ expanded: captureHelpExpanded }}
         >
           <View style={detailStyles.panelToggleCopy}>
-            <Text style={detailStyles.panelTitle}>What to capture</Text>
-            <Text style={detailStyles.panelToggleMeta}>
-              Open only if you need a quick reminder while scoring this factor.
-            </Text>
+            <Text style={detailStyles.panelTitle}>{t.captureTitle}</Text>
+            <Text style={detailStyles.panelToggleMeta}>{t.captureSubtitle}</Text>
           </View>
           <Ionicons
             name={captureHelpExpanded ? "chevron-up-outline" : "chevron-down-outline"}
@@ -115,34 +121,10 @@ export function FactorDetailScreen({ factor, fields, retainedScore }: FactorDeta
 }
 
 function humanizeFieldLabel(label: string): string {
-  switch (label) {
-    case "native_genus_count":
-      return "Native genus count"
-    case "strata_count":
-      return "Strata count"
-    case "covered_autochthonous_percent":
-      return "Autochthonous cover (%)"
-    case "bmg_count":
-      return "BMg count"
-    case "bmm_count":
-      return "BMm count"
-    case "surface_ha":
-      return "Surface (ha)"
-    case "tgb_count":
-      return "TGB count"
-    case "gb_count":
-      return "GB count"
-    case "trees_per_ha":
-      return "Trees per ha"
-    case "open_flowering_percent":
-      return "Open flowering area (%)"
-    case "class_score (0|2|5)":
-      return "Class score (0, 2 or 5)"
-    case "type_count":
-      return "Type count"
-    default:
-      return label.replace(/_/g, " ")
-  }
+  const labels: Record<string, string> = t.fieldLabels
+  return Object.prototype.hasOwnProperty.call(labels, label)
+    ? labels[label]
+    : label.replace(/_/g, " ")
 }
 
 const detailStyles = StyleSheet.create({

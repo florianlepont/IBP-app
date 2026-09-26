@@ -11,6 +11,7 @@ import {
   UNAVAILABLE_PHOTO_MESSAGE,
 } from "./survey-screen-helpers"
 import type { LocalAttachment } from "../storage/types"
+import { fr } from "../i18n"
 
 const attachment = (overrides: Partial<LocalAttachment> = {}): LocalAttachment => ({
   id: "attachment-1",
@@ -131,6 +132,19 @@ describe("survey screen helpers", () => {
         kind: "unavailable",
         message: UNAVAILABLE_PHOTO_MESSAGE,
       })
+    })
+  })
+
+  describe("preview messages", () => {
+    it("read the same French texts from fr.labels", () => {
+      expect(MISSING_PHOTO_MESSAGE).toBe(fr.labels.attachmentPreview.missing)
+      expect(LOADING_PHOTO_MESSAGE).toBe(fr.labels.attachmentPreview.loading)
+      expect(UNAVAILABLE_PHOTO_MESSAGE).toBe(fr.labels.attachmentPreview.unavailable)
+      expect(MISSING_PHOTO_MESSAGE).toBe(
+        "Photo introuvable sur cet appareil. Supprimez-la ou reprenez la photo.",
+      )
+      expect(LOADING_PHOTO_MESSAGE).toBe("Photo en cours de chargement…")
+      expect(UNAVAILABLE_PHOTO_MESSAGE).toBe("Photo non disponible pour le moment.")
     })
   })
 

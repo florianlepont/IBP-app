@@ -12,6 +12,10 @@ import { AppField } from "../ui/AppField"
 import { AppNotice } from "../ui/AppNotice"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
 import { AppSettingsRow } from "../ui/AppSettingsRow"
+import { fr } from "../i18n"
+
+const t = fr.settings
+const actions = fr.common.actions
 
 type SettingsScreenProps = {
   apiUrl: string
@@ -89,43 +93,35 @@ export function SettingsScreen({
   }
 
   const confirmDeleteAccount = () => {
-    Alert.alert(
-      "Supprimer mon compte",
-      "Cette action est irréversible. Toutes vos données seront définitivement supprimées, y compris vos relevés et pièces jointes.",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            setDeleteLoading(true)
-            try {
-              await onDeleteAccount()
-            } finally {
-              setDeleteLoading(false)
-            }
-          },
+    Alert.alert(t.alerts.deleteAccount.title, t.alerts.deleteAccount.message, [
+      { text: actions.cancel, style: "cancel" },
+      {
+        text: actions.delete,
+        style: "destructive",
+        onPress: async () => {
+          setDeleteLoading(true)
+          try {
+            await onDeleteAccount()
+          } finally {
+            setDeleteLoading(false)
+          }
         },
-      ],
-    )
+      },
+    ])
   }
 
   const confirmDebugResetIbpData = () => {
-    Alert.alert("Vider la base IBP", "Toutes les données IBP locales seront supprimées.", [
-      { text: "Annuler", style: "cancel" },
-      { text: "Vider", style: "destructive", onPress: () => void onDebugResetIbpData() },
+    Alert.alert(t.alerts.resetIbpData.title, t.alerts.resetIbpData.message, [
+      { text: actions.cancel, style: "cancel" },
+      { text: t.alerts.empty, style: "destructive", onPress: () => void onDebugResetIbpData() },
     ])
   }
 
   const confirmDebugResetUserData = () => {
-    Alert.alert(
-      "Vider la base utilisateur",
-      "Toutes les données utilisateur locales seront supprimées.",
-      [
-        { text: "Annuler", style: "cancel" },
-        { text: "Vider", style: "destructive", onPress: () => void onDebugResetUserData() },
-      ],
-    )
+    Alert.alert(t.alerts.resetUserData.title, t.alerts.resetUserData.message, [
+      { text: actions.cancel, style: "cancel" },
+      { text: t.alerts.empty, style: "destructive", onPress: () => void onDebugResetUserData() },
+    ])
   }
 
   return (
@@ -157,17 +153,13 @@ export function SettingsScreen({
       {/* Zone 1 — Compte (production) */}
       <AppCard variant="panelElevated" style={styles.section}>
         <AppSectionHeader
-          title="Compte"
-          subtitle="Gestion de votre compte et de vos données."
+          title={t.account.title}
+          subtitle={t.account.subtitle}
           titleStyle={styles.sectionTitle}
         />
-        <AppNotice
-          tone="danger"
-          icon="warning-outline"
-          message="Cette action est irréversible. Toutes vos données seront définitivement supprimées."
-        />
+        <AppNotice tone="danger" icon="warning-outline" message={t.account.deleteWarning} />
         <AppButton
-          label="Supprimer mon compte"
+          label={t.account.deleteButton}
           variant="danger"
           size="lg"
           leadingIcon="trash-outline"
@@ -180,12 +172,12 @@ export function SettingsScreen({
       {/* Zone 2 — Synchronisation */}
       <AppCard variant="panel" style={styles.section}>
         <AppSectionHeader
-          title="Synchronisation"
-          subtitle="Rafraîchir l'état local et les données serveur."
+          title={t.sync.title}
+          subtitle={t.sync.subtitle}
           titleStyle={styles.sectionTitle}
         />
         <AppButton
-          label="Synchroniser maintenant"
+          label={t.sync.syncNow}
           leadingIcon="sync-outline"
           loading={syncLoading}
           disabled={syncBusy}
@@ -193,23 +185,23 @@ export function SettingsScreen({
         />
         <View style={styles.advancedDivider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerLabel}>Avancé</Text>
+          <Text style={styles.dividerLabel}>{t.sync.advanced}</Text>
           <View style={styles.dividerLine} />
         </View>
         <AppSettingsRow
-          label="Récupérer les changements serveur"
+          label={t.sync.pullChanges}
           onPress={() => void handlePullChanges()}
           loading={pullLoading}
           disabled={syncBusy}
         />
         <AppSettingsRow
-          label="Rafraîchir la liste locale"
+          label={t.sync.refreshLocalList}
           onPress={() => void handleRefreshLocalList()}
           loading={refreshListLoading}
           disabled={syncBusy}
         />
         <AppSettingsRow
-          label="Rafraîchir les pièces jointes"
+          label={t.sync.refreshAttachments}
           onPress={() => void handleRefreshLocalAttachments()}
           loading={refreshAttachmentsLoading}
           disabled={syncBusy}
@@ -218,22 +210,22 @@ export function SettingsScreen({
 
       {/* Zone 3 — Outils développeur (repliée par défaut) */}
       {shouldShowDevTools() ? (
-        <AppCollapsibleSection title="Outils développeur" badge="DEV">
+        <AppCollapsibleSection title={t.devTools.title} badge={t.devTools.badge}>
           <AppField
-            label="URL de l'API"
+            label={t.devTools.apiUrl}
             value={apiUrl}
             onChangeText={onApiUrlChange}
             autoCapitalize="none"
             autoCorrect={false}
           />
           <AppButton
-            label="Vider la base IBP"
+            label={t.devTools.resetIbpData}
             variant="dangerSoft"
             leadingIcon="bug-outline"
             onPress={confirmDebugResetIbpData}
           />
           <AppButton
-            label="Vider la base utilisateur"
+            label={t.devTools.resetUserData}
             variant="dangerSoft"
             leadingIcon="bug-outline"
             onPress={confirmDebugResetUserData}
