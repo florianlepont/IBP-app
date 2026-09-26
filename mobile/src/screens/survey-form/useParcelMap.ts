@@ -11,6 +11,7 @@ import { AppScreen, GpsCaptureResult } from "../../app/types"
 import { useParcelStatuses } from "../../hooks/useParcelStatuses"
 import { toAddressLabel } from "../survey-screen-helpers"
 import type { WizardStep } from "./components"
+import { fr } from "../../i18n"
 
 type UseParcelMapInput = {
   apiUrl: string
@@ -25,10 +26,9 @@ type MapRef = { current: MapView | null }
 type FlagRef = { current: boolean }
 type RegionRef = { current: Region | null }
 
-const ADDRESS_UNAVAILABLE = "Adresse locale non disponible"
-const AUTO_LOCATE_ERROR =
-  "Current position unavailable. Open the full-screen map to retry or browse manually."
-const MANUAL_LOCATE_ERROR = "Current position unavailable. Browse the map manually or try again."
+const ADDRESS_UNAVAILABLE = fr.surveyForm.parcels.addressUnavailable
+const AUTO_LOCATE_ERROR = fr.surveyForm.parcels.autoLocateError
+const MANUAL_LOCATE_ERROR = fr.surveyForm.parcels.manualLocateError
 
 // Map state of the parcels step: region, parcel overlay, GPS centring and the
 // reverse-geocoded address. Shared by the inline map and the full-screen modal.
@@ -311,17 +311,17 @@ export function useParcelMap({
 
   const helperText = useMemo(() => {
     if (isAutoLocatingParcels) {
-      return "Centering on your current position..."
+      return fr.surveyForm.parcels.helperLocating
     }
     if (parcelAutoLocateError) {
       return parcelAutoLocateError
     }
     if (mapZoom >= 15) {
       return parcelsLoading
-        ? "Loading parcel overlay..."
-        : `${parcelStatuses.length} visible parcel(s) · tap polygons to select or deselect`
+        ? fr.surveyForm.parcels.helperLoading
+        : fr.surveyForm.parcels.helperVisible({ count: parcelStatuses.length })
     }
-    return "Zoom in to unlock parcel selection"
+    return fr.surveyForm.parcels.helperZoomIn
   }, [isAutoLocatingParcels, mapZoom, parcelAutoLocateError, parcelStatuses.length, parcelsLoading])
 
   return {

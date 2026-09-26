@@ -5,6 +5,7 @@ import { AppCard } from "../../ui/AppCard"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { WizardChip } from "./components"
 import { formStyles } from "./styles"
+import { fr } from "../../i18n"
 
 // Region version and vegetation stage: they set the IBP scoring thresholds.
 export function RegionVegetationSection({
@@ -21,13 +22,13 @@ export function RegionVegetationSection({
   return (
     <AppCard variant="panelElevated" style={formStyles.panel}>
       <AppSectionHeader
-        title="Scoring context"
-        subtitle="Region version and vegetation stage directly affect the IBP scoring thresholds, so set them before opening factors."
+        title={fr.surveyForm.region.title}
+        subtitle={fr.surveyForm.region.subtitle}
         titleStyle={formStyles.panelTitle}
         subtitleStyle={formStyles.panelBody}
       />
 
-      <Text style={formStyles.label}>Region version *</Text>
+      <Text style={formStyles.label}>{fr.surveyForm.region.label}</Text>
       <View style={formStyles.choiceRow}>
         {REGION_OPTIONS.map((option) => (
           <WizardChip
@@ -39,7 +40,7 @@ export function RegionVegetationSection({
         ))}
       </View>
 
-      <Text style={formStyles.label}>Vegetation stage *</Text>
+      <Text style={formStyles.label}>{fr.surveyForm.vegetation.label}</Text>
       <View style={formStyles.choiceRow}>
         {VEGETATION_STAGE_OPTIONS_BY_REGION[regionVersion].map((option) => (
           <WizardChip

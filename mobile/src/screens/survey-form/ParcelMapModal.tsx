@@ -7,6 +7,7 @@ import { IgnCadastreTileOverlay } from "../../components/IgnCadastreTileOverlay"
 import { ParcelOverlayPolygons } from "../../components/ParcelOverlayPolygons"
 import { parcelStyles } from "./parcels.styles"
 import type { ParcelMapState } from "./useParcelMap"
+import { fr } from "../../i18n"
 
 // Full-screen parcel map of step 2.
 export function ParcelMapModal({
@@ -22,10 +23,9 @@ export function ParcelMapModal({
 }) {
   const insets = useSafeAreaInsets()
   const hasParcelSelection = selectedParcelIds.length > 0
-  const parcelSelectionLabel = `${selectedParcelIds.length} parcel${selectedParcelIds.length > 1 ? "s" : ""} selected`
   const fullscreenParcelSelectionTitle = hasParcelSelection
-    ? parcelSelectionLabel
-    : "No parcel selected yet"
+    ? fr.surveyForm.parcels.selectionTitle({ count: selectedParcelIds.length })
+    : fr.surveyForm.parcels.noSelection
 
   return (
     <Modal
@@ -64,26 +64,42 @@ export function ParcelMapModal({
           <View style={parcelStyles.fullscreenMapTopBar}>
             {Platform.OS === "ios" ? (
               <>
-                <Button title="Back" color={brandColors.forest} onPress={map.closeFullscreenMap} />
+                <Button
+                  title={fr.surveyForm.parcels.back}
+                  color={brandColors.forest}
+                  onPress={map.closeFullscreenMap}
+                />
                 <Text numberOfLines={1} style={parcelStyles.fullscreenMapTopTitle}>
-                  {siteName.trim() || "Parcel selection"}
+                  {siteName.trim() || fr.surveyForm.parcels.fullscreenFallbackTitle}
                 </Text>
-                <Button title="Done" color={brandColors.forest} onPress={map.closeFullscreenMap} />
+                <Button
+                  title={fr.surveyForm.parcels.done}
+                  color={brandColors.forest}
+                  onPress={map.closeFullscreenMap}
+                />
               </>
             ) : (
               <>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={fr.surveyForm.a11y.closeFullscreenMap}
                   style={parcelStyles.fullscreenMapCloseButton}
                   onPress={map.closeFullscreenMap}
                 >
                   <Ionicons name="arrow-back" size={18} color={brandColors.white} />
-                  <Text style={parcelStyles.fullscreenMapCloseText}>Back</Text>
+                  <Text style={parcelStyles.fullscreenMapCloseText}>
+                    {fr.surveyForm.parcels.back}
+                  </Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={fr.surveyForm.a11y.doneFullscreenMap}
                   style={parcelStyles.fullscreenMapCloseButton}
                   onPress={map.closeFullscreenMap}
                 >
-                  <Text style={parcelStyles.fullscreenMapCloseText}>Done</Text>
+                  <Text style={parcelStyles.fullscreenMapCloseText}>
+                    {fr.surveyForm.parcels.done}
+                  </Text>
                 </Pressable>
               </>
             )}
@@ -92,6 +108,9 @@ export function ParcelMapModal({
           <View style={parcelStyles.fullscreenMapBottomArea}>
             <View style={parcelStyles.fullscreenMapFloatingActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={fr.surveyForm.a11y.locate}
+                accessibilityState={{ busy: map.isAutoLocatingParcels }}
                 style={parcelStyles.fullscreenMapActionButton}
                 onPress={map.handleLocateParcelsMap}
               >
@@ -100,7 +119,9 @@ export function ParcelMapModal({
                   size={18}
                   color={brandColors.white}
                 />
-                <Text style={parcelStyles.fullscreenMapActionButtonText}>Current position</Text>
+                <Text style={parcelStyles.fullscreenMapActionButtonText}>
+                  {fr.surveyForm.parcels.currentPosition}
+                </Text>
               </Pressable>
             </View>
 
@@ -113,12 +134,12 @@ export function ParcelMapModal({
                 <View style={parcelStyles.fullscreenMapWarningCard}>
                   <Ionicons name="alert-circle-outline" size={18} color={brandColors.terracotta} />
                   <Text style={parcelStyles.fullscreenMapWarningText}>
-                    Select at least one parcel to continue.
+                    {fr.surveyForm.parcels.selectAtLeastOne}
                   </Text>
                 </View>
               ) : null}
               <Text style={parcelStyles.fullscreenMapBottomHint}>
-                Tap polygons to add or remove parcels without leaving the wizard.
+                {fr.surveyForm.parcels.fullscreenHint}
               </Text>
             </View>
           </View>

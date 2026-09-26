@@ -4,6 +4,7 @@ import { AppScreen } from "../../app/types"
 import { StepButton, WIZARD_STEPS, WizardStep } from "./components"
 import { headerStyles } from "./header.styles"
 import type { WizardAnimation } from "./useWizardScroll"
+import { fr } from "../../i18n"
 
 const HERO_CONTENT_TOP_INSET = 18
 
@@ -33,17 +34,19 @@ export function buildStepMeta({
   "siteName" | "identityReady" | "selectedParcelCount" | "completedFactorCount"
 >): StepMeta {
   return {
-    identity: siteName.trim() ? "Name locked" : "Name your site",
+    identity: siteName.trim()
+      ? fr.surveyForm.header.steps.nameLocked
+      : fr.surveyForm.header.steps.nameYourSite,
     parcels: !identityReady
-      ? "Name required first"
+      ? fr.surveyForm.header.steps.nameRequiredFirst
       : selectedParcelCount > 0
-        ? `${selectedParcelCount} selected`
-        : "Map + context",
+        ? fr.surveyForm.header.steps.selectedCount({ count: selectedParcelCount })
+        : fr.surveyForm.header.steps.mapAndContext,
     factors: !identityReady
-      ? "Name required first"
+      ? fr.surveyForm.header.steps.nameRequiredFirst
       : completedFactorCount > 0
-        ? `${completedFactorCount}/10 scored`
-        : "Start scoring",
+        ? fr.surveyForm.header.steps.scoredCount({ count: completedFactorCount })
+        : fr.surveyForm.header.steps.startScoring,
   }
 }
 
@@ -59,30 +62,39 @@ export function buildHeroCopy({
 }: Omit<WizardSummary, "identityReady">): HeroCopy {
   if (activeStep === "identity") {
     return {
-      title: screen === "edit" ? "Refine survey identity" : "Start a new survey",
-      body: "Give the survey a clear name before you anchor it on the cadastre and score the field observations.",
+      title:
+        screen === "edit"
+          ? fr.surveyForm.header.identityTitleEdit
+          : fr.surveyForm.header.identityTitleCreate,
+      body: fr.surveyForm.header.identityBody,
       pills: [
-        siteName.trim() || "Name required",
-        selectedParcelCount ? `${selectedParcelCount} parcel(s)` : "No parcel yet",
+        siteName.trim() || fr.surveyForm.header.nameRequired,
+        selectedParcelCount
+          ? fr.surveyForm.header.parcelCount({ count: selectedParcelCount })
+          : fr.surveyForm.header.noParcelYet,
       ],
     }
   }
 
   if (activeStep === "parcels") {
     return {
-      title: "Anchor the survey on the map",
-      body: "Select the parcel footprint, then lock the region version and vegetation stage for the scoring rules.",
-      pills: [regionLabel, vegetationLabel, `${selectedParcelCount} parcel(s)`],
+      title: fr.surveyForm.header.parcelsTitle,
+      body: fr.surveyForm.header.parcelsBody,
+      pills: [
+        regionLabel,
+        vegetationLabel,
+        fr.surveyForm.header.parcelCount({ count: selectedParcelCount }),
+      ],
     }
   }
 
   return {
-    title: "Score the IBP factors",
-    body: "Open each factor, enter the observed values, and watch the retained scores build the total live.",
+    title: fr.surveyForm.header.factorsTitle,
+    body: fr.surveyForm.header.factorsBody,
     pills: [
-      `IBP ${ibpTotal}`,
-      `${completedFactorCount}/10 factors`,
-      `${selectedParcelCount} parcel(s)`,
+      fr.surveyForm.header.ibpTotal({ total: ibpTotal }),
+      fr.surveyForm.header.factorCount({ count: completedFactorCount }),
+      fr.surveyForm.header.parcelCount({ count: selectedParcelCount }),
     ],
   }
 }
@@ -99,7 +111,7 @@ export function FormHeader({
   animation: WizardAnimation
 }) {
   const activeStepIndex = WIZARD_STEPS.indexOf(activeStep)
-  const compactSummary = heroCopy.pills.join(" • ")
+  const compactSummary = heroCopy.pills.join(fr.surveyForm.header.pillSeparator)
 
   return (
     <Animated.View
@@ -120,7 +132,10 @@ export function FormHeader({
         >
           <View style={headerStyles.heroExpandedHeader}>
             <Text style={headerStyles.heroEyebrow}>
-              Survey wizard · Step {activeStepIndex + 1} of 3
+              {fr.surveyForm.header.eyebrow({
+                step: activeStepIndex + 1,
+                total: WIZARD_STEPS.length,
+              })}
             </Text>
             <Text style={headerStyles.heroTitleExpanded}>{heroCopy.title}</Text>
             <Text style={headerStyles.heroBody}>{heroCopy.body}</Text>
@@ -153,7 +168,12 @@ export function FormHeader({
               { opacity: animation.compactProgressOpacity },
             ]}
           >
-            <Text style={headerStyles.compactProgressCount}>Step {activeStepIndex + 1}/3</Text>
+            <Text style={headerStyles.compactProgressCount}>
+              {fr.surveyForm.header.compactProgress({
+                step: activeStepIndex + 1,
+                total: WIZARD_STEPS.length,
+              })}
+            </Text>
             <View style={headerStyles.compactProgressTrack}>
               {WIZARD_STEPS.map((step, index) => (
                 <View
@@ -214,7 +234,7 @@ export function StepRail({
         <View style={headerStyles.stepRow}>
           <StepButton
             index="01"
-            label="Identity"
+            label={fr.surveyForm.header.steps.identity}
             meta={stepMeta.identity}
             active={activeStep === "identity"}
             complete={identityReady}
@@ -222,7 +242,7 @@ export function StepRail({
           />
           <StepButton
             index="02"
-            label="Parcels"
+            label={fr.surveyForm.header.steps.parcels}
             meta={stepMeta.parcels}
             active={activeStep === "parcels"}
             complete={parcelsReady}
@@ -231,7 +251,7 @@ export function StepRail({
           />
           <StepButton
             index="03"
-            label="Factors"
+            label={fr.surveyForm.header.steps.factors}
             meta={stepMeta.factors}
             active={activeStep === "factors"}
             complete={factorsReady}

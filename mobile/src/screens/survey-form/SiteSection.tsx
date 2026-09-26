@@ -4,6 +4,7 @@ import { AppCard } from "../../ui/AppCard"
 import { AppField } from "../../ui/AppField"
 import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { formStyles } from "./styles"
+import { fr } from "../../i18n"
 
 // Step 1 of the wizard: the survey's site name.
 export function SiteSection({
@@ -34,26 +35,26 @@ export function SiteSection({
     >
       <AppCard variant="panelElevated" style={formStyles.panel}>
         <AppSectionHeader
-          title="Survey identity"
-          subtitle="Give the draft a name that will stay readable in lists, sync logs, and parcel detail screens."
+          title={fr.surveyForm.site.title}
+          subtitle={fr.surveyForm.site.subtitle}
           titleStyle={formStyles.panelTitle}
           subtitleStyle={formStyles.panelBody}
         />
 
         <AppField
-          label="Site name *"
+          label={fr.surveyForm.site.nameLabel}
           value={siteName}
           onChangeText={setSiteName}
           onFocus={onFocus}
           onBlur={onBlur}
-          placeholder="Ex: Foret de Rambouillet"
+          placeholder={fr.surveyForm.site.namePlaceholder}
           error={siteNameError}
           inputStyle={formStyles.input}
         />
       </AppCard>
 
       <AppButton
-        label="Continue to parcels"
+        label={fr.surveyForm.site.continue}
         disabled={!identityReady}
         style={formStyles.primaryButton}
         onPress={onContinue}

@@ -22,6 +22,7 @@ import { SiteSection } from "./survey-form/SiteSection"
 import { formStyles } from "./survey-form/styles"
 import { useParcelMap } from "./survey-form/useParcelMap"
 import { useWizardScroll } from "./survey-form/useWizardScroll"
+import { fr } from "../i18n"
 export { toAddressLabel } from "./survey-screen-helpers"
 type SurveyFormScreenProps = {
   apiUrl: string
@@ -108,7 +109,8 @@ export function SurveyFormScreen({
   const identityReady = siteName.trim().length > 0
   const parcelsReady = selectedParcelIds.length > 0
   const factorsReady = completedFactorCount === FACTOR_ORDER.length
-  const persistLabel = screen === "edit" ? "Save changes" : "Save draft"
+  const persistLabel =
+    screen === "edit" ? fr.surveyForm.actions.saveChanges : fr.surveyForm.actions.saveDraft
 
   const selectedParcelCount = selectedParcelIds.length
   const ibpTotal = scoreTotals.ibp_total
@@ -225,7 +227,7 @@ export function SurveyFormScreen({
               setVegetationStage={setVegetationStage}
             />
             <FormActions
-              primaryLabel="Continue to factors"
+              primaryLabel={fr.surveyForm.actions.continueToFactors}
               onBack={() => setActiveStep("identity")}
               onPrimary={() => setActiveStep("factors")}
             />

@@ -9,6 +9,7 @@ import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { FACTOR_ICONS, FACTOR_ORDER } from "./components"
 import { factorStyles } from "./factors.styles"
 import { formStyles } from "./styles"
+import { fr } from "../../i18n"
 
 export type FactorProgress = { complete: boolean; filled: number; total: number; invalid: number }
 
@@ -64,8 +65,22 @@ export function FactorTile({
       ? brandColors.terracotta
       : brandColors.textSecondary
 
+  const stateText = retainedScore
+    ? fr.surveyForm.factors.retainedScore({
+        selectedClass: retainedScore.selected_class,
+        score: retainedScore.score,
+      })
+    : progress.complete
+      ? fr.surveyForm.factors.ready
+      : fr.surveyForm.factors.pending
+
   return (
-    <Pressable onPress={onPress} style={[factorStyles.factorTile, toneStyle]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={fr.surveyForm.a11y.factorTile({ factor, title, state: stateText })}
+      onPress={onPress}
+      style={[factorStyles.factorTile, toneStyle]}
+    >
       <View style={factorStyles.factorTileTopRow}>
         <View style={factorStyles.factorTileIdentity}>
           <View style={factorStyles.factorBadge}>
@@ -81,15 +96,9 @@ export function FactorTile({
         {title}
       </Text>
       <Text style={factorStyles.factorTileMeta}>
-        {progress.filled}/{progress.total} fields
+        {fr.surveyForm.factors.fieldsProgress({ filled: progress.filled, total: progress.total })}
       </Text>
-      <Text style={factorStyles.factorTileState}>
-        {retainedScore
-          ? `${retainedScore.selected_class} · ${retainedScore.score} pts`
-          : progress.complete
-            ? "Ready"
-            : "Pending"}
-      </Text>
+      <Text style={factorStyles.factorTileState}>{stateText}</Text>
     </Pressable>
   )
 }
@@ -109,21 +118,23 @@ export function FactorsList({
   return (
     <>
       <View style={factorStyles.scoreHeroCard}>
-        <Text style={factorStyles.scoreHeroLabel}>IBP total in progress</Text>
+        <Text style={factorStyles.scoreHeroLabel}>{fr.surveyForm.factors.scoreLabel}</Text>
         <Text style={factorStyles.scoreHeroValue}>{scoreTotals.ibp_total}</Text>
         <Text style={factorStyles.scoreHeroMeta}>
-          Peuplement / gestion {scoreTotals.ibp_peuplement_gestion} · Contexte{" "}
-          {scoreTotals.ibp_contexte}
+          {fr.surveyForm.factors.scoreBreakdown({
+            stand: scoreTotals.ibp_peuplement_gestion,
+            context: scoreTotals.ibp_contexte,
+          })}
         </Text>
         <Text style={factorStyles.scoreHeroMeta}>
-          {scoreTotals.completed_factors}/10 factors currently scoreable
+          {fr.surveyForm.factors.scoreableCount({ count: scoreTotals.completed_factors })}
         </Text>
       </View>
 
       <AppCard variant="panelElevated" style={formStyles.panel}>
         <AppSectionHeader
-          title="Factor scoring"
-          subtitle="Open each factor to enter observations and update the score live."
+          title={fr.surveyForm.factors.sectionTitle}
+          subtitle={fr.surveyForm.factors.sectionSubtitle}
           titleStyle={formStyles.panelTitle}
           subtitleStyle={formStyles.panelBody}
         />

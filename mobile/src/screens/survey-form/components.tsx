@@ -4,6 +4,7 @@ import { brandColors } from "../../app/brand-tokens"
 import { FactorKey } from "../../app/types"
 import { AppChoiceChip } from "../../ui/AppChoiceChip"
 import { headerStyles } from "./header.styles"
+import { fr } from "../../i18n"
 
 export type WizardStep = "identity" | "parcels" | "factors"
 
@@ -43,6 +44,8 @@ export function StepButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={fr.surveyForm.a11y.stepButton({ index, label, meta })}
+      accessibilityState={{ selected: active, disabled }}
       disabled={disabled}
       onPress={onPress}
       style={[
@@ -88,7 +91,11 @@ export function StepButton({
         numberOfLines={1}
         style={[headerStyles.stepButtonHint, active ? headerStyles.stepButtonHintActive : null]}
       >
-        {active ? "Current step" : disabled ? "Name required" : "Tap to open"}
+        {active
+          ? fr.surveyForm.header.steps.hintCurrent
+          : disabled
+            ? fr.surveyForm.header.steps.hintNameRequired
+            : fr.surveyForm.header.steps.hintTapToOpen}
       </Text>
     </Pressable>
   )

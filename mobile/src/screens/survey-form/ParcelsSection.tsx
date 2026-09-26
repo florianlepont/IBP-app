@@ -10,6 +10,7 @@ import { AppSectionHeader } from "../../ui/AppSectionHeader"
 import { parcelStyles } from "./parcels.styles"
 import { formStyles } from "./styles"
 import type { ParcelMapState } from "./useParcelMap"
+import { fr } from "../../i18n"
 
 // Parcel selection card of step 2: inline cadastre map, selected ids and the
 // reverse-geocoded address.
@@ -28,15 +29,15 @@ export function ParcelsSection({
     <AppCard variant="panelElevated" style={formStyles.panel}>
       <View style={parcelStyles.parcelHeaderRow}>
         <AppSectionHeader
-          title="Parcel selection"
-          subtitle="Centered on your position when available. Zoom in, then tap parcels."
+          title={fr.surveyForm.parcels.title}
+          subtitle={fr.surveyForm.parcels.subtitle}
           style={formStyles.panelHeaderCompact}
           titleStyle={formStyles.panelTitle}
           subtitleStyle={formStyles.panelBody}
         />
         <View style={parcelStyles.selectionCountPill}>
           <Text style={parcelStyles.selectionCountPillText}>
-            {selectedParcelIds.length} selected
+            {fr.surveyForm.parcels.selectedCount({ count: selectedParcelIds.length })}
           </Text>
         </View>
       </View>
@@ -58,9 +59,16 @@ export function ParcelsSection({
           {map.gpsMarker ? <Marker coordinate={map.gpsMarker} /> : null}
         </MapView>
         <View pointerEvents="box-none" style={parcelStyles.mapOverlayActions}>
-          <Pressable style={parcelStyles.mapOverlayButton} onPress={onOpenParcelFullscreen}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={fr.surveyForm.a11y.openFullscreenMap}
+            style={parcelStyles.mapOverlayButton}
+            onPress={onOpenParcelFullscreen}
+          >
             <Ionicons name="expand-outline" size={15} color={brandColors.white} />
-            <Text style={parcelStyles.mapOverlayButtonText}>Full screen</Text>
+            <Text style={parcelStyles.mapOverlayButtonText}>
+              {fr.surveyForm.parcels.fullScreen}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -77,7 +85,7 @@ export function ParcelsSection({
           {selectedParcelIds.length > 4 ? (
             <View style={parcelStyles.selectionPill}>
               <Text style={parcelStyles.selectionPillText}>
-                +{selectedParcelIds.length - 4} more
+                {fr.surveyForm.parcels.moreCount({ count: selectedParcelIds.length - 4 })}
               </Text>
             </View>
           ) : null}
@@ -88,8 +96,8 @@ export function ParcelsSection({
         <AppNotice
           tone="info"
           icon="navigate-outline"
-          title="Local address"
-          message="Looking up..."
+          title={fr.surveyForm.parcels.addressTitle}
+          message={fr.surveyForm.parcels.addressLookingUp}
         />
       ) : null}
 
@@ -97,7 +105,7 @@ export function ParcelsSection({
         <AppNotice
           tone="info"
           icon="location-outline"
-          title="Local address"
+          title={fr.surveyForm.parcels.addressTitle}
           message={map.resolvedGpsAddress}
         />
       ) : null}
