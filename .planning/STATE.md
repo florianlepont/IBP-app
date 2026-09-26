@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Species Recognition — Approach Decision
 status: executing
-stopped_at: 01-05 Task A (calibration) complete; blocked at Task 2 checkpoint awaiting physical iPhone connection
-last_updated: "2026-09-26T12:04:33.951Z"
+stopped_at: 01-05 complete -- per-genus confidence calibration + real device latency measured on iPhone 15 Pro, GATE-MEASURE COMPLETE
+last_updated: "2026-09-26T12:36:34.404Z"
 last_activity: 2026-09-26
-last_activity_desc: 01-05 Task A (calibration) complete; Task B/C blocked on device connection
+last_activity_desc: 01-05 complete -- calibration (Section 15) + real on-device latency (median ~90ms both network states, D-05 MET, D-06 checked) -- ready for plan 06's ADR
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 1 (Species Recognition — Approach Decision) — EXECUTING
-Plan: 5 of 6
-Status: Blocked — awaiting physical device checkpoint (see Blockers/Concerns)
-Last activity: 2026-09-26 — 01-05 Task A (calibration) complete; Task B/C blocked on device connection
+Plan: 6 of 6
+Status: Ready to execute (plan 06 — ADR ratification)
+Last activity: 2026-09-26 — 01-05 complete (calibration + real device latency, GATE-MEASURE: COMPLETE)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04b | ~5.5h | 1 tasks | 5 files |
 | Phase 01 P04-iter3 | ~9-10h (2 sessions, corpus expansion+2 bug fixes) | 2 tasks | 1 files |
 | Phase 01-species-recognition-approach-decision P05 (partial: Task A) | ~2h | - tasks | - files |
+| Phase 01-species-recognition-approach-decision P05 (complete) | ~3.5h total | - tasks | - files |
 
 ## Accumulated Context
 
@@ -93,6 +94,7 @@ Decisions table. Decisions affecting current work:
 - [Phase 01-04-iter4-exec]: Coordinator approved pipeline-fix-first plan (Tela Botanica parked, not pursued). Fixed prepare_dataset.py's early-exit (widened 2->8 pages' zero-progress threshold) and added GBIF month= season-scoped fetching; raised target to 10,000/class for the 20 weak temperate genera only, routed Pinus through the same season fetch at its unchanged 6,000 target for its autumn gap specifically. Corpus grew 194,653->265,546 selected (269,341 raw on disk), 1.36x — deliberately moderate. Acer/Prunus/Pinus autumn counts: 66/30/60 -> 2,500/2,500/1,500, directly reopening Section 12.6's "cannot tell" verdict. verify_corpus_complete() PASSED. Found and fixed a genuine memory bug before training: make_dataset()'s shuffle(8192) ran post-decode (~4.9GB of float32 image tensors) rather than pre-decode on lightweight path/label pairs. Training launched (EfficientNetB0, --finetune-epochs 20 vs iteration 3's fixed 8, EarlyStopping confirmed monitor=val_top3/restore_best_weights=True unchanged) — PID 19098, 2026-09-25 13:29 CEST, expected 5-12h wall-clock. Machine-wide load/swap during the run traced to pre-existing shared-machine contention (confirmed present before this iteration's work began), not a new pipeline leak — training process RSS itself 1.04GB.
 - [Phase 01-04-iter4-complete]: Training finished (23.47h wall-clock: 5.80h head + 17.66h finetune, 20/20 epochs run). EarlyStopping on val_top3 did NOT fire despite genuine overfitting onset from epoch 15 (val_loss bottomed then rose while train loss kept falling) — a coarse, ceiling-bounded monitor metric missed what val_loss would have caught; flagged for a future iteration's EarlyStopping config, not re-run (D-19). This flips iteration 3's schedule-limited finding: the backbone/corpus combination is now saturated. Exported genus_classifier_v4.tflite (8.24MB, up from 6.13MB — plan 01-05 must re-time on device), 100% export parity. Evaluated on 26,557 test images: pooled top3 85.24%->88.25%, 32/34 genera improved. Decisive split: Île-de-France temperate genera (21, targeted) +4.93pp mean top-3 (21/21 positive) vs +1.65pp for untouched Mediterranean/other (11/13) — the targeted rebalance worked ~3x better where it was aimed. All 136 genus×season cells now clear n≥30 (previously 5 thin); Acer/Pinus/Prunus autumn resolved (82.40%/81.60%/95.35%, Pinus clearing D-02 in isolation). Still only Tamarix (96.88%) clears D-02 overall — no new partial-go. Promoted to canonical path after explicitly verifying the beat is on the targeted genera, not just the mean. Session survived a subscription rate-limit interruption mid-training with zero work lost — raw numbers were committed at each stage per explicit instruction.
 - [Phase 01-05]: Per-genus confidence calibration (D-04/D-12 amended) fit on validation split, reported on test split -- collapses old single-global-threshold per-genus accuracy spread (79.49%-97.23%) to 85.91%-91.92% around the 90% target, at a 0.59pp pooled coverage cost. Ulmus/Prunus/Populus/Fraxinus flagged as genera where 'strong' will rarely fire even after calibration.
+- [Phase 01-05]: Real on-device latency measured for the PROMOTED iteration-4 genus classifier on a real iPhone 15 Pro (Release build): median total 90.41ms online / 90.49ms airplane mode (D-05 3s budget MET, ~33x headroom). D-06 (offline, on-device-only) confirmed as a checked proof, not a code-inspection argument. GATE-MEASURE: COMPLETE.
 
 ### Pending Todos
 
@@ -104,8 +106,7 @@ None yet.
 - **Schedule.** The published plan put MVP finalization at September 2026 (today) with field tests October–December. Phases 1–3 are unstarted unknowns; the December field-test window is at risk.
 - **Codebase concerns carried in** (`.planning/codebase/CONCERNS.md`): string-interpolated SQL in `users.service.ts`, 9 of 12 screens untested, missing indexes — all scheduled in Phases 6 and 7.
 - **Next-milestone prerequisite:** Epics E and G need a back-office / CMS surface that no spec or architecture doc defines.
-- 01-03: plan 05 still needs a lower-spec real iOS device (iPhone SE/11-class, not a flagship) and a first real Android device -- the iPhone 15 Pro figures from 01-03 are a flagship ceiling, not the D-18 representative floor. D-06 (offline) also still needs an airplane-mode confirmation on real hardware.
-- Plan 01-05 blocked at Task 2 checkpoint: physical iPhone 15 Pro measurement required (device shows available-paired, not connected, via xcrun devicectl). Task A (per-genus confidence calibration) complete; Task B (device latency) software-prepared, GATE-MEASURE: READY; Task C not started.
+- **Still open for plan 06's ADR:** no lower-spec real iOS device (iPhone SE/11-class, not a flagship) and no real Android device have ever been used in this phase -- every latency figure (plan 03's stock model, plan 05's promoted genus classifier) is from the same flagship iPhone 15 Pro, a ceiling not the D-18 representative floor. D-06 (offline, on-device-only) IS now confirmed on real hardware (plan 05: online/airplane medians differ by 0.08ms) -- this part is resolved.
 
 ### Roadmap Evolution
 
@@ -122,6 +123,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-26T12:03:29.823Z
+Last session: 2026-09-26T12:36:34.400Z
 Stopped at: 01-04-PLAN.md iteration 4 — COMPLETE. genus_classifier_v4.tflite (EfficientNetB0, 8.24MB) promoted to the canonical path after beating iteration 3 on the Île-de-France temperate genera specifically (+4.93pp mean top-3, 21/21 positive). Measurement doc Sections 14.1-14.6 all written and committed. eval/GATE: GATE-MODEL PASS. Next: plan 01-05 (device latency, must re-time the larger 8.24MB model) and plan 01-06 (ADR) can proceed against this promoted model.
 Resume file: none — iteration 4 closed out; next work is plan 01-05/01-06
