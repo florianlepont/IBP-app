@@ -5,6 +5,7 @@ import { CadastreProviderService } from "./cadastre-provider.service"
 import { ParcelsController } from "./parcels.controller"
 import { ParcelsService } from "./parcels.service"
 import { PublicController } from "./public.controller"
+import { PublicMapService } from "./public-map.service"
 import { SurveysController } from "./surveys.controller"
 import { SurveysDataModule } from "./surveys-data.module"
 import { SurveysService } from "./surveys.service"
@@ -23,6 +24,7 @@ import { SyncController } from "./sync.controller"
     IbpRulesService,
     CadastreProviderService,
     ParcelsService,
+    PublicMapService,
   ],
 })
 export class SurveysModule {}

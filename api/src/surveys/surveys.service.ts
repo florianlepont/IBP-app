@@ -8,12 +8,11 @@ import {
 import { AuthenticatedUser } from "../auth/auth.types"
 import { DatabaseService, Queryable } from "../database/database.service"
 import { StorageService } from "../storage/storage.service"
-import { CadastreProviderService, WfsParcelFeature } from "./cadastre-provider.service"
 import { IbpRulesService } from "./ibp-rules.service"
 import { ParcelsService } from "./parcels.service"
 import { SurveyEventsService } from "./survey-events.service"
 import { SurveysRepository } from "./surveys.repository"
-import { normalizeDateInput, PublicMapDbRow, toPublicMapItem } from "./public-map.utils"
+import { normalizeDateInput } from "./public-map.utils"
 import {
   AttachmentRow,
   SurveyPatchBody,
@@ -22,21 +21,16 @@ import {
   SurveyUpsertBody,
 } from "./surveys.types"
 import {
-  buildFallbackParcelGeometry,
-  buildParcelKey,
   classifySameVersionContent,
   getChangedSubmittedReadOnlyFields,
   getSubmittedReadOnlyFields,
-  normalizeCentroid,
   normalizeObservationYear,
   normalizeParcelId,
   normalizeParcelIds,
   normalizePreviousSurveyId,
   normalizeSurveyStatusFilter,
   normalizeVersionNumber,
-  parseBbox,
   SameVersionContent,
-  toFiniteNumber,
 } from "./surveys-normalize.utils"
 
 @Injectable()
@@ -44,8 +38,6 @@ export class SurveysService {
   constructor(
     private readonly db: DatabaseService,
     private readonly ibpRules: IbpRulesService,
-    // D-08: the single IGN client (WFS features for the public parcel statuses).
-    private readonly cadastreProvider: CadastreProviderService,
     private readonly storage: StorageService,
     // D-07: the shared ownership lookup, parcel links and event writer (SurveysDataModule).
     private readonly repository: SurveysRepository,
@@ -1119,289 +1111,5 @@ export class SurveysService {
       already_deleted: false,
       missing: false,
     }
-  }
-
-  async getPublicMapItems(input?: { from?: string; to?: string; region?: string }): Promise<{
-    items: Array<{
-      survey_id: string
-      display_location: { lat: number; lng: number }
-      survey_date: string
-      region_code: string
-      ibp_total: number
-    }>
-  }> {
-    const filters: string[] = [
-      `deleted_at IS NULL`,
-      `visibility = 'public'`,
-      `status = 'submitted'`,
-      `submitted_at IS NOT NULL`,
-    ]
-    const values: unknown[] = []
-
-    const fromDate = normalizeDateInput(input?.from)
-    if (fromDate) {
-      values.push(fromDate)
-      filters.push(`submitted_at::date >= $${values.length}::date`)
-    }
-
-    const toDate = normalizeDateInput(input?.to)
-    if (toDate) {
-      values.push(toDate)
-      filters.push(`submitted_at::date <= $${values.length}::date`)
-    }
-
-    if (input?.region && input.region.trim().length > 0) {
-      values.push(input.region.trim())
-      filters.push(`region_version = $${values.length}`)
-    }
-
-    const result = await this.db.query<PublicMapDbRow>(
-      `SELECT
-         s.id,
-         s.region_version,
-         s.scores,
-         s.submitted_at::text,
-         AVG((p.centroid ->> 'lat')::double precision) AS parcel_centroid_lat,
-         AVG((p.centroid ->> 'lng')::double precision) AS parcel_centroid_lng
-       FROM surveys s
-       LEFT JOIN survey_parcels sp
-         ON sp.survey_id = s.id
-       LEFT JOIN parcels p
-         ON p.parcel_id = sp.parcel_id
-       WHERE ${filters.map((filter) => `s.${filter}`).join(" AND ")}
-       GROUP BY s.id, s.region_version, s.scores, s.submitted_at
-       ORDER BY s.submitted_at DESC
-       LIMIT 500`,
-      values,
-    )
-
-    const items = result.rows
-      .map((row) => toPublicMapItem(row))
-      .filter(
-        (
-          item,
-        ): item is {
-          survey_id: string
-          display_location: { lat: number; lng: number }
-          survey_date: string
-          region_code: string
-          ibp_total: number
-        } => Boolean(item),
-      )
-
-    return { items }
-  }
-
-  async getPublicParcelStatuses(input?: { bbox?: string; zoom?: string; year?: string }): Promise<{
-    items: Array<{
-      parcel_id: string
-      study_status: "studied" | "not_studied"
-      latest_submitted_survey_id: string | null
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-      geometry?: Record<string, unknown>
-    }>
-  }> {
-    const zoom = toFiniteNumber(input?.zoom)
-    if (zoom !== null && zoom < 15) {
-      return { items: [] }
-    }
-
-    const bbox = parseBbox(input?.bbox)
-    const year = normalizeObservationYear(input?.year)
-    if (this.cadastreProvider.wfsEnabled && bbox) {
-      // D-08: null (too many tiles, or IGN failed) and an empty answer both use the DB path.
-      const features = await this.cadastreProvider.fetchParcelFeaturesInBbox(bbox)
-      if (features && features.length > 0) {
-        return { items: await this.withStudyStatus(features, year) }
-      }
-    }
-
-    const values: unknown[] = [year]
-    const bboxFilters: string[] = []
-
-    if (bbox) {
-      values.push(bbox.minLng, bbox.maxLng, bbox.minLat, bbox.maxLat)
-      bboxFilters.push(
-        `(p.centroid ->> 'lng')::double precision BETWEEN $2::double precision AND $3::double precision`,
-      )
-      bboxFilters.push(
-        `(p.centroid ->> 'lat')::double precision BETWEEN $4::double precision AND $5::double precision`,
-      )
-    }
-
-    const result = await this.db.query<{
-      parcel_id: string
-      study_status: "studied" | "not_studied"
-      latest_submitted_survey_id: string | null
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-      geometry: Record<string, unknown>
-      centroid: Record<string, unknown>
-    }>(
-      `WITH latest_public AS (
-         SELECT
-           sp.parcel_id,
-           s.id,
-           s.observation_year,
-           s.version_number,
-           s.submitted_at,
-           s.scores,
-           ROW_NUMBER() OVER (
-             PARTITION BY sp.parcel_id
-             ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
-           ) AS rank_in_parcel
-         FROM surveys s
-         JOIN survey_parcels sp
-           ON sp.survey_id = s.id
-         WHERE s.deleted_at IS NULL
-           AND s.status = 'submitted'
-           AND s.visibility = 'public'
-           AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
-       )
-       SELECT
-         p.parcel_id,
-         p.geometry,
-         p.centroid,
-         CASE WHEN lp.parcel_id IS NULL THEN 'not_studied' ELSE 'studied' END AS study_status,
-         lp.id AS latest_submitted_survey_id,
-         lp.observation_year AS latest_observation_year,
-         (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
-       FROM parcels p
-       LEFT JOIN latest_public lp
-         ON lp.parcel_id = p.parcel_id
-        AND lp.rank_in_parcel = 1
-       ${bboxFilters.length ? `WHERE ${bboxFilters.join(" AND ")}` : ""}
-       ORDER BY p.parcel_id ASC
-       LIMIT 1000`,
-      values,
-    )
-
-    const seenParcelIds = new Set<string>()
-    const items = result.rows
-      .map((row) => {
-        const centroid = normalizeCentroid(row.centroid)
-        const geometry =
-          row.geometry && Object.keys(row.geometry).length > 0
-            ? row.geometry
-            : centroid
-              ? buildFallbackParcelGeometry(centroid)
-              : undefined
-        return {
-          parcel_id: row.parcel_id,
-          study_status: row.study_status,
-          latest_submitted_survey_id: row.latest_submitted_survey_id,
-          latest_observation_year: row.latest_observation_year,
-          latest_ibp_total: row.latest_ibp_total,
-          geometry,
-        }
-      })
-      .filter((item) => {
-        if (seenParcelIds.has(item.parcel_id)) {
-          return false
-        }
-        seenParcelIds.add(item.parcel_id)
-        return true
-      })
-
-    return {
-      items,
-    }
-  }
-
-  /**
-   * Study status for IGN features, computed per request (never cached, D-08): the latest
-   * public submitted survey of each parcel, ranked as before. The ranking only runs over
-   * parcels in the features' communes (D-08, T-01.7-39). It is not bounded by centroid: parcels
-   * registered by id have an empty centroid and would lose their "studied" flag (RESEARCH
-   * Pattern 7). Features only match parcels on their exact commune code, so the restriction
-   * does not change the result.
-   */
-  private async withStudyStatus(
-    features: WfsParcelFeature[],
-    year: number | null,
-  ): Promise<
-    Array<{
-      parcel_id: string
-      study_status: "studied" | "not_studied"
-      latest_submitted_survey_id: string | null
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-      geometry?: Record<string, unknown>
-    }>
-  > {
-    const communeCodes = [...new Set(features.map((feature) => feature.commune_code))]
-    const latestResult = await this.db.query<{
-      commune_code: string
-      section: string
-      number: string
-      latest_submitted_survey_id: string
-      latest_observation_year: number | null
-      latest_ibp_total: number | null
-    }>(
-      `WITH latest_public AS (
-         SELECT
-           p.commune_code,
-           p.section,
-           p.number,
-           s.id,
-           s.observation_year,
-           s.scores,
-           ROW_NUMBER() OVER (
-             PARTITION BY sp.parcel_id
-             ORDER BY s.observation_year DESC NULLS LAST, s.version_number DESC NULLS LAST, s.submitted_at DESC NULLS LAST
-           ) AS rank_in_parcel
-         FROM surveys s
-         JOIN survey_parcels sp
-           ON sp.survey_id = s.id
-         JOIN parcels p
-           ON p.parcel_id = sp.parcel_id
-         WHERE s.deleted_at IS NULL
-           AND s.status = 'submitted'
-           AND s.visibility = 'public'
-           AND ($1::integer IS NULL OR s.observation_year IS NULL OR s.observation_year <= $1::integer)
-           AND p.commune_code = ANY($2::text[])
-       )
-       SELECT
-         lp.commune_code,
-         lp.section,
-         lp.number,
-         lp.id::text AS latest_submitted_survey_id,
-         lp.observation_year AS latest_observation_year,
-         (lp.scores ->> 'ibp_total')::integer AS latest_ibp_total
-       FROM latest_public lp
-       WHERE lp.rank_in_parcel = 1`,
-      [year, communeCodes],
-    )
-
-    const studiedByParcelKey = new Map<
-      string,
-      {
-        latest_submitted_survey_id: string
-        latest_observation_year: number | null
-        latest_ibp_total: number | null
-      }
-    >()
-    for (const row of latestResult.rows) {
-      studiedByParcelKey.set(buildParcelKey(row.commune_code, row.section, row.number), {
-        latest_submitted_survey_id: row.latest_submitted_survey_id,
-        latest_observation_year: row.latest_observation_year,
-        latest_ibp_total: row.latest_ibp_total,
-      })
-    }
-
-    return features.map((feature) => {
-      const studied = studiedByParcelKey.get(
-        buildParcelKey(feature.commune_code, feature.section, feature.number),
-      )
-      return {
-        parcel_id: feature.parcel_id,
-        study_status: studied ? "studied" : "not_studied",
-        latest_submitted_survey_id: studied?.latest_submitted_survey_id ?? null,
-        latest_observation_year: studied?.latest_observation_year ?? null,
-        latest_ibp_total: studied?.latest_ibp_total ?? null,
-        geometry: feature.geometry,
-      }
-    })
   }
 }
