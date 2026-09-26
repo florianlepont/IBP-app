@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { Platform, View } from "react-native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { brandColors } from "../../app/brand-tokens"
+import { fr } from "../../i18n"
 import { useSurveyActions } from "../../state/surveys-context"
 import { FactorDetailRoute } from "../routes/FactorDetailRoute"
 import { ParcelSelectionRoute } from "../routes/ParcelSelectionRoute"
@@ -14,19 +15,19 @@ import { baseStackScreenOptions } from "./stack-options"
 import { SurveysStackConfigContext, type SurveysStackConfig } from "./surveys-stack-config"
 
 const SurveysStack = createNativeStackNavigator<SurveysStackParamList>()
+const headers = fr.navigation.headers
 
-type SurveysTabNavigatorProps = { useNativeNav?: boolean; searchEntry?: boolean }
+type SurveysTabNavigatorProps = { useNativeNav?: boolean }
 
-export function SurveysTabNavigator({
-  useNativeNav = false,
-  searchEntry = false,
-}: SurveysTabNavigatorProps) {
+/**
+ * The one survey stack (D-08). In the native iOS tree, Mes Relevés shows the
+ * native header with its search bar (set up by SurveyListRoute); elsewhere the
+ * list keeps its own inline search.
+ */
+export function SurveysTabNavigator({ useNativeNav = false }: SurveysTabNavigatorProps) {
   const surveyActions = useSurveyActions()
-  const nativeSearchEnabled = useNativeNav && Platform.OS === "ios" && searchEntry
-  const config = useMemo<SurveysStackConfig>(
-    () => ({ useNativeNav, searchEntry }),
-    [useNativeNav, searchEntry],
-  )
+  const nativeSearchEnabled = useNativeNav && Platform.OS === "ios"
+  const config = useMemo<SurveysStackConfig>(() => ({ useNativeNav }), [useNativeNav])
 
   return (
     <SurveysStackConfigContext.Provider value={config}>
@@ -54,7 +55,7 @@ export function SurveysTabNavigator({
           <SurveysStack.Screen
             name="surveysHome"
             options={{
-              title: searchEntry ? "Recherche" : "Mes Relevés",
+              title: headers.surveys,
               headerShown: nativeSearchEnabled,
               headerLargeTitle: false,
               headerTransparent: nativeSearchEnabled ? false : undefined,
@@ -67,7 +68,7 @@ export function SurveysTabNavigator({
           <SurveysStack.Screen
             name="surveyDetail"
             options={{
-              title: "Detail",
+              title: headers.detail,
               headerLargeTitle: false,
             }}
             listeners={{
@@ -81,7 +82,7 @@ export function SurveysTabNavigator({
             name="surveyForm"
             options={{
               // SurveyFormRoute sets the create/edit title.
-              title: "New survey",
+              title: headers.newSurvey,
               headerLargeTitle: false,
             }}
             component={SurveyFormRoute}
@@ -89,7 +90,7 @@ export function SurveysTabNavigator({
           <SurveysStack.Screen
             name="surveyFactorDetail"
             options={({ route }) => ({
-              title: `Factor ${route.params.factor}`,
+              title: headers.factor(route.params.factor),
               headerLargeTitle: false,
             })}
             component={FactorDetailRoute}
@@ -97,7 +98,7 @@ export function SurveysTabNavigator({
           <SurveysStack.Screen
             name="surveyParcels"
             options={{
-              title: "Parcels",
+              title: headers.parcels,
               headerLargeTitle: false,
               headerStyle: { backgroundColor: "#132434" },
               headerShadowVisible: false,

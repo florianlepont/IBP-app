@@ -2,6 +2,7 @@ import { useContext } from "react"
 import { Platform } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { brandColors } from "../app/brand-tokens"
+import { fr } from "../i18n"
 import { useSession, type SessionActions } from "../state/session-context"
 import { useSurveyActions } from "../state/surveys-context"
 import { useSyncActions } from "../state/sync-actions-context"
@@ -19,10 +20,6 @@ const IOS_TAB_ICONS = {
     focused: { sfSymbol: "list.bullet.clipboard.fill" },
     unfocused: { sfSymbol: "list.bullet.clipboard" },
   },
-  search: {
-    focused: { sfSymbol: "magnifyingglass" },
-    unfocused: { sfSymbol: "magnifyingglass" },
-  },
   publicMap: {
     focused: { sfSymbol: "map.fill" },
     unfocused: { sfSymbol: "map" },
@@ -36,23 +33,15 @@ const IOS_TAB_ICONS = {
 const ANDROID_TAB_ICONS = {
   home: require("../../assets/tabs/surveys.png"),
   surveys: require("../../assets/tabs/surveys.png"),
-  search: require("../../assets/tabs/surveys.png"),
   publicMap: require("../../assets/tabs/public-map.png"),
   account: require("../../assets/tabs/account.png"),
 } as const
 
-export const TAB_TITLES: Record<keyof RootTabParamList, string> = {
-  home: "Accueil",
-  surveys: "Mes Relevés",
-  search: "Recherche",
-  publicMap: "Explorer",
-  account: "Compte",
-}
+export const TAB_TITLES: Record<keyof RootTabParamList, string> = fr.navigation.tabs
 
 const JS_TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
   home: "home-outline",
   surveys: "list-outline",
-  search: "search-outline",
   publicMap: "map-outline",
   account: "person-outline",
 }
@@ -70,7 +59,17 @@ export const nativeTabScreenOptions = ({ route }: { route: { name: keyof RootTab
   },
 })
 
-// ─── JS tab screen options (Expo Go fallback) ─────────────────────────────────
+// ─── JS tab screen options (Android, Expo Go fallback) ────────────────────────
+
+/** The JS bar style; the surveys tab swaps it for `display: none` (tab-bar.ts). */
+export const JS_TAB_BAR_STYLE = {
+  backgroundColor: brandColors.panel,
+  borderTopColor: brandColors.divider,
+  borderTopWidth: 1,
+  height: Platform.select({ ios: 84, default: 68 }),
+  paddingBottom: Platform.select({ ios: 22, default: 10 }),
+  paddingTop: Platform.select({ ios: 8, default: 6 }),
+}
 
 export const jsTabScreenOptions = ({ route }: { route: { name: keyof RootTabParamList } }) => ({
   headerShown: false,
@@ -78,14 +77,7 @@ export const jsTabScreenOptions = ({ route }: { route: { name: keyof RootTabPara
   tabBarLabel: TAB_TITLES[route.name],
   tabBarActiveTintColor: brandColors.forest,
   tabBarInactiveTintColor: brandColors.textSecondary,
-  tabBarStyle: {
-    backgroundColor: brandColors.panel,
-    borderTopColor: brandColors.divider,
-    borderTopWidth: 1,
-    height: Platform.select({ ios: 84, default: 68 }),
-    paddingBottom: Platform.select({ ios: 22, default: 10 }),
-    paddingTop: Platform.select({ ios: 8, default: 6 }),
-  },
+  tabBarStyle: JS_TAB_BAR_STYLE,
   tabBarLabelStyle: { fontSize: 12, fontWeight: "600" as const },
   tabBarIcon: ({ color, size }: { color: string; size: number }) => (
     <Ionicons name={JS_TAB_ICONS[route.name]} size={size} color={color} />

@@ -358,3 +358,43 @@ describe("SurveyListScreen with 500 surveys (D-03)", () => {
     expect(tree.root.findAllByType("ActivityIndicator" as never)).toHaveLength(1)
   })
 })
+
+describe("SurveyListScreen under the native iOS header search (01.9-25, D-08)", () => {
+  const surveys: LocalSurvey[] = [
+    { ...makeSurvey(0), status: "draft", sync_state: "pending" },
+    makeSurvey(1),
+    makeSurvey(2),
+  ]
+  const nativeProps = (query: string): ScreenProps => ({
+    ...baseProps(surveys),
+    surveyQuery: query,
+    useNativeSearchUI: true,
+    showInlineSearch: false,
+  })
+  const withTitle = (tree: renderer.ReactTestRenderer, title: string) =>
+    tree.root.findAll((node) => typeof node.type !== "string" && node.props.title === title)
+  const rows = (tree: renderer.ReactTestRenderer) =>
+    tree.root.findAllByType("Swipeable" as never).length
+
+  it("drops the hero but keeps the create and to-do cards while not searching", () => {
+    const tree = mount(nativeProps(""))
+
+    expect(tree.root.findAll((node) => node.props.children === "Votre carnet de terrain")).toEqual(
+      [],
+    )
+    expect(withTitle(tree, "À faire").length).toBeGreaterThan(0)
+    expect(withTitle(tree, "Mes relevés").length).toBeGreaterThan(0)
+    expect(withTitle(tree, "Résultats")).toHaveLength(0)
+    // The draft sits in the "À faire" card, so the list shows the two others.
+    expect(rows(tree)).toBe(2)
+    expect(tree.root.findAll((node) => node.props.placeholder != null)).toHaveLength(0)
+  })
+
+  it("shows only the results while a search is active", () => {
+    const tree = mount(nativeProps("Site"))
+
+    expect(withTitle(tree, "À faire")).toHaveLength(0)
+    expect(withTitle(tree, "Résultats").length).toBeGreaterThan(0)
+    expect(rows(tree)).toBe(surveys.length)
+  })
+})

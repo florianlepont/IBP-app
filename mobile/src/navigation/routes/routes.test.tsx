@@ -78,6 +78,7 @@ jest.mock("../../hooks/usePublicMapExplorer", () => ({
   },
 }))
 
+import { fr } from "../../i18n"
 import { AccessTokenProvider, SessionProvider } from "../../state/session-context"
 import type { SessionContextValue } from "../../state/session-context"
 import { StatusProvider } from "../../state/status-context"
@@ -389,25 +390,28 @@ describe("SurveyListRoute", () => {
     expect(navigation.navigate).toHaveBeenLastCalledWith("surveyDetail")
   })
 
-  test("in the native Mes Relevés tab it lists every survey and hides the inline search", async () => {
-    mockPlatform.OS = "ios"
+  test("with the native tab bar outside iOS it keeps the inline search", async () => {
+    mockPlatform.OS = "android"
     const fixture = makeFixture()
+    const navigation = makeNavigation()
     await mount(
       <Providers fixture={fixture}>
-        <SurveysStackConfigContext.Provider value={{ useNativeNav: true, searchEntry: false }}>
-          <SurveyListRoute navigation={makeNavigation() as never} route={{} as never} />
+        <SurveysStackConfigContext.Provider value={{ useNativeNav: true }}>
+          <SurveyListRoute navigation={navigation as never} route={{} as never} />
         </SurveysStackConfigContext.Provider>
       </Providers>,
     )
-    expect(props("surveyList").visibleSurveys).toBe(fixture.surveys.state.surveys)
-    expect(props("surveyList").showInlineSearch).toBe(false)
+    expect(props("surveyList").visibleSurveys).toBe(fixture.surveys.state.visibleSurveys)
+    expect(props("surveyList").showInlineSearch).toBe(true)
+    expect(props("surveyList").useNativeSearchUI).toBe(false)
+    expect(navigation.setOptions).not.toHaveBeenCalled()
   })
 
-  test("in the native search tab it owns the header search bar and syncs its text", async () => {
+  test("in the native iOS Mes Relevés tab it owns the header search bar and syncs its text", async () => {
     mockPlatform.OS = "ios"
     const fixture = makeFixture()
     const navigation = makeNavigation()
-    const searchTabConfig = { useNativeNav: true, searchEntry: true }
+    const nativeConfig = { useNativeNav: true }
     const route = (query: string) => (
       <Providers
         fixture={{
@@ -415,16 +419,20 @@ describe("SurveyListRoute", () => {
           surveys: { ...fixture.surveys, state: { ...fixture.surveys.state, surveyQuery: query } },
         }}
       >
-        <SurveysStackConfigContext.Provider value={searchTabConfig}>
+        <SurveysStackConfigContext.Provider value={nativeConfig}>
           <SurveyListRoute navigation={navigation as never} route={{} as never} />
         </SurveysStackConfigContext.Provider>
       </Providers>
     )
     const tree = await mount(route(""))
     expect(props("surveyList").useNativeSearchUI).toBe(true)
+    expect(props("surveyList").showInlineSearch).toBe(false)
+    expect(props("surveyList").visibleSurveys).toBe(fixture.surveys.state.visibleSurveys)
     expect(navigation.setOptions).toHaveBeenCalledTimes(1)
 
     const options = navigation.setOptions.mock.calls[0][0].headerSearchBarOptions
+    expect(options.placeholder).toBe(fr.navigation.search.placeholder)
+    expect(options.placement).toBe("automatic")
     options.onChangeText({ nativeEvent: { text: "chêne" } })
     expect(fixture.surveys.actions.setSurveyQuery).toHaveBeenLastCalledWith("chêne")
     options.onCancelButtonPress()
@@ -517,7 +525,9 @@ describe("SurveyFormRoute", () => {
         <SurveyFormRoute navigation={navigation as never} route={{} as never} />
       </Providers>,
     )
-    expect(navigation.setOptions).toHaveBeenLastCalledWith({ title: "New survey" })
+    expect(navigation.setOptions).toHaveBeenLastCalledWith({
+      title: fr.navigation.headers.newSurvey,
+    })
     expect(props("surveyForm").screen).toBe("create")
     expect(props("surveyForm")).not.toHaveProperty("status")
 
@@ -553,7 +563,9 @@ describe("SurveyFormRoute", () => {
         <SurveyFormRoute navigation={navigation as never} route={{} as never} />
       </Providers>,
     )
-    expect(navigation.setOptions).toHaveBeenLastCalledWith({ title: "Edit survey" })
+    expect(navigation.setOptions).toHaveBeenLastCalledWith({
+      title: fr.navigation.headers.editSurvey,
+    })
     expect(props("surveyForm").screen).toBe("edit")
     callback("surveyForm", "onOpenParcelFullscreen")()
     expect(navigation.navigate).toHaveBeenLastCalledWith("surveyParcels", {
