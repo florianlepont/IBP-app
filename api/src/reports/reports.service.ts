@@ -21,7 +21,9 @@ export const REPORT_CURSOR_ID_PATTERN =
  * `created_at DESC, id DESC`). The keyset (created_at, id) is appended after the optional status
  * filter, so idx_reports_created_id serves the unfiltered list and idx_reports_status_created
  * the filtered one. reports.id is TEXT, so the id is compared as text, in the same collation as
- * the ORDER BY. Cursor fields and the limit are bound parameters (T-01.7-45).
+ * the ORDER BY. Cursor fields and the limit are bound parameters (T-01.7-45). The ORDER BY
+ * columns are table-qualified so they sort the timestamp, not the `created_at::text` output
+ * column of the same name; only then can the indexes serve the order.
  */
 export function buildReportListQuery(
   status: ReportStatus | null,
@@ -56,7 +58,7 @@ export function buildReportListQuery(
          reviewed_by::text
        FROM reports
        ${whereClause}
-       ORDER BY created_at DESC, id DESC${limitClause}`
+       ORDER BY reports.created_at DESC, reports.id DESC${limitClause}`
   return { text, values }
 }
 

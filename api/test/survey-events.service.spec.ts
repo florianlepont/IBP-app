@@ -94,7 +94,7 @@ describe("SurveyEventsService", () => {
         "SELECT id, survey_id, actor_id, event_type, payload, created_at::text, seq::text FROM survey_events",
       )
       expect(sql).toContain("WHERE survey_id = $1")
-      expect(sql).toContain("ORDER BY created_at DESC, seq DESC")
+      expect(sql).toContain("ORDER BY survey_events.created_at DESC, survey_events.seq DESC")
       expect(sql).not.toContain("LIMIT")
       expect(db.query.mock.calls[1][1]).toEqual(["s1"])
     })

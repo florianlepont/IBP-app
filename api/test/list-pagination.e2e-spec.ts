@@ -183,6 +183,16 @@ describe("list pagination (e2e)", () => {
       [eventSurveyId],
     )
 
+    // Two events share created_at and have seq values of different lengths: as text "9..."
+    // sorts after "10...", as bigint it sorts before. The list must follow the bigint.
+    for (const seq of ["9000000000", "10000000000"]) {
+      await db.query(
+        `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload, created_at, seq)
+         VALUES ($1, $2, $3, 'updated', '{}'::jsonb, '2024-05-02 07:00:00+00', $4::bigint)`,
+        [randomUUID(), eventSurveyId, ownerId, seq],
+      )
+    }
+
     // Reports: 9 over the owner's public surveys, mixed statuses, two sharing created_at.
     const reportIds: string[] = []
     for (let index = 0; index < 9; index += 1) {
@@ -217,7 +227,7 @@ describe("list pagination (e2e)", () => {
           `SELECT id, site_name, status, visibility, parcel_id, observation_year, version_number, updated_at::text, sync_version
            FROM surveys
            WHERE user_id = $1 AND deleted_at IS NULL
-           ORDER BY updated_at DESC, id DESC`,
+           ORDER BY surveys.updated_at DESC, surveys.id DESC`,
           [userId],
         )
       ).rows
@@ -288,7 +298,7 @@ describe("list pagination (e2e)", () => {
           `SELECT id, survey_id, actor_id, event_type, payload, created_at::text
            FROM survey_events
            WHERE survey_id = $1
-           ORDER BY created_at DESC, seq DESC`,
+           ORDER BY survey_events.created_at DESC, survey_events.seq DESC`,
           [eventSurveyId],
         )
       ).rows
@@ -297,10 +307,27 @@ describe("list pagination (e2e)", () => {
       const response = await get<ListBody<Record<string, unknown>>>(ownerToken, path())
       expect(response.body.next_cursor).toBeNull()
       expect(response.body.items).toEqual(await expectedRows())
-      expect(response.body.items.length).toBeGreaterThanOrEqual(9)
+      expect(response.body.items.length).toBeGreaterThanOrEqual(11)
       for (const item of response.body.items) {
         expect(Object.keys(item).sort()).toEqual(EVENT_KEYS)
       }
+      // The bigint tiebreaker: at the same created_at, seq 10000000000 comes first.
+      const sameSecond = await db.query<{ seq: string }>(
+        `SELECT seq::text FROM survey_events WHERE survey_id = $1
+         AND created_at = '2024-05-02 07:00:00+00'`,
+        [eventSurveyId],
+      )
+      expect(sameSecond.rows).toHaveLength(2)
+      const tied = response.body.items.filter(
+        (item) => item.created_at === "2024-05-02 07:00:00+00",
+      )
+      const seqOf = async (id: unknown) =>
+        (await db.query<{ seq: string }>(`SELECT seq::text FROM survey_events WHERE id = $1`, [id]))
+          .rows[0].seq
+      expect([await seqOf(tied[0].id), await seqOf(tied[1].id)]).toEqual([
+        "10000000000",
+        "9000000000",
+      ])
       expect(Object.keys(response.body).sort()).toEqual(["items", "next_cursor"])
     })
 
@@ -332,7 +359,7 @@ describe("list pagination (e2e)", () => {
                   reviewed_at::text, reviewed_by::text
            FROM reports
            ${status ? "WHERE status = $1" : ""}
-           ORDER BY created_at DESC, id DESC`,
+           ORDER BY reports.created_at DESC, reports.id DESC`,
           status ? [status] : [],
         )
       ).rows

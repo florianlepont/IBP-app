@@ -1,4 +1,5 @@
-// EXPLAIN reproduction of the two public map queries on 10 000 surveys (01.7 D-13, D-15).
+// EXPLAIN reproduction of the two public map queries and the three paginated lists on 10 000
+// surveys (01.7 D-11, D-13, D-15).
 //
 // Usage (from the repo root, against a *_test database only):
 //   npm --workspace api run build
@@ -6,15 +7,25 @@
 //
 // Everything runs in one transaction on one client: seed 200 users, 8 000 parcels with random
 // centroids in France (plus 200 parcels registered by id, with an empty centroid), 10 000
-// surveys (4 000 submitted, 2 000 of them public) and 1-3 parcel links per survey; ANALYZE;
-// then EXPLAIN (ANALYZE, BUFFERS) of the pre-01.7 query ("before") and of the query the API
-// runs now ("after"); then ROLLBACK, so the database is left as it was (ANALYZE included).
+// surveys (4 000 submitted, 2 000 of them public, 1 000+ owned by one busy user), 1-3 parcel
+// links per survey, 30 000 survey events (1 000 of them on one busy survey) and 20 000 reports
+// over 20 days; ANALYZE; then EXPLAIN (ANALYZE, BUFFERS) of the pre-01.7 public queries
+// ("before"), of the queries the API runs now ("after"), and of the first page (limit 50) and a
+// middle page (cursor taken from row 500) of each paginated list; then ROLLBACK, so the
+// database is left as it was (ANALYZE included).
 // The database name must end in _test (assertResettableDatabase), and the seed never commits.
 const path = require('path');
 const { Client } = require('pg');
 const { resolveDbConfig, assertResettableDatabase } = require('../test/e2e-env.js');
 
-const COMPILED_QUERIES = path.resolve(__dirname, '../dist/surveys/public-map.queries.js');
+const DIST = path.resolve(__dirname, '../dist');
+const COMPILED_QUERIES = path.join(DIST, 'surveys/public-map.queries.js');
+// D-11: the list query builders, compiled.
+const COMPILED_LIST_MODULES = [
+  path.join(DIST, 'surveys/surveys.repository.js'),
+  path.join(DIST, 'surveys/survey-events.service.js'),
+  path.join(DIST, 'reports/reports.service.js'),
+];
 
 // A 1 degree square around Paris: a generous map viewport (the app asks at zoom >= 15, a few
 // km wide). The seeded centroids spread over 42-51 N and 4 W-8 E, so it holds about 70 parcels.
@@ -27,9 +38,19 @@ const SEEDED_USERS = 200;
 const SEEDED_PARCELS = 8000;
 const SEEDED_EMPTY_CENTROID_PARCELS = 200;
 const SEEDED_SURVEYS = 10000;
+const SEEDED_EVENTS = 30000;
+const SEEDED_REPORTS = 20000;
 
-const SEQ_SCAN_PATTERN = /Seq Scan on (surveys|parcels|survey_parcels)\b/g;
-const WATCHED_RELATIONS = ['surveys', 'parcels', 'survey_parcels'];
+// D-11: the list EXPLAINs page like a client would: a first page of LIST_PAGE_LIMIT rows, then
+// the page after row LIST_MIDDLE_ROW of the unpaginated order.
+const LIST_PAGE_LIMIT = 50;
+const LIST_MIDDLE_ROW = 500;
+// Every 10th survey belongs to explain-u1, and the first 1 000 events go to explain-s1.
+const BUSY_USER_EMAIL = 'explain-u1@example.test';
+const BUSY_SURVEY_ID = 'explain-s1';
+
+const SEQ_SCAN_PATTERN = /Seq Scan on (surveys|parcels|survey_parcels|survey_events|reports)\b/g;
+const WATCHED_RELATIONS = ['surveys', 'parcels', 'survey_parcels', 'survey_events', 'reports'];
 
 // ---------------------------------------------------------------------------------------------
 // Pre-01.7 SQL, copied verbatim from api/src/surveys/surveys.service.ts at the phase base
@@ -174,7 +195,9 @@ const SEED_STATEMENTS = [
           'synthetic_v1'
    FROM generate_series(1, ${SEEDED_EMPTY_CENTROID_PARCELS}) g`,
   // 10 000 surveys: 40 % submitted, 20 % public and submitted (2 000), 10 % public drafts,
-  // 100 of the public submitted ones soft-deleted. Distinct submission times.
+  // 100 of the public submitted ones soft-deleted. Distinct submission times. Every 10th
+  // survey belongs to explain-u1 (the busy user of the GET /surveys EXPLAIN), the rest are
+  // spread over the 200 users.
   // Plain joins only: a CTE read from a scalar subquery is inlined and re-aggregated per row,
   // and after a first rolled-back run the planner (whose reltuples survive the rollback) can
   // pick that per-row plan.
@@ -197,7 +220,9 @@ const SEED_STATEMENTS = [
           1 + g % 2,
           CASE WHEN g % 100 = 0 THEN now() END
    FROM generate_series(1, ${SEEDED_SURVEYS}) g
-   JOIN users u ON u.email = 'explain-u' || (1 + g % ${SEEDED_USERS}) || '@example.test'`,
+   JOIN users u ON u.email = 'explain-u'
+                             || CASE WHEN g % 10 = 0 THEN 1 ELSE 1 + g % ${SEEDED_USERS} END
+                             || '@example.test'`,
   // 1-3 links per survey (none for every 97th), spread over the 8 000 located parcels; every
   // 211th survey also links one of the empty-centroid parcels. Parcel ids are computed from
   // their seed index, as in the parcel inserts above.
@@ -213,7 +238,30 @@ const SEED_STATEMENTS = [
    CROSS JOIN LATERAL generate_series(0, g % 3) k
    WHERE g % 97 <> 0
    ON CONFLICT DO NOTHING`,
-  `ANALYZE users, parcels, surveys, survey_parcels`,
+  // D-11: 30 000 events, the first 1 000 on explain-s1 (the busy survey of the events
+  // EXPLAIN), the rest spread over every survey. Ten events share each created_at second, so
+  // the seq tiebreaker matters. seq and xid8 come from their column defaults.
+  `INSERT INTO survey_events (id, survey_id, actor_id, event_type, payload, created_at)
+   SELECT 'explain-e' || g,
+          'explain-s' || CASE WHEN g <= 1000 THEN 1 ELSE 1 + g % ${SEEDED_SURVEYS} END,
+          NULL,
+          'updated',
+          jsonb_build_object('step', g),
+          date_trunc('second', now()) - ((g / 10) || ' s')::interval
+   FROM generate_series(1, ${SEEDED_EVENTS}) g`,
+  // D-11: 20 000 reports over 20 days (one every 86.4 s) on the seeded surveys. 1 in 20 is
+  // still open (the moderation queue, 1 000 rows), the rest reviewed; the reports are
+  // filed by the seeded users (joined on their email, not a scalar subquery).
+  `INSERT INTO reports (id, survey_id, reporter_user_id, reason, status, created_at)
+   SELECT gen_random_uuid()::text,
+          'explain-s' || (1 + g % ${SEEDED_SURVEYS}),
+          u.id,
+          'Explain reason ' || g,
+          CASE WHEN g % 20 = 0 THEN 'open' ELSE 'reviewed' END,
+          now() - (g * 86.4 || ' s')::interval
+   FROM generate_series(1, ${SEEDED_REPORTS}) g
+   JOIN users u ON u.email = 'explain-u' || (1 + g % ${SEEDED_USERS}) || '@example.test'`,
+  `ANALYZE users, parcels, surveys, survey_parcels, survey_events, reports`,
 ];
 
 async function seed(client) {
@@ -222,17 +270,80 @@ async function seed(client) {
   }
 }
 
-function loadCompiledQueries() {
+function requireCompiled(file) {
   try {
-    return require(COMPILED_QUERIES);
+    return require(file);
   } catch (error) {
     if (error && error.code === 'MODULE_NOT_FOUND') {
-      throw new Error(
-        `Missing ${COMPILED_QUERIES}: run npm --workspace api run build first.`
-      );
+      throw new Error(`Missing ${file}: run npm --workspace api run build first.`);
     }
     throw error;
   }
+}
+
+// The public map query module plus the three list builders (buildListForUserQuery,
+// buildEventListQuery, buildReportListQuery), merged into one object.
+function loadCompiledQueries() {
+  return Object.assign(
+    {},
+    requireCompiled(COMPILED_QUERIES),
+    ...COMPILED_LIST_MODULES.map(requireCompiled)
+  );
+}
+
+// D-11: the first page and the page after row LIST_MIDDLE_ROW of each paginated list, built by
+// the API's own builders. The middle cursor is read from the unpaginated query of the same
+// builder, so it is exactly the cursor a client walking the pages would hold.
+async function buildListCases(client, queries) {
+  const busyUser = await client.query('SELECT id FROM users WHERE email = $1', [BUSY_USER_EMAIL]);
+  const busyUserId = busyUser.rows[0].id;
+  const firstPage = { limit: LIST_PAGE_LIMIT, after: null };
+
+  const middleCursor = async (unpaginated, cursorOf) => {
+    const rows = await client.query(unpaginated.text, unpaginated.values);
+    const row = rows.rows[LIST_MIDDLE_ROW - 1];
+    if (!row) {
+      throw new Error(`The seed has fewer than ${LIST_MIDDLE_ROW} rows for ${unpaginated.text}`);
+    }
+    return cursorOf(row);
+  };
+  const unpaginated = { limit: null, after: null };
+
+  const lists = [
+    {
+      query: 'GET /surveys (busy user)',
+      build: (page) => queries.buildListForUserQuery(busyUserId, {}, page),
+      cursorOf: (row) => ({ t: row.updated_at, i: row.id }),
+    },
+    {
+      query: 'GET /surveys/:id/events (busy survey)',
+      build: (page) => queries.buildEventListQuery(BUSY_SURVEY_ID, page),
+      cursorOf: (row) => ({ t: row.created_at, i: row.seq }),
+    },
+    {
+      query: 'GET /reports',
+      build: (page) => queries.buildReportListQuery(null, page),
+      cursorOf: (row) => ({ t: row.created_at, i: row.id }),
+    },
+    {
+      query: 'GET /reports?status=open',
+      build: (page) => queries.buildReportListQuery('open', page),
+      cursorOf: (row) => ({ t: row.created_at, i: row.id }),
+    },
+  ];
+
+  const cases = [];
+  for (const list of lists) {
+    const after = await middleCursor(list.build(unpaginated), list.cursorOf);
+    for (const [variant, page] of [
+      [`first page (limit ${LIST_PAGE_LIMIT})`, firstPage],
+      [`middle page (after row ${LIST_MIDDLE_ROW})`, { limit: LIST_PAGE_LIMIT, after }],
+    ]) {
+      const query = list.build(page);
+      cases.push({ query: list.query, variant, text: query.text, values: query.values });
+    }
+  }
+  return cases;
 }
 
 // The before/after pairs, each with the parameters both variants take.
@@ -284,7 +395,8 @@ async function runExplain(client, queries = loadCompiledQueries()) {
     await client.query('SET LOCAL statement_timeout = 0');
     await seed(client);
 
-    for (const testCase of buildCases(queries)) {
+    const cases = [...buildCases(queries), ...(await buildListCases(client, queries))];
+    for (const testCase of cases) {
       const timings = [];
       let plan = '';
       for (let run = 0; run < EXPLAIN_RUNS; run += 1) {
@@ -312,7 +424,7 @@ async function runExplain(client, queries = loadCompiledQueries()) {
 }
 
 function formatSummary(results) {
-  const header = ['query', 'variant', 'execution (ms, median)', 'seq scan on surveys/parcels/survey_parcels'];
+  const header = ['query', 'variant', 'execution (ms, median)', 'seq scan on a watched relation'];
   const rows = results.map((result) => [
     result.query,
     result.variant,
@@ -340,7 +452,7 @@ async function main() {
     const counts = async () =>
       (
         await client.query(
-          'SELECT (SELECT count(*) FROM surveys)::int AS surveys, (SELECT count(*) FROM parcels)::int AS parcels, (SELECT count(*) FROM survey_parcels)::int AS links'
+          'SELECT (SELECT count(*) FROM surveys)::int AS surveys, (SELECT count(*) FROM parcels)::int AS parcels, (SELECT count(*) FROM survey_parcels)::int AS links, (SELECT count(*) FROM survey_events)::int AS events, (SELECT count(*) FROM reports)::int AS reports'
         )
       ).rows[0];
     const before = await counts();
@@ -349,7 +461,10 @@ async function main() {
 
     console.log(`Database: ${config.database} on ${config.host}:${config.port}`);
     console.log(
-      `Seed: ${SEEDED_USERS} users, ${SEEDED_PARCELS} parcels (+${SEEDED_EMPTY_CENTROID_PARCELS} without centroid), ${SEEDED_SURVEYS} surveys, 1-3 links each; rolled back.`
+      `Seed: ${SEEDED_USERS} users, ${SEEDED_PARCELS} parcels (+${SEEDED_EMPTY_CENTROID_PARCELS} without centroid), ${SEEDED_SURVEYS} surveys, 1-3 links each, ${SEEDED_EVENTS} events, ${SEEDED_REPORTS} reports; rolled back.`
+    );
+    console.log(
+      `Lists: first page (limit ${LIST_PAGE_LIMIT}) and the page after row ${LIST_MIDDLE_ROW}; busy user ${BUSY_USER_EMAIL}, busy survey ${BUSY_SURVEY_ID}.`
     );
     console.log(`Bbox: ${JSON.stringify(EXPLAIN_BBOX)}; each EXPLAIN runs ${EXPLAIN_RUNS} times.\n`);
     for (const result of results) {
@@ -378,6 +493,12 @@ if (require.main === module) {
 module.exports = {
   EXPLAIN_BBOX,
   SEEDED_SURVEYS,
+  SEEDED_EVENTS,
+  SEEDED_REPORTS,
+  LIST_PAGE_LIMIT,
+  LIST_MIDDLE_ROW,
+  BUSY_USER_EMAIL,
+  BUSY_SURVEY_ID,
   WATCHED_RELATIONS,
   LEGACY_MAP_ITEMS_SQL,
   LEGACY_PARCEL_STATUSES_BBOX_SQL,
@@ -385,6 +506,8 @@ module.exports = {
   buildLegacyMapItemsQuery,
   buildLegacyParcelStatusesSql,
   seed,
+  loadCompiledQueries,
+  buildListCases,
   runExplain,
   formatSummary,
 };

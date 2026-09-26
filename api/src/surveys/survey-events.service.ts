@@ -31,7 +31,9 @@ type SurveyEventListRow = SurveyEventRow & { seq: string }
  * D-11: the GET /surveys/:id/events query. Unpaginated it is the pre-D-11 select plus the
  * `seq DESC` tiebreaker and a `seq::text` column the service strips before answering. The
  * keyset is on (created_at, seq) inside `survey_id = $1`; the caller has already checked
- * ownership. Cursor fields and the limit are bound parameters (T-01.7-45).
+ * ownership. Cursor fields and the limit are bound parameters (T-01.7-45). The ORDER BY
+ * columns are table-qualified so they sort the bigint seq and the timestamp, not the
+ * `seq::text` / `created_at::text` output columns of the same name ("590" > "1000" as text).
  */
 export function buildEventListQuery(
   surveyId: string,
@@ -53,7 +55,7 @@ export function buildEventListQuery(
   const text = `SELECT id, survey_id, actor_id, event_type, payload, created_at::text, seq::text
        FROM survey_events
        WHERE survey_id = $1${keyset}
-       ORDER BY created_at DESC, seq DESC${limitClause}`
+       ORDER BY survey_events.created_at DESC, survey_events.seq DESC${limitClause}`
   return { text, values }
 }
 

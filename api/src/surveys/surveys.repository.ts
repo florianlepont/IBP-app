@@ -67,6 +67,10 @@ export function toListPage<Row, Item = Row>(
   }
 }
 
+// D-11: the ORDER BY columns are table-qualified on purpose. The select list outputs
+// `updated_at::text` under the name updated_at, and an unqualified ORDER BY name resolves to
+// the output column first: the rows would sort as text, out of step with the timestamp keyset,
+// and no index could serve the order.
 /**
  * D-11: the GET /surveys query. Without a page limit and cursor the SQL is the pre-D-11 one plus
  * the `id DESC` tiebreaker. The keyset predicate is appended after `user_id = $1`, so a
@@ -121,7 +125,7 @@ export function buildListForUserQuery(
   const text = `SELECT id, site_name, status, visibility, parcel_id, observation_year, version_number, updated_at::text, sync_version
        FROM surveys
        WHERE ${conditions.join(" AND ")}
-       ORDER BY updated_at DESC, id DESC${limitClause}`
+       ORDER BY surveys.updated_at DESC, surveys.id DESC${limitClause}`
 
   return { text, values }
 }
