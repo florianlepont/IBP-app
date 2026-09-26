@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect } from "react"
+import { memo, useCallback, useContext, useEffect, useRef } from "react"
 import { View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { usePublicMapExplorer } from "../../hooks/usePublicMapExplorer"
@@ -16,6 +16,11 @@ import type { PublicMapRouteProps } from "../types"
  * not in the navigation tree: the map items, filters and loading flags only
  * re-render this screen. An Explorer tab press reloads the map through the
  * reload signal (see public-map-reload.ts).
+ *
+ * The map loads by viewport (01.9-28, D-05). A tab press forces a reload of the
+ * last viewport bbox the screen reported. The press that mounted the route is
+ * served by the screen's own first viewport load, so it is not forced (the
+ * explorer skips the identical request instead of sending it twice).
  */
 export const PublicMapRoute = memo(function PublicMapRoute(_props: PublicMapRouteProps) {
   const insets = useSafeAreaInsets()
@@ -29,11 +34,23 @@ export const PublicMapRoute = memo(function PublicMapRoute(_props: PublicMapRout
     onStatusChange: syncActions.setStatus,
   })
 
-  const reload = useLatestCallback(() => {
-    void explorer.loadPublicMap()
+  const viewportBboxRef = useRef<string | undefined>(undefined)
+  const handleViewportBboxChange = useCallback((bbox: string) => {
+    viewportBboxRef.current = bbox
+  }, [])
+
+  const reload = useLatestCallback((force: boolean) => {
+    void explorer.loadPublicMap({ bbox: viewportBboxRef.current, force })
   })
 
-  useEffect(() => reloadSignal?.subscribe(reload), [reload, reloadSignal])
+  useEffect(() => {
+    if (!reloadSignal) return undefined
+    // A press made before the route existed is delivered inside subscribe().
+    let pendingFromBeforeMount = true
+    const unsubscribe = reloadSignal.subscribe(() => reload(!pendingFromBeforeMount))
+    pendingFromBeforeMount = false
+    return unsubscribe
+  }, [reload, reloadSignal])
 
   return (
     <View style={[styles.tabScreenContainer, { marginTop: -insets.top }]}>
@@ -52,6 +69,7 @@ export const PublicMapRoute = memo(function PublicMapRoute(_props: PublicMapRout
         onLoad={explorer.loadPublicMap}
         onLoadParcels={explorer.loadPublicParcels}
         onReportSurvey={syncActions.handleReportSurvey}
+        onViewportBboxChange={handleViewportBboxChange}
       />
     </View>
   )

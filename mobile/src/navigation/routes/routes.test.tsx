@@ -652,11 +652,18 @@ describe("PublicMapRoute", () => {
     expect(props("publicMap").ownSurveyIds).toEqual(["s-01"])
     expect(props("publicMap").onReportSurvey).toBe(fixture.syncActions.handleReportSurvey)
     expect(mockExplorer.loadPublicMap).toHaveBeenCalledTimes(1)
+    // The press that mounted the route is not forced: the screen's first viewport load serves it.
+    expect(mockExplorer.loadPublicMap).toHaveBeenLastCalledWith({ bbox: undefined, force: false })
 
+    // Later presses force a reload of the last viewport the screen reported (01.9-28).
+    act(() => {
+      ;(props("publicMap").onViewportBboxChange as (bbox: string) => void)("1,2,3,4")
+    })
     act(() => {
       signal.request()
     })
     expect(mockExplorer.loadPublicMap).toHaveBeenCalledTimes(2)
+    expect(mockExplorer.loadPublicMap).toHaveBeenLastCalledWith({ bbox: "1,2,3,4", force: true })
 
     await act(async () => {
       tree.unmount()
