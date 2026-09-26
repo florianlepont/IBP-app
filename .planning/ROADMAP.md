@@ -307,7 +307,7 @@ Plans:
 - [x] 01.9-19-PLAN.md — Do every dependency change of the phase in one plan: remove the root leftovers and the unused API packages, mo (wave 3)
 - [x] 01.9-20-PLAN.md — Move the status and dialog texts of the session, owner, network and central sync hooks to the catalogue, remov (wave 3)
 - [x] 01.9-21-PLAN.md — Move the remaining hook status messages (editing, draft patching, GPS, app bootstrap) and the form validation (wave 4)
-- [ ] 01.9-22-PLAN.md — Turn the survey list into a virtualised `Animated.FlatList` with memoised rows, prove it stays fluid with 500 (wave 4)
+- [x] 01.9-22-PLAN.md — Turn the survey list into a virtualised `Animated.FlatList` with memoised rows, prove it stays fluid with 500 (wave 4)
 - [ ] 01.9-23-PLAN.md — Build the map's data layer: bbox-aware API client and explorer hook with stale-response and duplicate-request (wave 4)
 - [ ] 01.9-24-PLAN.md — Split the 961-line navigation file into `mobile/src/navigation/`, type navigation globally, mount screens with (wave 5)
 - [ ] 01.9-25-PLAN.md — Apply the owner's tab decisions: remove the Recherche tab in favour of the native header search in Mes Relevés (wave 6)
@@ -432,7 +432,7 @@ of it if Phase 1 returns a no-go, or run in parallel with it.
 | 1.6. Sync feed ordering and unified object storage | 9/9 | Complete    | 2026-09-25 |
 | 1.7. API configuration, service split and database tuning | 13/14 | Complete    | 2026-09-26 |
 | 1.8. Shared IBP domain package and test completeness | 0/TBD | Not started | - |
-| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 21/32 | In Progress|  |
+| 1.9. Mobile state architecture, i18n, accessibility and hygiene | 22/32 | In Progress|  |
 | 2. Species Contracts & Data-Contract Corrections | 0/TBD | Not started | - |
 | 3. Species Recognition for Factor A | 0/TBD | Not started | - |
 | 4. Offline Map & Own-Survey Navigation | 0/TBD | Not started | - |
