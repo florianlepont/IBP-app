@@ -4,6 +4,9 @@ import { brandColors, brandSpacing, brandTypography } from "../app/brand-tokens"
 import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { fr } from "../i18n"
+
+const t = fr.ownerConflict
 
 type LocalDataOwnerConflictScreenProps = {
   foreignWorkSummary: string
@@ -27,8 +30,7 @@ export function LocalDataOwnerConflictScreen({
 }: LocalDataOwnerConflictScreenProps) {
   const insets = useSafeAreaInsets()
 
-  const emailSuffix = foreignOwnerEmail ? ` (${foreignOwnerEmail})` : ""
-  const bodyText = `${foreignWorkSummary} enregistrés sur cet appareil appartiennent à un autre compte${emailSuffix}. Ils ne seront jamais envoyés sous votre compte actuel. La synchronisation est suspendue tant que vous n'avez pas choisi.`
+  const bodyText = t.body({ summary: foreignWorkSummary, email: foreignOwnerEmail })
 
   return (
     <View style={styles.screen}>
@@ -46,9 +48,9 @@ export function LocalDataOwnerConflictScreen({
             {logoSource ? (
               <Image source={logoSource} style={styles.heroLogo} resizeMode="contain" />
             ) : null}
-            <Text style={styles.heroEyebrow}>DONNÉES LOCALES</Text>
+            <Text style={styles.heroEyebrow}>{t.eyebrow}</Text>
             <AppSectionHeader
-              title="Relevés d'un autre compte"
+              title={t.title}
               titleStyle={styles.heroTitle}
               subtitleStyle={styles.heroSubtitle}
             />
@@ -59,17 +61,8 @@ export function LocalDataOwnerConflictScreen({
           <Text style={styles.bodyText}>{bodyText}</Text>
 
           <View style={styles.actions}>
-            <AppButton
-              label="Me reconnecter avec l'autre compte"
-              onPress={onSwitchAccount}
-              size="lg"
-            />
-            <AppButton
-              label="Supprimer ces données"
-              variant="dangerSoft"
-              onPress={onDiscard}
-              size="lg"
-            />
+            <AppButton label={t.switchAccount} onPress={onSwitchAccount} size="lg" />
+            <AppButton label={t.discard} variant="dangerSoft" onPress={onDiscard} size="lg" />
           </View>
         </AppCard>
       </ScrollView>

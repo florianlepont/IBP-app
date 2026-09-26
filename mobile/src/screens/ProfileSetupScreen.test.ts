@@ -51,6 +51,7 @@ jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }))
 
+import { fr } from "../i18n"
 import { ProfileSetupScreen } from "./ProfileSetupScreen"
 
 describe("ProfileSetupScreen", () => {
@@ -68,14 +69,18 @@ describe("ProfileSetupScreen", () => {
       )
     })
 
-    const firstNameInput = component!.root.findByProps({ placeholder: "e.g. Marie" })
-    const lastNameInput = component!.root.findByProps({ placeholder: "e.g. Dupont" })
+    const firstNameInput = component!.root.findByProps({
+      placeholder: fr.profileSetup.firstNamePlaceholder,
+    })
+    const lastNameInput = component!.root.findByProps({
+      placeholder: fr.profileSetup.lastNamePlaceholder,
+    })
     await act(async () => {
       firstNameInput.props.onChangeText("  Marie ")
       lastNameInput.props.onChangeText(" Dupont  ")
     })
 
-    const submitButton = component!.root.findByProps({ accessibilityLabel: "Get started" })
+    const submitButton = component!.root.findByProps({ accessibilityLabel: fr.profileSetup.start })
     await act(async () => {
       submitButton.props.onPress()
     })
@@ -97,7 +102,7 @@ describe("ProfileSetupScreen", () => {
       )
     })
 
-    const skipButton = component!.root.findByProps({ accessibilityLabel: "Skip for now" })
+    const skipButton = component!.root.findByProps({ accessibilityLabel: fr.profileSetup.skip })
     await act(async () => {
       skipButton.props.onPress()
     })

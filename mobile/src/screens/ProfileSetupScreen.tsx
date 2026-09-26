@@ -16,6 +16,9 @@ import { AppButton } from "../ui/AppButton"
 import { AppCard } from "../ui/AppCard"
 import { AppField } from "../ui/AppField"
 import { AppSectionHeader } from "../ui/AppSectionHeader"
+import { fr } from "../i18n"
+
+const t = fr.profileSetup
 
 type ProfileSetupScreenProps = {
   saving: boolean
@@ -70,10 +73,10 @@ export function ProfileSetupScreen({
             {logoSource ? (
               <Image source={logoSource} style={styles.heroLogo} resizeMode="contain" />
             ) : null}
-            <Text style={styles.heroEyebrow}>NEW ACCOUNT</Text>
+            <Text style={styles.heroEyebrow}>{t.eyebrow}</Text>
             <AppSectionHeader
-              title="Complete your profile"
-              subtitle="Add the name other contributors will see across the app. You can update it later from your profile."
+              title={t.title}
+              subtitle={t.subtitle}
               titleStyle={styles.heroTitle}
               subtitleStyle={styles.heroSubtitle}
             />
@@ -82,18 +85,18 @@ export function ProfileSetupScreen({
 
         <AppCard variant="panelElevated" style={styles.formCard}>
           <AppSectionHeader
-            title="Your name"
-            subtitle="Use your real name so survey ownership and community activity stay readable."
+            title={t.nameTitle}
+            subtitle={t.nameSubtitle}
             titleStyle={styles.sectionTitle}
             subtitleStyle={styles.sectionSubtitle}
           />
 
           <View style={styles.fields}>
             <AppField
-              label="First name"
+              label={t.firstName}
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="e.g. Marie"
+              placeholder={t.firstNamePlaceholder}
               autoCapitalize="words"
               autoCorrect={false}
               autoFocus
@@ -105,10 +108,10 @@ export function ProfileSetupScreen({
               }}
             />
             <AppField
-              label="Last name"
+              label={t.lastName}
               value={lastName}
               onChangeText={setLastName}
-              placeholder="e.g. Dupont"
+              placeholder={t.lastNamePlaceholder}
               autoCapitalize="words"
               autoCorrect={false}
               inputRef={lastNameInputRef}
@@ -122,13 +125,13 @@ export function ProfileSetupScreen({
 
           <View style={styles.actions}>
             <AppButton
-              label={saving ? "Saving..." : "Get started"}
+              label={saving ? t.saving : t.start}
               onPress={() => void handleContinue()}
               disabled={saving || !firstName.trim()}
               size="lg"
             />
             <AppButton
-              label="Skip for now"
+              label={t.skip}
               variant="secondary"
               onPress={onSkip}
               disabled={saving}
