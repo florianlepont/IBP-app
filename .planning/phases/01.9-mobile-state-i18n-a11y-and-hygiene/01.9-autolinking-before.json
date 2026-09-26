@@ -1,0 +1,396 @@
+{
+  "capturedAt": "2026-09-26T12:14:17.279Z",
+  "moduleNames": [
+    "community:expo",
+    "community:react-native-auth0",
+    "community:react-native-bottom-tabs",
+    "community:react-native-gesture-handler",
+    "community:react-native-maps",
+    "community:react-native-safe-area-context",
+    "community:react-native-screens",
+    "community:react-native-svg",
+    "expo:@expo/dom-webview",
+    "expo:@expo/log-box",
+    "expo:expo",
+    "expo:expo-asset",
+    "expo:expo-blur",
+    "expo:expo-constants",
+    "expo:expo-crypto",
+    "expo:expo-file-system",
+    "expo:expo-font",
+    "expo:expo-haptics",
+    "expo:expo-image",
+    "expo:expo-image-loader",
+    "expo:expo-image-manipulator",
+    "expo:expo-image-picker",
+    "expo:expo-keep-awake",
+    "expo:expo-location",
+    "expo:expo-modules-core",
+    "expo:expo-modules-jsi",
+    "expo:expo-network",
+    "expo:expo-secure-store",
+    "expo:expo-sqlite"
+  ],
+  "expoModules": {
+    "android": [
+      {
+        "packageName": "@expo/dom-webview",
+        "packageVersion": "57.0.1"
+      },
+      {
+        "packageName": "@expo/log-box",
+        "packageVersion": "57.0.4"
+      },
+      {
+        "packageName": "expo",
+        "packageVersion": "57.0.24"
+      },
+      {
+        "packageName": "expo-asset",
+        "packageVersion": "57.0.18"
+      },
+      {
+        "packageName": "expo-blur",
+        "packageVersion": "57.0.3"
+      },
+      {
+        "packageName": "expo-constants",
+        "packageVersion": "57.0.19"
+      },
+      {
+        "packageName": "expo-crypto",
+        "packageVersion": "57.0.3"
+      },
+      {
+        "packageName": "expo-file-system",
+        "packageVersion": "57.0.7"
+      },
+      {
+        "packageName": "expo-font",
+        "packageVersion": "57.0.4"
+      },
+      {
+        "packageName": "expo-haptics",
+        "packageVersion": "57.0.3"
+      },
+      {
+        "packageName": "expo-image",
+        "packageVersion": "57.0.5"
+      },
+      {
+        "packageName": "expo-image-loader",
+        "packageVersion": "57.0.1"
+      },
+      {
+        "packageName": "expo-image-manipulator",
+        "packageVersion": "57.0.20"
+      },
+      {
+        "packageName": "expo-image-picker",
+        "packageVersion": "57.0.19"
+      },
+      {
+        "packageName": "expo-keep-awake",
+        "packageVersion": "57.0.2"
+      },
+      {
+        "packageName": "expo-location",
+        "packageVersion": "57.0.19"
+      },
+      {
+        "packageName": "expo-modules-core",
+        "packageVersion": "57.0.18"
+      },
+      {
+        "packageName": "expo-network",
+        "packageVersion": "57.0.2"
+      },
+      {
+        "packageName": "expo-secure-store",
+        "packageVersion": "57.0.4"
+      },
+      {
+        "packageName": "expo-sqlite",
+        "packageVersion": "57.0.3"
+      }
+    ],
+    "ios": [
+      {
+        "packageName": "@expo/dom-webview",
+        "packageVersion": "57.0.1"
+      },
+      {
+        "packageName": "@expo/log-box",
+        "packageVersion": "57.0.4"
+      },
+      {
+        "packageName": "expo",
+        "packageVersion": "57.0.24"
+      },
+      {
+        "packageName": "expo-asset",
+        "packageVersion": "57.0.18"
+      },
+      {
+        "packageName": "expo-blur",
+        "packageVersion": "57.0.3"
+      },
+      {
+        "packageName": "expo-constants",
+        "packageVersion": "57.0.19"
+      },
+      {
+        "packageName": "expo-crypto",
+        "packageVersion": "57.0.3"
+      },
+      {
+        "packageName": "expo-file-system",
+        "packageVersion": "57.0.7"
+      },
+      {
+        "packageName": "expo-font",
+        "packageVersion": "57.0.4"
+      },
+      {
+        "packageName": "expo-haptics",
+        "packageVersion": "57.0.3"
+      },
+      {
+        "packageName": "expo-image",
+        "packageVersion": "57.0.5"
+      },
+      {
+        "packageName": "expo-image-manipulator",
+        "packageVersion": "57.0.20"
+      },
+      {
+        "packageName": "expo-image-picker",
+        "packageVersion": "57.0.19"
+      },
+      {
+        "packageName": "expo-keep-awake",
+        "packageVersion": "57.0.2"
+      },
+      {
+        "packageName": "expo-location",
+        "packageVersion": "57.0.19"
+      },
+      {
+        "packageName": "expo-modules-core",
+        "packageVersion": "57.0.18"
+      },
+      {
+        "packageName": "expo-modules-jsi",
+        "packageVersion": "57.1.0"
+      },
+      {
+        "packageName": "expo-network",
+        "packageVersion": "57.0.2"
+      },
+      {
+        "packageName": "expo-secure-store",
+        "packageVersion": "57.0.4"
+      },
+      {
+        "packageName": "expo-sqlite",
+        "packageVersion": "57.0.3"
+      }
+    ]
+  },
+  "communityModules": [
+    {
+      "name": "expo",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-auth0",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-bottom-tabs",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-gesture-handler",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-maps",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-safe-area-context",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-screens",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "name": "react-native-svg",
+      "platforms": [
+        "android"
+      ]
+    }
+  ],
+  "npmLs": [
+    "cortege-monorepo@0.1.0 /home/user/cortege/.claude/worktrees/agent-a5ab44d565c95a2cf",
+    "+-- cortege-mobile@0.1.0 -> ./mobile",
+    "| +-- @bottom-tabs/react-navigation@1.4.0",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @expo/vector-icons@15.1.1",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @react-navigation/bottom-tabs@7.19.2",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @react-navigation/elements@2.9.43",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | +-- react@19.2.3 deduped",
+    "| | +-- use-latest-callback@0.2.6",
+    "| | | `-- react@19.2.3 deduped",
+    "| | `-- use-sync-external-store@1.6.0",
+    "| |   `-- react@19.2.3 deduped",
+    "| +-- @react-navigation/native-stack@7.19.2",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @react-navigation/native@7.4.1",
+    "| | +-- @react-navigation/core@7.22.1",
+    "| | | `-- react@19.2.3 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | +-- react@19.2.3 deduped",
+    "| | `-- standard-navigation@0.0.8",
+    "| |   `-- react@19.2.3 deduped",
+    "| +-- @testing-library/react-native@14.0.1",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-blur@57.0.3",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-constants@57.0.19",
+    "| | +-- expo@57.0.24 deduped",
+    "| | `-- react-native@0.86.3 deduped",
+    "| +-- expo-crypto@57.0.3",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-file-system@57.0.7",
+    "| | +-- expo@57.0.24 deduped",
+    "| | `-- react-native@0.86.3 deduped",
+    "| +-- expo-haptics@57.0.3",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-image-manipulator@57.0.20",
+    "| | +-- expo-image-loader@57.0.1",
+    "| | | `-- expo@57.0.24 deduped",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-image-picker@57.0.19",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-image@57.0.5",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-location@57.0.19",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-network@57.0.2",
+    "| | +-- expo@57.0.24 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-secure-store@57.0.4",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-sqlite@57.0.3",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo@57.0.24 deduped",
+    "| +-- react-native-auth0@5.4.1",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native-bottom-tabs@1.4.0",
+    "| | +-- react-freeze@1.0.4",
+    "| | | `-- react@19.2.3 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native-gesture-handler@2.32.0",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native-maps@1.27.2",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native-safe-area-context@5.7.0",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native-screens@4.26.2",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native-svg@15.15.4",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native@0.86.3 deduped",
+    "| +-- react@19.2.3 deduped",
+    "| `-- test-renderer@1.3.0",
+    "|   +-- react-reconciler@0.34.0",
+    "|   | `-- react@19.2.3 deduped",
+    "|   `-- react@19.2.3 deduped",
+    "+-- expo@57.0.24 overridden",
+    "| +-- @expo/cli@57.0.26",
+    "| | +-- @expo/router-server@57.0.10",
+    "| | | +-- expo@57.0.24 deduped",
+    "| | | `-- react@19.2.3 deduped",
+    "| | +-- expo@57.0.24 deduped",
+    "| | `-- react-native@0.86.3 deduped",
+    "| +-- @expo/devtools@57.0.1",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @expo/dom-webview@57.0.1",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @expo/log-box@57.0.4",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- @expo/metro-config@57.0.12",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- babel-preset-expo@57.0.12",
+    "| | `-- expo@57.0.24 deduped",
+    "| +-- expo-asset@57.0.18",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-font@57.0.4",
+    "| | +-- expo@57.0.24 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-keep-awake@57.0.2",
+    "| | +-- expo@57.0.24 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- expo-modules-core@57.0.18",
+    "| | +-- expo-modules-jsi@57.1.0",
+    "| | | `-- react-native@0.86.3 deduped",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| +-- react-native@0.86.3 deduped",
+    "| `-- react@19.2.3 deduped",
+    "+-- react-native@0.86.3 overridden",
+    "| +-- @react-native/virtualized-lists@0.86.3",
+    "| | +-- react-native@0.86.3 deduped",
+    "| | `-- react@19.2.3 deduped",
+    "| `-- react@19.2.3 deduped",
+    "+-- react-test-renderer@19.2.3 overridden",
+    "| `-- react@19.2.3 deduped",
+    "`-- react@19.2.3 overridden"
+  ]
+}
