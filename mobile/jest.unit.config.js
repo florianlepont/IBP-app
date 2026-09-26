@@ -34,6 +34,8 @@ module.exports = {
   // coverage improves; never lower them. Regenerate with node scripts/coverage-by-directory.js mobile.
   coverageThreshold: {
     global: { statements: 100, lines: 100 },
+    // Mounted by src/state/render-counts.test.tsx (phase 01.9-01); raised at the 01.9-31 gate.
+    './App.tsx': { statements: 79, branches: 65, functions: 56, lines: 83 },
     './src/api/': { statements: 95, branches: 97, functions: 91, lines: 95 },
     './src/app/': { statements: 61, branches: 55, functions: 45, lines: 63 },
     './src/components/': { statements: 6, branches: 0, functions: 0, lines: 6 },
